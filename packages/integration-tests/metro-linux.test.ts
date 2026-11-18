@@ -255,7 +255,14 @@ describe('the Metro preset, for an app whose expo.platforms lists linux', () => 
       const preset = `
 const { getDefaultConfig } = require('expo/metro-config');
 const { withAngularNative } = require('@ng-native/metro/config.cjs');
-const config = withAngularNative(getDefaultConfig(process.cwd()));
+const base = getDefaultConfig(process.cwd());
+if (process.env.APP_CONDITIONS) {
+  base.resolver.unstable_conditionsByPlatform = {
+    ...base.resolver.unstable_conditionsByPlatform,
+    linux: JSON.parse(process.env.APP_CONDITIONS),
+  };
+}
+const config = withAngularNative(base);
 const platforms = require(require.resolve('@expo/platforms', {
   paths: [require('node:path').dirname(require.resolve('@expo/cli/package.json', {
     paths: [require('node:path').dirname(require.resolve('expo/package.json'))],
@@ -267,10 +274,24 @@ console.log(JSON.stringify({
   known: platforms.KNOWN_PLATFORMS.includes('linux'),
 }));
 `;
-      const ask = () =>
-        JSON.parse(execFileSync(process.execPath, ['-e', preset], { cwd: root, encoding: 'utf8' }));
+      const ask = (conditions?: string[]) =>
+        JSON.parse(
+          execFileSync(process.execPath, ['-e', preset], {
+            cwd: root,
+            encoding: 'utf8',
+            env: conditions
+              ? { ...process.env, APP_CONDITIONS: JSON.stringify(conditions) }
+              : process.env,
+          }),
+        );
       app(['ios', 'linux']);
       assert.deepEqual(ask(), { served: true, conditions: ['react-native'], known: true });
+      // Conditions the app's config already gives linux stay, ahead of React Native's.
+      assert.deepEqual(ask(['app-source']).conditions, ['app-source', 'react-native']);
+      assert.deepEqual(ask(['react-native', 'app-source']).conditions, [
+        'react-native',
+        'app-source',
+      ]);
       app(['ios', 'macos']);
       assert.deepEqual(ask(), { served: false, conditions: null, known: false });
     } finally {
