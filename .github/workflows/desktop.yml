@@ -144,11 +144,14 @@ jobs:
     timeout-minutes: 60
     env:
       CCACHE_MAXSIZE: 1G
-      # Keyed by what the compiles read: the pins, how Hermes and ICU build, and the image.
-      CCACHE_KEY: desktop-linux-${{ matrix.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'packages/desktop/native/scripts/build-icu.sh', 'packages/desktop/native/docker/Dockerfile', 'pnpm-lock.yaml') }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+
+      # The ccache key, by what the compiles read: the pins, how Hermes and ICU build, and the image.
+      # hashFiles is not available in a job's env.
+      - id: ccache
+        run: echo "key=desktop-linux-${{ matrix.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'packages/desktop/native/scripts/build-icu.sh', 'packages/desktop/native/docker/Dockerfile', 'pnpm-lock.yaml') }}" >> "$GITHUB_OUTPUT"
 
       - name: Build the AlmaLinux 9 image
         run: docker build -t ngn-el9 packages/desktop/native/docker
@@ -159,9 +162,9 @@ jobs:
       - uses: actions/cache/restore@v6
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ${{ env.CCACHE_KEY }}-${{ github.run_id }}
+          key: ${{ steps.ccache.outputs.key }}-${{ github.run_id }}
           restore-keys: |
-            ${{ env.CCACHE_KEY }}-
+            ${{ steps.ccache.outputs.key }}-
             desktop-linux-${{ matrix.arch }}-
 
       - uses: actions/cache@v6
@@ -190,7 +193,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ${{ env.CCACHE_KEY }}-${{ github.run_id }}
+          key: ${{ steps.ccache.outputs.key }}-${{ github.run_id }}
 
   host-macos:
     needs: changes
