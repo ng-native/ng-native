@@ -30,8 +30,11 @@ using Answer = std::function<void(Outcome outcome, GVariant *results)>;
 void request(const char *interface, const char *method, GVariant *leading, GVariantBuilder *options, GUnixFDList *fds,
              Answer answer, bool returnsRequest = true, std::function<void(const std::string &path)> started = {});
 
-// Ends the Request at `path` (org.freedesktop.portal.Request.Close).
+// Ends the Request at `path` (org.freedesktop.portal.Request.Close), which then never answers.
 void close(const std::string &path);
+
+// The requests still waiting for a Response: none once each has answered or been closed.
+size_t requestsInFlight();
 
 // The window identifier the portals place a dialog against ("x11:<xid>" or "wayland:<handle>"),
 // handed to `ready` on the main context; empty for no window or a windowing system with none (a

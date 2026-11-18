@@ -292,6 +292,13 @@ void close(const std::string &path) {
   auto *heap = new std::string(path);
   g_main_context_invoke(nullptr, +[](gpointer data) -> gboolean {
     std::unique_ptr<std::string> path(static_cast<std::string *>(data));
+    // A closed Request sends no Response: it is dropped here, unanswered, with its subscription.
+    for (auto it = pending().begin(); it != pending().end(); ++it) {
+      if (it->second->path == *path) {
+        pending().erase(it);
+        break;
+      }
+    }
     if (GDBusConnection *bus = connection()) {
       g_dbus_connection_call(bus, gInjected ? nullptr : kBusName, path->c_str(), "org.freedesktop.portal.Request", "Close",
                              nullptr, nullptr, G_DBUS_CALL_FLAGS_NONE, -1, nullptr, nullptr, nullptr);
@@ -299,6 +306,10 @@ void close(const std::string &path) {
     }
     return G_SOURCE_REMOVE;
   }, heap);
+}
+
+size_t requestsInFlight() {
+  return pending().size();
 }
 
 void useConnection(GDBusConnection *connection) {

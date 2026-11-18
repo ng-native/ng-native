@@ -3,6 +3,8 @@
 // is its old path, then its new one).
 #include "file-system.h"
 
+#include "app-windows.h"
+
 #include <gio/gio.h>
 
 #include <cstdio>
@@ -68,13 +70,6 @@ void changed(GFileMonitor *, GFile *file, GFile *other, GFileMonitorEvent type, 
   }
 }
 
-void onMain(std::function<void()> task) {
-  g_main_context_invoke(nullptr, +[](gpointer data) -> gboolean {
-    std::unique_ptr<std::function<void()>> task(static_cast<std::function<void()> *>(data));
-    (*task)();
-    return G_SOURCE_REMOVE;
-  }, new std::function<void()>(std::move(task)));
-}
 
 class MonitorWatcher final : public FileWatcher {
  public:
@@ -88,7 +83,7 @@ class MonitorWatcher final : public FileWatcher {
       watches_[handle] = watch;
     }
     // On the main context, so its events are read there whichever thread asked.
-    onMain([watch, path] {
+    onMainContext([watch, path] {
       std::lock_guard hold(watch->lock);
       if (!watch->live) {
         return;
@@ -124,7 +119,7 @@ class MonitorWatcher final : public FileWatcher {
       std::lock_guard hold(watch->lock);
       watch->live = false;
     }
-    onMain([watch] {
+    onMainContext([watch] {
       if (watch->monitor) {
         g_signal_handler_disconnect(watch->monitor, watch->handler);
         g_file_monitor_cancel(watch->monitor);

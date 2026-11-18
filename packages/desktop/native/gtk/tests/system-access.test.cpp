@@ -161,6 +161,8 @@ TEST_CASE("KeepAwake holds the session idle through the Inhibit portal, and clos
   ngn::testing::runUntil([&portal] { return portal.calls.size() == 4; });
   CHECK(portal.calls[2].method == "Inhibit");
   CHECK(portal.calls[3].method == "Close");
+  // A closed hold never answers, and is not kept waiting for an answer.
+  ngn::testing::runUntil([] { return ngn::gtk::portal::requestsInFlight() == 0; });
   sleep.reset();
   g_object_unref(application);
 }

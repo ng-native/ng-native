@@ -1,5 +1,6 @@
 #include "system-access.h"
 
+#include "app-windows.h"
 #include "portal.h"
 
 #include <folly/json.h>
@@ -21,15 +22,6 @@ namespace {
 constexpr const char *kOpenUri = "org.freedesktop.portal.OpenURI";
 
 using Done = std::function<void(bool)>;
-
-// Runs `task` on the main context, where GTK and the portal's replies live, from any thread.
-void onMain(std::function<void()> task) {
-  g_main_context_invoke(nullptr, +[](gpointer data) -> gboolean {
-    std::unique_ptr<std::function<void()>> task(static_cast<std::function<void()> *>(data));
-    (*task)();
-    return G_SOURCE_REMOVE;
-  }, new std::function<void()>(std::move(task)));
-}
 
 // The portal's answer as Done's: opened, or not; `fallBack` when no portal is there to ask.
 portal::Answer answered(Done done, std::function<void(Done)> fallBack) {
@@ -178,7 +170,7 @@ class PortalOpener final : public ShellOpener {
 
  private:
   static void openFile(const char *method, std::string path, bool containingFolder, Done done) {
-    onMain([method, path = std::move(path), containingFolder, done = std::move(done)]() mutable {
+    onMainContext([method, path = std::move(path), containingFolder, done = std::move(done)]() mutable {
       GUnixFDList *fds = exists(path) ? fdFor(path) : nullptr;
       if (!fds) {
         done(false);
@@ -199,7 +191,7 @@ class Inhibitor final : public SleepPreventer, public std::enable_shared_from_th
   }
 
   void hold(bool awake) override {
-    onMain([self = shared_from_this(), awake] { self->set(awake); });
+    onMainContext([self = shared_from_this(), awake] { self->set(awake); });
   }
 
  private:
@@ -286,7 +278,7 @@ ProcessesSetup processesSetup(const HostOs &os, const std::string &capabilitiesJ
 }
 
 void openUri(const std::string &uri, Done done) {
-  onMain([uri, done = std::move(done)]() mutable {
+  onMainContext([uri, done = std::move(done)]() mutable {
     openThroughPortal("OpenURI", g_variant_new_string(uri.c_str()), nullptr,
                       answered(std::move(done), [uri](Done done) { launchUriWithGtk(uri, std::move(done)); }));
   });
