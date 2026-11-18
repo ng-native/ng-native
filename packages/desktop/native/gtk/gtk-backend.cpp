@@ -34,9 +34,18 @@ void relayout(GtkWidget *widget) {
 
 } // namespace
 
-GtkBackend::GtkBackend() : uiThread_(std::this_thread::get_id()) {}
+GtkBackend::GtkBackend()
+    : uiThread_(std::this_thread::get_id()),
+      headers_(std::make_unique<Headers>(*this)),
+      modals_(std::make_unique<Modals>(*this)) {}
 
 GtkBackend::~GtkBackend() {
+  // Each gives back the views it hosts before the views go.
+  modals_.reset();
+  headers_.reset();
+  for (auto &[tag, entry] : searchEntries_) {
+    g_object_unref(entry);
+  }
   {
     std::lock_guard lock(tasksMutex_);
     if (drainSource_ != 0) {
@@ -63,6 +72,65 @@ void GtkBackend::removeSurface(SurfaceId surfaceId) {
 GtkWidget *GtkBackend::view(Tag tag) const {
   auto it = views_.find(tag);
   return it == views_.end() ? nullptr : it->second;
+}
+
+GtkWidget *GtkBackend::surfaceWidget(SurfaceId surfaceId) const {
+  auto it = surfaces_.find(surfaceId);
+  return it == surfaces_.end() ? nullptr : it->second;
+}
+
+ViewData *GtkBackend::data(Tag tag) const {
+  return viewData(view(tag));
+}
+
+void GtkBackend::hostView(Tag tag, GtkWidget *slot) {
+  GtkWidget *widget = view(tag);
+  if (!widget) {
+    return;
+  }
+  unhostView(tag);
+  GtkWidget *placeholder = makeViewWidget();
+  g_object_ref_sink(placeholder);
+  gtk_widget_set_child_visible(placeholder, FALSE);
+  if (GtkWidget *parent = gtk_widget_get_parent(widget)) {
+    gtk_widget_insert_after(placeholder, parent, widget);
+    gtk_widget_unparent(widget);
+  }
+  gtk_widget_set_parent(widget, slot);
+  hosted_[tag] = {.placeholder = placeholder, .slot = slot};
+  gtk_widget_queue_resize(slot);
+}
+
+void GtkBackend::unhostView(Tag tag) {
+  auto it = hosted_.find(tag);
+  if (it == hosted_.end()) {
+    return;
+  }
+  Hosted hosted = it->second;
+  hosted_.erase(it);
+  GtkWidget *widget = view(tag);
+  if (widget && gtk_widget_get_parent(widget) == hosted.slot) {
+    gtk_widget_unparent(widget);
+    if (GtkWidget *parent = gtk_widget_get_parent(hosted.placeholder)) {
+      gtk_widget_insert_after(widget, parent, hosted.placeholder);
+    }
+    relayout(widget);
+  }
+  if (gtk_widget_get_parent(hosted.placeholder)) {
+    gtk_widget_unparent(hosted.placeholder);
+  }
+  g_object_unref(hosted.placeholder);
+}
+
+bool GtkBackend::isHosted(Tag tag) const {
+  auto it = hosted_.find(tag);
+  GtkWidget *widget = view(tag);
+  return it != hosted_.end() && widget && gtk_widget_get_parent(widget) == it->second.slot;
+}
+
+GtkWidget *GtkBackend::searchEntry(Tag tag) const {
+  auto it = searchEntries_.find(tag);
+  return it == searchEntries_.end() ? nullptr : it->second;
 }
 
 void GtkBackend::runOnUiThread(std::function<void()> task) {
@@ -126,6 +194,17 @@ void GtkBackend::createView(const ShadowView &view) {
     // react-native-svg's elements draw nothing of their own: the svg draws them. A foreignObject's
     // views stay hidden with them.
     gtk_widget_set_child_visible(widget, FALSE);
+  } else if (d->component == "RNSScreenStackHeaderConfig") {
+    // What of a header shows is in the window's header bar: its subtree is neither drawn nor hit
+    // in the content.
+    gtk_widget_set_child_visible(widget, FALSE);
+    hooks.containerRoot(view.tag, true);
+  } else if (d->component == "RNSSearchBar") {
+    GtkWidget *entry = makeSearchEntry(*this, view.tag);
+    searchEntries_[view.tag] = GTK_WIDGET(g_object_ref_sink(entry));
+    if (view.props) {
+      applySearchBar(entry, *view.props);
+    }
   }
   applyViewProps(widget, *d);
   views_[view.tag] = widget;
@@ -141,6 +220,19 @@ void GtkBackend::deleteView(SurfaceId, Tag tag) {
   if (it == views_.end()) {
     return;
   }
+  modals_->unmounted(tag);
+  headers_->forget(tag);
+  unhostView(tag);
+  if (viewData(it->second)->component == "RNSScreenStackHeaderConfig") {
+    hooks.containerRoot(tag, false);
+  }
+  if (auto entry = searchEntries_.find(tag); entry != searchEntries_.end()) {
+    if (gtk_widget_get_parent(entry->second)) {
+      gtk_widget_unparent(entry->second);
+    }
+    g_object_unref(entry->second);
+    searchEntries_.erase(entry);
+  }
   if (gtk_widget_get_parent(it->second)) {
     gtk_widget_unparent(it->second);
   }
@@ -148,11 +240,12 @@ void GtkBackend::deleteView(SurfaceId, Tag tag) {
   views_.erase(it);
 }
 
-void GtkBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
+void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int index) {
   auto p = views_.find(parent), c = views_.find(child);
   if (p == views_.end() || c == views_.end()) {
     return;
   }
+  unhostView(child);
   if (gtk_widget_get_parent(c->second)) {
     gtk_widget_unparent(c->second);
   }
@@ -166,9 +259,14 @@ void GtkBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
     }
   }
   gtk_widget_insert_before(c->second, parentWidget, sibling);
+  if (viewData(c->second)->component == "ModalHostView") {
+    modals_->mounted(surfaceId, child);
+  }
 }
 
 void GtkBackend::removeChild(SurfaceId, Tag, Tag child, int) {
+  modals_->unmounted(child);
+  unhostView(child);
   if (auto c = views_.find(child); c != views_.end() && gtk_widget_get_parent(c->second)) {
     gtk_widget_unparent(c->second);
   }
@@ -191,6 +289,9 @@ void GtkBackend::updateProps(const ShadowView &view) {
   applyScrollViewProps(*d);
   if (d->image) {
     applyImageProps(*d, gtk_widget_get_scale_factor(it->second));
+  }
+  if (GtkWidget *entry = searchEntry(view.tag); entry && view.props) {
+    applySearchBar(entry, *view.props);
   }
   relayout(it->second);
 }
@@ -284,6 +385,9 @@ void GtkBackend::updateEventEmitter(const ShadowView &view) {
 void GtkBackend::dispatchCommand(Tag tag, const std::string &name, const folly::dynamic &args) {
   if (auto it = views_.find(tag); it != views_.end()) {
     textFieldCommand(*viewData(it->second), name, args);
+    if (GtkWidget *entry = searchEntry(tag)) {
+      runSearchBarCommand(entry, name, args);
+    }
     scrollViewCommand(*viewData(it->second), name, args);
   }
 }
@@ -296,7 +400,13 @@ void GtkBackend::setCovered(SurfaceId, Tag tag, bool covered) {
   }
 }
 
+void GtkBackend::setFrontHeader(SurfaceId surfaceId, const std::optional<ScreenStacks::FrontHeader> &header) {
+  headers_->show(surfaceId, header);
+}
+
 void GtkBackend::didMount(SurfaceId surfaceId) {
+  modals_->settle();
+  headers_->refresh();
   if (onMount) {
     onMount(surfaceId);
   }

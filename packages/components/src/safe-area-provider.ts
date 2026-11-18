@@ -37,12 +37,14 @@ import { booleanOr } from './transforms.ts';
 
 /**
  * The insets, in the form the cascade carries: one custom property per edge, in points, and the
- * extent of a desktop window's title bar controls into the provider's pane (zero in the content
- * pane beside a sidebar, which they do not reach, and on every OS that has none).
+ * extent of a desktop window's title bar controls into the provider's pane from each side (zero in
+ * the content pane beside a sidebar, which they do not reach, and on every OS that has none).
  */
-function insetTokens(insets: Insets, titlebarLeading: number): Record<string, { length: number }> {
+function insetTokens(area: SafeArea): Record<string, { length: number }> {
+  const insets = area.insets();
   return {
-    '--safe-area-inset-titlebar-leading': { length: titlebarLeading },
+    '--safe-area-inset-titlebar-leading': { length: area.titlebarLeading() },
+    '--safe-area-inset-titlebar-trailing': { length: area.titlebarTrailing() },
     '--safe-area-inset-top': { length: insets.top },
     '--safe-area-inset-right': { length: insets.right },
     '--safe-area-inset-bottom': { length: insets.bottom },
@@ -53,8 +55,9 @@ function insetTokens(insets: Insets, titlebarLeading: number): Record<string, { 
 interface InsetsChange {
   readonly insets: Insets;
   readonly frame: Frame;
-  /** The desktop host's window controls' width, from each pane's insets. Absent elsewhere. */
+  /** The desktop host's window controls' extent from each side of the pane. Absent elsewhere. */
   readonly titlebarLeading?: number;
+  readonly titlebarTrailing?: number;
 }
 
 @Component({
@@ -82,10 +85,16 @@ export class SafeAreaProvider {
       (event: { nativeEvent?: InsetsChange }) => {
         const change = event?.nativeEvent;
         if (!change || !this.reportInsets()) return;
-        area.report(change.insets, change.frame, this, change.titlebarLeading);
+        area.report(
+          change.insets,
+          change.frame,
+          this,
+          change.titlebarLeading,
+          change.titlebarTrailing,
+        );
         // Also published to the stylesheet, where a padding that clears the home indicator
         // belongs. `env()` on the web; a seeded custom property here.
-        engine?.updateTokens(insetTokens(area.insets(), area.titlebarLeading()));
+        engine?.updateTokens(insetTokens(area));
       },
     );
     inject(DestroyRef).onDestroy(() => {
@@ -94,7 +103,7 @@ export class SafeAreaProvider {
       // of a tree on its way out would be all this did.
       if (app.injector.destroyed) return;
       if (area.withdraw(this)) {
-        engine?.updateTokens(insetTokens(area.insets(), area.titlebarLeading()));
+        engine?.updateTokens(insetTokens(area));
       }
     });
   }

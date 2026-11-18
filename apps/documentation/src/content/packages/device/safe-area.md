@@ -43,7 +43,9 @@ tells you whether a real measurement has arrived yet, for a layout that would ra
 On macOS, `titlebarLeading` is how far the window's close, minimise and zoom buttons reach into
 the provider's pane from its leading edge: their width in a window with no sidebar and in the
 sidebar pane they sit over, and `0` in the content pane beside a sidebar, which they do not reach.
-It is `0` on every other OS.
+It is `0` on every other OS. `titlebarTrailing` is the same measure from the trailing edge: `0`
+on macOS, whose controls are on the leading side, on Linux, whose content stays below the header
+bar, and on every other OS.
 When the provider that reported is destroyed, all four take what another provider still up last
 reported, and with none they go back to where they started and the `--safe-area-inset-*` custom
 properties go back to zero, so `Screen.window` follows `Dimensions` again until a provider reports.
