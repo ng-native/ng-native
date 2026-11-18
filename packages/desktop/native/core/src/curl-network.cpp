@@ -120,6 +120,18 @@ bool parses(const std::string &url) {
   return ok;
 }
 
+// A WebSocket url with an http or https scheme as ws or wss, which NSURLSession's WebSocket task
+// takes and curl's does not. React Native's HMR client opens Metro's /hot by the bundle's http url.
+std::string webSocketUrl(const std::string &url) {
+  if (startsWithNoCase(url, "http://")) {
+    return "ws://" + url.substr(7);
+  }
+  if (startsWithNoCase(url, "https://")) {
+    return "wss://" + url.substr(8);
+  }
+  return url;
+}
+
 // A `data:` url's bytes: `data:[<type>][;base64],<data>`, its data percent-decoded.
 std::optional<std::string> dataUriBytes(const std::string &uri) {
   auto comma = uri.find(',');
@@ -433,7 +445,7 @@ class Engine {
     s->state = std::move(state);
     CURL *e = s->easy;
     common(e);
-    curl_easy_setopt(e, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(e, CURLOPT_URL, webSocketUrl(url).c_str());
     curl_easy_setopt(e, CURLOPT_PROTOCOLS_STR, "ws,wss");
     // The handshake through the multi handle, then frames by curl_ws_send and curl_ws_recv.
     curl_easy_setopt(e, CURLOPT_CONNECT_ONLY, 2L);
