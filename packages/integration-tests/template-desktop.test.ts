@@ -65,7 +65,7 @@ describe('the desktop template', () => {
       'typecheck',
     ]);
     assert.equal(scripts.macos, 'ng-native-desktop run');
-    assert.equal(scripts.linux, 'ng-native-desktop run');
+    assert.equal(scripts.linux, 'ng-native-desktop run --os linux');
     assert.equal(scripts.package, 'ng-native-desktop package');
     for (const name of ['start', 'typecheck']) assert.equal(scripts[name], theirs[name]);
     // Its Vitest config has projects that open the app, so `npm test` names the Node ones.

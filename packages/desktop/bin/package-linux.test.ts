@@ -34,6 +34,7 @@ import {
   summaryOf,
 } from './package-linux.mjs';
 import { decodePng, encodePng, scaleImage } from './png-icon.mjs';
+import { LINUX_TOOLS } from './toolchain.mjs';
 
 const EXPO = {
   name: 'Notes',
@@ -611,6 +612,14 @@ function linuxApp({
     warn: () => {},
     host: () => Promise.reject(new Error('package never runs the host')),
     run(command, args) {
+      // A complete toolchain, which a from-source build checks first (toolchain.mjs).
+      const tools = ['cmake', 'ninja', ...LINUX_TOOLS.map((tool) => tool.command)];
+      if (args[0] === '--version' && tools.includes(command)) {
+        return { status: 0, stdout: `${command} version 3.31.6\n` };
+      }
+      if (command === 'pkg-config' && args[0] === '--modversion') {
+        return { status: 0, stdout: '9.0\n' };
+      }
       calls.push({ command, args });
       if (command.endsWith('build.sh')) return { status: 0, stdout: `${build}\n` };
       if (command.endsWith('hermesc')) {

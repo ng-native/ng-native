@@ -1134,7 +1134,7 @@ describe('with --desktopOnly', () => {
     await generate(tree, { directory: 'apps/desktop', desktopOnly: true });
     const { targets } = readProjectConfiguration(tree, '@proj/desktop');
     assert.equal(targets!['macos'].options.command, 'ng-native-desktop run');
-    assert.equal(targets!['linux'].options.command, 'ng-native-desktop run');
+    assert.equal(targets!['linux'].options.command, 'ng-native-desktop run --os linux');
     assert.equal(targets!['package'].options.command, 'ng-native-desktop package');
     assert.equal(targets!['run-ios'], undefined);
     const agents = tree.read('apps/desktop/AGENTS.md', 'utf-8')!;
