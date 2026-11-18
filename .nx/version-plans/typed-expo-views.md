@@ -1,0 +1,11 @@
+---
+__default__: patch
+---
+
+`@ng-native/expo` gains typed components for `<expo-video>`, `<expo-blur>`, `<expo-gl>`, `<expo-mesh-gradient>` and `<expo-live-photo>`, `Camera` takes all of `<expo-camera>`'s view props as inputs, and `MapView` also types `<expo-maps-apple>` and `<expo-maps-google>`, so a boolean prop written as a bare attribute commits as true when the component is imported.
+
+`ExpoVideo`, `ExpoBlur`, `ExpoGL`, `ExpoMeshGradient` and `ExpoLivePhoto` are on the bare `@ng-native/expo` import. Each input is the module's own view prop, typed, and goes to the view as it is, except that `ExpoVideo`'s `player` takes a `videoPlayer()` as well as its id and commits the id. A boolean input written bare is true, `null` or `undefined` leaves the prop to the view's default, and an input left unset commits nothing, except where the module's React component sends a default of its own: `ExpoGL`'s `msaaSamples` is 4 unless set on iOS, as `expo-gl`'s `GLView` sends it. Without the component imported, a bare boolean attribute still reaches native as an empty string, which iOS, Android and macOS each drop for a boolean prop.
+
+`Camera`'s new inputs are `facing`, `flash`, `zoom`, `mode`, `mirror`, `autofocus`, `active`, `videoQuality`, `videoBitrate`, `animateShutter`, `pictureSize`, `selectedLens`, `enableTorch`, `videoStabilizationMode`, `barcodeScannerEnabled`, `barcodeScannerSettings`, `responsiveOrientationWhenOrientationLocked` and `ratio`. `flash` and `autofocus` are now committed as `flashMode` and `autoFocus`, the props the native view reads, as `expo-camera`'s `CameraView` renames them; before, `flash="on"` and `autofocus="on"` on the element reached no native prop. `flashMode` and `autoFocus` still work, as inputs, and `flash` or `autofocus` wins when both are set. `flash` is committed as `off` unless set, as `CameraView` sends it, so an iOS camera with `Camera` imported no longer fires the flash automatically by default; set `flash="auto"` for that.
+
+`MapView`'s shape colours also take a number, a colour React Native's `processColor` already returned, as `expo-maps`' own types do, and pass it to native unconverted. A template that imports `Camera` and binds one of these props to a value of the wrong type now fails to compile under strict template checking.

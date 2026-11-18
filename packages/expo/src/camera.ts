@@ -31,12 +31,15 @@
  * the tag the engine committed the view under, and no ref is needed. On macOS the functions are
  * the desktop host's `NgNativeCamera`'s, which take the tag as their first argument.
  */
-import { Directive, ElementRef, InjectionToken, inject, input } from '@angular/core';
-import { Engine, type EngineNode } from '@ng-native/fabric';
+import { Directive, ElementRef, InjectionToken, inject, input, output } from '@angular/core';
+import { Engine, type EngineNode, type NativeSyntheticEvent } from '@ng-native/fabric';
 import { desktopHost } from './desktop-host.ts';
 import { expoModule, optional, present } from './native.ts';
 import { Permission, UNAVAILABLE, type PermissionResponse } from './permissions.ts';
-import { optionalBoolean } from './transforms.ts';
+import { optionalBoolean, optionalNumber } from './transforms.ts';
+
+/** `expo-camera`'s own props for its view, which each input below is typed from. */
+type CameraViewProps = import('expo-camera').CameraViewProps;
 
 export type PictureOptions = Omit<
   import('expo-camera').CameraPictureOptions,
@@ -57,7 +60,31 @@ export interface CameraViewFunctions {
   stopRecording(this: { nativeTag: number }): Promise<void> | void;
 }
 
-@Directive({ selector: 'expo-camera', exportAs: 'camera', host: { '[mute]': 'mute()' } })
+@Directive({
+  selector: 'expo-camera',
+  exportAs: 'camera',
+  host: {
+    '[facing]': 'facing()',
+    '[flashMode]': "flash() ?? flashMode() ?? 'off'",
+    '[zoom]': 'zoom()',
+    '[mode]': 'mode()',
+    '[mute]': 'mute()',
+    '[mirror]': 'mirror()',
+    '[autoFocus]': 'autofocus() ?? autoFocus()',
+    '[active]': 'active()',
+    '[videoQuality]': 'videoQuality()',
+    '[videoBitrate]': 'videoBitrate()',
+    '[animateShutter]': 'animateShutter()',
+    '[pictureSize]': 'pictureSize()',
+    '[selectedLens]': 'selectedLens()',
+    '[enableTorch]': 'enableTorch()',
+    '[videoStabilizationMode]': 'videoStabilizationMode()',
+    '[barcodeScannerEnabled]': 'barcodeScannerEnabled()',
+    '[barcodeScannerSettings]': 'barcodeScannerSettings()',
+    '[responsiveOrientationWhenOrientationLocked]': 'responsiveOrientationWhenOrientationLocked()',
+    '[ratio]': 'ratio()',
+  },
+})
 export class Camera {
   /** Overridden in a test to take pictures without a camera. */
   static readonly SOURCE = new InjectionToken<CameraViewFunctions | null>(
@@ -83,11 +110,65 @@ export class Camera {
     },
   );
 
+  /** `back` unless set. */
+  readonly facing = input<CameraViewProps['facing']>();
+  /**
+   * The flash for a picture. Committed as `flashMode`, the prop native reads, and as `off` unless
+   * set, as `expo-camera`'s `CameraView` sends it: iOS's own default is `auto`.
+   */
+  readonly flash = input<CameraViewProps['flash']>();
+  /** The native view's own name for `flash`, which `flash` wins over. */
+  readonly flashMode = input<CameraViewProps['flash']>();
+  /** From 0, not zoomed, to 1, the device's furthest. */
+  readonly zoom = input<number>(undefined, { transform: optionalNumber });
+  /** `picture` unless set; `video` to `record()`. */
+  readonly mode = input<CameraViewProps['mode']>();
   /**
    * Record without sound, and without the microphone permission. A bare `mute` attribute is true,
    * and unset (`undefined` or `null`) is expo-camera's default, with sound.
    */
   readonly mute = input<boolean>(undefined, { transform: optionalBoolean });
+  /** Mirrors what the front camera takes. A bare attribute is true. */
+  readonly mirror = input<boolean>(undefined, { transform: optionalBoolean });
+  /** Committed as `autoFocus`, the prop native reads. */
+  readonly autofocus = input<CameraViewProps['autofocus']>();
+  /** The native view's own name for `autofocus`, which `autofocus` wins over. */
+  readonly autoFocus = input<CameraViewProps['autofocus']>();
+  /** Runs the camera session. True unless set; false stops it with the view still there. iOS only. */
+  readonly active = input<boolean>(undefined, { transform: optionalBoolean });
+  readonly videoQuality = input<CameraViewProps['videoQuality']>();
+  /** Bits per second. iOS needs a `codec` in `record()`'s options for it. */
+  readonly videoBitrate = input<number>(undefined, { transform: optionalNumber });
+  /** Plays the shutter animation as a picture is taken. True unless set. */
+  readonly animateShutter = input<boolean>(undefined, { transform: optionalBoolean });
+  /** One of the sizes `expo-camera`'s `getAvailablePictureSizesAsync` lists. */
+  readonly pictureSize = input<string>();
+  /** A lens's `deviceType`, as `expo-camera`'s `getAvailableLensesAsync` lists them. iOS only. */
+  readonly selectedLens = input<string>();
+  /** Turns the torch on. A bare attribute is true. */
+  readonly enableTorch = input<boolean>(undefined, { transform: optionalBoolean });
+  readonly videoStabilizationMode = input<CameraViewProps['videoStabilizationMode']>();
+  /**
+   * Scans for barcodes, sending `barcodeScanned`. `expo-camera`'s React component sets this native
+   * prop when `onBarcodeScanned` is given; here it is set with the binding. A bare attribute is
+   * true.
+   */
+  readonly barcodeScannerEnabled = input<boolean>(undefined, { transform: optionalBoolean });
+  readonly barcodeScannerSettings = input<CameraViewProps['barcodeScannerSettings']>();
+  /** Takes landscape pictures with the device turned, with the app locked upright. iOS only. */
+  readonly responsiveOrientationWhenOrientationLocked = input<boolean>(undefined, {
+    transform: optionalBoolean,
+  });
+  /** The preview's aspect ratio. Android only. */
+  readonly ratio = input<CameraViewProps['ratio']>();
+
+  /** The preview has started. */
+  readonly cameraReady = output<NativeSyntheticEvent<Record<string, never>>>();
+  /** The preview could not start, with `expo-camera`'s message. */
+  readonly mountError = output<NativeSyntheticEvent<import('expo-camera').CameraMountError>>();
+  /** A barcode was scanned, with `barcodeScannerEnabled` on. */
+  readonly barcodeScanned =
+    output<NativeSyntheticEvent<import('expo-camera').BarcodeScanningResult>>();
 
   private readonly functions = inject(Camera.SOURCE);
   private readonly engine = inject(Engine);
