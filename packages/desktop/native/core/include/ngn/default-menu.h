@@ -9,6 +9,7 @@
 #include "ngn/host-os.h"
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ngn {
@@ -97,6 +98,13 @@ std::vector<MenuItem> macOSMenuBar(const DefaultMenuOptions &options);
 // Linux's (HostOs's menuBar for Linux): the app's groups, then a menu named for the app with About
 // and Quit. None of macOS's Hide, Services, Minimize, Zoom or window list.
 std::vector<MenuItem> linuxMenuBar(const DefaultMenuOptions &options);
+
+// Where a window shows the app's menus on Linux: a menu bar under the header bar on KDE Plasma,
+// whose apps have one, and the header bar's primary menu everywhere else, as GNOME's apps have it.
+// `currentDesktop` is XDG_CURRENT_DESKTOP, a colon-separated list of desktop names, any of which
+// may be KDE's.
+enum class MenuPlacement { MenuBar, PrimaryMenu };
+MenuPlacement linuxMenuPlacement(std::string_view currentDesktop);
 
 // The item with this command anywhere in `menus`, or null.
 const MenuItem *findMenuItem(const std::vector<MenuItem> &menus, MenuCommand command);

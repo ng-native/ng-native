@@ -39,6 +39,11 @@ The options every window takes are `title`, `width`, `height`, `minWidth`, `minH
 `autosave`. A window's frame is saved and restored on the next launch, under `main`, its route
 outlet or its `restoreKey`; `autosave: false` turns that off.
 
+On Linux the title bar is the window's libadwaita header bar. `'default'` keeps the content below
+it; `'transparent'` makes the bar flat and runs the content under it, clear of it by the safe area's
+top inset; `'hidden'` does the same and hides the window's title. The window controls stay in
+every mode, as on macOS.
+
 ## Component windows
 
 `open(Component, { inputs })` opens a window rendering a component, as many as are asked for, such

@@ -39,6 +39,7 @@
 
 #include <atomic>
 #include <cstdio>
+#include <map>
 #include <memory>
 #include <set>
 
@@ -63,6 +64,9 @@ struct Host {
   GtkWidget *appSurface{nullptr};
   bool appWindowShown{false};
   std::set<SurfaceId> surfaces;
+  // What each surface last reported of its size and its chrome's insets.
+  std::map<SurfaceId, ngn::ContainerInsets> reported;
+  GtkApplication *application{nullptr};
   gint64 launched{0};
   bool firstFrame{false};
   bool quit{false};
@@ -84,6 +88,10 @@ ngn::SurfaceMetrics metricsFor(int width, int height, int scale) {
   return {.size = {static_cast<Float>(width), static_cast<Float>(height)}, .pointScale = static_cast<float>(scale), .fontScale = ngn::gtk::desktopFontScale()};
 }
 
+GtkWidget *surfaceWidgetOf(SurfaceId surface) {
+  return surface == kAppSurface ? gHost.appSurface : gHost.windows ? gHost.windows->surfaceWidget(surface) : nullptr;
+}
+
 // The text scaling changed: every surface lays out again at it, and Dimensions reports it.
 void followFontScale() {
   float fontScale = ngn::gtk::desktopFontScale();
@@ -91,7 +99,7 @@ void followFontScale() {
   metrics.window.fontScale = metrics.screen.fontScale = fontScale;
   gHost.state->metrics.set(metrics);
   for (SurfaceId surface : gHost.surfaces) {
-    GtkWidget *widget = surface == kAppSurface ? gHost.appSurface : gHost.windows->surfaceWidget(surface);
+    GtkWidget *widget = surfaceWidgetOf(surface);
     if (widget && gHost.runtime) {
       gHost.runtime->updateSurface(
           surface, metricsFor(gtk_widget_get_width(widget), gtk_widget_get_height(widget), gtk_widget_get_scale_factor(widget)));
@@ -123,14 +131,21 @@ void watchFirstFrame(GtkWidget *window, GtkWidget *surface) {
   }), surface);
 }
 
-// A surface fills its window below the header bar, which its content never runs under: its safe
-// area is clear on every side, and the window controls reach none of it.
-void reportContainer(SurfaceId surface, int width, int height) {
-  gHost.backend->modals().settle();
-  if (gHost.mounting) {
-    gHost.mounting->setContainerInsets(
-        surface, {.size = {static_cast<facebook::react::Float>(width), static_cast<facebook::react::Float>(height)}});
+// A surface's size and the safe area its window's chrome leaves it (chromeInsets), each time
+// either changes: as it resizes, and as the header bar or the window controls move over content
+// that runs under them.
+void reportContainer(SurfaceId surface) {
+  GtkWidget *widget = surfaceWidgetOf(surface);
+  if (!widget || !gHost.mounting) {
+    return;
   }
+  auto insets = ngn::gtk::chromeInsets(widget);
+  if (auto it = gHost.reported.find(surface); it != gHost.reported.end() && it->second == insets) {
+    return;
+  }
+  gHost.reported[surface] = insets;
+  gHost.backend->modals().settle();
+  gHost.mounting->setContainerInsets(surface, insets);
 }
 
 // A surface's widget joins the backend and the input dispatcher.
@@ -204,6 +219,9 @@ int main(int argc, char *argv[]) {
 
   gtk_init();
   adw_init();
+  gHost.application = ngn::gtk::startApplication(appId);
+  const char *desktop = getenv("XDG_CURRENT_DESKTOP");
+  const auto menuPlacement = ngn::linuxMenuPlacement(desktop ? desktop : "");
 
   gHost.backend = std::make_shared<ngn::gtk::GtkBackend>();
   // The mounting manager, the input dispatcher and the gesture recognisers over the backend, the
@@ -267,30 +285,30 @@ int main(int argc, char *argv[]) {
   // pointer shows it.
   gHost.input->onCursor = [](ngn::Cursor cursor) {
     for (SurfaceId surface : gHost.surfaces) {
-      GtkWidget *widget = surface == kAppSurface ? gHost.appSurface : gHost.windows->surfaceWidget(surface);
-      if (widget) {
+      if (GtkWidget *widget = surfaceWidgetOf(surface)) {
         gtk_widget_set_cursor_from_name(widget, ngn::gtk::cursorName(cursor));
       }
     }
   };
 
   int width = static_cast<int>(ngn::kDefaultWindowWidth), height = static_cast<int>(ngn::kDefaultWindowHeight);
-  gHost.appWindow = adw_window_new();
+  gHost.appWindow = adw_application_window_new(gHost.application);
   gtk_window_set_title(GTK_WINDOW(gHost.appWindow), settings.title.c_str());
   gtk_window_set_default_size(GTK_WINDOW(gHost.appWindow), width, height);
   gHost.appSurface = ngn::gtk::makeSurfaceWidget(kAppSurface, [](int w, int h) {
-    reportContainer(kAppSurface, w, h);
+    reportContainer(kAppSurface);
     if (gHost.runtime) {
       gHost.runtime->updateSurface(kAppSurface, metricsFor(w, h, gtk_widget_get_scale_factor(gHost.appWindow)));
     }
   });
-  adw_window_set_content(ADW_WINDOW(gHost.appWindow), ngn::gtk::wrapInChrome(gHost.appSurface));
+  adw_application_window_set_content(ADW_APPLICATION_WINDOW(gHost.appWindow), ngn::gtk::wrapInChrome(gHost.appSurface, {.menus = menuPlacement}));
   addSurface(kAppSurface, gHost.appSurface);
   g_signal_connect(gHost.appWindow, "close-request", G_CALLBACK(+[](GtkWindow *, gpointer) -> gboolean {
     gHost.quit = true;
     return FALSE;
   }), nullptr);
   gtk_widget_realize(gHost.appWindow);
+  ngn::gtk::afterLayout(gHost.appWindow, [] { reportContainer(kAppSurface); });
 
   // The app's folders: a test launch's own, else the XDG ones named for the app.
   std::string appData = settings.test ? settings.test->applicationSupport() : joined(g_get_user_data_dir(), appId);
@@ -365,7 +383,7 @@ int main(int argc, char *argv[]) {
       .startSurface = [](SurfaceId surface, int w, int h, int scale) { gHost.runtime->startSurface(surface, "", metricsFor(w, h, scale)); },
       .resizeSurface =
           [](SurfaceId surface, int w, int h, int scale) {
-            reportContainer(surface, w, h);
+            reportContainer(surface);
             if (gHost.runtime) {
               gHost.runtime->updateSurface(surface, metricsFor(w, h, scale));
             }
@@ -374,12 +392,14 @@ int main(int argc, char *argv[]) {
           [](SurfaceId surface) {
             gHost.runtime->stopSurface(surface);
             gHost.mounting->removeContainerInsets(surface);
+            gHost.reported.erase(surface);
             gHost.input->removeContainer(surface);
             gHost.backend->removeSurface(surface);
             gHost.surfaces.erase(surface);
           },
+      .laidOut = reportContainer,
       .quit = [] { gHost.quit = true; },
-  });
+  }, gHost.application, menuPlacement);
   auto windowHost = std::make_shared<ngn::WindowHost>(gHost.windows, system);
   gHost.windows->setHost(windowHost);
   auto menus = std::make_shared<ngn::MenuHost>(

@@ -81,6 +81,18 @@ TEST_CASE("the window controls reach in from the leading edge, the right one rig
   CHECK(ngn::titlebarLeading(-10, 20, 100, true) == 110);
 }
 
+TEST_CASE("the window controls reach in from the trailing edge, the left one right to left") {
+  // A close button 46 points wide, 6 in from the right of a 360-point window, or from its left.
+  CHECK(ngn::titlebarTrailing(308, 354, 360, false) == 52);
+  CHECK(ngn::titlebarTrailing(6, 52, 360, true) == 52);
+  // Controls outside the container reach nothing.
+  CHECK(ngn::titlebarTrailing(-60, -10, 360, false) == 0);
+  CHECK(ngn::titlebarTrailing(370, 400, 360, true) == 0);
+  // Controls overlapping the container count from its trailing edge.
+  CHECK(ngn::titlebarTrailing(-10, 20, 100, false) == 110);
+  CHECK(ngn::titlebarTrailing(80, 110, 100, true) == 110);
+}
+
 TEST_CASE("a view gets the part of its container's insets it overlaps") {
   ngn::ContainerInsets c{.size = {800, 600}, .insets = {.left = 10, .top = 52, .right = 20, .bottom = 30}};
   CHECK(ngn::insetsWithin(c, {{0, 0}, {800, 600}}) == EdgeInsets{.left = 10, .top = 52, .right = 20, .bottom = 30});

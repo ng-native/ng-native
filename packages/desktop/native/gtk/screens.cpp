@@ -164,22 +164,88 @@ static void ngn_host_slot_init(NgnHostSlot *self) {
 
 namespace ngn::gtk {
 
-GtkWidget *wrapInChrome(GtkWidget *surface) {
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+GtkWidget *wrapInChrome(GtkWidget *surface, const ChromeOptions &options) {
+  GtkWidget *toolbar = adw_toolbar_view_new();
   GtkWidget *header = adw_header_bar_new();
   GtkWidget *overlay = gtk_overlay_new();
   gtk_overlay_set_child(GTK_OVERLAY(overlay), surface);
-  gtk_widget_set_vexpand(overlay, TRUE);
-  gtk_box_append(GTK_BOX(box), header);
-  gtk_box_append(GTK_BOX(box), overlay);
-  g_object_set_data_full(G_OBJECT(surface), kChrome, new WindowChrome{.headerBar = header, .overlay = overlay}, [](gpointer p) {
-    delete static_cast<WindowChrome *>(p);
-  });
-  return box;
+  adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(toolbar), header);
+  adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(toolbar), overlay);
+  auto *chrome = new WindowChrome{.toolbarView = toolbar, .headerBar = header, .overlay = overlay, .titleBar = options.titleBar};
+  if (options.menus == MenuPlacement::MenuBar) {
+    chrome->menuBar = gtk_popover_menu_bar_new_from_model(nullptr);
+    gtk_widget_set_visible(chrome->menuBar, FALSE);
+    adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(toolbar), chrome->menuBar);
+  } else {
+    chrome->primaryMenu = gtk_menu_button_new();
+    gtk_menu_button_set_icon_name(GTK_MENU_BUTTON(chrome->primaryMenu), "open-menu-symbolic");
+    gtk_menu_button_set_primary(GTK_MENU_BUTTON(chrome->primaryMenu), TRUE);
+    gtk_widget_set_tooltip_text(chrome->primaryMenu, "Main Menu");
+    gtk_widget_set_visible(chrome->primaryMenu, FALSE);
+    adw_header_bar_pack_end(ADW_HEADER_BAR(header), chrome->primaryMenu);
+  }
+  if (runsUnderHeaderBar(*chrome)) {
+    // A flat bar over the content, which shows through it.
+    adw_toolbar_view_set_top_bar_style(ADW_TOOLBAR_VIEW(toolbar), ADW_TOOLBAR_FLAT);
+    adw_toolbar_view_set_extend_content_to_top_edge(ADW_TOOLBAR_VIEW(toolbar), TRUE);
+    adw_header_bar_set_show_title(ADW_HEADER_BAR(header), options.titleBar != TitleBar::Hidden);
+  } else {
+    // The bar above the content, with its edge, as the content scrolls under nothing.
+    adw_toolbar_view_set_top_bar_style(ADW_TOOLBAR_VIEW(toolbar), ADW_TOOLBAR_RAISED);
+  }
+  g_object_set_data_full(G_OBJECT(surface), kChrome, chrome, [](gpointer p) { delete static_cast<WindowChrome *>(p); });
+  return toolbar;
 }
 
 const WindowChrome *chromeOf(GtkWidget *surface) {
   return surface ? static_cast<const WindowChrome *>(g_object_get_data(G_OBJECT(surface), kChrome)) : nullptr;
+}
+
+bool runsUnderHeaderBar(const WindowChrome &chrome) {
+  return chrome.titleBar != TitleBar::Default;
+}
+
+namespace {
+
+// The window controls in `widget`'s subtree that show a button: the start side's and the end's,
+// as gtk-decoration-layout splits them at its colon.
+void findWindowControls(GtkWidget *widget, std::vector<GtkWidget *> &found) {
+  for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
+    if (GTK_IS_WINDOW_CONTROLS(child)) {
+      if (!gtk_window_controls_get_empty(GTK_WINDOW_CONTROLS(child)) && gtk_widget_get_visible(child)) {
+        found.push_back(child);
+      }
+    } else {
+      findWindowControls(child, found);
+    }
+  }
+}
+
+} // namespace
+
+ContainerInsets chromeInsets(GtkWidget *surface) {
+  ContainerInsets insets{.size = {static_cast<Float>(gtk_widget_get_width(surface)), static_cast<Float>(gtk_widget_get_height(surface))}};
+  const WindowChrome *chrome = chromeOf(surface);
+  if (!chrome || !runsUnderHeaderBar(*chrome)) {
+    return insets;
+  }
+  insets.insets.top = static_cast<Float>(adw_toolbar_view_get_top_bar_height(ADW_TOOLBAR_VIEW(chrome->toolbarView)));
+  bool rightToLeft = gtk_widget_get_direction(surface) == GTK_TEXT_DIR_RTL;
+  std::vector<GtkWidget *> controls;
+  findWindowControls(chrome->headerBar, controls);
+  for (GtkWidget *side : controls) {
+    graphene_rect_t bounds;
+    if (!gtk_widget_compute_bounds(side, surface, &bounds)) {
+      continue;
+    }
+    double minX = bounds.origin.x, maxX = bounds.origin.x + bounds.size.width;
+    if (gtk_window_controls_get_side(GTK_WINDOW_CONTROLS(side)) == GTK_PACK_START) {
+      insets.titlebarLeading = std::max(insets.titlebarLeading, titlebarLeading(minX, maxX, insets.size.width, rightToLeft));
+    } else {
+      insets.titlebarTrailing = std::max(insets.titlebarTrailing, titlebarTrailing(minX, maxX, insets.size.width, rightToLeft));
+    }
+  }
+  return insets;
 }
 
 GtkWidget *makeHostSlot() {
@@ -879,7 +945,13 @@ void Modals::fit(Tag tag, Presented &p) {
   Size window{static_cast<Float>(gtk_widget_get_width(surface)), static_cast<Float>(gtk_widget_get_height(surface))};
   Size size = window;
   auto node = sheetNodes_ ? sheetNodes_(p.surfaceId, tag) : std::nullopt;
-  if (p.presentation == ModalPresentation::Sheet) {
+  if (p.presentation == ModalPresentation::Cover) {
+    // Below the header bar, which the window's content may run under: the cover starts where the
+    // bar ends.
+    int top = static_cast<int>(chromeInsets(surface).insets.top);
+    gtk_widget_set_margin_top(p.layer, top);
+    size.height = std::max<Float>(0, window.height - static_cast<Float>(top));
+  } else if (p.presentation == ModalPresentation::Sheet) {
     // The content at the core's size, below the header, which the sheet stays within the window with.
     Float header = p.header ? static_cast<Float>(naturalHeight(p.header)) : 0;
     size = sheetSize(node.value_or(SheetNode{}), window);
