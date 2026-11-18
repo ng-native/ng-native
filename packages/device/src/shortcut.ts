@@ -5,8 +5,10 @@
  * host, iOS hardware keyboards and Android's key-shortcut dispatch all follow the same rules.
  */
 
+import type { OsName } from './os.ts';
+
 /** The OSes a shortcut is read on, as the `OS` token names them. */
-export type ShortcutOs = 'ios' | 'android' | 'macos' | 'web';
+export type ShortcutOs = OsName;
 
 /** A key pressed with its modifiers, as a key event reports it. */
 export interface KeyChord {

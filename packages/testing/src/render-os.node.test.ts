@@ -63,6 +63,17 @@ test("renders as the project's OS when the render names none, fakes included", a
   }
 });
 
+test('refuses a project OS it does not know, naming it, rather than rendering as iOS', async () => {
+  const before = process.env['NG_NATIVE_TEST_OS'];
+  process.env['NG_NATIVE_TEST_OS'] = 'windows';
+  try {
+    await assert.rejects(render(Gate), /NG_NATIVE_TEST_OS is 'windows'/);
+  } finally {
+    if (before === undefined) delete process.env['NG_NATIVE_TEST_OS'];
+    else process.env['NG_NATIVE_TEST_OS'] = before;
+  }
+});
+
 test('puts the platform back once the render goes', async () => {
   const before = nativePlatform();
   await render(Gate, { os: 'android' });
