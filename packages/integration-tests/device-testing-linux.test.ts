@@ -73,6 +73,7 @@ let reply = null;
     fs.appendFileSync(env.LOG, JSON.stringify({ got: request.type, session }) + '\\n');
     if (request.type === 'cancel' && env.CRASH_FIRST && !fs.existsSync(env.CRASH_FIRST)) {
       fs.writeFileSync(env.CRASH_FIRST, '1');
+      fs.writeFileSync(env.NGN_STATE_DIR + '/crash.txt', 'ngn-linux crashed: SIGSEGV (signal 11)\\nNative stack:\\n#0 stand-in\\n');
       process.stderr.write('Gdk-ERROR: stand-in for the host aborting\\n');
       process.kill(process.pid, 'SIGKILL');
     }
@@ -186,6 +187,15 @@ describe('the Linux launcher', () => {
       assert.match(
         String(failed?.error?.message),
         /The host's last output:\nGdk-ERROR: stand-in for the host aborting/,
+      );
+      // Its crash.txt, which the session prints as the host goes, before the state goes with it.
+      assert.match(
+        String(failed?.error?.message),
+        /The host's crash report:\nngn-linux crashed: SIGSEGV \(signal 11\)\nNative stack:\n#0 stand-in/,
+      );
+      assert.doesNotMatch(
+        String(failed?.error?.message),
+        /last output:[\s\S]*the host left crash\.txt/,
       );
 
       worker.send(request('cancel') as never);

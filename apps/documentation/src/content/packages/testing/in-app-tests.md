@@ -88,7 +88,9 @@ On a Mac, the host runs in the AlmaLinux 9 image it is built in, `ngn-el9` from
 container can see, such as one under your home folder. The image reaches Vitest and Metro on the
 Mac through ports it forwards, so start Metro as usual. `container: false` runs the host directly.
 
-Linux has no crash report folder: if the host crashes, the failure quotes the end of its output.
+Linux has no crash report folder, so the host writes its own as it crashes, naming the signal and
+the native stack. The failure quotes that report, then the end of the host's output, from a
+container too.
 
 ## Writing a test
 

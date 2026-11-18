@@ -5,8 +5,10 @@
  * the AlmaLinux 9 image the host is built in (`packages/desktop/native/docker`), which reaches the
  * pool and Metro on the Mac through ports it forwards.
  *
- * Linux has no crash report location of its own, so what the pool names for a lost host is the
- * end of the host's output.
+ * Linux has no crash report location of its own, so the host writes `crash.txt` in its state
+ * folder as it dies of a fatal signal. The session script prints it after the host, where the
+ * launch's output carries it out of a container too, and the pool names it for a lost host, with
+ * the end of the host's output.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { rmSync } from 'node:fs';
@@ -135,6 +137,8 @@ export function sessionScript(display: LinuxDisplay, forward: readonly number[] 
     'status=$?',
     // A trapped signal ends the first wait early: wait again for the host itself.
     'while kill -0 "$host" 2>/dev/null; do wait "$host"; status=$?; done',
+    // The host's crash report, which a container's state goes with.
+    `if [ -s "$NGN_STATE_DIR/crash.txt" ]; then echo ${shellQuote(CRASH_MARKER)} >&2; cat "$NGN_STATE_DIR/crash.txt" >&2; fi`,
     'exit "$status"',
   );
   return lines.join('\n');
@@ -291,19 +295,28 @@ function signalName(number: number): string | undefined {
 /** How many lines of the host's output a lost host's failure quotes. */
 const TAIL_LINES = 30;
 
+/** The line the session script prints before the host's `crash.txt`. */
+export const CRASH_MARKER = 'ngn-test: the host left crash.txt:';
+
 export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
   let tail: string[] = [];
+  let crash: string[] | undefined;
   return {
     start(request): LaunchedApp {
       const launch = linuxLaunchCommand(options, request);
       tail = [];
+      crash = undefined;
       const child: ChildProcess = spawn(launch.command, launch.args, {
         cwd: options.cwd,
         env: launch.env as NodeJS.ProcessEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       const keep = (chunk: Buffer) => {
-        tail = [...tail, ...chunk.toString().split('\n').filter(Boolean)].slice(-TAIL_LINES);
+        for (const line of chunk.toString().split('\n').filter(Boolean)) {
+          if (crash) crash.push(line);
+          else if (line === CRASH_MARKER) crash = [];
+          else tail = [...tail, line].slice(-TAIL_LINES);
+        }
       };
       child.stdout?.on('data', keep);
       child.stderr?.on('data', keep);
@@ -335,7 +348,11 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
       };
     },
     crashReport() {
-      return tail.length ? `The host's last output:\n${tail.join('\n')}` : undefined;
+      const parts = [
+        ...(crash?.length ? [`The host's crash report:\n${crash.join('\n')}`] : []),
+        ...(tail.length ? [`The host's last output:\n${tail.join('\n')}`] : []),
+      ];
+      return parts.length ? parts.join('\n\n') : undefined;
     },
   };
 }
