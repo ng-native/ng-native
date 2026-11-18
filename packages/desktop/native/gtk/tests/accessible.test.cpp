@@ -203,3 +203,20 @@ TEST_CASE("a paragraph that stops saying anything is read through, and is static
   CHECK(roleOf(views.view(2)) == GTK_ACCESSIBLE_ROLE_LABEL);
   CHECK(hasProperty(views.view(2), GTK_ACCESSIBLE_PROPERTY_LABEL, "Saved again"));
 }
+
+TEST_CASE("a paragraph whose state alone changes its role keeps its opacity") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto paragraph = MountedViews::shadow(2, "Paragraph", desktopViewProps(dynamic::object("opacity", 0)), {{0, 0}, {150, 20}});
+  paragraph.state = paragraphState("");
+  views.add(paragraph);
+  GtkWidget *before = views.view(2);
+  CHECK(gtk_widget_get_opacity(before) == 0);
+  // A state update only, with the same props: the new widget is made with GTK's opacity of 1.
+  auto current = views.mounting->tree().find(2)->view;
+  auto next = current;
+  next.state = paragraphState("Hidden");
+  views.mount({ShadowViewMutation::UpdateMutation(current, next, MountedViews::kSurface)});
+  CHECK(views.view(2) != before);
+  CHECK(gtk_widget_get_opacity(views.view(2)) == 0);
+}
