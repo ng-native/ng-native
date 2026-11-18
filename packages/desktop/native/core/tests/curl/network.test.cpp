@@ -524,6 +524,23 @@ TEST_CASE("a WebSocket over libcurl opens with the server's subprotocol, echoes 
   CHECK(r.seen().size() == 6);
 }
 
+// React Native's HMR client opens Metro's /hot by the bundle's http url, which NSURLSession takes.
+TEST_CASE("a WebSocket over libcurl opens an http url as ws, as NSURLSession does") {
+  TestServer server;
+  auto network = ngn::makeCurlNetwork();
+  SocketRecorder lower, upper;
+  auto l = network.webSockets->connect(server.url("/ws"), {}, {}, lower.callbacks());
+  auto u = network.webSockets->connect("HTTP" + server.url("/ws").substr(4), {}, {}, upper.callbacks());
+  REQUIRE(l);
+  REQUIRE(u);
+  l->sendText("hi");
+  u->sendText("hi");
+  REQUIRE(lower.waitFor(2));
+  REQUIRE(upper.waitFor(2));
+  CHECK(lower.seen() == std::vector<std::string>{"open ", "text hi"});
+  CHECK(upper.seen() == std::vector<std::string>{"open ", "text hi"});
+}
+
 TEST_CASE("a WebSocket over libcurl reports the server's close, and fails when it cannot open") {
   TestServer server;
   auto network = ngn::makeCurlNetwork();
@@ -545,6 +562,21 @@ TEST_CASE("a WebSocket over libcurl reports the server's close, and fails when i
       "ws://127.0.0.1:" + std::to_string(closedPort()) + "/ws", {}, {}, unreachable.callbacks());
   REQUIRE(unreachable.waitFor(1));
   CHECK(unreachable.seen() == std::vector<std::string>{"error Could not connect to the server."});
+
+  // https is wss: its TLS handshake fails on this plain server, where a scheme curl refuses would be
+  // an unsupported URL.
+  SocketRecorder https;
+  auto h = network.webSockets->connect("https" + server.url("/ws").substr(4), {}, {}, https.callbacks());
+  REQUIRE(https.waitFor(1));
+  CHECK(https.seen() ==
+        std::vector<std::string>{"error An SSL error has occurred and a secure connection to the server cannot be made."});
+
+  // Only http and https become a WebSocket's schemes.
+  SocketRecorder ftp;
+  auto f = network.webSockets->connect("ftp" + server.url("/ws").substr(4), {}, {}, ftp.callbacks());
+  REQUIRE(ftp.waitFor(1));
+  REQUIRE(ftp.seen().size() == 1);
+  CHECK(ftp.seen()[0].starts_with("error "));
 
   // Closed before it opens, as NSURLSession cancels it.
   SocketRecorder early;
