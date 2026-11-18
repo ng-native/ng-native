@@ -36,7 +36,7 @@ std::shared_ptr<DockBackend> makeNoDock();
 // Whether the network is reachable, from GLib's GNetworkMonitor.
 std::shared_ptr<PathMonitor> makePathMonitor();
 
-// A native control's size before the GTK controls come: one fixed size for every control.
+// How big GTK draws each native control (native-controls.h).
 std::shared_ptr<ControlMeasurer> makeControlMeasurer();
 
 } // namespace ngn::gtk

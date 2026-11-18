@@ -44,8 +44,8 @@ class NativeControlProps final : public facebook::react::ViewProps, public HasDe
 
   // Button.
   std::string title;
-  // `default`, `cancel`, `destructive` or `plain`.
-  std::string kind{"default"};
+  // `default`, `cancel`, `destructive` or `plain`, or empty when the element sets none.
+  std::string kind;
   std::string sfSymbol;
 
   // Switch.
