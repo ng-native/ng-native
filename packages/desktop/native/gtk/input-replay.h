@@ -10,6 +10,7 @@
 
 #include <gtk/gtk.h>
 
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -19,7 +20,8 @@ namespace ngn::gtk {
 std::optional<std::string> inputReplayProblem(GtkWidget *window, const InputScript &script);
 
 // Plays the script into `window` from now, a step at a time on the main loop, and logs
-// "[ngn] input script done" after the last. False, having logged why, when it cannot play.
-bool replayInputScript(GtkWidget *window, InputScript script);
+// "[ngn] input script done" after the last, then calls `done`, which a script whose window
+// closes first never reaches. False, having logged why, when it cannot play.
+bool replayInputScript(GtkWidget *window, InputScript script, std::function<void()> done = {});
 
 } // namespace ngn::gtk

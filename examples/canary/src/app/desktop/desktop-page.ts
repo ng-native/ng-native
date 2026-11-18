@@ -11,10 +11,12 @@ import {
   ScrollView,
   Shortcut,
   Text,
+  TrayIcon,
   View,
   type FileDropEvent,
 } from '@ng-native/components';
-import { AppWindows, OS, UndoStack } from '@ng-native/device';
+import { AppWindows, OS, Tray, UndoStack } from '@ng-native/device';
+import { Notifications } from '@ng-native/expo/notifications';
 import { NativeHeader } from '@ng-native/router';
 import { page } from '../screen-styles.ts';
 import { LibraryWindow } from './library-window.ts';
@@ -40,6 +42,7 @@ import { TitleBarWindow } from './title-bar-window.ts';
     ScrollView,
     Shortcut,
     Text,
+    TrayIcon,
     View,
   ],
   template: `
@@ -68,6 +71,21 @@ import { TitleBarWindow } from './title-bar-window.ts';
         Edit > Undo takes a star back while no text field has focus.
         {{ undo.available() ? '' : 'This OS has no undo manager, so undo does nothing here.' }}
       </text>
+
+      <text class="heading">Tray and badge</text>
+      <view class="desktop-row">
+        <native-button testID="tray" [disabled]="!tray.available()" (press)="toggleTray()">
+          {{ trayShown() ? 'Hide the Tray Icon' : 'Show a Tray Icon' }}
+        </native-button>
+        <native-button testID="badge" (press)="badgeStars()">Badge the Stars</native-button>
+      </view>
+      @if (trayShown()) {
+        <tray-icon sfSymbol="star" [title]="stars() + ' stars'" tooltip="Canary stars">
+          <menu-item label="Add a Star" (select)="addStar()" />
+          <menu-item label="Clear Stars" (select)="clearStars()" />
+        </tray-icon>
+      }
+      <text class="hint">{{ trayNote() }}</text>
 
       <text class="heading">Context menu</text>
       <view class="card" testID="menu-card" [nativeID]="cardName()" [contextMenu]="cardMenu">
@@ -131,6 +149,8 @@ import { TitleBarWindow } from './title-bar-window.ts';
 })
 export class DesktopPage {
   protected readonly undo = inject(UndoStack);
+  protected readonly tray = inject(Tray);
+  private readonly notifications = inject(Notifications);
   private readonly windows = inject(AppWindows);
   protected readonly os = inject(OS);
   protected readonly page = page;
@@ -142,6 +162,12 @@ export class DesktopPage {
   protected readonly over = signal(false);
   protected readonly drops = signal<readonly string[]>([]);
   protected readonly windowNote = signal('');
+  protected readonly trayShown = signal(false);
+  protected readonly trayNote = computed(() =>
+    this.tray.available()
+      ? 'The tray icon menu adds and clears stars. The badge is the star count on the app icon, where the OS draws one.'
+      : 'This OS has no tray here. The badge is the star count on the app icon, where the OS draws one.',
+  );
   protected readonly undoTitle = computed(() =>
     this.undo.undoLabel() ? 'Undo ' + this.undo.undoLabel() : 'Undo',
   );
@@ -154,6 +180,14 @@ export class DesktopPage {
       undo: () => this.stars.update((count) => count - 1),
       redo: () => this.stars.update((count) => count + 1),
     });
+  }
+
+  protected toggleTray(): void {
+    this.trayShown.update((shown) => !shown);
+  }
+
+  protected badgeStars(): void {
+    this.notifications.setBadge(this.stars());
   }
 
   protected renameCard(): void {

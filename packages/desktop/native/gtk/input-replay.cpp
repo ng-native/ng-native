@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -49,6 +50,7 @@ struct Replay {
   GtkWidget *window{nullptr};
   InputScript script;
   size_t at{0};
+  std::function<void()> done;
   ~Replay() {
     if (window) {
       g_object_remove_weak_pointer(G_OBJECT(window), reinterpret_cast<gpointer *>(&window));
@@ -82,8 +84,12 @@ void pointerTo(GtkWidget *window, const InputStep &step) {
   xtest().motion(displayOf(window), -1, x, y, 0);
 }
 
-// The X keysym a script's key names: a character, or escape, return, space, tab or delete.
+// The X keysym a script's key names: a character, or escape, return, space, tab, delete or an arrow.
 unsigned long keysymOf(const std::string &key) {
+  if (key == "left") return XK_Left;
+  if (key == "right") return XK_Right;
+  if (key == "up") return XK_Up;
+  if (key == "down") return XK_Down;
   if (key == "escape") return XK_Escape;
   if (key == "return") return XK_Return;
   if (key == "space") return XK_space;
@@ -156,6 +162,9 @@ void playNext(std::shared_ptr<Replay> replay) {
   }
   if (replay->at >= replay->script.steps.size()) {
     fprintf(stderr, "[ngn] input script done\n");
+    if (replay->done) {
+      replay->done();
+    }
     return;
   }
   const auto &step = replay->script.steps[replay->at++];
@@ -199,7 +208,7 @@ std::optional<std::string> inputReplayProblem(GtkWidget *window, const InputScri
 #endif
 }
 
-bool replayInputScript(GtkWidget *window, InputScript script) {
+bool replayInputScript(GtkWidget *window, InputScript script, std::function<void()> done) {
   if (auto problem = inputReplayProblem(window, script)) {
     fprintf(stderr, "[ngn] input script: %s\n", problem->c_str());
     return false;
@@ -208,6 +217,7 @@ bool replayInputScript(GtkWidget *window, InputScript script) {
   auto replay = std::make_shared<Replay>();
   replay->window = window;
   replay->script = std::move(script);
+  replay->done = std::move(done);
   g_object_add_weak_pointer(G_OBJECT(window), reinterpret_cast<gpointer *>(&replay->window));
   playNext(std::move(replay));
   return true;

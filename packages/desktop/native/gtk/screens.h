@@ -162,6 +162,9 @@ class Modals {
   GtkWidget *sheetHeaderOf(Tag tag) const;
   // What Escape does: presses a sheet's Cancel, or asks the app to close the presentation.
   void requestClose(Tag tag);
+  // The presentation shown last over `window`'s surfaces, which Ctrl+W closes before the window, as
+  // Cmd-W does on macOS.
+  std::optional<Tag> front(GtkWindow *window) const;
   // What Return does: presses a sheet's default button. Whether there was one to press.
   bool pressDefault(Tag tag);
 
@@ -186,6 +189,8 @@ class Modals {
     std::pair<int, int> size{0, 0};
     // Where the focus was, to go back to.
     GtkWidget *opener{nullptr};
+    // When it was presented, against the others: the front one is the latest.
+    uint64_t order{0};
   };
   void present(SurfaceId surfaceId, Tag tag);
   void fit(Tag tag, Presented &presented);
@@ -198,6 +203,7 @@ class Modals {
   SheetNodes sheetNodes_;
   std::set<std::pair<SurfaceId, Tag>> pending_;
   std::map<Tag, Presented> presented_;
+  uint64_t presentations_{0};
 };
 
 } // namespace ngn::gtk
