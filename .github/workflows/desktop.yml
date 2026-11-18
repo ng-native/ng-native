@@ -194,7 +194,9 @@ jobs:
               Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
               xvfb=$!
               trap "kill $xvfb" EXIT
-              DISPLAY=:99 GDK_BACKEND=x11 GTK_A11Y=none "$build/gtk/ngn_gtk_tests"
+              mkdir -p "$GITHUB_WORKSPACE/.linux-probe/gtk-tests"
+              DISPLAY=:99 GDK_BACKEND=x11 GTK_A11Y=none NGN_GTK_TEST_SHOTS="$GITHUB_WORKSPACE/.linux-probe/gtk-tests" \
+                "$build/gtk/ngn_gtk_tests"
               native/docker/glibc-floor.sh 2.34 "$build/ngn_core_tests" "$build/ngn_runtime_tests" "$build/gtk/ngn-linux" \
                 "$NGN_DESKTOP_CACHE"/*/hermes-$(uname -m)/bin/hermesc
             '
@@ -237,6 +239,7 @@ jobs:
           name: linux-first-frame-${{ matrix.arch }}
           path: |
             .linux-probe/*.png
+            .linux-probe/gtk-tests/*.png
             .linux-probe/weston.log
           if-no-files-found: ignore
 
