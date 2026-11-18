@@ -5,6 +5,7 @@
 // it run another bundle, as another app, or take updates from another server.
 #pragma once
 
+#include "ngn/host-os.h"
 #include "ngn/updates.h"
 
 #include <functional>
@@ -83,16 +84,17 @@ struct LaunchSettings {
   LaunchSources::Lookup plist;
 };
 
-// The settings, or the usage line when a dev run's argv names no bundle or is malformed, or why a
-// test launch's environment is unusable (NGN_TESTS=1 without an absolute NGN_STATE_DIR, or with a
-// run id that is not letters, digits and dashes).
-std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources);
+// The settings, or the usage line (naming `os`'s program) when a dev run's argv names no bundle or
+// is malformed, or why a test launch's environment is unusable (NGN_TESTS=1 without an absolute
+// NGN_STATE_DIR, or with a run id that is not letters, digits and dashes).
+std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources, const HostOs &os);
 
 // The Expo Updates client's settings: NGNUpdatesURL, NGNRuntimeVersion, NGNUpdatesPlatform,
 // NGNUpdatesCodeSigningCertificate (PEM), NGNUpdatesCodeSigningKeyId and
 // NGNUpdatesCodeSigningAlg, and in a dev run NGN_UPDATES_URL and the rest, as `setting` reads
-// them. Updates are kept in `appData`/updates; `embeddedBundle` runs without one. Off (no url)
-// without a runtime version.
-UpdatesConfig updatesConfigFrom(const LaunchSettings &settings, const std::string &appData, const std::string &embeddedBundle);
+// them. The platform is `os`'s id without NGNUpdatesPlatform. Updates are kept in `appData`/updates;
+// `embeddedBundle` runs without one. Off (no url) without a runtime version.
+UpdatesConfig updatesConfigFrom(
+    const LaunchSettings &settings, const HostOs &os, const std::string &appData, const std::string &embeddedBundle);
 
 } // namespace ngn

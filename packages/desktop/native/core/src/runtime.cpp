@@ -104,6 +104,7 @@ Runtime::Runtime(
     ReactNativeFeatureFlags::override(std::make_unique<FeatureFlags>());
     flagsSet = true;
   }
+  devServerOs() = identity_.os;
   createHost();
 }
 

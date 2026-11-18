@@ -57,8 +57,9 @@ struct UpdatesConfig {
   // The server's manifest URL (Expo's `updates.url`). Empty turns updates off.
   std::string url;
   std::string runtimeVersion;
-  // The `expo-platform` header. EAS Update refuses `macos`; a self-hosted server serves it.
-  std::string platform{"macos"};
+  // The `expo-platform` header: the OS's id (HostOs) unless the app names another. EAS Update
+  // refuses `macos`; a self-hosted server serves it.
+  std::string platform;
   // The certificate a manifest must be signed by, as PEM, with its `keyid` and `alg`
   // (Expo's `updates.codeSigningCertificate` and `codeSigningMetadata`). Empty: no code signing.
   std::string certificatePem;

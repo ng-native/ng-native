@@ -96,9 +96,9 @@ const char *directionName(NavigationDirection direction) {
 }
 
 // The keys a focused text input owns.
-bool editingChord(const KeyChord &chord) {
+bool editingChord(const KeyChord &chord, const HostOs &os) {
   static const std::vector<std::string> keys{"z", "x", "c", "v", "a"};
-  return chord.modifiers == Command && std::find(keys.begin(), keys.end(), chord.key) != keys.end();
+  return chord.modifiers == os.primaryModifier && std::find(keys.begin(), keys.end(), chord.key) != keys.end();
 }
 
 } // namespace
@@ -145,8 +145,9 @@ std::vector<MenuItem> parseMenuBar(const folly::dynamic &groups, const DefaultMe
       });
     }
   }
-  // Cmd-W closes the window (or the sheet in front) whatever the app's bar has: the File menu's
-  // Close Window, as the default bar has it, when the app's bar has no close item.
+  // Close Window's key (Cmd-W on macOS) closes the window (or the sheet in front) whatever the
+  // app's bar has: the File menu's Close Window, as the OS's default bar has it, when the app's bar
+  // has no close item.
   if (findMenuItem(bar, MenuCommand::CloseWindow) == nullptr) {
     auto close = *findMenuItem(defaultMenuBar(options), MenuCommand::CloseWindow);
     auto file = std::find_if(bar.begin(), bar.end(), [](const MenuItem &m) { return m.title == "File"; });
@@ -183,14 +184,11 @@ std::optional<NavigationDirection> navigationFor(NavigationInput input, bool rig
   return std::nullopt;
 }
 
-std::optional<NavigationDirection> navigationFor(const KeyChord &chord) {
-  if (chord.modifiers != Command) {
-    return std::nullopt;
-  }
-  if (chord.key == "[") {
+std::optional<NavigationDirection> navigationFor(const KeyChord &chord, const HostOs &os) {
+  if (chord == os.back) {
     return NavigationDirection::Back;
   }
-  if (chord.key == "]") {
+  if (chord == os.forward) {
     return NavigationDirection::Forward;
   }
   return std::nullopt;
@@ -246,7 +244,7 @@ bool MenuHost::keyDown(const KeyChord &pressed, bool textInputFocused) {
     return false;
   }
   send(folly::dynamic::object("type", "shortcut")("id", *id)("textInputFocused", textInputFocused));
-  return !(textInputFocused && editingChord(chord));
+  return !(textInputFocused && editingChord(chord, options_.os));
 }
 
 void MenuHost::navigate(NavigationDirection direction, std::optional<SurfaceId> surface, int steps) {

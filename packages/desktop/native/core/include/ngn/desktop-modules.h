@@ -19,6 +19,7 @@
 #include "ngn/desktop-expo.h"
 #include "ngn/file-system.h"
 #include "ngn/fonts.h"
+#include "ngn/host-os.h"
 #include "ngn/image-manipulator.h"
 #include "ngn/language-model.h"
 #include "ngn/local-authentication.h"
@@ -54,6 +55,8 @@ namespace ngn {
 // What the backend passes in: the host's state and folders, the app's hosts it made with its
 // windows and menus, and one source for each module that reaches the OS.
 struct DesktopModuleSources {
+  // The OS the host runs on: Device's osName, and a device push token's type.
+  HostOs os;
   std::shared_ptr<System> system;
   std::shared_ptr<HostState> state;
   std::shared_ptr<Http> http;

@@ -42,8 +42,6 @@ class SpawnRuleError : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
-extern const std::vector<std::string> kSearchPath;
-
 // Why `program` cannot be declared, or nothing when it can.
 std::optional<std::string> programProblem(const std::string &program);
 
@@ -65,6 +63,9 @@ struct ProgramLookup {
   std::function<bool(const std::string &path)> isExecutable;
   // A developer tool stub that only runs xcrun, with no Command Line Tools to run.
   std::function<bool(const std::string &path)> isStub;
+  // Where a bare name is looked for, in order: the host OS's searchPath (HostOs), never the
+  // inherited PATH.
+  std::vector<std::string> searchPath;
 };
 
 // Where a declared program runs from, pinned once at startup, or nothing when it is absent.

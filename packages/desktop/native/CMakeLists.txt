@@ -91,6 +91,7 @@ add_library(ngn_core STATIC
     core/src/gestures.cpp
     core/src/glass.cpp
     core/src/header-bar.cpp
+    core/src/host-os.cpp
     core/src/host-state.cpp
     core/src/host-views.cpp
     core/src/input-dispatcher.cpp
@@ -235,7 +236,8 @@ if(NGN_TESTS)
         appkit/system.mm appkit/tests/system.test.mm
         appkit/image-request.mm appkit/tests/image-request.test.mm
         appkit/tests/pointer-buttons.test.mm
-        appkit/test-launch.mm appkit/desktop-expo.mm appkit/tests/test-launch.test.mm appkit/tests/locales.test.mm)
+        appkit/test-launch.mm appkit/desktop-expo.mm appkit/tests/test-launch.test.mm appkit/tests/locales.test.mm
+        appkit/tests/desktop-expo.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
     target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit" "-framework WebKit" "-framework PDFKit" "-framework CoreImage" "-framework AuthenticationServices" "-framework AVKit" "-framework UserNotifications")
   endif()

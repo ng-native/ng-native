@@ -29,7 +29,7 @@ struct FakeMenus final : ngn::MenuBackend {
 struct Fixture {
   std::shared_ptr<FakeMenus> backend = std::make_shared<FakeMenus>();
   std::shared_ptr<MenuHost> host =
-      std::make_shared<MenuHost>(backend, ngn::DefaultMenuOptions{.appName = "Notes", .developer = true});
+      std::make_shared<MenuHost>(backend, ngn::DefaultMenuOptions{.appName = "Notes", .developer = true, .os = ngn::macOS()});
   std::shared_ptr<ngn::NativeModule> module = ngn::makeMenusModule(host);
   std::vector<std::string> events;
 
@@ -99,7 +99,7 @@ TEST_CASE("NgNativeMenus draws a menu bar, named for the app, and shows the defa
   CHECK(constants["menuBar"] == true);
   CHECK(constants["appName"] == "Notes");
   REQUIRE(f.backend->bars.size() == 1);
-  CHECK(f.backend->bars[0] == ngn::defaultMenuBar({.appName = "Notes", .developer = true}));
+  CHECK(f.backend->bars[0] == ngn::defaultMenuBar({.appName = "Notes", .developer = true, .os = ngn::macOS()}));
 }
 
 TEST_CASE("the app's bar is drawn as it sent it, with the Developer menu kept before Help") {
@@ -184,7 +184,7 @@ TEST_CASE("File > Print with no handler prints the window it was chosen in; the 
   std::vector<std::optional<ngn::SurfaceId>> printed;
   f.host->printWindow = [&](std::optional<ngn::SurfaceId> surface) { printed.push_back(surface); };
   // The default bar's, before the app sets one.
-  auto defaults = ngn::defaultMenuBar({.appName = "Notes"});
+  auto defaults = ngn::defaultMenuBar({.appName = "Notes", .os = ngn::macOS()});
   auto print = ngn::findMenuItem(defaults, MenuCommand::Print);
   REQUIRE(print);
   f.host->choose(*print, 11);
@@ -259,10 +259,10 @@ TEST_CASE("the OS's back and forward inputs become navigate, in the window they 
   CHECK(ngn::navigationFor(NavigationInput::MouseButton4, true) == NavigationDirection::Back);
   CHECK(ngn::navigationFor(NavigationInput::MouseButton5, true) == NavigationDirection::Forward);
   // Command-Left stays with text editing.
-  CHECK(ngn::navigationFor(KeyChord{.key = "[", .modifiers = ngn::Command}) == NavigationDirection::Back);
-  CHECK(ngn::navigationFor(KeyChord{.key = "]", .modifiers = ngn::Command}) == NavigationDirection::Forward);
-  CHECK_FALSE(ngn::navigationFor(KeyChord{.key = "ArrowLeft", .modifiers = ngn::Command}));
-  CHECK_FALSE(ngn::navigationFor(KeyChord{.key = "[", .modifiers = ngn::Command | ngn::Shift}));
+  CHECK(ngn::navigationFor(KeyChord{.key = "[", .modifiers = ngn::Command}, ngn::macOS()) == NavigationDirection::Back);
+  CHECK(ngn::navigationFor(KeyChord{.key = "]", .modifiers = ngn::Command}, ngn::macOS()) == NavigationDirection::Forward);
+  CHECK_FALSE(ngn::navigationFor(KeyChord{.key = "ArrowLeft", .modifiers = ngn::Command}, ngn::macOS()));
+  CHECK_FALSE(ngn::navigationFor(KeyChord{.key = "[", .modifiers = ngn::Command | ngn::Shift}, ngn::macOS()));
 
   f.host->navigate(NavigationDirection::Forward, 31);
   f.host->navigate(NavigationDirection::Back, std::nullopt);

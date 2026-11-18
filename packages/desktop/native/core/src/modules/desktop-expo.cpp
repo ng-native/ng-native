@@ -128,11 +128,6 @@ void MovingSecretStore::removeOld(const std::string &service, const std::string 
   }
 }
 
-bool usesDataProtectionKeychain(const std::string &teamId, const std::set<std::string> &entitlements) {
-  return !teamId.empty() &&
-      (entitlements.contains("com.apple.application-identifier") || entitlements.contains("keychain-access-groups"));
-}
-
 std::shared_ptr<NativeModule> makeSecureStoreModule(std::shared_ptr<SecretStore> store, std::string defaultService) {
   struct SecureStore : NativeModule {
     SecureStore(std::shared_ptr<SecretStore> store, std::string service) : NativeModule("NgNativeSecureStore") {

@@ -161,7 +161,7 @@ TEST_CASE("a request is read with its content and reported back as Expo reports 
 
 TEST_CASE("permission is asked for only by requestPermissionsAsync, and only while undetermined") {
   auto center = std::make_shared<FakeCenter>();
-  auto module = ngn::makeNotificationsModule(center, std::make_shared<ngn::NotificationEvents>());
+  auto module = ngn::makeNotificationsModule(center, std::make_shared<ngn::NotificationEvents>("macos"));
   CHECK(
       json(*ask(*module, "getPermissionsAsync")->value) ==
       R"({"canAskAgain":true,"expires":"never","granted":false,"status":"undetermined"})");
@@ -190,7 +190,7 @@ TEST_CASE("permission is asked for only by requestPermissionsAsync, and only whi
 
 TEST_CASE("without permission scheduling resolves null and schedules nothing") {
   auto center = std::make_shared<FakeCenter>();
-  auto module = ngn::makeNotificationsModule(center, std::make_shared<ngn::NotificationEvents>());
+  auto module = ngn::makeNotificationsModule(center, std::make_shared<ngn::NotificationEvents>("macos"));
   for (auto status : {ngn::NotificationAuthorization::NotDetermined, ngn::NotificationAuthorization::Denied}) {
     center->status = status;
     auto answer = ask(*module, "scheduleNotificationAsync", dynamic::array(dynamic::object("content", dynamic::object())));
@@ -204,7 +204,7 @@ TEST_CASE("without permission scheduling resolves null and schedules nothing") {
 TEST_CASE("scheduling gives a request an identifier when it has none, and cancelling names it") {
   auto center = std::make_shared<FakeCenter>();
   center->status = ngn::NotificationAuthorization::Authorized;
-  auto module = ngn::makeNotificationsModule(center, std::make_shared<ngn::NotificationEvents>());
+  auto module = ngn::makeNotificationsModule(center, std::make_shared<ngn::NotificationEvents>("macos"));
   auto first = ask(*module, "scheduleNotificationAsync", dynamic::array(dynamic::object("content", dynamic::object("title", "A"))));
   auto second = ask(*module, "scheduleNotificationAsync", dynamic::array(dynamic::object("content", dynamic::object("title", "B"))));
   REQUIRE(first->value);
@@ -227,7 +227,7 @@ TEST_CASE("scheduling gives a request an identifier when it has none, and cancel
 
 TEST_CASE("the badge count is the Dock badge, a whole number from 0") {
   auto center = std::make_shared<FakeCenter>();
-  auto module = ngn::makeNotificationsModule(center, std::make_shared<ngn::NotificationEvents>());
+  auto module = ngn::makeNotificationsModule(center, std::make_shared<ngn::NotificationEvents>("macos"));
   CHECK(*ask(*module, "setBadgeCountAsync", dynamic::array(4))->value == true);
   CHECK(*ask(*module, "getBadgeCountAsync")->value == 4);
   CHECK(*ask(*module, "setBadgeCountAsync", dynamic::array(-1))->value == false);
@@ -239,7 +239,7 @@ TEST_CASE("the badge count is the Dock badge, a whole number from 0") {
 
 TEST_CASE("a delivered notification and a click reach the app, and the click that launched it waits") {
   auto center = std::make_shared<FakeCenter>();
-  auto events = std::make_shared<ngn::NotificationEvents>();
+  auto events = std::make_shared<ngn::NotificationEvents>("macos");
   ngn::NotificationRequest request;
   request.identifier = "tea";
   request.title = "Tea";
@@ -313,7 +313,7 @@ TEST_CASE("a remote notification reads as Expo's iOS one, with its payload as th
 
 TEST_CASE("the device token is asked for once however many wait, in hex, and its roll is sent out") {
   auto registrar = std::make_shared<FakeRegistrar>();
-  auto events = std::make_shared<ngn::NotificationEvents>();
+  auto events = std::make_shared<ngn::NotificationEvents>("macos");
   auto push = std::make_shared<ngn::PushTokens>(registrar, events);
   auto module = ngn::makeNotificationsModule(std::make_shared<FakeCenter>(), events, push);
   std::vector<dynamic> heard;
@@ -352,7 +352,7 @@ TEST_CASE("the device token is asked for once however many wait, in hex, and its
 
 TEST_CASE("a host without the entitlement rejects the token with what to do, and one without push rejects") {
   auto registrar = std::make_shared<FakeRegistrar>();
-  auto events = std::make_shared<ngn::NotificationEvents>();
+  auto events = std::make_shared<ngn::NotificationEvents>("macos");
   auto push = std::make_shared<ngn::PushTokens>(registrar, events);
   auto module = ngn::makeNotificationsModule(std::make_shared<FakeCenter>(), events, push);
   Answer refused;
@@ -374,7 +374,7 @@ TEST_CASE("a host without the entitlement rejects the token with what to do, and
 }
 
 TEST_CASE("dropping a notification listener waits for a call to it already running on another thread") {
-  ngn::NotificationEvents events;
+  ngn::NotificationEvents events("macos");
   CHECK(ngn::testing::dropWaitsForRunningCall(
       [&](auto listener) { return events.listen(listener); }, [&] { events.tokenChanged("0102"); }));
 }
