@@ -6,6 +6,8 @@
 // below, as CSS and Pango 1.50 both place it.
 #pragma once
 
+#include <functional>
+
 #include "ngn/text-measurer.h"
 
 #include <pango/pangocairo.h>
@@ -46,6 +48,11 @@ TextLayout layoutText(
 
 // Whether the Pango running has the line-height attribute.
 bool pangoHasLineHeight();
+
+// The text size multiplier the desktop asks for, from GtkSettings' `gtk-xft-dpi` (xftFontScale),
+// and `changed` called each time it changes, for as long as the process runs.
+float desktopFontScale();
+void watchFontScale(std::function<void()> changed);
 
 // The font a run of text attributes resolves to. The caller frees it.
 PangoFontDescription *fontOf(const facebook::react::TextAttributes &attributes);

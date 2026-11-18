@@ -85,6 +85,10 @@ On macOS the desktop host reads the system's settings: `screenReader` is VoiceOv
 `boldText` stays false. `announce()` hands a message that is not empty to VoiceOver. `fontScale`
 is one, since nothing resizes a Mac app.
 
+On Linux `fontScale` is the desktop's text scaling, which GNOME's Large Text and text scaling
+factor set, and the app's text is laid out at it. A change while the app runs reaches `fontScale`
+the next time the app becomes active.
+
 ## Off a device and on the web
 
 Off a device every setting stays at its neutral default forever and `announce()` does nothing,
