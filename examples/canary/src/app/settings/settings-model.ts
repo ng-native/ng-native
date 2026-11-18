@@ -168,11 +168,13 @@ export class Settings {
   }));
 
   constructor() {
-    // Once, when it is read back. A read that failed leaves the scheme the app started in.
+    // Once, when it is read back, and only a scheme chosen: a read that failed leaves the signal
+    // at 'automatic', and the scheme the app started in.
     const restore = effect(() => {
       if (!this.store.ready()) return;
       restore.destroy();
-      if (!this.store.error()) this.apply(untracked(this.appearance));
+      const appearance = untracked(this.appearance);
+      if (appearance !== 'automatic') this.apply(appearance);
     });
   }
 

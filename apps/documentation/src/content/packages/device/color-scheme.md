@@ -54,11 +54,13 @@ export class ThemeToggle {
   protected readonly choice = this.store.signal<Scheme | null>('theme', null);
 
   constructor() {
-    // The choice kept from the last launch, once it is read back. A failed read changes nothing.
+    // The scheme kept from the last launch, once it is read back. A failed read leaves `null`,
+    // and the scheme the app started in.
     const restore = effect(() => {
       if (!this.store.ready()) return;
       restore.destroy();
-      if (!this.store.error()) this.scheme.set(untracked(this.choice));
+      const choice = untracked(this.choice);
+      if (choice !== null) this.scheme.set(choice);
     });
   }
 

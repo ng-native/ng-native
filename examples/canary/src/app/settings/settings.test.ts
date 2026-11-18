@@ -20,11 +20,11 @@ describe('the settings search', () => {
   });
 });
 
-/** A store over `data`, as the disk a relaunched app reads again. A read fails with `broken`. */
-function disk(data = new Map<string, string>(), broken = false) {
+/** A store over `data`, as the disk a relaunched app reads again. A read of a `broken` key fails. */
+function disk(data = new Map<string, string>(), broken: string[] = []) {
   return new Store({
     get: async (key) => {
-      if (broken) throw new Error('unreadable');
+      if (broken.includes(key)) throw new Error('unreadable');
       return data.get(key) ?? null;
     },
     set: async (key, value) => void data.set(key, value),
@@ -94,9 +94,18 @@ describe('settings', () => {
     await screen.findByLabelText('Display & Brightness, Dark', undefined, asyncWait);
   });
 
+  test('another key failing to read does not stop the choice applying', async () => {
+    const asked: (string | null)[] = [];
+    const store = disk(new Map([['appearance', JSON.stringify('dark')]]), ['elsewhere']);
+    store.signal('elsewhere', 0);
+    await boot('/notes', asked, store);
+    await waitFor(() => expect(store.error()).not.toBeNull());
+    await waitFor(() => expect(asked).toEqual(['dark']));
+  });
+
   test('a choice that cannot be read back leaves the scheme alone, and a new one applies', async () => {
     const asked: (string | null)[] = [];
-    const store = disk(new Map([['appearance', JSON.stringify('dark')]]), true);
+    const store = disk(new Map([['appearance', JSON.stringify('dark')]]), ['appearance']);
     await boot('/settings/display', asked, store);
     await waitFor(() => expect(store.error()).not.toBeNull());
     await screen.findByRole('radio', { name: 'Light' }, asyncWait);
