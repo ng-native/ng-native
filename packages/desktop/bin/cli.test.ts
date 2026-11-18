@@ -130,6 +130,7 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
   const warnings: string[] = [];
   const sys: typeof system = {
     platform: 'darwin',
+    arch: 'arm64',
     cwd: () => '/apps/demo',
     resolveReactNative: () => '/apps/demo/node_modules/react-native',
     resolvePackage: () => null,
@@ -149,7 +150,10 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
       withoutDesktop: [],
       problems: [],
     }),
-    writeFile: (file, text) => void (written[file] = text),
+    writeFile: (file, text) => void (written[file] = String(text)),
+    readBytes: () => new Uint8Array(),
+    files: () => [],
+    symlink: () => {},
     warn: (line) => void warnings.push(line),
     host(command, args) {
       return Promise.resolve(this.run(command, args).status);
@@ -477,10 +481,82 @@ describe('run', () => {
       () => prepareHost(fakeSystem({ platform: 'linux' }).sys, { universal: false, os: 'linux' }),
       /does not list linux/,
     );
+    // A Linux host builds only on Linux of its architecture, so a Mac needs a prebuilt one.
+    const listsLinux = () => ({
+      name: 'demo',
+      platforms: ['linux'],
+      experiments: { outOfTreePlatforms: true },
+    });
     assert.throws(
-      () => prepareHost(fakeSystem().sys, { universal: false, os: 'linux' }),
-      /The Linux desktop host builds on Linux only for now/,
+      () =>
+        prepareHost(fakeSystem({ expoConfig: listsLinux }).sys, { universal: false, os: 'linux' }),
+      /The Linux desktop host builds on Linux only for now[\s\S]*no prebuilt Linux arm64 host fits/,
     );
+    assert.throws(
+      () =>
+        prepareHost(fakeSystem({ platform: 'linux', expoConfig: listsLinux }).sys, {
+          universal: false,
+          os: 'linux',
+          arch: 'x64',
+        }),
+      /no prebuilt Linux x64 host fits this app[\s\S]*Package on Linux on x64/,
+    );
+  });
+
+  it('takes a prebuilt Linux host for the architecture asked, on any machine', () => {
+    const manifest = {
+      version: 1,
+      hosts: [
+        // A macOS host first, then Linux's x64 one, which a lookup by OS or architecture alone takes.
+        {
+          reactNative: '0.88.0',
+          url: 'https://e.com/macos.tar.gz',
+          sha256: 'c'.repeat(64),
+          libraries: {},
+        },
+        {
+          reactNative: '0.88.0',
+          os: 'linux',
+          arch: 'x64',
+          url: 'https://e.com/x64.tar.gz',
+          sha256: 'a'.repeat(64),
+          libraries: {},
+        },
+        {
+          reactNative: '0.88.0',
+          os: 'linux',
+          arch: 'arm64',
+          url: 'https://e.com/arm64.tar.gz',
+          sha256: 'b'.repeat(64),
+          libraries: {},
+        },
+      ],
+    };
+    const { sys, calls } = fakeSystem({
+      expoConfig: () => ({
+        name: 'demo',
+        platforms: ['linux'],
+        experiments: { outOfTreePlatforms: true },
+      }),
+      readFile: (file: string) =>
+        file.endsWith('prebuilt.json')
+          ? JSON.stringify(manifest)
+          : file.endsWith('package.json')
+            ? JSON.stringify({ version: '0.88.0' })
+            : '',
+      // Unpacked already, each under its archive's hash.
+      exists: (file: string) => /prebuilt\/(a|b|c){16}\/gtk\/ngn-linux$/.test(file),
+    });
+    const { buildDir } = prepareHost(sys, {
+      universal: false,
+      release: true,
+      os: 'linux',
+      arch: 'arm64',
+    });
+    assert.match(buildDir, /prebuilt\/b{16}$/);
+    const x64 = prepareHost(sys, { universal: false, release: true, os: 'linux', arch: 'x64' });
+    assert.match(x64.buildDir, /prebuilt\/a{16}$/);
+    assert.ok(!calls.some((call) => call.command.endsWith('build.sh')));
   });
 
   it('warns about dependencies whose native code the build leaves out', async () => {

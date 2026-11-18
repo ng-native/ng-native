@@ -13,6 +13,7 @@ import {
   parsePackage,
   remotePush,
   sandboxProblems,
+  type MacPackageCommand,
 } from './package.mjs';
 import { plist } from './plist.mjs';
 
@@ -44,6 +45,7 @@ function fakeMac(
   const removed: string[] = [];
   const sys: typeof system = {
     platform: 'darwin',
+    arch: 'arm64',
     env: {},
     cwd: () => '/apps/notes',
     resolveReactNative: () => '/apps/notes/node_modules/react-native',
@@ -74,7 +76,10 @@ function fakeMac(
     exists: (file) => file === HERMESC,
     remove: (file) => void removed.push(file),
     copy: (from, to) => void copied.push([from, to]),
-    writeFile: (file, text) => void (written[file] = text),
+    writeFile: (file, text) => void (written[file] = String(text)),
+    readBytes: () => new Uint8Array(),
+    files: () => [],
+    symlink: () => {},
     readFile: () => '',
     warn: () => {},
     sha256: () => '',
@@ -126,59 +131,152 @@ const MAS_ENV = {
   APPLE_TEAM_ID: 'TEAM123',
 };
 
+/** A package command parsed on a Mac, which --os defaults to. */
+const macPackage = (args: string[]) => parsePackage(args, 'darwin');
+
 describe('parsePackage', () => {
+  /** On a Mac, which --os defaults to. */
+  const mac = (args: string[]) => parsePackage(args, 'darwin') as MacPackageCommand;
+
   it('takes a format, an output folder and a feed URL, app and dist/macos by default', () => {
-    assert.deepEqual(parsePackage([]), {
+    assert.deepEqual(mac([]), {
       command: 'package',
+      os: 'macos',
+      arch: 'all',
       format: 'app',
       output: 'dist/macos',
       feedUrl: undefined,
       sparkleKey: undefined,
       skipNotarize: false,
     });
-    assert.deepEqual(
-      parsePackage(['--format', 'dmg', '--feed-url', 'https://example.com/appcast.xml']),
-      {
-        command: 'package',
-        format: 'dmg',
-        output: 'dist/macos',
-        feedUrl: 'https://example.com/appcast.xml',
-        sparkleKey: undefined,
-        skipNotarize: false,
-      },
-    );
-    assert.equal(parsePackage(['--format', 'dmg', '--skip-notarize']).skipNotarize, true);
+    assert.deepEqual(mac(['--format', 'dmg', '--feed-url', 'https://example.com/appcast.xml']), {
+      command: 'package',
+      os: 'macos',
+      arch: 'all',
+      format: 'dmg',
+      output: 'dist/macos',
+      feedUrl: 'https://example.com/appcast.xml',
+      sparkleKey: undefined,
+      skipNotarize: false,
+    });
+    assert.equal(mac(['--format', 'dmg', '--skip-notarize']).skipNotarize, true);
     assert.equal(
-      parsePackage(['--format', 'dmg', '--feed-url', 'https://e.com/a.xml', '--sparkle-key', 'K='])
+      mac(['--format', 'dmg', '--feed-url', 'https://e.com/a.xml', '--sparkle-key', 'K='])
         .sparkleKey,
       'K=',
     );
   });
 
   it('refuses another format, a feed URL off dmg, and a feed that is not https', () => {
-    assert.throws(() => parsePackage(['--format', 'zip']), /--format takes app, dmg or mas/);
+    assert.throws(() => mac(['--format', 'zip']), /--format takes app, dmg or mas for macos/);
     assert.throws(
-      () => parsePackage(['--format', 'mas', '--feed-url', 'https://e.com/a.xml']),
+      () => mac(['--format', 'mas', '--feed-url', 'https://e.com/a.xml']),
       /--feed-url is for --format dmg only: the Mac App Store updates/,
     );
     assert.throws(
-      () => parsePackage(['--feed-url', 'https://e.com/a.xml']),
+      () => mac(['--feed-url', 'https://e.com/a.xml']),
       /--feed-url is for --format dmg only/,
     );
     assert.throws(
-      () => parsePackage(['--format', 'dmg', '--feed-url', 'http://e.com/a.xml']),
+      () => mac(['--format', 'dmg', '--feed-url', 'http://e.com/a.xml']),
       /https URL of a Sparkle appcast/,
     );
     assert.throws(
-      () => parsePackage(['--format', 'dmg', '--sparkle-key', 'K=']),
+      () => mac(['--format', 'dmg', '--sparkle-key', 'K=']),
       /--sparkle-key goes with --feed-url/,
     );
     for (const format of ['app', 'mas']) {
       assert.throws(
-        () => parsePackage(['--format', format, '--skip-notarize']),
+        () => mac(['--format', format, '--skip-notarize']),
         /--skip-notarize is for --format dmg only/,
       );
     }
+  });
+
+  it("packages for this machine's OS unless --os names one, into dist/<os>", () => {
+    assert.equal(parsePackage([], 'darwin').os, 'macos');
+    assert.equal(parsePackage([], 'linux').os, 'linux');
+    assert.deepEqual(parsePackage(['--os', 'linux', '--arch', 'arm64'], 'darwin'), {
+      command: 'package',
+      os: 'linux',
+      arch: 'arm64',
+      format: 'app',
+      output: 'dist/linux',
+    });
+    assert.equal(parsePackage(['--os', 'macos'], 'linux').os, 'macos');
+    assert.equal(parsePackage(['--os', 'linux', '--output', 'out'], 'darwin').output, 'out');
+    assert.throws(() => parsePackage(['--os', 'windows'], 'darwin'), /--os takes macos or linux/);
+    assert.throws(
+      () => parsePackage(['--arch', 'ia32'], 'darwin'),
+      /--arch takes x64, arm64 or all/,
+    );
+    assert.equal(mac(['--arch', 'x64']).arch, 'x64');
+  });
+
+  it("takes each OS's own formats and flags, and refuses the other's", () => {
+    const linux = (args: string[]) => parsePackage(['--os', 'linux', ...args], 'darwin');
+    assert.throws(
+      () => linux(['--format', 'dmg']),
+      /--format takes app, deb, rpm or flatpak for linux/,
+    );
+    assert.throws(() => mac(['--format', 'deb']), /--format takes app, dmg or mas for macos/);
+    assert.throws(() => linux(['--skip-notarize']), /--skip-notarize is for --os macos only/);
+    assert.throws(
+      () => linux(['--feed-url', 'https://e.com/a.xml']),
+      /--feed-url is for --os macos only/,
+    );
+    assert.throws(() => mac(['--license', 'MIT']), /--license is for --os linux only/);
+    assert.deepEqual(
+      linux([
+        '--format',
+        'rpm',
+        '--license',
+        'MIT',
+        '--homepage',
+        'https://example.com',
+        '--categories',
+        'Office;Utility',
+      ]),
+      {
+        command: 'package',
+        os: 'linux',
+        arch: 'all',
+        format: 'rpm',
+        output: 'dist/linux',
+        license: 'MIT',
+        homepage: 'https://example.com',
+        categories: 'Office;Utility',
+      },
+    );
+  });
+
+  it('needs what each Linux format states: a license for rpm and flatpak, a maintainer for deb', () => {
+    const linux = (args: string[]) => parsePackage(['--os', 'linux', ...args], 'darwin');
+    for (const format of ['rpm', 'flatpak']) {
+      assert.throws(
+        () => linux(['--format', format]),
+        new RegExp(`--format ${format} needs --license`),
+      );
+    }
+    assert.throws(() => linux(['--format', 'deb']), /--format deb needs --maintainer/);
+    assert.ok(linux(['--format', 'deb', '--maintainer', 'Ada Lovelace <ada@example.com>']));
+    assert.throws(
+      () => linux(['--format', 'deb', '--maintainer', 'Ada']),
+      /--maintainer takes a name and an email/,
+    );
+    assert.throws(() => linux(['--homepage', 'example.com']), /--homepage takes the URL/);
+    assert.throws(
+      () => linux(['--license', 'MIT; rm']),
+      /--license takes an SPDX license expression/,
+    );
+    assert.throws(
+      () => linux(['--categories', 'Notes']),
+      /--categories needs one of the main categories/,
+    );
+    assert.throws(
+      () => linux(['--categories', 'Office;Bad Name']),
+      /"Bad Name", which is not a category/,
+    );
   });
 });
 
@@ -473,7 +571,7 @@ describe('sandboxProblems', () => {
 describe('packageApp', () => {
   it('bundles with expo export:embed, builds the universal release host and ad-hoc signs an app', async () => {
     const { sys, calls, written, copied } = fakeMac();
-    assert.equal(await quiet(() => packageApp(parsePackage([]), sys)), 0);
+    assert.equal(await quiet(() => packageApp(macPackage([]), sys)), 0);
     const build = calls.find((call) => call.command.endsWith('build.sh'))!;
     assert.ok(build.args.includes('--universal'), 'a release build is universal');
     assert.ok(build.args.includes('--release'), 'and built as Release');
@@ -504,7 +602,7 @@ describe('packageApp', () => {
 
   it('compiles the bundle to Hermes bytecode with the hermesc the host was built against', async () => {
     const { sys, calls } = fakeMac();
-    await quiet(() => packageApp(parsePackage([]), sys));
+    await quiet(() => packageApp(macPackage([]), sys));
     const app = '/apps/notes/dist/macos/Notes.app';
     const hermesc = calls.find((call) => call.command === HERMESC);
     assert.deepEqual(hermesc?.args, [
@@ -520,16 +618,39 @@ describe('packageApp', () => {
     assert.ok(order.indexOf('expo') < order.indexOf(HERMESC));
   });
 
+  it('keeps the one architecture --arch asks for out of the universal build, after stripping', async () => {
+    const executable = '/apps/notes/dist/macos/Notes.app/Contents/MacOS/Notes';
+    const thin = '/apps/notes/.expo/ng-native-desktop/package/thin';
+    for (const [arch, slice] of [
+      ['x64', 'x86_64'],
+      ['arm64', 'arm64'],
+    ]) {
+      const { sys, calls, copied } = fakeMac();
+      await quiet(() => packageApp(macPackage(['--arch', arch!]), sys));
+      // The host is still built universal: the prebuilt one is, and lipo takes the slice from it.
+      assert.ok(
+        calls.find((call) => call.command.endsWith('build.sh'))!.args.includes('--universal'),
+      );
+      const lipo = calls.findIndex((call) => call.command === 'lipo');
+      assert.deepEqual(calls[lipo]!.args, [executable, '-thin', slice, '-output', thin]);
+      assert.ok(lipo > calls.findIndex((call) => call.command === 'strip'));
+      assert.ok(copied.some(([from, to]) => from === thin && to === executable));
+    }
+    const { sys, calls } = fakeMac();
+    await quiet(() => packageApp(macPackage([]), sys));
+    assert.ok(!calls.some((call) => call.command === 'lipo'));
+  });
+
   it('stops when hermesc fails or the host build has none', async () => {
     const failing = fakeMac({}, { [`${HERMESC} -emit-binary`]: { status: 1 } });
     await assert.rejects(
-      quiet(() => packageApp(parsePackage([]), failing.sys)),
+      quiet(() => packageApp(macPackage([]), failing.sys)),
       /hermesc could not compile the bundle/,
     );
     assert.ok(!failing.calls.some((call) => call.command === 'codesign'), 'nothing signed');
     const without = fakeMac({ exists: () => false });
     await assert.rejects(
-      quiet(() => packageApp(parsePackage([]), without.sys)),
+      quiet(() => packageApp(macPackage([]), without.sys)),
       /has no hermesc beside it/,
     );
     assert.ok(!without.calls.some((call) => call.command === 'expo'), 'checked before bundling');
@@ -542,7 +663,7 @@ describe('packageApp', () => {
         'xcode-select -p': { status: 0, stdout: '/Library/Developer/CommandLineTools\n' },
       },
     );
-    await assert.rejects(packageApp(parsePackage([]), sys), /needs full Xcode/);
+    await assert.rejects(packageApp(macPackage([]), sys), /needs full Xcode/);
     assert.deepEqual(
       calls.map((call) => call.command),
       ['xcode-select'],
@@ -551,7 +672,7 @@ describe('packageApp', () => {
 
   it('scales an image icon into an icon set and compiles it with actool', async () => {
     const { sys, calls, written } = fakeMac();
-    await quiet(() => packageApp(parsePackage([]), sys));
+    await quiet(() => packageApp(macPackage([]), sys));
     const sips = calls.filter((call) => call.command === 'sips');
     assert.equal(sips.length, 10, 'five sizes at 1x and 2x');
     assert.ok(sips.every((call) => call.args.includes('/apps/notes/assets/icon.png')));
@@ -587,7 +708,7 @@ describe('packageApp', () => {
       if (command === 'sips' && made > 0) before++;
       return run(command, args, options);
     };
-    await quiet(() => packageApp(parsePackage([]), fake.sys));
+    await quiet(() => packageApp(macPackage([]), fake.sys));
     assert.equal(before, 10, 'every sips ran after the folder was made');
   });
 
@@ -606,7 +727,7 @@ describe('packageApp', () => {
         ],
       }),
     });
-    await quiet(() => packageApp(parsePackage([]), sys));
+    await quiet(() => packageApp(macPackage([]), sys));
     assert.deepEqual(
       copied.filter(([from]) => from.endsWith('note.icns')),
       [
@@ -633,7 +754,7 @@ describe('packageApp', () => {
         }),
       });
       await assert.rejects(
-        () => quiet(() => packageApp(parsePackage([]), sys)),
+        () => quiet(() => packageApp(macPackage([]), sys)),
         /app name .* cannot contain a path separator or be \. or \.\./,
       );
       assert.equal(removed.length, 0);
@@ -650,7 +771,7 @@ describe('packageApp', () => {
         ios: { bundleIdentifier: 'com.example.notes', icon: './assets/Notes.icon' },
       }),
     });
-    await quiet(() => packageApp(parsePackage([]), sys));
+    await quiet(() => packageApp(macPackage([]), sys));
     assert.equal(calls.filter((call) => call.command === 'sips').length, 0);
     const actool = calls.find((call) => call.args[0] === 'actool')!;
     assert.equal(actool.args[1], '/apps/notes/assets/Notes.icon');
@@ -663,7 +784,7 @@ describe('packageApp', () => {
 
   it('signs with the hardened runtime, notarises and staples the app and the dmg', async () => {
     const { sys, calls } = fakeMac({ env: DMG_ENV });
-    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), sys));
+    await quiet(() => packageApp(macPackage(['--format', 'dmg']), sys));
     assert.deepEqual(tools(calls).slice(tools(calls).indexOf('codesign --force')), [
       'codesign --force',
       'ditto -c',
@@ -708,7 +829,7 @@ describe('packageApp', () => {
       },
     );
     await assert.rejects(
-      packageApp(parsePackage(['--format', 'dmg']), sys),
+      packageApp(macPackage(['--format', 'dmg']), sys),
       /Apple did not notarise Notes\.zip: Invalid\. Run xcrun notarytool log r-1/,
     );
     assert.equal(calls.filter((call) => call.args[0] === 'stapler').length, 0);
@@ -716,7 +837,7 @@ describe('packageApp', () => {
 
   it('fails on a notarytool that answers nothing it can read', async () => {
     const { sys } = fakeMac({ env: DMG_ENV }, { 'xcrun notarytool': { status: 1, stdout: '' } });
-    await assert.rejects(packageApp(parsePackage(['--format', 'dmg']), sys), /no answer/);
+    await assert.rejects(packageApp(macPackage(['--format', 'dmg']), sys), /no answer/);
   });
 
   it('embeds Sparkle with a feed, signs its parts first and zips the stapled app beside the dmg', async () => {
@@ -725,7 +846,7 @@ describe('packageApp', () => {
       exists: () => true,
     });
     await quiet(() =>
-      packageApp(parsePackage(['--format', 'dmg', '--feed-url', 'https://e.com/appcast.xml']), sys),
+      packageApp(macPackage(['--format', 'dmg', '--feed-url', 'https://e.com/appcast.xml']), sys),
     );
     const app = '/apps/notes/dist/macos/Notes.app';
     assert.deepEqual(copied.at(-1), [
@@ -778,7 +899,7 @@ describe('packageApp', () => {
   it('stops before it builds when a feed has no Sparkle public key to check updates with', async () => {
     const { sys, calls } = fakeMac({ env: DMG_ENV, exists: () => true });
     await assert.rejects(
-      packageApp(parsePackage(['--format', 'dmg', '--feed-url', 'https://e.com/a.xml']), sys),
+      packageApp(macPackage(['--format', 'dmg', '--feed-url', 'https://e.com/a.xml']), sys),
       /needs Sparkle's public EdDSA key/,
     );
     assert.ok(!calls.some((call) => call.command.endsWith('build.sh')), 'nothing built');
@@ -800,7 +921,7 @@ describe('packageApp', () => {
       }),
       readFile: (file: string) => (read.push(file), '-----BEGIN CERTIFICATE-----\nX\n'),
     });
-    await quiet(() => packageApp(parsePackage([]), sys));
+    await quiet(() => packageApp(macPackage([]), sys));
     assert.deepEqual(
       read.filter((file) => file.startsWith('/apps/notes/certs')),
       ['/apps/notes/certs/certificate.pem'],
@@ -813,7 +934,7 @@ describe('packageApp', () => {
   it('stops when the host was built without Sparkle, rather than shipping no updater', async () => {
     const { sys } = fakeMac({ env: { ...DMG_ENV, NGN_SPARKLE_PUBLIC_KEY: 'EDKEY=' } });
     await assert.rejects(
-      packageApp(parsePackage(['--format', 'dmg', '--feed-url', 'https://e.com/a.xml']), sys),
+      packageApp(macPackage(['--format', 'dmg', '--feed-url', 'https://e.com/a.xml']), sys),
       /built without Sparkle/,
     );
   });
@@ -837,7 +958,7 @@ describe('packageApp', () => {
       ],
     ] as const) {
       const { sys, calls } = fakeMac({ env });
-      await assert.rejects(packageApp(parsePackage([...args]), sys), message);
+      await assert.rejects(packageApp(macPackage([...args]), sys), message);
       assert.ok(!calls.some((call) => call.command.endsWith('build.sh')), 'nothing built');
     }
   });
@@ -845,7 +966,7 @@ describe('packageApp', () => {
   it('makes a dmg with --skip-notarize and no credentials, ad-hoc signed, and says it is for this Mac', async () => {
     const warnings: string[] = [];
     const { sys, calls } = fakeMac({ warn: (line) => void warnings.push(line) });
-    await quiet(() => packageApp(parsePackage(['--format', 'dmg', '--skip-notarize']), sys));
+    await quiet(() => packageApp(macPackage(['--format', 'dmg', '--skip-notarize']), sys));
     assert.deepEqual(tools(calls).slice(tools(calls).indexOf('codesign --force')), [
       'codesign --force',
       'hdiutil create',
@@ -871,7 +992,7 @@ describe('packageApp', () => {
 
   it('signs with the identity it is given under --skip-notarize, and still notarises nothing', async () => {
     const { sys, calls } = fakeMac({ env: { NGN_SIGN_IDENTITY: DMG_ENV.NGN_SIGN_IDENTITY } });
-    await quiet(() => packageApp(parsePackage(['--format', 'dmg', '--skip-notarize']), sys));
+    await quiet(() => packageApp(macPackage(['--format', 'dmg', '--skip-notarize']), sys));
     assert.ok(!calls.some((call) => call.args[0] === 'notarytool' || call.args[0] === 'stapler'));
     const signApp = calls.find((call) => call.command === 'codesign')!;
     assert.deepEqual(signApp.args.slice(0, 4), ['--force', '--options', 'runtime', '--timestamp']);
@@ -882,7 +1003,7 @@ describe('packageApp', () => {
     const { sys, calls } = fakeMac({ env: { NGN_SPARKLE_PUBLIC_KEY: 'K=' } });
     await assert.rejects(
       packageApp(
-        parsePackage(['--format', 'dmg', '--skip-notarize', '--feed-url', 'https://e.com/a.xml']),
+        macPackage(['--format', 'dmg', '--skip-notarize', '--feed-url', 'https://e.com/a.xml']),
         sys,
       ),
       /--feed-url needs NGN_SIGN_IDENTITY/,
@@ -898,7 +1019,7 @@ describe('packageApp', () => {
       const { sys, calls } = fakeMac({ env: { ...env, NGN_SPARKLE_PUBLIC_KEY: 'K=' } });
       await assert.rejects(
         packageApp(
-          parsePackage(['--format', 'dmg', ...args, '--feed-url', 'https://e.com/a.xml']),
+          macPackage(['--format', 'dmg', ...args, '--feed-url', 'https://e.com/a.xml']),
           sys,
         ),
         /--feed-url needs a NGN_SIGN_IDENTITY other than -, codesign's ad hoc identity/,
@@ -915,14 +1036,14 @@ describe('packageApp', () => {
       experiments: { outOfTreePlatforms: true },
     });
     const { sys, written } = fakeMac({ expoConfig: config });
-    await quiet(() => packageApp(parsePackage([]), sys));
+    await quiet(() => packageApp(macPackage([]), sys));
     assert.match(
       written['/apps/notes/dist/macos/my-notes.app/Contents/Info.plist']!,
       /<string>dev\.ngnative\.mynotes<\/string>/,
     );
     const signed = fakeMac({ expoConfig: config, env: DMG_ENV }).sys;
     await assert.rejects(
-      packageApp(parsePackage(['--format', 'dmg']), signed),
+      packageApp(macPackage(['--format', 'dmg']), signed),
       /Set expo\.ios\.bundleIdentifier/,
     );
   });
@@ -940,7 +1061,7 @@ describe('packageApp', () => {
         plugins: [['@ng-native/desktop', { capabilities: { spawn: [{ program: 'git' }] } }]],
       }),
     });
-    await quiet(() => packageApp(parsePackage(['--format', 'mas']), sys));
+    await quiet(() => packageApp(macPackage(['--format', 'mas']), sys));
     const app = '/apps/notes/dist/macos/Notes.app';
     assert.deepEqual(copied.at(-1), [
       '/secrets/notes.provisionprofile',
@@ -978,7 +1099,7 @@ describe('packageApp', () => {
       env: MAS_ENV,
       expoConfig: app({ plugins: ['expo-apple-authentication'] }),
     });
-    await quiet(() => packageApp(parsePackage(['--format', 'mas']), listed.sys));
+    await quiet(() => packageApp(macPackage(['--format', 'mas']), listed.sys));
     assert.match(listed.written[entitlementsFile]!, /com\.apple\.developer\.applesignin/);
 
     const installed = fakeMac({
@@ -989,11 +1110,11 @@ describe('packageApp', () => {
           ? '/apps/notes/node_modules/expo-apple-authentication'
           : null,
     });
-    await quiet(() => packageApp(parsePackage(['--format', 'mas']), installed.sys));
+    await quiet(() => packageApp(macPackage(['--format', 'mas']), installed.sys));
     assert.match(installed.written[entitlementsFile]!, /com\.apple\.developer\.applesignin/);
 
     const without = fakeMac({ env: MAS_ENV, expoConfig: app({}) });
-    await quiet(() => packageApp(parsePackage(['--format', 'mas']), without.sys));
+    await quiet(() => packageApp(macPackage(['--format', 'mas']), without.sys));
     assert.doesNotMatch(without.written[entitlementsFile]!, /applesignin/);
 
     // A dmg of an app that only lists the plugin is signed as before, with no profile.
@@ -1001,7 +1122,7 @@ describe('packageApp', () => {
       env: DMG_ENV,
       expoConfig: app({ plugins: ['expo-apple-authentication'] }),
     });
-    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), dmg.sys));
+    await quiet(() => packageApp(macPackage(['--format', 'dmg']), dmg.sys));
     assert.doesNotMatch(dmg.written[entitlementsFile]!, /applesignin/);
     assert.ok(!dmg.copied.some(([, to]) => to.endsWith('embedded.provisionprofile')));
   });
@@ -1020,7 +1141,7 @@ describe('packageApp', () => {
     ] as const) {
       const { sys, calls } = fakeMac({ env, expoConfig: config });
       await assert.rejects(
-        packageApp(parsePackage([...args]), sys),
+        packageApp(macPackage([...args]), sys),
         /Sign in with Apple \(ios\.usesAppleSignIn\) in a dmg needs [\s\S]*NGN_PROVISIONING_PROFILE[\s\S]*APPLE_TEAM_ID/,
       );
       assert.ok(!calls.some((call) => call.command.endsWith('build.sh')), 'nothing built');
@@ -1034,7 +1155,7 @@ describe('packageApp', () => {
       },
       expoConfig: config,
     });
-    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), sys));
+    await quiet(() => packageApp(macPackage(['--format', 'dmg']), sys));
     const app = '/apps/notes/dist/macos/Notes.app';
     assert.ok(
       copied.some(
@@ -1064,12 +1185,12 @@ describe('packageApp', () => {
       resolvePackage: (_, name) =>
         name === 'expo-notifications' ? '/apps/notes/node_modules/expo-notifications' : null,
     });
-    await quiet(() => packageApp(parsePackage(['--format', 'mas']), installed.sys));
+    await quiet(() => packageApp(macPackage(['--format', 'mas']), installed.sys));
     assert.match(installed.written[entitlementsFile]!, /com\.apple\.developer\.aps-environment/);
 
     // A dmg of an app that only has the package is signed as before.
     const plain = fakeMac({ env: DMG_ENV, expoConfig: app({ plugins: ['expo-notifications'] }) });
-    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), plain.sys));
+    await quiet(() => packageApp(macPackage(['--format', 'dmg']), plain.sys));
     assert.doesNotMatch(plain.written[entitlementsFile]!, /aps-environment/);
 
     const asking = app({ ios: { entitlements: { 'aps-environment': 'production' } } });
@@ -1078,7 +1199,7 @@ describe('packageApp', () => {
       expoConfig: asking,
     });
     await assert.rejects(
-      packageApp(parsePackage(['--format', 'dmg', '--skip-notarize']), sys),
+      packageApp(macPackage(['--format', 'dmg', '--skip-notarize']), sys),
       /Remote notifications \(ios\.entitlements\['aps-environment'\]\) in a dmg needs [\s\S]*NGN_PROVISIONING_PROFILE/,
     );
     const signed = fakeMac({
@@ -1089,14 +1210,14 @@ describe('packageApp', () => {
       },
       expoConfig: asking,
     });
-    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), signed.sys));
+    await quiet(() => packageApp(macPackage(['--format', 'dmg']), signed.sys));
     assert.match(signed.written[entitlementsFile]!, /com\.apple\.developer\.aps-environment/);
     assert.ok(signed.copied.some(([, to]) => to.endsWith('embedded.provisionprofile')));
   });
 
   it('writes into --output, relative to the app', async () => {
     const { sys, calls } = fakeMac();
-    await quiet(() => packageApp(parsePackage(['--output', 'out']), sys));
+    await quiet(() => packageApp(macPackage(['--output', 'out']), sys));
     assert.deepEqual(calls.at(-1)!.args.at(-1), '/apps/notes/out/Notes.app');
   });
 
