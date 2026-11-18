@@ -195,6 +195,8 @@ export const system = {
   },
   /** @param {string} file */
   readFile: (file) => readFileSync(file, 'utf8'),
+  /** @param {string} dir */
+  mkdir: (dir) => mkdirSync(dir, { recursive: true }),
   /** @param {string} file */
   readBytes: (file) => new Uint8Array(readFileSync(file)),
   /**
