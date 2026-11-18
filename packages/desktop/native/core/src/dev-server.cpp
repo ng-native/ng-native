@@ -1,6 +1,8 @@
 #include "ngn/dev-server.h"
 
 #include <charconv>
+#include <stdexcept>
+#include <utility>
 
 namespace ngn {
 
@@ -97,9 +99,22 @@ folly::dynamic DevServer::hmrSetupArgs(const std::string &os) const {
   return folly::dynamic::array(platform.empty() ? os : platform, entry, host, port, true, scheme);
 }
 
-std::string &devServerOs() {
+namespace {
+std::string &hostOs() {
   static std::string os;
   return os;
+}
+} // namespace
+
+const std::string &devServerOs() {
+  return hostOs();
+}
+
+void setDevServerOs(std::string os) {
+  if (os.empty()) {
+    throw std::invalid_argument("The dev server needs the host OS's id, and DebuggerIdentity::os is empty");
+  }
+  hostOs() = std::move(os);
 }
 
 } // namespace ngn
