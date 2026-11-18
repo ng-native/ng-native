@@ -2,6 +2,7 @@
 
 #include "app-windows.h"
 #include "native-controls.h"
+#include "system-access.h"
 
 #include <adwaita.h>
 #if __has_include(<gio/gdesktopappinfo.h>)
@@ -78,39 +79,6 @@ bool sandboxed() {
   return g_file_test("/.flatpak-info", G_FILE_TEST_EXISTS) || g_getenv("SNAP") != nullptr;
 }
 
-// The window the app is in front with, which a launched app is placed against and takes its
-// activation token from.
-GtkWindow *frontWindow() {
-  GtkWindow *front = nullptr;
-  GListModel *windows = gtk_window_get_toplevels();
-  for (guint i = 0, n = g_list_model_get_n_items(windows); i < n; ++i) {
-    auto *window = GTK_WINDOW(g_list_model_get_item(windows, i));
-    g_object_unref(window);
-    if (gtk_widget_get_visible(GTK_WIDGET(window)) && (!front || gtk_window_is_active(window))) {
-      front = window;
-    }
-  }
-  return front;
-}
-
-// Opens `uri` in the app the desktop chose for it, through the OpenURI portal when the app is
-// sandboxed, answering once it has launched or failed.
-void launchUri(const std::string &uri, std::function<void(bool)> done) {
-  GtkUriLauncher *launcher = gtk_uri_launcher_new(uri.c_str());
-  auto *heap = new std::function<void(bool)>(std::move(done));
-  gtk_uri_launcher_launch(launcher, frontWindow(), nullptr, +[](GObject *source, GAsyncResult *result, gpointer data) {
-    std::unique_ptr<std::function<void(bool)>> done(static_cast<std::function<void(bool)> *>(data));
-    GError *error = nullptr;
-    bool launched = gtk_uri_launcher_launch_finish(GTK_URI_LAUNCHER(source), result, &error);
-    if (error) {
-      fprintf(stderr, "[ngn] could not open a url: %s\n", error->message);
-      g_error_free(error);
-    }
-    (*done)(launched);
-  }, heap);
-  g_object_unref(launcher);
-}
-
 // The desktop's own settings app, GNOME's or KDE Plasma's. None in the dev loop on a Mac, whose
 // GLib has no desktop files.
 bool launchSettingsApp() {
@@ -164,7 +132,7 @@ class GtkSystem final : public System {
     return {.osVersion = name.release, .systemName = "Linux", .locale = locale, .rightToLeft = gtk_widget_get_default_direction() == GTK_TEXT_DIR_RTL};
   }
   void openUrl(const std::string &url, std::function<void(bool)> done) override {
-    onMainContext([url, done = std::move(done)]() mutable { launchUri(url, std::move(done)); });
+    openUri(url, std::move(done));
   }
   bool canOpenUrl(const std::string &url) override {
     return canOpenUri(url, sandboxed(), [](const std::string &scheme) {

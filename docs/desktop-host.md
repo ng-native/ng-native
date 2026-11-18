@@ -26,8 +26,14 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   test each offset, with classic scroll bars (`gtk-overlay-scrolling` off) taking their gutter from
   the content through `scrollers.h`. An Image reads its source through the core's
   `loadImageSource` (`image-source.h`), which keeps what a GET fetched over http(s) in memory for
-  the process in place of macOS's URL cache, and GDK decodes it off the UI thread. Linking opens
-  a url with `GtkUriLauncher`, which goes through the desktop portal inside a sandbox. An svg
+  the process in place of macOS's URL cache, and GDK decodes it off the UI thread. The XDG desktop
+  portals are called through `portal.h`, one GDBus request and response routine of our own, inside
+  a sandbox and outside one; where no portal answers (no session bus, as in the dev loop on a Mac),
+  each caller falls back to GTK's own path. Linking and Shell open a url, a file or its folder
+  through the OpenURI portal, falling back to `GtkUriLauncher` and `GtkFileLauncher`, and KeepAwake
+  holds the session idle through the Inhibit portal (`system-access.h`). FileSystem's `watch` is a
+  `GFileMonitor` (inotify), and its desktop and downloads folders come from the XDG user-dirs file,
+  absent when it names none (`file-system.h`). An svg
   draws the core's document of react-native-svg's elements (`svg.h`) with `cairo-canvas.h`, a
   cairo node in the view's snapshot, since GSK fills and strokes paths only from GTK 4.14; text in
   an svg is Pango's, and a `foreignObject`'s views are not drawn.

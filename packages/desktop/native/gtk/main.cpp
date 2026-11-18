@@ -11,6 +11,7 @@
 // in-process (capture.h).
 #include "app-windows.h"
 #include "capture.h"
+#include "file-system.h"
 #include "gtk-backend.h"
 #include "host-sources.h"
 #include "image-view.h"
@@ -19,6 +20,7 @@
 #include "pango-text.h"
 #include "scroll-view.h"
 #include "surface-input.h"
+#include "system-access.h"
 #include "view-widget.h"
 
 #include "ngn/core-modules.h"
@@ -498,31 +500,8 @@ int main(int argc, char *argv[]) {
     gHost.mounting->tree().setScrollOffset(tag, offset);
   });
 
-  static ngn::ProcessesSetup processes;
-  for (char **e = environ; e && *e; ++e) {
-    std::string entry = *e;
-    if (auto eq = entry.find('='); eq != std::string::npos) {
-      processes.environment[entry.substr(0, eq)] = entry.substr(eq + 1);
-    }
-  }
-  processes.lookup = {
-      .isExecutable = [](const std::string &path) { return access(path.c_str(), X_OK) == 0; },
-      .searchPath = os.searchPath,
-  };
-  if (!settings.capabilitiesJson.empty()) {
-    processes.capabilities = ngn::parseCapabilities(folly::parseJson(settings.capabilitiesJson));
-  }
-  auto document = joined(appData, "Documents");
-  g_mkdir_with_parents(document.c_str(), 0700);
-  ngn::FileAccess::Folders folders{
-      .cache = caches,
-      .document = document,
-      .appData = appData,
-      .temp = settings.test ? settings.test->temp() : g_get_tmp_dir(),
-      .home = g_get_home_dir(),
-      .desktop = g_get_user_special_dir(G_USER_DIRECTORY_DESKTOP) ? g_get_user_special_dir(G_USER_DIRECTORY_DESKTOP) : "",
-      .downloads = g_get_user_special_dir(G_USER_DIRECTORY_DOWNLOAD) ? g_get_user_special_dir(G_USER_DIRECTORY_DOWNLOAD) : "",
-  };
+  static ngn::ProcessesSetup processes = ngn::gtk::processesSetup(os, settings.capabilitiesJson, ngn::gtk::insideFlatpak());
+  auto folders = ngn::gtk::fileFolders(appData, caches, settings.test ? settings.test->temp() : g_get_tmp_dir());
   if (auto path = ngn::pathOfUri(bundle)) {
     // An exported bundle on disk: its assets are beside it.
     folders.bundle = directoryOf(*path);
@@ -626,7 +605,10 @@ int main(int argc, char *argv[]) {
        .tray = tray,
        .dock = dock,
        .processes = processes,
+       .shell = ngn::gtk::makeShellOpener(),
+       .sleep = ngn::gtk::makeSleepPreventer(gHost.application),
        .notifications = [](std::shared_ptr<ngn::NotificationEvents>) { return std::shared_ptr<ngn::NotificationCenter>(); },
+       .fileWatcher = ngn::gtk::makeFileWatcher(),
        .pathMonitor = ngn::gtk::makePathMonitor(),
        .regionCode = [system] {
          auto locale = system->facts().locale;
