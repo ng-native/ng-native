@@ -201,27 +201,104 @@ TEST_CASE("while an input method composes, a controlled value and setTextAndSele
   }
 }
 
-TEST_CASE("a multiline text input shows its placeholder while it is empty") {
+TEST_CASE("a text input shows its placeholder in placeholderTextColor while it is empty, one line or many") {
   REQUIRE(ngn::testing::gtkReady());
-  MountedViews views;
-  dynamic props = dynamic::object("multiline", true)("placeholder", "MMMMMMMM")("placeholderTextColor", 0xffff0000)("fontSize", 30);
-  auto input = MountedViews::shadow(2, "TextInput", textInputProps(props), {{0, 0}, {200, 80}});
-  views.add(input);
-  auto redPixels = [&views] {
-    int red = 0;
-    for (int x = 2; x < 150; x += 6) {
-      for (int y = 8; y < 30; y += 4) {
-        auto p = views.pixel(x, y);
-        red += p.a > 100 && p.r > 150 && p.g < 100;
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    auto props = [multiline](bool red) {
+      dynamic p = dynamic::object("multiline", multiline)("placeholder", "MMMMMMMM")("fontSize", 30);
+      if (red) {
+        p["placeholderTextColor"] = 0xffff0000;
       }
+      return textInputProps(p);
+    };
+    auto input = MountedViews::shadow(2, "TextInput", props(true), {{0, 0}, {240, 80}});
+    views.add(input);
+    auto redPixels = [&views] {
+      int red = 0;
+      for (int x = 2; x < 200; x += 6) {
+        for (int y = 4; y < 76; y += 4) {
+          auto p = views.pixel(x, y);
+          red += p.a > 100 && p.r > 150 && p.g < 100;
+        }
+      }
+      return red;
+    };
+    CHECK(redPixels() > 5);
+    // Without the prop, GTK's dimmed text again.
+    views.update(input, props(false));
+    CHECK(redPixels() == 0);
+    views.update(input, props(true));
+    CHECK(redPixels() > 5);
+    auto *field = ngn::gtk::viewData(views.view(2))->field;
+    if (multiline) {
+      gtk_text_buffer_insert_at_cursor(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), "x", -1);
+    } else {
+      int position = 0;
+      gtk_editable_insert_text(GTK_EDITABLE(field->text), "x", -1, &position);
     }
-    return red;
-  };
-  CHECK(redPixels() > 5);
-  auto *field = ngn::gtk::viewData(views.view(2))->field;
-  gtk_text_buffer_insert_at_cursor(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), "x", -1);
-  views.settle();
-  CHECK(redPixels() == 0);
+    views.settle();
+    CHECK(redPixels() == 0);
+  }
+}
+
+TEST_CASE("autoCapitalize capitalizes what is typed or pasted, one line or many, and tells the input method") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    auto field = [&views, multiline](int tag, const std::string &capitalize, int maxLength = 0) {
+      dynamic p = dynamic::object("multiline", multiline)("autoCapitalize", capitalize);
+      if (maxLength) {
+        p["maxLength"] = maxLength;
+      }
+      views.add(MountedViews::shadow(tag, "TextInput", textInputProps(p), {{0, 0}, {240, 40}}));
+      return ngn::gtk::viewData(views.view(tag))->field;
+    };
+    auto type = [](ngn::gtk::TextField *f, const char *text) {
+      if (f->scroll) {
+        gtk_text_buffer_insert_at_cursor(gtk_text_view_get_buffer(GTK_TEXT_VIEW(f->text)), text, -1);
+      } else {
+        int position = gtk_editable_get_position(GTK_EDITABLE(f->text));
+        gtk_editable_insert_text(GTK_EDITABLE(f->text), text, -1, &position);
+        gtk_editable_set_position(GTK_EDITABLE(f->text), position);
+      }
+    };
+    auto hints = [](ngn::gtk::TextField *f) {
+      return f->scroll ? gtk_text_view_get_input_hints(GTK_TEXT_VIEW(f->text)) : gtk_text_get_input_hints(GTK_TEXT(f->text));
+    };
+
+    auto *characters = field(2, "characters");
+    type(characters, "straße é");
+    CHECK(ngn::gtk::fieldText(*characters) == "STRASSE É");
+    CHECK(hints(characters) == GTK_INPUT_HINT_UPPERCASE_CHARS);
+
+    auto *words = field(3, "words");
+    type(words, "hello wo");
+    type(words, "rld again");
+    CHECK(ngn::gtk::fieldText(*words) == "Hello World Again");
+    CHECK(hints(words) == GTK_INPUT_HINT_UPPERCASE_WORDS);
+
+    // Each change counts once, the capitalized text being the user's.
+    CHECK(words->eventCount == 2);
+
+    auto *none = field(4, "none");
+    type(none, "lower");
+    CHECK(ngn::gtk::fieldText(*none) == "lower");
+    CHECK(hints(none) == GTK_INPUT_HINT_NONE);
+
+    // Sentences are the input method's to capitalize, as GTK has no rule of its own.
+    auto *sentences = field(5, "sentences");
+    type(sentences, "one. two");
+    CHECK(ngn::gtk::fieldText(*sentences) == "one. two");
+    CHECK(hints(sentences) == GTK_INPUT_HINT_UPPERCASE_SENTENCES);
+
+    // Capitalized, then cut to maxLength in UTF-16 units.
+    auto *cut = field(6, "characters", 4);
+    type(cut, "abcdef");
+    CHECK(ngn::gtk::fieldText(*cut) == "ABCD");
+  }
 }
 
 TEST_CASE("a text input's border and background are its view's, painted under the field") {
