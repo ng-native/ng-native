@@ -7,8 +7,9 @@
 # ReactCommon comes from the installed react-native package; everything else is fetched here:
 # ReactCxxPlatform (in the git tag, not the npm package), Hermes, folly and the libraries React
 # Native's Android build would normally download (glog, fmt, double-conversion, boost headers,
-# fast_float), nlohmann_json for the dev-server client, doctest for the core tests, and on macOS
-# Sparkle's framework, which `package --format dmg` embeds for whole-app updates.
+# fast_float), nlohmann_json for the dev-server client, doctest for the core tests, on macOS
+# Sparkle's framework, which `package --format dmg` embeds for whole-app updates, and elsewhere ICU,
+# which Hermes's Unicode layer needs there (build-icu.sh builds it).
 # Each source records what it was fetched at, so a changed pin fetches it again. A download whose
 # checksum or commit does not match fails the script; nothing is ever used unverified.
 #
@@ -49,6 +50,11 @@ DOCTEST_URL=https://raw.githubusercontent.com/doctest/doctest/v2.4.12/doctest/do
 DOCTEST_SHA256=94029a7d32da24a56249658147dbd2b33ff0b9ed665295cbbaf19aafff5b0ced
 SPARKLE_URL=https://github.com/sparkle-project/Sparkle/releases/download/2.6.4/Sparkle-2.6.4.tar.xz
 SPARKLE_SHA256=50612a06038abc931f16011d7903b8326a362c1074dabccb718404ce8e585f0b
+# ICU's sources and, to build its data filtered (build-icu.sh), the data's sources.
+ICU_URL=https://github.com/unicode-org/icu/releases/download/release-77-1/icu4c-77_1-src.tgz
+ICU_SHA256=588e431f77327c39031ffbb8843c0e3bc122c211374485fa87dc5f3faff24061
+ICU_DATA_URL=https://github.com/unicode-org/icu/releases/download/release-77-1/icu4c-77_1-data.zip
+ICU_DATA_SHA256=1e08bfafa442260ccabf9a872d4eab12de813d42b90769df056bab032b37e1d3
 
 if [ "$(cat "$RN_PKG/sdks/.hermesv1version")" != "$HERMES_TAG" ]; then
   echo "fetch.sh: react-native names Hermes $(cat "$RN_PKG/sdks/.hermesv1version"), pinned $HERMES_TAG" >&2
@@ -150,6 +156,22 @@ if [ "$(uname -s)" = "Darwin" ] && ! fresh sparkle "$SPARKLE_SHA256"; then
   mv "$SRC/.sparkle.tmp/x" "$SRC/sparkle"
   rm -rf "$SRC/.sparkle.tmp"
   stamp sparkle "$SPARKLE_SHA256"
+fi
+
+# ICU, with its data's sources in place of the prebuilt data, so build-icu.sh can filter them.
+if [ "$(uname -s)" != "Darwin" ] && ! fresh icu "$ICU_SHA256-$ICU_DATA_SHA256"; then
+  echo "==> icu"
+  rm -rf "$SRC/icu" "$SRC/.icu.tmp"
+  mkdir -p "$SRC/.icu.tmp"
+  download "$ICU_URL" "$ICU_SHA256" "$SRC/.icu.tmp/icu.tgz"
+  download "$ICU_DATA_URL" "$ICU_DATA_SHA256" "$SRC/.icu.tmp/data.zip"
+  tar -xzf "$SRC/.icu.tmp/icu.tgz" -C "$SRC/.icu.tmp"
+  rm -rf "$SRC/.icu.tmp/icu/source/data"
+  unzip -q "$SRC/.icu.tmp/data.zip" -d "$SRC/.icu.tmp/icu/source"
+  [ -d "$SRC/.icu.tmp/icu/source/data/locales" ] || { echo "fetch.sh: ICU's data archive has no data/locales" >&2; exit 1; }
+  mv "$SRC/.icu.tmp/icu" "$SRC/icu"
+  rm -rf "$SRC/.icu.tmp"
+  stamp icu "$ICU_SHA256-$ICU_DATA_SHA256"
 fi
 t1=$(date +%s)
 
