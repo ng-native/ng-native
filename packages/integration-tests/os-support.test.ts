@@ -200,9 +200,10 @@ describe('each service the table lists', () => {
   }
 
   it('matches the desktop host: a service is on macOS exactly where the host has its module', () => {
-    const host = read('packages/desktop/native/appkit/main.mm');
+    // The desktop modules are registered for every backend by the core (desktop-modules.cpp).
+    const host = read('packages/desktop/native/core/src/modules/desktop-modules.cpp');
     const registered = new Set(
-      [...host.matchAll(/addModule\(\*modules, "(\w+)"/g)].map((m) => m[1]),
+      [...host.matchAll(/addModule\(registry, "(\w+)"/g)].map((m) => m[1]),
     );
     assert.ok(registered.size > 5, `read ${registered.size} modules from the host`);
     const disagree: string[] = [];
