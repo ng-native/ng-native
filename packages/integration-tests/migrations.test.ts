@@ -1156,7 +1156,7 @@ describe('os-comparisons-on-linux, through nx migrate, ng update and ng-native-m
     assert.deepEqual(nx.notes, [
       "src/app/platform.ts:5: Platform.OS === 'ios' is false on Linux, where the OS is 'linux'. If the branch is about React Native's iOS behaviour, which Linux shares, check for 'linux' too.",
       "src/app/platform.ts:6: inject(OS) === 'macos' is false on Linux, where the OS is 'linux'. If the branch is for every desktop OS, inject DESKTOP instead.",
-      "src/app/platform.ts:7: inject(OS) !== 'macos' is true on Linux, where the OS is 'linux'. If the branch is for every OS but a desktop one, inject DESKTOP instead.",
+      "src/app/platform.ts:7: inject(OS) !== 'macos' is true on Linux, where the OS is 'linux'. If the branch is for every OS but a desktop one, check !inject(DESKTOP) instead.",
       "src/app/platform.ts:8: inject(OS) !== 'android' is true on Linux too, so Linux takes this branch. Check that it is right there.",
       "src/app/screen.html:1: os === 'macos' is false on Linux, where the OS is 'linux'. If the branch is for every desktop OS, inject DESKTOP instead.",
     ]);

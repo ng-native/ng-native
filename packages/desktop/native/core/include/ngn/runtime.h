@@ -49,7 +49,7 @@ struct DebuggerIdentity {
   std::string appId{"ngn-desktop"};
   std::string deviceName{"desktop"};
   // The host OS's id (HostOs): the platform the HMR client is set up for when the bundle URL
-  // names none.
+  // names none. Required: the runtime throws std::invalid_argument when it is empty.
   std::string os;
 };
 
@@ -64,7 +64,7 @@ class Runtime {
       std::shared_ptr<ModuleRegistry> modules,
       NetworkClients clients,
       std::string bundle,
-      DebuggerIdentity identity = {});
+      DebuggerIdentity identity);
   ~Runtime();
   Runtime(const Runtime &) = delete;
   Runtime &operator=(const Runtime &) = delete;
