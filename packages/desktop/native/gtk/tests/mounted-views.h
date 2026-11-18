@@ -83,14 +83,20 @@ struct MountedViews {
   GtkWidget *surface = nullptr;
   int frames = 0;
 
-  MountedViews() {
+  // `chrome`: the surface in a header bar's window (screens.h), `width` by `height` below it.
+  explicit MountedViews(bool chrome = false, int width = 200, int height = 200) {
     window = gtk_window_new();
-    gtk_window_set_default_size(GTK_WINDOW(window), 200, 200);
+    gtk_window_set_default_size(GTK_WINDOW(window), width, height);
     gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
     surface = gtk::makeSurfaceWidget(kSurface, nullptr);
-    gtk_window_set_child(GTK_WINDOW(window), surface);
+    if (chrome) {
+      gtk_widget_set_size_request(surface, width, height);
+      gtk_window_set_child(GTK_WINDOW(window), gtk::wrapInChrome(surface));
+    } else {
+      gtk_window_set_child(GTK_WINDOW(window), surface);
+    }
     backend->addSurface(kSurface, surface);
-    mount({facebook::react::ShadowViewMutation::CreateMutation(shadow(kSurface, "RootView", desktopViewProps(folly::dynamic::object()), {{0, 0}, {200, 200}}))});
+    mount({facebook::react::ShadowViewMutation::CreateMutation(shadow(kSurface, "RootView", desktopViewProps(folly::dynamic::object()), {{0, 0}, {static_cast<facebook::react::Float>(width), static_cast<facebook::react::Float>(height)}}))});
     gtk_window_present(GTK_WINDOW(window));
     runUntil([this] { return gtk_widget_get_mapped(surface) && gtk_widget_get_frame_clock(surface); });
     g_signal_connect(gtk_widget_get_frame_clock(surface), "after-paint", G_CALLBACK(+[](GdkFrameClock *, gpointer self) {

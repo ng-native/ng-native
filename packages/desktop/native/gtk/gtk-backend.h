@@ -2,6 +2,9 @@
 // view (view-widget.h), on the GTK thread.
 #pragma once
 
+#include "screens.h"
+#include "view-widget.h"
+
 #include "ngn/desktop-view-props.h"
 #include "ngn/mounting-backend.h"
 
@@ -30,6 +33,34 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
   // Told once each transaction has mounted.
   std::function<void(SurfaceId)> onMount;
 
+  // What the screens (screens.h) need of the host: a view whose subtree a container of its own
+  // hits (the tree's container roots), and the pointer into a slot as that container.
+  struct Hooks {
+    std::function<void(Tag, bool)> containerRoot = [](Tag, bool) {};
+    std::function<void(GtkWidget *, SurfaceId, Tag)> attachInput = [](GtkWidget *, SurfaceId, Tag) {};
+    std::function<void(Tag)> detachInput = [](Tag) {};
+  } hooks;
+
+  // The widget a surface's root mounts into, or null.
+  GtkWidget *surfaceWidget(SurfaceId surfaceId) const;
+  // A view's data, or null.
+  ViewData *data(Tag tag) const;
+  // Moves the view's widget into `slot`, leaving an empty view in its place, so its siblings keep
+  // their places and Fabric's indices; unhostView puts it back. A view Fabric moves or removes
+  // comes back first.
+  void hostView(Tag tag, GtkWidget *slot);
+  void unhostView(Tag tag);
+  // Whether the view is still in the slot it was hosted in.
+  bool isHosted(Tag tag) const;
+  // A RNSSearchBar's field, or null.
+  GtkWidget *searchEntry(Tag tag) const;
+  Headers &headers() {
+    return *headers_;
+  }
+  Modals &modals() {
+    return *modals_;
+  }
+
   void runOnUiThread(std::function<void()> task) override;
   bool onUiThread() const override;
   void serviceUiThread() override;
@@ -43,6 +74,7 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
   void updateEventEmitter(const ShadowView &view) override;
   void dispatchCommand(Tag tag, const std::string &name, const folly::dynamic &args) override;
   void setCovered(SurfaceId surfaceId, Tag tag, bool covered) override;
+  void setFrontHeader(SurfaceId surfaceId, const std::optional<ScreenStacks::FrontHeader> &header) override;
   void didMount(SurfaceId surfaceId) override;
   void updateDesktopProps(SurfaceId surfaceId, Tag tag, const DesktopProps &props) override;
   void setSvgDrawing(SurfaceId surfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) override;
@@ -61,6 +93,14 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
   guint drainSource_{0};
   std::unordered_map<Tag, GtkWidget *> views_;
   std::unordered_map<SurfaceId, GtkWidget *> surfaces_;
+  struct Hosted {
+    GtkWidget *placeholder;
+    GtkWidget *slot;
+  };
+  std::unordered_map<Tag, Hosted> hosted_;
+  std::unordered_map<Tag, GtkWidget *> searchEntries_;
+  std::unique_ptr<Headers> headers_;
+  std::unique_ptr<Modals> modals_;
 };
 
 } // namespace ngn::gtk
