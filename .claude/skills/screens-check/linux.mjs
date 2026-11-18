@@ -12,8 +12,11 @@
  * and the host, the bundle and the out folder must be under the home folder. On Linux it runs where
  * it is; run it in the image there too, for captures that compare with a Mac's.
  *
- * The link reaches the app as its initial URL (`--url`). Nothing here taps: a route whose screen
- * needs a tap to show what matters is a link of its own, or is checked by hand.
+ * The link reaches the app as its initial URL (`--url`). With `--input <script.input>`, each route
+ * plays that input script (`NGN_INPUT_SCRIPT`, in input-script.h's format) and the host captures a
+ * second after the script has played; its capture is named with the script's name after the
+ * route's. A script the host refuses, or one it does not finish, fails the route rather than
+ * capturing the screen untouched.
  */
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
@@ -23,10 +26,15 @@ import { fileURLToPath } from 'node:url';
 import { deepLink, screenshotName } from './macos.mjs';
 import { runInLinuxImage, startXvfb } from '../../../scripts/linux-image.mjs';
 
-/** The host's environment for one capture: a test launch, cairo, and where the capture goes. */
-export function captureEnv(env, state, file) {
+/**
+ * The host's environment for one capture: a test launch, cairo, where the capture goes, and the
+ * input script to play first, if any.
+ */
+export function captureEnv(env, state, file, input) {
+  const { NGN_INPUT_SCRIPT: _ignored, ...rest } = env;
   return {
-    ...env,
+    ...rest,
+    ...(input ? { NGN_INPUT_SCRIPT: input } : {}),
     NGN_TESTS: '1',
     NGN_STATE_DIR: state,
     NGN_RUN_ID: `screens-${process.pid}`,
@@ -37,9 +45,18 @@ export function captureEnv(env, state, file) {
   };
 }
 
-/** What the host logs once its capture is written, or could not be. @param {string} log */
-export function captureResult(log) {
-  if (/\[ngn\] captured /.test(log)) return 'captured';
+/**
+ * What the host logs once its capture is written, or could not be. With an input script, the script
+ * must have played first: a refusal (`[ngn] input script: <why>`) fails the capture.
+ *
+ * @param {string} log
+ * @param {boolean} [scripted]
+ */
+export function captureResult(log, scripted = false) {
+  if (scripted && /\[ngn\] input script[^\n]*: /.test(log)) return 'failed';
+  if (/\[ngn\] captured /.test(log)) {
+    return !scripted || /\[ngn\] input script done/.test(log) ? 'captured' : 'failed';
+  }
   if (/\[ngn\] could not capture /.test(log)) return 'failed';
   return undefined;
 }
@@ -47,29 +64,31 @@ export function captureResult(log) {
 /**
  * Launch the host on `route`, wait for its capture, and stop it.
  *
- * @param {{ host: string, bundle: string, scheme: string, out: string, limitSeconds?: number }} target
+ * @param {{ host: string, bundle: string, scheme: string, out: string, input?: string, limitSeconds?: number }} target
  * @param {string} route
  */
 export async function shoot(target, route) {
-  const file = path.join(target.out, screenshotName(route, []));
+  const label = target.input ? [path.basename(target.input).replace(/\.input$/, '')] : [];
+  const file = path.join(target.out, screenshotName(route, label));
   const state = mkdtempSync(path.join(tmpdir(), 'screens-linux-'));
   mkdirSync(target.out, { recursive: true });
   const child = spawn(
     target.host,
     [target.bundle, '--url', deepLink(target.scheme, route), '--title', 'screens-check'],
-    { stdio: ['ignore', 'pipe', 'pipe'], env: captureEnv(process.env, state, file) },
+    { stdio: ['ignore', 'pipe', 'pipe'], env: captureEnv(process.env, state, file, target.input) },
   );
   let log = '';
   child.stdout.on('data', (chunk) => (log += chunk));
   child.stderr.on('data', (chunk) => (log += chunk));
   const exited = new Promise((resolve) => child.once('exit', resolve));
   try {
-    const limit = (target.limitSeconds ?? 30) * 1000;
-    for (let waited = 0; waited < limit && !captureResult(log); waited += 200) {
+    const scripted = Boolean(target.input);
+    const limit = (target.limitSeconds ?? (scripted ? 90 : 30)) * 1000;
+    for (let waited = 0; waited < limit && !captureResult(log, scripted); waited += 200) {
       if (child.exitCode !== null || child.signalCode !== null) break;
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
-    if (captureResult(log) !== 'captured' || !existsSync(file)) {
+    if (captureResult(log, scripted) !== 'captured' || !existsSync(file)) {
       throw new Error(`No capture for ${route}. The host's output:\n${log}`);
     }
     return file;
@@ -90,9 +109,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const bundle = option('--bundle');
   const scheme = option('--scheme');
   const out = option('--out');
+  const input = option('--input');
   if (!host || !bundle || !scheme || !out || args.length === 0) {
     console.error(
-      'Usage: linux.mjs --host <ngn-linux> --bundle <main.js> --scheme <scheme> --out <dir> <route>...',
+      'Usage: linux.mjs --host <ngn-linux> --bundle <main.js> --scheme <scheme> --out <dir> [--input <script.input>] <route>...',
     );
     process.exit(2);
   }
@@ -101,6 +121,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     bundle: path.resolve(bundle),
     scheme,
     out: path.resolve(out),
+    ...(input ? { input: path.resolve(input) } : {}),
   };
   if (process.platform !== 'linux') {
     mkdirSync(target.out, { recursive: true });
@@ -116,6 +137,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           scheme,
           '--out',
           target.out,
+          ...(target.input ? ['--input', target.input] : []),
           ...args,
         ],
         {
@@ -123,6 +145,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
             path.dirname(path.dirname(target.host)),
             path.dirname(target.bundle),
             target.out,
+            ...(target.input ? [path.dirname(target.input)] : []),
           ],
         },
       ),

@@ -272,7 +272,14 @@ done
 The files are named as step 4 names them. A capture is the window's content at scale 1, with no
 title bar (Xvfb runs no window manager), so a change to the header bar or the window frame is
 checked by hand (`docs/linux-manual-pass.md`), and so are Wayland, fractional scale and input
-methods. The script does not tap.
+methods. For a screen that needs input first, `--input <script.input>` plays that input script
+(`NGN_INPUT_SCRIPT`, the format of `packages/desktop/native/core/include/ngn/input-script.h`: points
+in the window's content, `key` with modifiers, arrows and `type`) on each route given, and the host
+captures a second after the script has played; the capture is `<route>-<script>.png`. Under Xvfb a
+script plays through XTest. One the host refuses (`scroll`, `magnify`, `rotate` or `choose`) or does
+not finish fails the route, and so does a capture logged before the script is done. The capture is
+the surface, so a sheet, cover or popover the script opens over it is not in it: check those by
+hand.
 
 Step 6 on Linux: each launch's container is removed with it, so `rm -rf "$out"` after
 `git worktree remove` is all there is.
