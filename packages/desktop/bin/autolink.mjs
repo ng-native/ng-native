@@ -2,19 +2,25 @@
  * Autolinking for the desktop build: which native code the host compiles in, found the way Expo's
  * autolinking finds a library's iOS and Android code.
  *
- * - A library opts in through its `expo-module.config.json`: `macos` among its `platforms`, and a
- *   `macos` entry naming the CMake target its desktop code builds and the folder that holds its
- *   CMake fragment (`desktop` unless it says otherwise):
+ * Everything below is per desktop OS (`DESKTOP_OSES`), named by the key it is configured under:
+ * `macos` or `linux`.
  *
- *       { "platforms": ["apple", "android", "macos"],
- *         "macos": { "cmakeTarget": "haptics_desktop", "cmakeDir": "desktop" } }
+ * - A library opts in through its `expo-module.config.json`: the OS among its `platforms`, and an
+ *   entry of that name naming the CMake target its desktop code builds and the folder that holds
+ *   its CMake fragment (`desktop` unless it says otherwise). A library that builds for both lists
+ *   both, and its fragment can be one folder for both or one for each:
  *
- * - The app's own modules are each `modules/<name>/macos/`, beside `ios/` and `android/`, compiled
- *   in with nothing to register. The module's `expo-module.config.json` may name its CMake target.
+ *       { "platforms": ["apple", "android", "macos", "linux"],
+ *         "macos": { "cmakeTarget": "haptics_desktop", "cmakeDir": "desktop" },
+ *         "linux": { "cmakeTarget": "haptics_desktop", "cmakeDir": "desktop" } }
+ *
+ * - The app's own modules are each `modules/<name>/<os>/`, beside `ios/` and `android/`, compiled
+ *   in with nothing to register. The module's `expo-module.config.json` may name its CMake target
+ *   under the OS's key.
  * - A package in the plugin options' `deny` list stays out, whatever it ships; the packages it
  *   depends on are still walked.
- * - A dependency with native code and none for the desktop is listed, so `run` and `package` can
- *   say its native modules are absent on macOS.
+ * - A dependency with native code and none for the OS is listed, so `run` and `package` can
+ *   say its native modules are absent there.
  *
  * Plain Node with no dependencies, so it runs before anything is built.
  */
@@ -22,7 +28,18 @@ import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'n
 import path from 'node:path';
 
 /**
- * Packages whose native side is answered another way on macOS, so they are neither linked nor
+ * The desktop OSes autolinking links native code for: the desktop members of `OS_NAMES` in
+ * `@ng-native/device`, which a test keeps equal. `macos` is the default wherever an OS is optional.
+ *
+ * @typedef {'macos' | 'linux'} DesktopOs
+ */
+export const DESKTOP_OSES = /** @type {const} */ (['macos', 'linux']);
+
+/** How each OS is written in a message. */
+const OS_LABELS = { macos: 'macOS', linux: 'Linux' };
+
+/**
+ * Packages whose native side is answered another way on a desktop OS, so they are neither linked nor
  * reported: React Native and React themselves, Expo (`expo` and `expo-*` resolve to empty modules
  * there, and the host's own modules answer the services that use them) and this framework.
  *
@@ -44,6 +61,7 @@ function suppliedOtherwise(name) {
  * @typedef {{ name: string, dir: string, cmakeTarget: string, cmakeDir: string }} DesktopLibrary
  * @typedef {{ name: string, dir: string, cmakeTarget: string | null }} AppModule
  * @typedef {{
+ *   os: DesktopOs,
  *   libraries: DesktopLibrary[],
  *   appModules: AppModule[],
  *   hostLibraries: { name: string, dir: string }[],
@@ -53,20 +71,23 @@ function suppliedOtherwise(name) {
  */
 
 /**
- * The desktop code an app's build compiles in, and the dependencies with native code that have
- * none. Walks the app's `dependencies` and theirs, as Expo's autolinking does, each package once.
+ * The desktop code an app's build compiles in for `os`, and the dependencies with native code that
+ * have none. Walks the app's `dependencies` and theirs, as Expo's autolinking does, each package once.
  *
  * @param {string} appDir
- * @param {{ deny?: readonly string[], builtIn?: readonly string[] }} [options] `builtIn` are the
+ * @param {{ os?: DesktopOs, deny?: readonly string[], builtIn?: readonly string[] }} [options]
+ *   `os`: the OS the build is for (macos unless said); `builtIn` are the
  *   libraries the host compiles in itself, which are neither linked nor reported: `hostLibraries`
  *   says where each one the walk finds is installed, under a dependency's node_modules too
  * @returns {DesktopLinks}
  */
-export function desktopLinks(appDir, { deny = [], builtIn = [] } = {}) {
+export function desktopLinks(appDir, { os = 'macos', deny = [], builtIn = [] } = {}) {
+  assertDesktopOs(os);
   /** @type {DesktopLinks} */
   const links = {
+    os,
     libraries: [],
-    appModules: appModules(appDir),
+    appModules: appModules(appDir, os),
     hostLibraries: [],
     withoutDesktop: [],
     problems: [],
@@ -95,66 +116,76 @@ export function desktopLinks(appDir, { deny = [], builtIn = [] } = {}) {
   return links;
 }
 
+/** @param {string} os */
+function assertDesktopOs(os) {
+  if (!DESKTOP_OSES.some((desktop) => desktop === os)) {
+    throw new Error(`Autolinking is for ${DESKTOP_OSES.join(' and ')}, not '${os}'.`);
+  }
+}
+
 /**
  * @param {DesktopLinks} links
  * @param {string} name
  * @param {string} dir
  */
 function classify(links, name, dir) {
+  const { os } = links;
   const config = readJson(path.join(dir, 'expo-module.config.json'));
-  const macos = config?.platforms?.includes('macos') ? config.macos : undefined;
-  if (macos === undefined) {
+  const entry = config?.platforms?.includes(os) ? config[os] : undefined;
+  if (entry === undefined) {
     if (hasNativeCode(dir, config)) links.withoutDesktop.push(name);
     return;
   }
-  if (typeof macos?.cmakeTarget !== 'string' || macos.cmakeTarget === '') {
+  if (typeof entry?.cmakeTarget !== 'string' || entry.cmakeTarget === '') {
     links.problems.push(
-      `${name} lists macos in expo-module.config.json without a macos.cmakeTarget, so it is left out.`,
+      `${name} lists ${os} in expo-module.config.json without a ${os}.cmakeTarget, so it is left out.`,
     );
     return;
   }
-  const cmakeDir = path.join(dir, typeof macos.cmakeDir === 'string' ? macos.cmakeDir : 'desktop');
+  const cmakeDir = path.join(dir, typeof entry.cmakeDir === 'string' ? entry.cmakeDir : 'desktop');
   if (!existsSync(path.join(cmakeDir, 'CMakeLists.txt'))) {
     links.problems.push(
-      `${name} names ${path.relative(dir, cmakeDir)}/CMakeLists.txt for macos, which it does not have, so it is left out.`,
+      `${name} names ${path.relative(dir, cmakeDir)}/CMakeLists.txt for ${os}, which it does not have, so it is left out.`,
     );
     return;
   }
-  links.libraries.push({ name, dir, cmakeTarget: macos.cmakeTarget, cmakeDir });
+  links.libraries.push({ name, dir, cmakeTarget: entry.cmakeTarget, cmakeDir });
 }
 
 /**
- * The app's own modules: each `modules/<name>/macos/` folder.
+ * The app's own modules: each `modules/<name>/<os>/` folder.
  *
  * @param {string} appDir
+ * @param {DesktopOs} os
  * @returns {AppModule[]}
  */
-function appModules(appDir) {
+function appModules(appDir, os) {
   const root = path.join(appDir, 'modules');
   if (!isDirectory(root)) return [];
   return readdirSync(root)
     .sort()
-    .filter((name) => isDirectory(path.join(root, name, 'macos')))
+    .filter((name) => isDirectory(path.join(root, name, os)))
     .map((name) => {
       const config = readJson(path.join(root, name, 'expo-module.config.json'));
-      const target = config?.macos?.cmakeTarget;
+      const target = config?.[os]?.cmakeTarget;
       return {
         name,
-        dir: path.join(root, name, 'macos'),
+        dir: path.join(root, name, os),
         cmakeTarget: typeof target === 'string' && target !== '' ? target : null,
       };
     });
 }
 
 /**
- * Whether a package ships native code for a phone: an Expo module for iOS or Android, a React
+ * Whether a package ships native code: an Expo module for iOS, Android or a desktop OS, a React
  * Native codegen spec, a podspec, or an `ios` or `android` folder.
  *
  * @param {string} dir
  * @param {{ platforms?: string[] } | null} config its expo-module.config.json
  */
 function hasNativeCode(dir, config) {
-  if (config?.platforms?.some((platform) => ['apple', 'ios', 'android'].includes(platform))) {
+  const native = ['apple', 'ios', 'android', ...DESKTOP_OSES];
+  if (config?.platforms?.some((platform) => native.includes(platform))) {
     return true;
   }
   if (readJson(path.join(dir, 'package.json'))?.codegenConfig) return true;
@@ -216,7 +247,7 @@ export function linkWarnings(links) {
   if (links.withoutDesktop.length > 0) {
     lines.push(
       `No desktop code in ${links.withoutDesktop.join(', ')}: their native modules are absent on ` +
-        'macOS. List a package in the deny option of the @ng-native/desktop plugin to keep it out ' +
+        `${OS_LABELS[links.os]}. List a package in the deny option of the @ng-native/desktop plugin to keep it out ` +
         'of this check.',
     );
   }
