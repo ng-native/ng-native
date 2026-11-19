@@ -318,7 +318,7 @@ export class NativeScrollDriver {
       const offset = this.offset(source, sourceTag, feed, key);
       drive.nodes = this.build(offset.value, viewTag, property, drive);
       this.hold(view, viewTag, drive.nodes.props, ['transform']);
-      this.place(offset.value, drive.from);
+      this.place(offset.value, drive);
       this.flush();
       return true;
     };
@@ -330,15 +330,21 @@ export class NativeScrollDriver {
       const offset = this.offsets.get(source)!.get(key)!;
       drive.nodes = this.build(offset.value, drive.viewTag, property, drive);
       this.hold(view, drive.viewTag, drive.nodes.props, ['transform']);
-      this.place(offset.value, drive.from);
+      this.place(offset.value, drive);
       this.flush();
     };
     return {
       update: (next, from) => {
+        if (drive.stopped) return;
         if (from !== undefined) drive.from = from;
-        if (drive.stopped || sameRange(drive.range, next)) return;
-        drive.range = next;
-        rebuild();
+        if (!sameRange(drive.range, next)) {
+          drive.range = next;
+          return rebuild();
+        }
+        // The graph stays, but native is still to be told where the source is.
+        if (!drive.nodes || drive.from === undefined) return;
+        this.place(this.offsets.get(source)!.get(key)!.value, drive);
+        this.flush();
       },
       follow: (entries) => {
         if (drive.stopped || sameFollowing(drive.after, entries)) return;
@@ -701,8 +707,11 @@ export class NativeScrollDriver {
    * works a graph out when a value changes, and the source's next event may be a while coming,
    * after a jump not at all. React Native's components draw that first frame from JavaScript.
    */
-  private place(value: number, from: number | undefined): void {
-    if (from !== undefined) this.native.API.setAnimatedNodeValue(value, from);
+  private place(value: number, drive: Drive): void {
+    if (drive.from === undefined) return;
+    this.native.API.setAnimatedNodeValue(value, drive.from);
+    // Once: native's own events take it from here, and a later rebuild must not set it back.
+    drive.from = undefined;
   }
 
   private flush(): void {

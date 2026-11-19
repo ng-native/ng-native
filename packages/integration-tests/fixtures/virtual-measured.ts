@@ -93,6 +93,7 @@ export class Measured {
       [itemHeight]="40"
       [keyExtractor]="keyOf"
       [itemType]="typed() ? typeOf : undefined"
+      [stickyIndices]="sticky()"
       [overscan]="2"
       [maintainVisibleContentPosition]="anchoring()"
       [style]="fill"
@@ -108,6 +109,7 @@ export class Measured {
 export class KeyedFixed {
   readonly list = viewChild.required<VirtualList<Post>>('list');
   readonly typed = signal(false);
+  readonly sticky = signal<readonly number[]>([]);
   /** Every third post is a different kind of row, as a photo post among text posts is. */
   readonly typeOf = (post: Post) => (post.id % 3 === 0 ? 'photo' : 'text');
   readonly items = signal(posts(0, 1000));

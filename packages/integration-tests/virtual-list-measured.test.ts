@@ -502,6 +502,39 @@ describe('virtual list with fixed heights, keyed', () => {
     unmount();
   });
 
+  it('recycles a sticky row only into a sticky row of the same type', async () => {
+    const { instance, scroll, unmount } = await boot('KeyedFixed');
+    const fixture = instance as unknown as {
+      typed: { set(value: boolean): void };
+      sticky: { set(value: readonly number[]): void };
+    };
+    fixture.typed.set(true);
+    // Every fifth row sticky: photos (0, 15, 30) and text (5, 10, 20) among them.
+    const sticky = new Set(Array.from({ length: 200 }, (_, i) => i * 5));
+    fixture.sticky.set([...sticky]);
+    await settle();
+    const typeOfSlot = new Map<number, string>();
+    const check = () => {
+      for (const row of instance.list().window()) {
+        if (row.parked) continue;
+        const kind = row.item.id % 3 === 0 ? 'photo' : 'text';
+        const type = sticky.has(row.index) ? `sticky ${kind}` : kind;
+        const seen = typeOfSlot.get(row.slot);
+        assert.ok(
+          seen === undefined || seen === type,
+          `slot ${row.slot} held a ${seen}, now a ${type}`,
+        );
+        typeOfSlot.set(row.slot, type);
+      }
+    };
+    check();
+    for (let y = 0; y < 300 * 40; y += 97) {
+      await scroll(y);
+      check();
+    }
+    unmount();
+  });
+
   it('recycles a row only into a row of the same type', async () => {
     const { instance, scroll, unmount } = await boot('KeyedFixed');
     (instance as unknown as { typed: { set(value: boolean): void } }).typed.set(true);
