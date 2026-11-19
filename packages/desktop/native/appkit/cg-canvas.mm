@@ -78,6 +78,13 @@ NSCache<NSString *, NSImage *> *imageCache() {
   return cache;
 }
 
+// The uris whose load failed or whose data is no image: not asked for again on each draw, like a
+// browser's broken image, for as long as the app runs.
+NSMutableSet<NSString *> *failedImages() {
+  static NSMutableSet<NSString *> *failed = [NSMutableSet set];
+  return failed;
+}
+
 // The canvas drawSvg draws on: Core Graphics calls on the view's context, or on a mask's while
 // one is drawn. It tracks the user transform itself, so a mask, drawn in a context of its own,
 // starts where the drawing is.
@@ -369,7 +376,9 @@ class CGCanvas final : public ngn::SvgCanvas {
     NSString *key = @(uri.c_str());
     NSImage *image = [imageCache() objectForKey:key];
     if (image == nil) {
-      load(key);
+      if (![failedImages() containsObject:key]) {
+        load(key);
+      }
       return;
     }
     NSSize natural = image.size;
@@ -622,11 +631,13 @@ class CGCanvas final : public ngn::SvgCanvas {
                                  dispatch_async(dispatch_get_main_queue(), ^{
                                    NSArray *waiters = loading[uri];
                                    [loading removeObjectForKey:uri];
-                                   if (image != nil) {
-                                     [imageCache() setObject:image forKey:uri];
-                                     for (void (^waiter)(void) in waiters) {
-                                       waiter();
-                                     }
+                                   if (image == nil) {
+                                     [failedImages() addObject:uri];
+                                     return;
+                                   }
+                                   [imageCache() setObject:image forKey:uri];
+                                   for (void (^waiter)(void) in waiters) {
+                                     waiter();
                                    }
                                  });
                                }] resume];

@@ -241,6 +241,60 @@ TEST_CASE("every canvas waiting for the same image is told when it loads") {
   CGContextRelease(context);
 }
 
+namespace {
+// Answers every request for the scheme with bytes that are no image, and counts them.
+int gBrokenRequests = 0;
+}
+
+@interface BrokenImageProtocol : NSURLProtocol
+@end
+
+@implementation BrokenImageProtocol
++ (BOOL)canInitWithRequest:(NSURLRequest *)request {
+  return [request.URL.scheme isEqualToString:@"ngn-broken-image"];
+}
++ (NSURLRequest *)canonicalRequestForRequest:(NSURLRequest *)request {
+  return request;
+}
+- (void)startLoading {
+  gBrokenRequests++;
+  NSURLResponse *response = [[NSURLResponse alloc] initWithURL:self.request.URL MIMEType:@"image/png" expectedContentLength:3 textEncodingName:nil];
+  [self.client URLProtocol:self didReceiveResponse:response cacheStoragePolicy:NSURLCacheStorageNotAllowed];
+  [self.client URLProtocol:self didLoadData:[NSData dataWithBytes:"abc" length:3]];
+  [self.client URLProtocolDidFinishLoading:self];
+}
+- (void)stopLoading {
+}
+@end
+
+TEST_CASE("an svg image that failed to load is not asked for again on later draws") {
+  [NSURLProtocol registerClass:BrokenImageProtocol.class];
+  gBrokenRequests = 0;
+  std::vector<uint8_t> data(4, 0);
+  CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef context = CGBitmapContextCreate(data.data(), 1, 1, 8, 4, space, kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(space);
+  std::string uri = "ngn-broken-image://host/" + std::to_string(arc4random()) + ".png";
+  auto draw = [&] {
+    auto canvas = NGNMakeCGCanvas(context, CGSizeMake(1, 1), 1, nil);
+    canvas->image(uri, {.x = 0, .y = 0, .width = 1, .height = 1}, "none", 0, 1);
+  };
+  draw();
+  NSDate *until = [NSDate dateWithTimeIntervalSinceNow:10];
+  while (gBrokenRequests == 0 && [until timeIntervalSinceNow] > 0) {
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, false);
+  }
+  // Let the failure reach the main queue, where it is recorded.
+  CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.3, false);
+  for (int i = 0; i < 3; i++) {
+    draw();
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.3, false);
+  }
+  CHECK(gBrokenRequests == 1);
+  [NSURLProtocol unregisterClass:BrokenImageProtocol.class];
+  CGContextRelease(context);
+}
+
 // A layer that keeps the transform it is given, as the host's views' layers do (host-view.mm).
 @interface FixedTransformLayer : CALayer
 @property (nonatomic) CATransform3D kept;
