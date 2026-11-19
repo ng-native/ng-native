@@ -629,6 +629,10 @@ TEST_CASE("cookies over libcurl outlive the process in the cookie file, all but 
     std::promise<bool> cleared;
     next.http->clearCookies([&](bool any) { cleared.set_value(any); });
     CHECK(cleared.get_future().get());
+    // Cleared in the file at once, not only when the client goes: a crash then keeps none.
+    std::ifstream in(file);
+    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    CHECK(text.find("flavour") == std::string::npos);
   }
   {
     auto afterClear = ngn::makeCurlNetwork({.cookieFile = file.string()});
