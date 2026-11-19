@@ -36,3 +36,6 @@ coverage/
 # Docs code-sample fixtures the docs-samples test writes, one per ```ts block; matched by the
 # *.generated.ts rule above but namespaced so they are easy to spot and bulk-clean.
 packages/integration-tests/.docs-samples/
+
+# A core dump a crashing native test leaves where the build script runs it.
+/packages/desktop/core

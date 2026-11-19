@@ -8,7 +8,14 @@ import { NgIcon } from '../../icons/src/ng-icon.ts';
   selector: 'x-virtual',
   imports: [VirtualList, Text, View],
   template: `
-    <virtual-list #list [items]="rows()" [itemHeight]="40" [overscan]="2" [style]="fill">
+    <virtual-list
+      #list
+      [items]="rows()"
+      [itemHeight]="40"
+      [overscan]="2"
+      [windowSize]="windowSize()"
+      [style]="fill"
+    >
       @for (row of list.window(); track row.index) {
         <view [style]="row.style"
           ><text>{{ row.item.label }}</text></view
@@ -18,6 +25,9 @@ import { NgIcon } from '../../icons/src/ng-icon.ts';
   `,
 })
 export class Virtual {
+  // Fill nothing while idle unless a test asks: the window tests pin what a scroll renders.
+  windowSize = signal(1);
+  list = viewChild.required<VirtualList<unknown>>('list');
   rows = signal(Array.from({ length: 1000 }, (_, i) => ({ id: i, label: `row ${i}` })));
   fill = { flex: 1 };
 }
@@ -28,6 +38,7 @@ export class Virtual {
   imports: [VirtualList, Text, View],
   template: `
     <virtual-list
+      [windowSize]="1"
       #list
       [items]="rows()"
       [itemHeight]="40"
@@ -80,7 +91,14 @@ export class VirtualOptions {
   selector: 'x-virtual-mixed',
   imports: [VirtualList, Text, View],
   template: `
-    <virtual-list #list [items]="rows()" [itemHeight]="heightOf" [overscan]="2" [style]="fill">
+    <virtual-list
+      [windowSize]="1"
+      #list
+      [items]="rows()"
+      [itemHeight]="heightOf"
+      [overscan]="2"
+      [style]="fill"
+    >
       @for (row of list.window(); track row.index) {
         <view [style]="row.style" [nativeID]="'row' + row.index"
           ><text>{{ row.item }}</text></view
@@ -107,7 +125,14 @@ export class VirtualMixed {
   selector: 'x-virtual-recycled',
   imports: [VirtualList, Text, View],
   template: `
-    <virtual-list #list [items]="rows()" [itemHeight]="40" [overscan]="2" [style]="fill">
+    <virtual-list
+      [windowSize]="1"
+      #list
+      [items]="rows()"
+      [itemHeight]="40"
+      [overscan]="2"
+      [style]="fill"
+    >
       @for (row of list.window(); track row.slot) {
         <view [style]="row.style"
           ><text>{{ row.item.label }}</text></view
@@ -128,6 +153,7 @@ export class VirtualRecycled {
   imports: [VirtualList, Text, View],
   template: `
     <virtual-list
+      [windowSize]="1"
       #list
       [items]="rows()"
       [itemHeight]="40"
@@ -158,6 +184,7 @@ export class VirtualKeyed {
   imports: [VirtualList, Text, View],
   template: `
     <virtual-list
+      [windowSize]="1"
       #list
       [items]="rows()"
       [itemHeight]="300"
@@ -192,6 +219,7 @@ export class VirtualCarousel {
   imports: [VirtualList, VirtualListRow, Text, View],
   template: `
     <virtual-list
+      [windowSize]="1"
       #list
       [items]="rows()"
       [itemHeight]="40"
@@ -220,7 +248,14 @@ export class VirtualFeed {
   selector: 'x-virtual-icons',
   imports: [VirtualList, NgIcon, View],
   template: `
-    <virtual-list #list [items]="rows" [itemHeight]="40" [overscan]="2" [style]="fill">
+    <virtual-list
+      [windowSize]="1"
+      #list
+      [items]="rows"
+      [itemHeight]="40"
+      [overscan]="2"
+      [style]="fill"
+    >
       @for (row of list.window(); track row.slot) {
         <view [style]="row.style"><ng-icon [svg]="icon" color="white" /></view>
       }
@@ -260,6 +295,7 @@ export class BoundTouchIcon {
   template: `
     @if (measured()) {
       <virtual-list
+        [windowSize]="1"
         #list
         [items]="rows()"
         [estimatedItemHeight]="heightOf"
@@ -275,6 +311,7 @@ export class BoundTouchIcon {
       </virtual-list>
     } @else {
       <virtual-list
+        [windowSize]="1"
         #list
         [items]="rows()"
         [itemHeight]="heightOf"

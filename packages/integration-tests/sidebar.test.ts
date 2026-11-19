@@ -29,7 +29,7 @@ import {
   registerViewName,
   registeredViewName,
 } from '@ng-native/fabric';
-import { HardwareBack, Screen, type ScreenSource } from '@ng-native/device';
+import { HardwareBack, Screen, nativeSplitViews, type ScreenSource } from '@ng-native/device';
 import { cleanup, fireEvent, render, settle, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
@@ -340,6 +340,31 @@ describe('on iPadOS', () => {
     } finally {
       registerPlatformComponents('ios');
     }
+  });
+
+  it('never asks for the module off iOS, where it is missing and the asking is logged', () => {
+    const asked: string[] = [];
+    const host = globalThis as Record<string, unknown>;
+    host['require'] = (id: string) =>
+      id === 'react-native'
+        ? {
+            Platform: { OS: 'macos' },
+            TurboModuleRegistry: {
+              get: (name: string) => {
+                asked.push(name);
+                return null;
+              },
+            },
+          }
+        : undefined;
+    host['nativeFabricUIManager'] = {};
+    try {
+      assert.equal(nativeSplitViews(), false);
+    } finally {
+      delete host['require'];
+      delete host['nativeFabricUIManager'];
+    }
+    assert.deepEqual(asked, []);
   });
 
   /** Render as the iPad does: the names its module gives, for the length of one test. */

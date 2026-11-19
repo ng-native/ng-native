@@ -7,8 +7,8 @@
  * `prebuilt.json` beside this package lists them, one entry per version and flavour; an entry
  * that names no flavour is a release host. The release workflow writes each entry before
  * the package is packed (`docs/desktop-host.md` has the steps), so the SHA-256 of each archive
- * travels inside the npm package, not beside the archive it vouches for. An archive holds `appkit/ngn-macos`, `appkit/hermesc` and
- * `appkit/Sparkle.framework`, the files a host build's `appkit` folder has, and unpacks into the
+ * travels inside the npm package, not beside the archive it vouches for. An archive holds `appkit/ngn-macos`, `appkit/hermesc`,
+ * `appkit/hermesvm.framework` and `appkit/Sparkle.framework`, the files a host build's `appkit` folder has, and unpacks into the
  * per-user cache under its own hash, so a new archive never reuses an old one's files. An entry
  * with `os: 'linux'` is a Linux host for the one `arch` it names, whose archive holds
  * `gtk/ngn-linux` and `gtk/hermesc`; the release workflow does not publish one yet.
@@ -341,20 +341,40 @@ export function fetchPrebuilt(sys, host, cache) {
 }
 
 /**
+ * The entitlements of an ad hoc signed host with the hardened runtime. Library validation loads
+ * only libraries from the process's own team, and an ad hoc signature has none, so it would refuse
+ * React Native's Hermes framework beside the binary. A real identity signs the framework too and
+ * keeps validation.
+ */
+export const AD_HOC_HOST_ENTITLEMENTS = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>
+`;
+
+/**
  * Strips each file's local symbols, then signs it with the hardened runtime: with
  * `NGN_SIGN_IDENTITY` when that is set and not empty, ad hoc (`--sign -`, no timestamp) otherwise.
+ * `adHocEntitlements` go with an ad hoc signature only. A framework is signed as it is, unstripped.
  * Throws when a command fails.
  *
  * @param {(command: string, args: string[]) => { status: number | null }} run
  * @param {string[]} files
  * @param {Record<string, string | undefined>} env
+ * @param {string} [adHocEntitlements]
  */
-export function signPrebuiltFiles(run, files, env) {
+export function signPrebuiltFiles(run, files, env, adHocEntitlements) {
   const identity = env['NGN_SIGN_IDENTITY'] || '-';
+  const entitlements =
+    identity === '-' && adHocEntitlements ? ['--entitlements', adHocEntitlements] : [];
   for (const file of files) {
     // Before signing, which stripping would break.
     for (const [command, args] of /** @type {[string, string[]][]} */ ([
-      ['strip', ['-x', file]],
+      ...(file.endsWith('.framework') ? [] : [['strip', ['-x', file]]]),
       [
         'codesign',
         [
@@ -362,6 +382,7 @@ export function signPrebuiltFiles(run, files, env) {
           '--options',
           'runtime',
           identity === '-' ? '--timestamp=none' : '--timestamp',
+          ...entitlements,
           '--sign',
           identity,
           file,
