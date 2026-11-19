@@ -109,6 +109,8 @@ bool haveAdwDialog();
 // sheet the first time it is asked for; empty for no colour. The class names its colour, so its rule
 // never goes stale.
 std::string colorClass(const char *property, const facebook::react::SharedColor &color);
+// The rule colorClass adds for a class `name`: the alpha is written with a point in any locale.
+std::string colorRule(const char *name, const char *property, float red, float green, float blue, float alpha);
 
 // The header the window of each surface shows.
 class Headers {
@@ -153,6 +155,8 @@ class Headers {
     // The window's history, and the pair it shows.
     std::optional<WindowHistory> history;
     HistoryButtons buttons;
+    // The search fields packed at the end, kept across a layout that keeps them.
+    std::vector<GtkWidget *> searches;
     GtkWidget *back{nullptr};
     GtkWidget *forward{nullptr};
     GtkWidget *sidebarButton{nullptr};
@@ -160,7 +164,7 @@ class Headers {
     std::string background;
   };
   void layOut(SurfaceId surfaceId, Shown &shown);
-  void clear(SurfaceId surfaceId, Shown &shown);
+  void clear(SurfaceId surfaceId, Shown &shown, bool keepSearches = false);
   GtkWidget *headerBarOf(SurfaceId surfaceId) const;
 
   GtkBackend &backend_;
@@ -202,13 +206,21 @@ class Modals {
   std::optional<Tag> front(GtkWindow *window) const;
   // What Return does: presses a sheet's default button. Whether there was one to press.
   bool pressDefault(Tag tag);
+  // Escape over a surface's modals: asks to close the one presented last.
+  void requestCloseFront(SurfaceId surfaceId);
+  // Return over a surface's modals: presses the default button of the one presented last. Whether it had one.
+  bool pressDefaultFront(SurfaceId surfaceId);
 
  private:
+  // The tag of the modal presented last on a surface, or 0.
+  Tag frontOf(SurfaceId surfaceId) const;
   struct Presented {
     SurfaceId surfaceId;
     ModalPresentation presentation{ModalPresentation::Sheet};
     // A presented RNSScreen, not a <modal>.
     bool screen{false};
+    // When it was presented among the others: the latest is in front.
+    uint64_t order{0};
     GtkWidget *slot{nullptr};
     // The AdwDialog, the overlay's backdrop or cover, or the popover.
     GtkWidget *dialog{nullptr};
@@ -224,8 +236,6 @@ class Modals {
     std::pair<int, int> size{0, 0};
     // Where the focus was, to go back to.
     GtkWidget *opener{nullptr};
-    // When it was presented, against the others: the front one is the latest.
-    uint64_t order{0};
   };
   void present(SurfaceId surfaceId, Tag tag);
   void fit(Tag tag, Presented &presented);

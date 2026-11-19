@@ -174,15 +174,36 @@ void unfocused(GtkEventControllerFocus *, gpointer user) {
   }
 }
 
+// Whether a key press is the Latin letter `latin` the way GTK's shortcut triggers match it: by the
+// keyval it produced, or by what its hardware key makes in the first layout group, so that Ctrl+Z
+// still undoes on a Cyrillic or Greek layout.
+bool pressesLatin(GtkWidget *widget, guint keyval, guint keycode, guint latin) {
+  if (gdk_keyval_to_lower(keyval) == latin) {
+    return true;
+  }
+  GdkKeymapKey *keys = nullptr;
+  guint *keyvals = nullptr;
+  int count = 0;
+  bool found = false;
+  if (gdk_display_map_keycode(gtk_widget_get_display(widget), keycode, &keys, &keyvals, &count)) {
+    for (int i = 0; i < count && !found; ++i) {
+      found = keys[i].group == 0 && gdk_keyval_to_lower(keyvals[i]) == latin;
+    }
+    g_free(keys);
+    g_free(keyvals);
+  }
+  return found;
+}
+
 // `onKeyPress`, before the key changes the text, with the key as React Native iOS names it.
-gboolean keyPressed(GtkEventControllerKey *, guint keyval, guint, GdkModifierType state, gpointer user) {
+gboolean keyPressed(GtkEventControllerKey *, guint keyval, guint keycode, GdkModifierType state, gpointer user) {
   auto *field = static_cast<TextField *>(user);
   // GtkText's own undo and redo keys, run here so that its replay is known (a multiline field's
   // buffer signals its own).
   if (!field->scroll && (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) == GDK_CONTROL_MASK) {
-    guint key = gdk_keyval_to_lower(keyval);
     bool shift = state & GDK_SHIFT_MASK;
-    const char *action = key == GDK_KEY_z ? (shift ? "text.redo" : "text.undo") : key == GDK_KEY_y && !shift ? "text.redo" : nullptr;
+    const char *action = pressesLatin(field->text, keyval, keycode, GDK_KEY_z) ? (shift ? "text.redo" : "text.undo")
+                         : !shift && pressesLatin(field->text, keyval, keycode, GDK_KEY_y) ? "text.redo" : nullptr;
     if (action) {
       field->replaying = true;
       gtk_widget_activate_action(field->text, action, nullptr);
@@ -464,6 +485,11 @@ void plainTextViews() {
 void watch(TextField *field, GtkWidget *editor) {
   g_object_set_data(G_OBJECT(editor), "ngn-text-field", field);
   g_signal_connect(editor, "preedit-changed", G_CALLBACK(preeditChanged), field);
+  // Backspace over a mark Pango lets go of alone deletes its whole character and puts the base
+  // back (GtkText and GtkTextBuffer alike): text the field had, not fitted again.
+  g_signal_connect_swapped(editor, "backspace", G_CALLBACK(+[](TextField *f) { f->replaying = true; }), field);
+  g_signal_connect_data(editor, "backspace", G_CALLBACK(+[](TextField *f) { f->replaying = false; }), field, nullptr,
+                        static_cast<GConnectFlags>(G_CONNECT_SWAPPED | G_CONNECT_AFTER));
   GtkEventController *focus = gtk_event_controller_focus_new();
   g_signal_connect(focus, "enter", G_CALLBACK(focused), field);
   g_signal_connect(focus, "leave", G_CALLBACK(unfocused), field);
