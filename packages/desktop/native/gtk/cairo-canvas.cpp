@@ -11,6 +11,7 @@
 #include <cmath>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -152,6 +153,8 @@ struct ShapedGlyphs {
 struct SvgImages {
   std::map<std::string, cairo_surface_t *> loaded;
   std::map<std::string, std::vector<std::function<void()>>> waiting;
+  // The uris that failed to load or to become a cairo surface: not asked for again on each draw.
+  std::set<std::string> failed;
   // The loaded ones in the order they loaded.
   std::vector<std::pair<std::string, cairo_surface_t *>> order;
 };
@@ -161,9 +164,14 @@ SvgImages &svgImages() {
   return images;
 }
 
+// Null when cairo cannot hold the picture: larger than an image surface can be, or out of memory.
 cairo_surface_t *surfaceOf(GdkTexture *texture) {
   int width = gdk_texture_get_width(texture), height = gdk_texture_get_height(texture);
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+  if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+    cairo_surface_destroy(surface);
+    return nullptr;
+  }
   cairo_surface_flush(surface);
   gdk_texture_download(texture, cairo_image_surface_get_data(surface), static_cast<gsize>(cairo_image_surface_get_stride(surface)));
   cairo_surface_mark_dirty(surface);
@@ -297,13 +305,17 @@ class CairoCanvas final : public SvgCanvas {
       drawTile(inner);
       cairo_destroy(cr);
     }
-    cairo_save(cr_);
-    cairo_matrix_t transform = cairoMatrix(tile.transform);
-    cairo_transform(cr_, &transform);
-    cairo_translate(cr_, tile.tile.x, tile.tile.y);
-    cairo_set_source_surface(cr_, surface, 0, 0);
-    cairo_pattern_t *repeat = cairo_pattern_reference(cairo_get_source(cr_));
-    cairo_restore(cr_);
+    // The tile's place is in the pattern's own matrix, from user space to the tile's: a source takes
+    // the user space current where it is set, which is the outer one below.
+    cairo_pattern_t *repeat = cairo_pattern_create_for_surface(surface);
+    cairo_matrix_t toTile = cairoMatrix(tile.transform);
+    cairo_matrix_translate(&toTile, tile.tile.x, tile.tile.y);
+    if (cairo_matrix_invert(&toTile) != CAIRO_STATUS_SUCCESS) {
+      cairo_pattern_destroy(repeat);
+      cairo_surface_destroy(surface);
+      return;
+    }
+    cairo_pattern_set_matrix(repeat, &toTile);
     cairo_pattern_set_extend(repeat, CAIRO_EXTEND_REPEAT);
     cairo_save(cr_);
     if (strokeClip_) {
@@ -379,7 +391,9 @@ class CairoCanvas final : public SvgCanvas {
     auto &images = svgImages();
     auto found = images.loaded.find(uri);
     if (found == images.loaded.end()) {
-      load(uri);
+      if (!images.failed.contains(uri)) {
+        load(uri);
+      }
       return;
     }
     cairo_surface_t *surface = found->second;
@@ -567,7 +581,12 @@ class CairoCanvas final : public SvgCanvas {
       auto &images = svgImages();
       auto waiters = std::move(images.waiting[uri]);
       images.waiting.erase(uri);
-      if (!texture) {
+      cairo_surface_t *surface = texture ? surfaceOf(texture) : nullptr;
+      if (texture) {
+        g_object_unref(texture);
+      }
+      if (!surface) {
+        images.failed.insert(uri);
         return;
       }
       // At most 64 kept, the first loaded going first, as macOS lets its image cache go.
@@ -576,10 +595,8 @@ class CairoCanvas final : public SvgCanvas {
         images.loaded.erase(images.order.front().first);
         images.order.erase(images.order.begin());
       }
-      cairo_surface_t *surface = surfaceOf(texture);
       images.loaded[uri] = surface;
       images.order.emplace_back(uri, surface);
-      g_object_unref(texture);
       for (auto &waiter : waiters) {
         waiter();
       }
