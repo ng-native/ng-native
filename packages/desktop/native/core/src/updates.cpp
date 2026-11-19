@@ -585,9 +585,16 @@ std::string UpdatesClient::beginReload() {
   return running_ ? pathOf(*running_) : config_.embeddedBundle;
 }
 
+std::string UpdatesClient::offReason() const {
+  if (config_.url.empty()) {
+    return "Updates are off: the app has no updates URL (updates.url in app.json).";
+  }
+  return config_.off;
+}
+
 void UpdatesClient::check(std::function<void(CheckResult)> done) {
   if (!enabled()) {
-    done({.error = "updates are off: the app has no updates URL"});
+    done({.error = offReason()});
     return;
   }
   HttpRequest request{.url = config_.url, .withCredentials = false};
@@ -906,12 +913,11 @@ std::shared_ptr<NativeModule> makeUpdatesModule(
         }
         return assets;
       });
-      auto refuse = [on, development](JsPromise &p) {
+      auto refuse = [on, development, client](JsPromise &p) {
         if (on) {
           return false;
         }
-        p.reject(development ? "Updates are off in development, where the bundle comes from the dev server."
-                             : "Updates are off: the app has no updates URL (updates.url in app.json).");
+        p.reject(development ? "Updates are off in development, where the bundle comes from the dev server." : client->offReason());
         return true;
       };
       promise("checkForUpdateAsync", [client, refuse](const folly::dynamic &, JsPromise p) {

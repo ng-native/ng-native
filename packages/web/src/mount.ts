@@ -54,8 +54,8 @@ import {
   ɵcreateOrReusePlatformInjector as createOrReusePlatformInjector,
   ɵINJECTOR_SCOPE as INJECTOR_SCOPE,
   ɵprovideZonelessChangeDetectionInternal as provideZonelessChangeDetectionInternal,
-  ɵsetLocaleId as setLocaleId,
 } from '@angular/core';
+import * as core from '@angular/core';
 import { HostEngine } from '@ng-native/fabric';
 import { ColorScheme, Direction, HardwareBack, OS, Screen, StatusBar } from '@ng-native/device';
 import {
@@ -391,4 +391,14 @@ function mountInside(
 
 function setInputs(componentRef: ComponentRef<unknown>, inputs: Readonly<Record<string, unknown>>) {
   for (const [name, value] of Object.entries(inputs)) componentRef.setInput(name, value);
+}
+
+/**
+ * Tells Angular's i18n runtime the app's locale, on Angular 22.2 and earlier, which keep it in a
+ * global. 22.3 removed that global and each view reads `LOCALE_ID` from its injector. A named import
+ * of the removed export fails a Vite build and is undefined under Metro; a namespace member read in
+ * place is undefined (Vite warns) and still tree-shakes.
+ */
+function setLocaleId(id: string): void {
+  (core as { ɵsetLocaleId?: (id: string) => void }).ɵsetLocaleId?.(id);
 }
