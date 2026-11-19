@@ -108,6 +108,16 @@ void installSheetStyle() {
 
 namespace ngn::gtk {
 
+std::string colorRule(const char *name, const char *property, float red, float green, float blue, float alpha) {
+  auto byte = [](float v) { return static_cast<unsigned>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255)); };
+  // CSS wants a point, whatever the user's locale writes a decimal as.
+  char opacity[G_ASCII_DTOSTR_BUF_SIZE];
+  g_ascii_formatd(opacity, sizeof opacity, "%.3f", static_cast<double>(alpha));
+  char rule[200];
+  std::snprintf(rule, sizeof rule, ".%s { %s: rgba(%u, %u, %u, %s); }", name, property, byte(red), byte(green), byte(blue), opacity);
+  return rule;
+}
+
 std::string colorClass(const char *property, const SharedColor &color) {
   if (!color || !gdk_display_get_default()) {
     return {};
@@ -120,12 +130,9 @@ std::string colorClass(const char *property, const SharedColor &color) {
       byte(c.green), byte(c.blue), byte(c.alpha));
   static std::set<std::string> added;
   if (added.insert(name).second) {
-    char rule[160];
-    std::snprintf(
-        rule, sizeof rule, ".%s { %s: rgba(%u, %u, %u, %.3f); }", name, property, byte(c.red), byte(c.green),
-        byte(c.blue), static_cast<double>(c.alpha));
+    std::string rule = colorRule(name, property, c.red, c.green, c.blue, c.alpha);
     GtkCssProvider *css = gtk_css_provider_new();
-    gtk_css_provider_load_from_data(css, rule, -1);
+    gtk_css_provider_load_from_data(css, rule.c_str(), -1);
     gtk_style_context_add_provider_for_display(
         gdk_display_get_default(), GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     g_object_unref(css);
@@ -276,27 +283,30 @@ using CloseTarget = std::pair<Modals *, Tag>;
 // The menu entries of a bar button's menu, as a GMenu whose actions are `group`'s: choosing one
 // sends its menu id, as AppKit's menu does. An `on` entry is a stateful action, which GTK draws
 // with a check.
-void fillMenu(GMenu *menu, const HeaderMenuItem &entry, GSimpleActionGroup *group, int &next, GtkBackend &backend, Tag config) {
+void fillMenu(
+    GMenu *menu, const HeaderMenuItem &entry, GSimpleActionGroup *group, int &next, GtkBackend &backend, Tag config,
+    bool disabled = false) {
   for (const auto &child : entry.items) {
     if (child.inlineSection) {
       GMenu *section = g_menu_new();
       for (const auto &inner : child.items) {
         HeaderMenuItem one;
         one.items.push_back(inner);
-        fillMenu(section, one, group, next, backend, config);
+        fillMenu(section, one, group, next, backend, config, disabled);
       }
       g_menu_append_section(menu, nullptr, G_MENU_MODEL(section));
       g_object_unref(section);
     } else if (!child.items.empty() || child.menuId.empty()) {
       GMenu *submenu = g_menu_new();
-      fillMenu(submenu, child, group, next, backend, config);
+      // A disabled submenu has no entry that can be chosen.
+      fillMenu(submenu, child, group, next, backend, config, disabled || child.disabled);
       g_menu_append_submenu(menu, child.title.c_str(), G_MENU_MODEL(submenu));
       g_object_unref(submenu);
     } else {
       std::string name = "item" + std::to_string(next++);
       GSimpleAction *action = child.on ? g_simple_action_new_stateful(name.c_str(), nullptr, g_variant_new_boolean(TRUE))
                                        : g_simple_action_new(name.c_str(), nullptr);
-      g_simple_action_set_enabled(action, !child.disabled);
+      g_simple_action_set_enabled(action, !disabled && !child.disabled);
       g_signal_connect_data(
           action, "activate", G_CALLBACK(+[](GSimpleAction *, GVariant *, gpointer data) {
             auto *p = static_cast<PressTarget *>(data);
@@ -370,7 +380,9 @@ GtkWidget *makeSearchEntry(GtkBackend &backend, Tag tag) {
   g_object_set_data_full(G_OBJECT(entry), "ngn-search", new SearchField{&backend, tag}, [](gpointer p) {
     delete static_cast<SearchField *>(p);
   });
-  g_signal_connect(entry, "search-changed", G_CALLBACK(+[](GtkSearchEntry *e, gpointer) {
+  // Each change as it happens: `search-changed` comes after a delay, when a change the host made
+  // can no longer be told from the user's.
+  g_signal_connect(entry, "changed", G_CALLBACK(+[](GtkEditable *e, gpointer) {
     if (!searchFieldOf(GTK_WIDGET(e))->setting) {
       emitSearch(GTK_WIDGET(e), SearchBarInput::Typed);
     }
@@ -549,14 +561,38 @@ void Headers::removeSurface(SurfaceId surfaceId) {
 
 void Headers::forget(Tag tag) {
   for (auto &[surfaceId, shown] : shown_) {
-    if (std::find(shown.hosted.begin(), shown.hosted.end(), tag) != shown.hosted.end()) {
-      shown.hosted.erase(std::remove(shown.hosted.begin(), shown.hosted.end(), tag), shown.hosted.end());
+    if (auto it = std::find(shown.hosted.begin(), shown.hosted.end(), tag); it != shown.hosted.end()) {
+      // Let go of as clear() lets go of it, which will no longer see it.
+      backend_.unhostView(tag);
+      backend_.hooks.detachInput(tag);
+      backend_.hooks.containerRoot(tag, false);
+      shown.hosted.erase(it);
     }
   }
 }
 
-void Headers::clear(SurfaceId surfaceId, Shown &shown) {
+namespace {
+
+// Takes a widget packed into the header bar back out, and lets it go.
+void unpack(GtkWidget *bar, GtkWidget *widget) {
+  if (bar && gtk_widget_is_ancestor(widget, bar)) {
+    adw_header_bar_remove(ADW_HEADER_BAR(bar), widget);
+  } else if (gtk_widget_get_parent(widget)) {
+    gtk_widget_unparent(widget);
+  }
+  g_object_unref(widget);
+}
+
+} // namespace
+
+void Headers::clear(SurfaceId surfaceId, Shown &shown, bool keepSearches) {
   GtkWidget *bar = headerBarOf(surfaceId);
+  if (!keepSearches) {
+    for (GtkWidget *entry : shown.searches) {
+      unpack(bar, entry);
+    }
+    shown.searches.clear();
+  }
   for (Tag tag : shown.hosted) {
     backend_.unhostView(tag);
     backend_.hooks.detachInput(tag);
@@ -579,12 +615,7 @@ void Headers::clear(SurfaceId surfaceId, Shown &shown) {
   // What was packed into the bar comes out of it; the title's own children go with the title. A
   // search field is its search bar view's, which keeps it for the next header.
   for (GtkWidget *widget : shown.packed) {
-    if (bar && gtk_widget_is_ancestor(widget, bar)) {
-      adw_header_bar_remove(ADW_HEADER_BAR(bar), widget);
-    } else if (gtk_widget_get_parent(widget)) {
-      gtk_widget_unparent(widget);
-    }
-    g_object_unref(widget);
+    unpack(bar, widget);
   }
   shown.packed.clear();
   shown.back = nullptr;
@@ -598,7 +629,9 @@ void Headers::clear(SurfaceId surfaceId, Shown &shown) {
 }
 
 void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
-  clear(surfaceId, shown);
+  // The search fields stay packed when they stay the same: one taken out loses the focus, and
+  // typing into it stops.
+  clear(surfaceId, shown, true);
   GtkWidget *bar = headerBarOf(surfaceId);
   const ViewData *config = shown.header ? backend_.data(shown.header->config) : nullptr;
   shown.bar = config && config->props ? headerBar(*config->props) : std::nullopt;
@@ -608,6 +641,26 @@ void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
   // in front, as the macOS toolbar does.
   bool header = shown.bar && !shown.bar->hidden;
   bool sidebar = backend_.splitViews().windowSplit(surfaceId).has_value();
+  bool showing = bar && header;
+  std::vector<GtkWidget *> searches;
+  for (Tag tag : showing ? shown.layout.searchBars : std::vector<Tag>{}) {
+    const ViewData *subview = backend_.data(tag);
+    for (GtkWidget *c = subview ? gtk_widget_get_first_child(subview->widget) : nullptr; c; c = gtk_widget_get_next_sibling(c)) {
+      if (const ViewData *d = viewData(c); d && d->component == "RNSSearchBar") {
+        if (GtkWidget *entry = backend_.searchEntry(d->tag)) {
+          searches.push_back(entry);
+        }
+      }
+    }
+  }
+  if (searches != shown.searches) {
+    clear(surfaceId, shown);
+    // The end packs from the window's edge inward: the search fields are outermost.
+    for (GtkWidget *entry : searches) {
+      adw_header_bar_pack_end(ADW_HEADER_BAR(bar), entry);
+      shown.searches.push_back(GTK_WIDGET(g_object_ref(entry)));
+    }
+  }
   if (!bar || (!header && !sidebar)) {
     return;
   }
@@ -739,17 +792,7 @@ void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
     addClass(title, colorClass("color", shown.bar->titleColor));
     adw_header_bar_set_title_widget(ADW_HEADER_BAR(bar), title);
   }
-  // The end packs from the window's edge inward: the last piece in reading order first.
-  for (Tag tag : layout.searchBars) {
-    const ViewData *subview = backend_.data(tag);
-    for (GtkWidget *c = subview ? gtk_widget_get_first_child(subview->widget) : nullptr; c; c = gtk_widget_get_next_sibling(c)) {
-      if (const ViewData *d = viewData(c); d && d->component == "RNSSearchBar") {
-        if (GtkWidget *entry = backend_.searchEntry(d->tag)) {
-          adw_header_bar_pack_end(ADW_HEADER_BAR(bar), keep(entry));
-        }
-      }
-    }
-  }
+  // Inward of the search fields, the last piece in reading order first.
   for (auto it = layout.right.rbegin(); it != layout.right.rend(); ++it) {
     adw_header_bar_pack_end(ADW_HEADER_BAR(bar), slotFor(*it));
   }
@@ -896,6 +939,21 @@ std::optional<Tag> Modals::front(GtkWindow *window) const {
   return front;
 }
 
+// Whether a popover on `anchor` would show: it is in a window, and nothing above it is hidden, as a
+// screen the stack covers is (setCovered). Not whether it is mapped yet, which a presentation begun
+// before the window maps is not.
+static bool anchorOnScreen(GtkWidget *anchor) {
+  if (!gtk_widget_get_root(anchor)) {
+    return false;
+  }
+  for (GtkWidget *w = anchor; w; w = gtk_widget_get_parent(w)) {
+    if (!gtk_widget_get_visible(w) || !gtk_widget_get_child_visible(w)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool Modals::pressDefault(Tag tag) {
   auto it = presented_.find(tag);
   if (it == presented_.end()) {
@@ -910,6 +968,27 @@ bool Modals::pressDefault(Tag tag) {
   return false;
 }
 
+Tag Modals::frontOf(SurfaceId surfaceId) const {
+  const std::pair<const Tag, Presented> *front = nullptr;
+  for (const auto &entry : presented_) {
+    if (entry.second.surfaceId == surfaceId && (!front || entry.second.order > front->second.order)) {
+      front = &entry;
+    }
+  }
+  return front ? front->first : 0;
+}
+
+void Modals::requestCloseFront(SurfaceId surfaceId) {
+  if (Tag front = frontOf(surfaceId)) {
+    requestClose(front);
+  }
+}
+
+bool Modals::pressDefaultFront(SurfaceId surfaceId) {
+  Tag front = frontOf(surfaceId);
+  return front && pressDefault(front);
+}
+
 void Modals::present(SurfaceId surfaceId, Tag tag) {
   const ViewData *d = backend_.data(tag);
   GtkWidget *surface = backend_.surfaceWidget(surfaceId);
@@ -918,7 +997,7 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
     return;
   }
   installSheetStyle();
-  Presented p{.surfaceId = surfaceId, .presentation = d->desktop.presentation, .screen = d->component == "RNSScreen"};
+  Presented p{.surfaceId = surfaceId, .presentation = d->desktop.presentation, .screen = d->component == "RNSScreen", .order = ++presentations_};
   std::optional<Tag> anchor = d->desktop.anchor;
   if (p.screen) {
     p.presentation = screenPresentation(*d->props).value_or(ModalPresentation::Sheet);
@@ -928,7 +1007,7 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
   }
   // A popover points at its anchor; an anchor that is not on screen leaves it a sheet, as on macOS.
   GtkWidget *anchorWidget = anchor ? backend_.view(*anchor) : nullptr;
-  if (anchorWidget && !gtk_widget_get_root(anchorWidget)) {
+  if (anchorWidget && !anchorOnScreen(anchorWidget)) {
     anchorWidget = nullptr;
   }
   if (p.presentation == ModalPresentation::Popover && !anchorWidget) {
@@ -942,6 +1021,9 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
   }
   p.slot = GTK_WIDGET(g_object_ref_sink(makeHostSlot()));
   backend_.hostView(tag, p.slot);
+  // libadwaita presents a dialog in a window of its own outside an AdwWindow, or over one that is
+  // not resizable: the sheet is drawn over the window there instead.
+  bool inWindow = root && (ADW_IS_WINDOW(root) || ADW_IS_APPLICATION_WINDOW(root)) && gtk_window_get_resizable(GTK_WINDOW(root));
   if (p.presentation == ModalPresentation::Sheet) {
     // What a sheet shows: the screen's header, when it has one (dress), over the content.
     p.card = GTK_WIDGET(g_object_ref_sink(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0)));
@@ -960,12 +1042,23 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
           auto *self = static_cast<CloseTarget *>(data);
           if (self->first->presented_.count(self->second)) {
             self->first->requestClose(self->second);
+            // GTK hid it to emit this. Until the app unmounts the modal, it is still presented.
+            g_idle_add_full(
+                G_PRIORITY_DEFAULT_IDLE, +[](gpointer data) -> gboolean {
+                  auto *again = static_cast<CloseTarget *>(data);
+                  auto it = again->first->presented_.find(again->second);
+                  if (it != again->first->presented_.end() && it->second.popover) {
+                    gtk_popover_popup(GTK_POPOVER(it->second.popover));
+                  }
+                  return G_SOURCE_REMOVE;
+                },
+                new CloseTarget(*self), [](gpointer data) { delete static_cast<CloseTarget *>(data); });
           }
         }),
         new CloseTarget(this, tag), [](gpointer data, GClosure *) { delete static_cast<CloseTarget *>(data); },
         GConnectFlags(0));
     p.popover = GTK_WIDGET(g_object_ref(popover));
-  } else if (p.presentation == ModalPresentation::Sheet && haveAdwDialog()) {
+  } else if (p.presentation == ModalPresentation::Sheet && inWindow && haveAdwDialog()) {
     // AdwDialog by its type and properties, which 1.4's headers do not declare. It asks before it
     // closes, and the app decides, as Escape on macOS asks.
     GtkWidget *dialog = GTK_WIDGET(g_object_new(g_type_from_name("AdwDialog"), "can-close", FALSE, "child", p.card, nullptr));
@@ -996,18 +1089,19 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
     p.layer = p.slot;
   }
   if (p.layer) {
-    onKey(p.layer, "Escape", [this, tag] {
-      requestClose(tag);
+    // Each layer's Escape reaches the presentation in front: GTK runs the first one registered.
+    onKey(p.layer, "Escape", [this, surfaceId] {
+      requestCloseFront(surfaceId);
       return true;
     });
     gtk_overlay_add_overlay(GTK_OVERLAY(chrome->overlay), p.layer);
   }
   if (GtkWidget *keys = p.dialog ? p.dialog : p.layer) {
-    onKey(keys, "Return|KP_Enter", [this, tag] { return pressDefault(tag); });
+    // As for Escape, whichever layer's shortcut runs first, the presentation in front takes Return.
+    onKey(keys, "Return|KP_Enter", [this, surfaceId] { return pressDefaultFront(surfaceId); });
   }
   backend_.hooks.containerRoot(tag, true);
   backend_.hooks.attachInput(p.slot, surfaceId, tag);
-  p.order = ++presentations_;
   auto &presented = presented_[tag] = p;
   dress(tag, presented);
   fit(tag, presented);
