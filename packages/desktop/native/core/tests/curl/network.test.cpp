@@ -535,6 +535,27 @@ TEST_CASE("redirects over libcurl are followed to the last response, changing a 
   CHECK(multipleChoices.body == "hello");
 }
 
+TEST_CASE("a 301 or 302 over libcurl changes only a POST to a GET, and keeps another method and its body") {
+  TestServer server;
+  Recorder movedPut, foundPatch, foundPost;
+  auto network = ngn::makeCurlNetwork();
+
+  network.http->send({.method = "PUT", .url = server.url("/moved"), .body = "kept"}, movedPut.callbacks());
+  REQUIRE(movedPut.waitForComplete());
+  CHECK(echoed(movedPut)["method"] == "PUT");
+  CHECK(echoed(movedPut)["body"] == "kept");
+
+  network.http->send({.method = "PATCH", .url = server.url("/found"), .body = "kept"}, foundPatch.callbacks());
+  REQUIRE(foundPatch.waitForComplete());
+  CHECK(echoed(foundPatch)["method"] == "PATCH");
+  CHECK(echoed(foundPatch)["body"] == "kept");
+
+  network.http->send({.method = "POST", .url = server.url("/found"), .body = "gone"}, foundPost.callbacks());
+  REQUIRE(foundPost.waitForComplete());
+  CHECK(echoed(foundPost)["method"] == "GET");
+  CHECK(echoed(foundPost)["body"] == "");
+}
+
 TEST_CASE("requests over libcurl with credentials share cookies until they are cleared, and one without sends none") {
   TestServer server;
   auto network = ngn::makeCurlNetwork();
@@ -597,6 +618,19 @@ TEST_CASE("data and file urls over libcurl answer 200 with no headers, as on mac
   network.http->send({.url = "data:,a%20b"}, plain.callbacks());
   REQUIRE(plain.waitForComplete());
   CHECK(plain.body == "a b");
+
+  // A fragment is not data, while %23 is a # in it.
+  Recorder fragment, base64Fragment, escaped;
+  network.http->send({.url = "data:,hello#section"}, fragment.callbacks());
+  network.http->send({.url = "data:text/plain;base64,aGVsbG8=#top"}, base64Fragment.callbacks());
+  network.http->send({.url = "data:,a%23b"}, escaped.callbacks());
+  REQUIRE(fragment.waitForComplete());
+  REQUIRE(base64Fragment.waitForComplete());
+  REQUIRE(escaped.waitForComplete());
+  CHECK(fragment.body == "hello");
+  CHECK(base64Fragment.error.empty());
+  CHECK(base64Fragment.body == "hello");
+  CHECK(escaped.body == "a#b");
 
   Recorder bad;
   network.http->send({.url = "data:text/plain;base64"}, bad.callbacks());
@@ -693,8 +727,9 @@ TEST_CASE("a WebSocket over libcurl opens with the server's subprotocol, echoes 
 // React Native's HMR client opens Metro's /hot by the bundle's http url, which NSURLSession takes.
 TEST_CASE("a WebSocket over libcurl opens an http url as ws, as NSURLSession does") {
   TestServer server;
-  auto network = ngn::makeCurlNetwork();
+  // Before the network, so that they outlive the callbacks its thread may still run.
   SocketRecorder lower, upper;
+  auto network = ngn::makeCurlNetwork();
   auto l = network.webSockets->connect(server.url("/ws"), {}, {}, lower.callbacks());
   auto u = network.webSockets->connect("HTTP" + server.url("/ws").substr(4), {}, {}, upper.callbacks());
   REQUIRE(l);
@@ -759,6 +794,44 @@ TEST_CASE("a WebSocket over libcurl reports the server's close, and fails when i
   REQUIRE(early.waitFor(1));
   std::this_thread::sleep_for(100ms);
   CHECK(early.seen() == std::vector<std::string>{"error cancelled"});
+}
+
+TEST_CASE("a WebSocket over libcurl answers the server's ping while it has nothing else to send") {
+  TestServer server;
+  SocketRecorder r;
+  auto network = ngn::makeCurlNetwork();
+  auto c = network.webSockets->connect(server.ws("/ws"), {}, {}, r.callbacks());
+  REQUIRE(r.waitFor(1));
+  // The server pings, then waits for the pong while this side sends nothing more.
+  c->sendText("ping-me");
+  CHECK(serverLog(server, *network.http) == "[\"pong hb\"]");
+}
+
+TEST_CASE("a WebSocket over libcurl keeps one pong waiting, for the latest ping, while its sends are held up") {
+  TestServer server;
+  SocketRecorder r;
+  auto network = ngn::makeCurlNetwork();
+  auto c = network.webSockets->connect(server.ws("/ws"), {}, {}, r.callbacks());
+  REQUIRE(r.waitFor(1));
+  // The server stops reading, so the 16 MB message stalls part way, and pings 200 times.
+  c->sendText("ping-flood");
+  c->sendBinary(std::string(16 * 1024 * 1024, 'x'));
+  c->sendText("done");
+  CHECK(serverLog(server, *network.http) == "[\"pongs 1 last 199\"]");
+}
+
+TEST_CASE("a WebSocket over libcurl delivers UTF-8 split across frames, and fails on a text that is not UTF-8") {
+  TestServer server;
+  SocketRecorder r;
+  auto network = ngn::makeCurlNetwork();
+  auto c = network.webSockets->connect(server.ws("/ws"), {}, {}, r.callbacks());
+  REQUIRE(r.waitFor(1));
+  c->sendText("split-utf8");
+  REQUIRE(r.waitFor(2));
+  c->sendText("bad-utf8");
+  REQUIRE(r.waitFor(3));
+  std::this_thread::sleep_for(100ms);
+  CHECK(r.seen() == std::vector<std::string>{"open ", "text \xc3\xa9", "error Invalid UTF-8 in a text message"});
 }
 
 TEST_CASE("a WebSocket over libcurl cuts a long close reason before a character, not inside one") {
