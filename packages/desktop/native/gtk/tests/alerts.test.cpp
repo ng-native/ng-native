@@ -140,15 +140,30 @@ ngn::AlertRequest choice(int count) {
 
 } // namespace
 
-TEST_CASE("a choice of more than three buttons stacks them, and three or fewer sit side by side") {
+// libadwaita 1.6 narrowed its dialog to 300sp and gave each response button a 100px minimum, so a
+// dialog of three never fits in one row there and libadwaita stacks them itself; older ones keep
+// three in one row up to 550px. Two fit in one row on both.
+TEST_CASE("a choice of more than three buttons stacks them, and two sit side by side, and three where libadwaita fits them") {
   REQUIRE(ngn::testing::gtkReady());
-  for (int count : {3, 4, 5}) {
+  // The host starts libadwaita before it shows a dialog, which loads its stylesheet; a test that
+  // runs first would otherwise measure the buttons without it.
+  adw_init();
+  bool threeFit = adw_get_major_version() == 1 && adw_get_minor_version() < 6;
+  for (int count : {2, 3, 4, 5}) {
     CAPTURE(count);
+    CAPTURE(adw_get_minor_version());
     std::optional<Answer> answer;
     ngn::gtk::showAlert(choice(count), [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, nullptr);
     GtkWidget *alert = ngn::gtk::shownAlert();
     REQUIRE(alert);
-    CHECK(stacked(alert, static_cast<size_t>(count)) == (count > 3));
+    bool sideBySide = count == 2 || (count == 3 && threeFit);
+    bool forced = count > 3;
+    if (sideBySide || forced) {
+      CHECK(stacked(alert, static_cast<size_t>(count)) == forced);
+    } else {
+      // Three on libadwaita 1.6 and later: the host leaves it to libadwaita, which stacks them.
+      CHECK(stacked(alert, static_cast<size_t>(count)));
+    }
     ngn::gtk::respondToAlert(alert, "b1");
     REQUIRE(answer);
     CHECK(std::get<0>(*answer) == 1);

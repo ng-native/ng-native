@@ -218,18 +218,18 @@ void selectSegment(GtkWidget *segments, int index) {
 // --- Date picker ------------------------------------------------------------------------------
 
 // The picker's date as the locale writes it, in the local time zone: its time on the desktop's
-// clock where it sets one (useClockFormat), and a countdown as hours and minutes.
+// clock where it sets one (useClockFormat), and a countdown as hours and minutes. The 12-hour hour
+// is `%-l`, unpadded: `%l` pads with a space, or a figure space in newer GLib (2.88), which a trim of
+// spaces leaves behind.
 std::string dateLabel(const NativeControlProps &p) {
   GDateTime *at = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(p.date.value_or(0) / 1000)));
   if (!at) {
     return {};
   }
-  std::string time = !desktopClock() ? "%X" : *desktopClock() ? "%l:%M:%S %p" : "%H:%M:%S";
+  std::string time = !desktopClock() ? "%X" : *desktopClock() ? "%-l:%M:%S %p" : "%H:%M:%S";
   std::string format = p.mode == "countdown" ? "%H:%M" : p.mode == "time" ? time : p.mode == "datetime" ? "%x " + time : "%x";
   gchar *text = g_date_time_format(at, format.c_str());
   std::string out = text ? text : "";
-  // %l pads a one-digit hour with a space.
-  out.erase(0, out.find_first_not_of(' '));
   g_free(text);
   g_date_time_unref(at);
   return out;
