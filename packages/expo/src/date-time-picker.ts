@@ -8,8 +8,8 @@
  * strict templates know that, takes a `Date` wherever the view takes milliseconds, and registers
  * the element the first time one is made, so no `registerNativeViews` call is needed.
  *
- * iOS only. On Android the library has no view, only a module that opens a dialog, and the element
- * commits as nothing.
+ * iOS and macOS, where the desktop host draws it. On Android the library has no view, only a module
+ * that opens a dialog, and the element commits as nothing.
  */
 import { Component, input, output } from '@angular/core';
 import type { ControlSize } from '@ng-native/device';

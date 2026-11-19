@@ -234,8 +234,8 @@ export class DueDate {
 ```
 
 On Android the library has no view, only a module that opens a dialog, so the element commits as
-nothing there. Show the picker on iOS alone, and on Android open the library's dialog from a press
-with its own `DateTimePickerAndroid.open()`.
+nothing there. Show the picker on iOS and macOS, and on Android open the library's dialog from a
+press with its own `DateTimePickerAndroid.open()`.
 
 `skia-view`'s name is right, but worth being plain about: Skia's drawing model is React elements
 through a reconciler of its own, and none of that is reachable here. What the element takes is a

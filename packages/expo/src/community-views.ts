@@ -26,7 +26,7 @@ export const NATIVE_VIEWS: Readonly<Record<string, [string, Record<string, unkno
    * `ui-slider` from `@expo/ui`, a SwiftUI slider there.
    */
   slider: ['RNCSlider', { maximumValue: 1, minimumValue: 0, step: 0 }],
-  /** `@react-native-community/datetimepicker`. iOS only: on Android the library has no view. */
+  /** `@react-native-community/datetimepicker`. iOS and macOS: on Android the library has no view. */
   'date-time-picker': ['RNDateTimePicker'],
   /**
    * `@react-native-picker/picker`, whose items are `<picker-item>` children. Absent on macOS, where
@@ -35,7 +35,7 @@ export const NATIVE_VIEWS: Readonly<Record<string, [string, Record<string, unkno
   picker: ['RNCPicker'],
   'picker-item': ['RNCPickerItem'],
   /**
-   * `@react-native-segmented-control/segmented-control`. iOS only.
+   * `@react-native-segmented-control/segmented-control`. iOS and macOS.
    *
    * A view manager from before Fabric, run through the interop layer, which only installs the
    * `onChange` block when the prop is set - as React's handler does by being there. Without it
