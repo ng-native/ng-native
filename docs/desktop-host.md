@@ -69,9 +69,7 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   its last active window, or sends `reopen` when it has none shown. `--gapplication-service` starts
   it as the D-Bus service a packaged app's `DBusActivatable` desktop entry names. A window reports
   its size, maximised and full-screen state and focus to the core's `WindowHost`, which saves the
-  size and state but no place. The host quits when the user closes the last window only when no
-  app listens and the app's own window is not shown; an app or a reload closing a window never
-  quits it. The app's menu bar is a `GMenu` built from the core's items
+  size and state but no place. An app that listens decides whether closing its last window quits it, by `provideAppLifecycle`'s `quitWhenLastWindowCloses`, as on macOS. With no app listening, the host quits when the user closes the last window and the app's own window is not shown (`WindowHost::lastWindowClosed`); a reload closing a window never quits it. The app's menu bar is a `GMenu` built from the core's items
   (`menus.h`), each item an action of the window's `menu` group, shown in the chrome's menu bar or
   primary menu. GTK's popover menus take no keys, so a window's capture-phase key controller looks a
   press up in order: the app's shortcuts (`MenuHost::keyDown`), the focus keys (`focus.h`: Tab and

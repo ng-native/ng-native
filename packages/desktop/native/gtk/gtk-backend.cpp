@@ -185,6 +185,16 @@ void hideSvgElement(GtkWidget *widget) {
   }
 }
 
+// Takes `widget` out of its parent, if it has one. GTK makes an unparented widget visible again:
+// one setCovered or hideSvgElement hid stays hidden where it is inserted next.
+void unparentStayingHidden(GtkWidget *widget) {
+  if (gtk_widget_get_parent(widget)) {
+    gboolean childVisible = gtk_widget_get_child_visible(widget);
+    gtk_widget_unparent(widget);
+    gtk_widget_set_child_visible(widget, childVisible);
+  }
+}
+
 } // namespace
 
 void GtkBackend::createView(const ShadowView &view) {
@@ -265,9 +275,7 @@ void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int ind
     return;
   }
   unhostView(child);
-  if (gtk_widget_get_parent(c->second)) {
-    gtk_widget_unparent(c->second);
-  }
+  unparentStayingHidden(c->second);
   // Fabric's order is the drawing order. The index counts views only: a TextInput's field is a
   // child of its own, after them.
   GtkWidget *parentWidget = contentWidget(p->second);
@@ -278,7 +286,7 @@ void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int ind
     }
   }
   gtk_widget_insert_before(c->second, parentWidget, sibling);
-  // Unparenting, here or in removeChild, made it visible again.
+  // An svg element's view stays hidden, however it came here.
   hideSvgElement(c->second);
   // An Image's source was picked before it had a window, at the first monitor's scale.
   if (ViewData *d = viewData(c->second); d && d->image) {
@@ -293,8 +301,8 @@ void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int ind
 void GtkBackend::removeChild(SurfaceId, Tag, Tag child, int) {
   modals_->unmounted(child);
   unhostView(child);
-  if (auto c = views_.find(child); c != views_.end() && gtk_widget_get_parent(c->second)) {
-    gtk_widget_unparent(c->second);
+  if (auto c = views_.find(child); c != views_.end()) {
+    unparentStayingHidden(c->second);
   }
 }
 
@@ -370,6 +378,10 @@ void GtkBackend::followRole(const ShadowView &view) {
   g_object_set_data(G_OBJECT(old), "ngn-replaced-by", next);
   // A state update replaces a Paragraph's widget with no props update to follow.
   applyViewProps(next, *viewData(next));
+  // An Image hears a new scale through its widget: the new one listens too, and keeps the load.
+  if (viewData(next)->image) {
+    makeImageView(next, *viewData(next));
+  }
   // A focused field's GtkText loses the focus as it moves and takes it back after: the app hears
   // neither.
   TextField *field = focus ? textFieldOf(focus) : nullptr;

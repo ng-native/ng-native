@@ -15,22 +15,24 @@
 #   /ws             a WebSocket that echoes, picks the subprotocol "chat", refuses "refuse", picks
 #                   "other" when offered "pick-other", and answers the texts "pings" (pings seen),
 #                   "fragments" (a message in two frames), "close-me" (a close 4000 "bye"),
-#                   "ping-me" (a ping "hb", then logs the pong), "ping-flood" (reads nothing for
-#                   300 ms, pings 200 times, waits 300 ms, then reads until the text "done" and
-#                   logs the pongs and the last one's payload), "bad-utf8" (a text that is not
-#                   UTF-8), "split-utf8" (an é split across two frames),
+#                   "ping-me" (a ping "hb", then logs the pong), "ping-flood" (reads nothing until
+#                   the client's sends stall, pings 200 times, waits 300 ms, then reads until the
+#                   text "done" and logs the pongs and the last one's payload), "bad-utf8" (a text
+#                   that is not UTF-8), "split-utf8" (an é split across two frames),
 #                   "flood" (2000 one-byte texts at once) and "close-later" (reads nothing for
 #                   300 ms, closes 4000 "bye", then reads until the client's close frame and logs
 #                   it). Offered "mute", it drops the connection on a close frame; offered
 #                   "silent", it reads on without answering one.
 #   /ws-log         what the WebSockets have logged, as a JSON array
 import base64
+import fcntl
 import gzip
 import hashlib
 import json
 import socketserver
 import struct
 import sys
+import termios
 import threading
 import time
 from urllib.parse import parse_qs, urlsplit
@@ -159,7 +161,7 @@ class Handler(socketserver.BaseRequestHandler):
                     with LOG_LOCK:
                         LOG.append(f'pong {answer[1].decode()}' if answer and answer[0] == 10 else 'no pong')
                 elif text == 'ping-flood':
-                    time.sleep(0.3)
+                    self.wait_until_client_stalls()
                     for i in range(200):
                         self.send_frame(9, str(i).encode())
                     time.sleep(0.3)
@@ -205,6 +207,18 @@ class Handler(socketserver.BaseRequestHandler):
                     continue
                 self.send_frame(8, payload)
                 return
+
+    # Returns once the client's sends are held up: this side reads nothing, and its receive queue is
+    # full, holding the same byte count across several polls. The pings that follow then find the
+    # client unable to send a pong at once.
+    def wait_until_client_stalls(self):
+        last, steady = -1, 0
+        deadline = time.monotonic() + 10
+        while steady < 5 and time.monotonic() < deadline:
+            queued = struct.unpack('i', fcntl.ioctl(self.request.fileno(), termios.FIONREAD, b'\0' * 4))[0]
+            steady = steady + 1 if queued == last and queued >= 65536 else 0
+            last = queued
+            time.sleep(0.02)
 
     # An (opcode, payload) pair, or None once the connection ends, mid-frame included.
     def read_frame(self):
