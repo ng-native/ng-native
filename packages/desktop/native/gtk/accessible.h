@@ -34,8 +34,14 @@ GtkAccessibleRole gtkRole(AriaRole role);
 // Sets what the widget says beyond its role, and resets what `info` no longer has.
 void applyAccessibility(GtkWidget *widget, const AxInfo &info);
 
-// The widget that is the view's accessible element: a text input's field, else the view's own.
+// The widget that carries the view's label, description and states: a text input's editor (the
+// GtkText, or a multiline field's GtkTextView, which is a text box where its scrolled window is a
+// group), else the view's own.
 GtkWidget *accessibleWidget(const ViewData &view);
+
+// The widget that is the view's end of a relation, labelled-by and described-by: the native
+// control that fills it, which assistive technology operates, else accessibleWidget.
+GtkWidget *relationWidget(const ViewData &view);
 
 // Says `announcement` through `widget`'s window, at its priority, with gtk_accessible_announce,
 // found at run time: GTK 4.14 and later. Below it nothing is said. Whether it was.
