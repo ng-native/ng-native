@@ -19,8 +19,10 @@
  *
  *   node scripts/release-version.mjs <bump> [exact version]
  *
- * Prints the version or bump to give `nx release version`, and writes it to the step's outputs as
- * `version`. Exits non-zero with the reason when the inputs are refused.
+ * Prints the version to give `nx release version`, a bump resolved against the version on disk
+ * as Nx resolves it, and writes it to the step's outputs as `version`, which every later job takes:
+ * the prebuilt desktop hosts' archive names and URLs among them. Exits non-zero with the reason
+ * when the inputs are refused.
  */
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
@@ -55,6 +57,17 @@ function compareIdentifiers(x, y) {
   return x === y ? 0 : x < y ? -1 : 1;
 }
 
+/**
+ * The version `nx release version <bump>` makes of `current`, as semver's inc does: a prerelease
+ * bumps to the release it leads up to when that is the bump's next version.
+ */
+function bumped(current, bump) {
+  const { core, prerelease } = parse(current);
+  const [major, minor, patch] = core;
+  if (bump === 'patch') return `${major}.${minor}.${prerelease.length ? patch : patch + 1}`;
+  return prerelease.length && patch === 0 ? `${major}.${minor}.0` : `${major}.${minor + 1}.0`;
+}
+
 /** Negative, zero or positive as `a` is below, equal to or above `b`, by semver precedence. */
 export function compare(a, b) {
   const [left, right] = [parse(a), parse(b)];
@@ -74,7 +87,7 @@ export function compare(a, b) {
 }
 
 /**
- * The version or bump to release, from the workflow's inputs, every version the released packages
+ * The version to release, from the workflow's inputs, every version the released packages
  * have on npm, and the version on disk. Throws with the reason when the inputs are refused.
  */
 export function releaseVersion(bump, exact, published, current) {
@@ -85,7 +98,7 @@ export function releaseVersion(bump, exact, published, current) {
     if (!BUMPS.includes(bump)) {
       throw new Error(`The bump must be ${BUMPS.join(' or ')}, not "${bump}".`);
     }
-    return bump;
+    return bumped(current, bump);
   }
 
   const version = parse(exact);

@@ -180,6 +180,37 @@ TEST_CASE("a view whose role changes keeps the focus, in itself or in a field in
   CHECK(gtk_root_get_focus(gtk_widget_get_root(views.view(2))) == views.view(2));
 }
 
+TEST_CASE("a view whose role changes leaves a focused field's caret where it was, selecting nothing") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto group = MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("role", "group")), {{0, 0}, {180, 100}});
+  views.add(group);
+  views.add(MountedViews::shadow(3, "TextInput", textInputProps(dynamic::object("text", "draft")), {{10, 10}, {150, 40}}), 2);
+  GtkWidget *text = ngn::gtk::viewData(views.view(3))->field->text;
+  REQUIRE(gtk_text_grab_focus_without_selecting(GTK_TEXT(text)));
+  gtk_editable_set_position(GTK_EDITABLE(text), 2);
+  views.update(group, desktopViewProps(dynamic::object("role", "form")));
+  REQUIRE(gtk_root_get_focus(gtk_widget_get_root(text)) == text);
+  int start = 0, end = 0;
+  CHECK_FALSE(gtk_editable_get_selection_bounds(GTK_EDITABLE(text), &start, &end));
+  CHECK(gtk_editable_get_position(GTK_EDITABLE(text)) == 2);
+}
+
+TEST_CASE("a view whose role changes keeps a covered child hidden, and the others shown") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto stack = MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("role", "group")), {{0, 0}, {100, 100}});
+  views.add(stack);
+  views.add(MountedViews::shadow(3, "View", desktopViewProps(dynamic::object()), {{0, 0}, {100, 100}}), 2);
+  views.add(MountedViews::shadow(4, "View", desktopViewProps(dynamic::object()), {{0, 0}, {100, 100}}), 2);
+  views.backend->setCovered(MountedViews::kSurface, 3, true);
+  REQUIRE_FALSE(gtk_widget_get_child_visible(views.view(3)));
+  views.update(stack, desktopViewProps(dynamic::object("role", "region")));
+  CHECK(roleOf(views.view(2)) == GTK_ACCESSIBLE_ROLE_REGION);
+  CHECK_FALSE(gtk_widget_get_child_visible(views.view(3)));
+  CHECK(gtk_widget_get_child_visible(views.view(4)));
+}
+
 TEST_CASE("a paragraph that stops saying anything is read through, and is static text again when it does") {
   REQUIRE(ngn::testing::gtkReady());
   MountedViews views;
@@ -202,4 +233,21 @@ TEST_CASE("a paragraph that stops saying anything is read through, and is static
   setText("Saved again");
   CHECK(roleOf(views.view(2)) == GTK_ACCESSIBLE_ROLE_LABEL);
   CHECK(hasProperty(views.view(2), GTK_ACCESSIBLE_PROPERTY_LABEL, "Saved again"));
+}
+
+TEST_CASE("a paragraph whose state alone changes its role keeps its opacity") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto paragraph = MountedViews::shadow(2, "Paragraph", desktopViewProps(dynamic::object("opacity", 0)), {{0, 0}, {150, 20}});
+  paragraph.state = paragraphState("");
+  views.add(paragraph);
+  GtkWidget *before = views.view(2);
+  CHECK(gtk_widget_get_opacity(before) == 0);
+  // A state update only, with the same props: the new widget is made with GTK's opacity of 1.
+  auto current = views.mounting->tree().find(2)->view;
+  auto next = current;
+  next.state = paragraphState("Hidden");
+  views.mount({ShadowViewMutation::UpdateMutation(current, next, MountedViews::kSurface)});
+  CHECK(views.view(2) != before);
+  CHECK(gtk_widget_get_opacity(views.view(2)) == 0);
 }
