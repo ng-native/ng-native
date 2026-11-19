@@ -276,6 +276,13 @@ class CairoCanvas final : public SvgCanvas {
   // its luminance times its alpha, as SVG masks by; an alpha mask's alpha as it is.
   void beginMask(bool alpha) override {
     cairo_surface_t *surface = viewSurface();
+    if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+      // No bitmap (a view past cairo's limit): the masked content draws unmasked, as a filter's
+      // source does, and the parent context never sees an error surface.
+      cairo_surface_destroy(surface);
+      masks_.push_back({.parent = cr_, .mask = nullptr, .surface = nullptr, .saved = saved_, .alpha = alpha});
+      return;
+    }
     cairo_t *mask = drawingInto(surface);
     masks_.push_back({.parent = cr_, .mask = mask, .surface = surface, .saved = saved_, .alpha = alpha});
     cr_ = mask;
@@ -286,6 +293,9 @@ class CairoCanvas final : public SvgCanvas {
       return;
     }
     Mask &frame = masks_.back();
+    if (!frame.surface) {
+      return;
+    }
     cr_ = frame.parent;
     saved_ = frame.saved;
     cairo_destroy(frame.mask);
@@ -304,6 +314,9 @@ class CairoCanvas final : public SvgCanvas {
     }
     Mask frame = masks_.back();
     masks_.pop_back();
+    if (!frame.surface) {
+      return;
+    }
     cairo_pop_group_to_source(cr_);
     cairo_set_matrix(cr_, &base_);
     cairo_mask_surface(cr_, frame.surface, 0, 0);
