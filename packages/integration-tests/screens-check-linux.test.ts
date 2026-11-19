@@ -4,9 +4,11 @@
  * host is a stand-in that writes what it was given where it was asked to capture.
  */
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
 const script = new URL('../../.claude/skills/screens-check/linux.mjs', import.meta.url);
@@ -129,6 +131,21 @@ describe('the Linux screens mode', () => {
     }
   });
 
+  it('fails a route when the host cannot start', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'screens-linux-'));
+    try {
+      await assert.rejects(
+        shoot(
+          { host: path.join(dir, 'missing'), bundle: '/b.js', scheme: 'notes', out: dir },
+          '/settings',
+        ),
+        /ENOENT/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('reads whether the host wrote its capture, after its input script when it has one', () => {
     assert.equal(captureResult('[ngn] captured /o/a.png\n', true), 'failed');
     assert.equal(
@@ -143,6 +160,33 @@ describe('the Linux screens mode', () => {
     assert.equal(captureResult('[ngn] first frame 90 ms\n[ngn] captured /o/a.png\n'), 'captured');
     assert.equal(captureResult('[ngn] could not capture /o/a.png\n'), 'failed');
     assert.equal(captureResult('[ngn] first frame 90 ms\n'), undefined);
+  });
+
+  it('does not accept a capture logged before its input script finished', () => {
+    assert.equal(
+      captureResult('[ngn] captured /o/a.png\n[ngn] input script done\n', true),
+      'failed',
+    );
+  });
+
+  it('reports usage for an option given without its operand', () => {
+    const out = mkdtempSync(path.join(tmpdir(), 'screens-linux-'));
+    try {
+      const run = spawnSync(
+        process.execPath,
+        [
+          fileURLToPath(script),
+          ...['--host', '/h', '--bundle', '/b.js', '--scheme', 'notes', '--out', out],
+          '/desktop',
+          '--input',
+        ],
+        { encoding: 'utf8' },
+      );
+      assert.equal(run.status, 2);
+      assert.match(run.stderr, /Usage: linux\.mjs/);
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
   });
 
   it('launches as a test launch with no accessibility bus, whatever the caller set', () => {

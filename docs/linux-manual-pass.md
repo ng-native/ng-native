@@ -104,5 +104,5 @@ Run the whole list again in the Plasma session, then these rows, which differ th
 ## Report
 
 For each session: the build tested, each row as passed, failed or not run, with a screenshot
-(`gnome-screenshot -w`, or Spectacle on Plasma) for each failure, and an issue for each failure that
+(on GNOME, press Print, choose Window, then capture; Spectacle on Plasma) for each failure, and an issue for each failure that
 is not a known gap above.
