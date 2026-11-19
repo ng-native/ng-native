@@ -177,14 +177,15 @@ function appModules(appDir, os) {
 }
 
 /**
- * Whether a package ships native code for a phone: an Expo module for iOS or Android, a React
+ * Whether a package ships native code: an Expo module for iOS, Android or a desktop OS, a React
  * Native codegen spec, a podspec, or an `ios` or `android` folder.
  *
  * @param {string} dir
  * @param {{ platforms?: string[] } | null} config its expo-module.config.json
  */
 function hasNativeCode(dir, config) {
-  if (config?.platforms?.some((platform) => ['apple', 'ios', 'android'].includes(platform))) {
+  const native = ['apple', 'ios', 'android', ...DESKTOP_OSES];
+  if (config?.platforms?.some((platform) => native.includes(platform))) {
     return true;
   }
   if (readJson(path.join(dir, 'package.json'))?.codegenConfig) return true;

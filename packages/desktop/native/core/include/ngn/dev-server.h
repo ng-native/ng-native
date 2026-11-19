@@ -33,7 +33,10 @@ struct DevServer {
 
 // The OS id the HMR client is set up for when the bundle URL names none. ReactHost makes React
 // Native's DevServerHelper (dev-server-helper.cpp) with no way to pass it one, so the runtime sets
-// it for the process before it makes its ReactHost.
-std::string &devServerOs();
+// it for the process before it makes its ReactHost, through setDevServerOs.
+const std::string &devServerOs();
+// Sets devServerOs. An empty id throws std::invalid_argument: the HMR client would be set up for
+// no platform, and the core names no OS of its own to fall back on.
+void setDevServerOs(std::string os);
 
 } // namespace ngn

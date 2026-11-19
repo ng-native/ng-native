@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/desktop",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "description": "The macOS desktop host for Angular Native: React Native's C++ core and Hermes, mounting into AppKit views, and the ng-native-desktop command that builds and launches it.",
   "keywords": [
     "angular",

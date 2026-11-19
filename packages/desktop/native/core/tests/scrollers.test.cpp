@@ -162,3 +162,17 @@ TEST_CASE("the desktop scroll view is React Native's in name and state") {
   auto state = std::static_pointer_cast<const ConcreteState<ScrollViewState>>(tree.scroll->getState());
   CHECK(state->getData().contentOffset.y == 40);
 }
+
+TEST_CASE("a paged scroll view settles on the nearest page, or the next one a flick points at") {
+  // Pages 300 wide, the last starting at 900.
+  CHECK(ngn::pagedOffset(120, 0, 300, 900) == 0);
+  CHECK(ngn::pagedOffset(160, 0, 300, 900) == 300);
+  CHECK(ngn::pagedOffset(20, 1, 300, 900) == 300);
+  CHECK(ngn::pagedOffset(580, -1, 300, 900) == 300);
+  // A flick from a page's own offset goes one page on, and never past either end.
+  CHECK(ngn::pagedOffset(300, 1, 300, 900) == 600);
+  CHECK(ngn::pagedOffset(900, 1, 300, 900) == 900);
+  CHECK(ngn::pagedOffset(-30, -1, 300, 900) == 0);
+  // No page to go by (not laid out yet) leaves it at the start.
+  CHECK(ngn::pagedOffset(50, 0, 0, 900) == 0);
+}
