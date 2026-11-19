@@ -6,6 +6,8 @@
 
 #include <doctest/doctest.h>
 
+#include <react/renderer/components/text/ParagraphComponentDescriptor.h>
+
 using namespace facebook::react;
 using ngn::AxRole;
 using ngn::AxSubrole;
@@ -27,6 +29,15 @@ ngn::AxInfo inputInfo(folly::dynamic raw) {
   PropsParserContext parserContext{1, *context};
   auto props = descriptor.cloneProps(parserContext, nullptr, RawProps(std::move(raw)));
   return ngn::accessibilityInfo(static_cast<const ViewProps &>(*props));
+}
+
+// A `<text>`'s, through React Native's own Paragraph props, saying `text`.
+ngn::AxInfo textInfo(folly::dynamic raw, const std::string &text) {
+  auto context = std::make_shared<const ContextContainer>();
+  ParagraphComponentDescriptor descriptor{{{}, context, nullptr}};
+  PropsParserContext parserContext{1, *context};
+  auto props = descriptor.cloneProps(parserContext, nullptr, RawProps(std::move(raw)));
+  return ngn::paragraphAccessibilityInfo(static_cast<const ViewProps &>(*props), text);
 }
 
 } // namespace
@@ -203,6 +214,27 @@ TEST_CASE("an item's place in its set and a grid's counts are read from 1, and n
   CHECK_FALSE(unknown.rowCount.has_value());
   CHECK_FALSE(unknown.positionInSet.has_value());
   CHECK(info(folly::dynamic::object("role", "listitem")("accessibilityPosInSet", 1)).positionInSet == 1);
+}
+
+TEST_CASE("a text takes a heading's level and the ARIA states and counts, as a view does") {
+  auto heading = textInfo(folly::dynamic::object("role", "heading")("accessibilityLevel", 2), "Keyboard");
+  CHECK(heading.role == AxRole::Heading);
+  CHECK(heading.level == 2);
+  CHECK(heading.label == "Keyboard");
+  auto item = textInfo(folly::dynamic::object("role", "listitem")("accessibilityPosInSet", 2)("accessibilitySetSize", 5), "Milk");
+  CHECK(item.positionInSet == 2);
+  CHECK(item.setSize == 5);
+  CHECK_FALSE(textInfo(folly::dynamic::object(), "Milk").level.has_value());
+}
+
+TEST_CASE("a text's desktop props reach the core, as a view's do") {
+  auto context = std::make_shared<const ContextContainer>();
+  ParagraphComponentDescriptor descriptor{{{}, context, nullptr}};
+  PropsParserContext parserContext{1, *context};
+  auto props = descriptor.cloneProps(parserContext, nullptr, RawProps(folly::dynamic::object("tabIndex", 0)("accessibilityDescribedBy", folly::dynamic::array("hint"))));
+  auto desktop = ngn::desktopProps(*props);
+  CHECK(desktop.tabIndex == 0);
+  CHECK(desktop.accessibilityDescribedBy == std::vector<std::string>{"hint"});
 }
 
 TEST_CASE("every role the components take is mapped") {
