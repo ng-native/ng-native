@@ -41,11 +41,39 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   WebSocket client is the
   core's libcurl one (`curl-network.h`), which the GTK build turns on (`NGN_CURL`): one thread
   drives every request through `curl_multi`, behaving as NSURLSession does on macOS for redirects,
-  timeouts (the longest silence), decoded bodies and `file:` and `data:` urls. Unlike macOS, its
-  cookies last only as long as the process, and it takes a proxy only from libcurl's environment
-  variables (`http_proxy`, `https_proxy`, `ALL_PROXY`, `NO_PROXY` and the rest), not the desktop's
-  settings. Linux is not yet an app target: the bundle it runs is exported for `macos`, and menus
-  and the libadwaita chrome come in later steps.
+  timeouts (the longest silence), decoded bodies and `file:` and `data:` urls, and opening a
+  WebSocket's `http` or `https` url as `ws` or `wss`, as React Native's HMR client asks. Unlike
+  macOS, its cookies last only as long as the process, and it takes a proxy only from libcurl's environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY`, `NO_PROXY` and the rest), not the desktop's settings. It runs a `linux`
+  bundle, which `expo export` makes once the app's `app.config.js` registers the platform
+  (`@ng-native/metro/linux.cjs`). A window is an
+  `AdwApplicationWindow` of the app's `AdwApplication`, holding an `AdwToolbarView` with an
+  `AdwHeaderBar` on top of a `GtkOverlay` with the surface (`screens.h`). Its `titleBar` decides how
+  they meet: `default` keeps the content below a raised header bar, and `transparent` runs it under
+  a flat one, as does `hidden`, which also hides the title. Content under the bar reports the bar's
+  height as its top inset, and the window controls' reach from each side, wherever
+  `gtk-decoration-layout` puts them, as `titlebarLeading` and `titlebarTrailing`. The chrome also
+  holds where the app's menus will go, hidden until it has them: a `GtkPopoverMenuBar` under the
+  header bar when `XDG_CURRENT_DESKTOP` names KDE, else a primary `GtkMenuButton` in it. The
+  front screen's header goes into the header bar as macOS puts it into the toolbar, in the core's
+  `headerLayout` order, with the header's subviews moved into slots of their own, each a container
+  for input, a bar button's menu as a `GtkMenuButton`, the header's tint, title and background
+  colours as CSS classes, and a search bar as a `GtkSearchEntry`. The `AdwApplication` is unique
+  by the app id, except in a test launch, and handles open: a second launch finds the first on the
+  session bus and hands it its links and files (`forwardLaunch`), then exits, and the first raises
+  its last active window, or sends `reopen` when it has none shown. `--gapplication-service` starts
+  it as the D-Bus service a packaged app's `DBusActivatable` desktop entry names. A window reports
+  its size, maximised and full-screen state and focus to the core's `WindowHost`, which saves the
+  size and state but no place. An app that listens decides whether closing its last window quits
+  it, by `provideAppLifecycle`'s `quitWhenLastWindowCloses`, as on macOS. With no app listening,
+  the host quits when the user closes the last window and the app's own window is not shown
+  (`WindowHost::lastWindowClosed`); a reload closing a window never quits it. A window shows with nothing
+  focused, as on macOS, so a header's search field does not take the focus at launch. A `<modal>`
+  sheet, and a screen presented with `present()`, is an `AdwDialog` in a resizable window on
+  libadwaita 1.5 and later, found at run time, and a drawn sheet on a dimmed overlay on 1.4 or over
+  a window that is not resizable, where libadwaita would open a window of its own; a cover fills
+  the overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. A
+  presented screen's header is the sheet's own header bar, with Cancel at the start and bound to
+  Escape and the last right item the default on Return.
 - `native/scripts`: fetching the pinned sources, building Hermes and building the host.
   `NGN_DESKTOP_CACHE` moves the cache and `NGN_JOBS` caps parallel compiles. `build.sh --library
   <dir>` compiles a library's component codegen and its own C++ in, as React Native's Android

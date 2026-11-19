@@ -85,6 +85,17 @@ std::vector<MenuItem> macOSMenuBar(const DefaultMenuOptions &options) {
   return bar;
 }
 
+MenuPlacement linuxMenuPlacement(std::string_view currentDesktop) {
+  while (!currentDesktop.empty()) {
+    auto colon = currentDesktop.find(':');
+    if (currentDesktop.substr(0, colon) == "KDE") {
+      return MenuPlacement::MenuBar;
+    }
+    currentDesktop = colon == std::string_view::npos ? std::string_view() : currentDesktop.substr(colon + 1);
+  }
+  return MenuPlacement::PrimaryMenu;
+}
+
 std::vector<MenuItem> linuxMenuBar(const DefaultMenuOptions &options) {
   const std::string &app = options.appName;
   std::vector<MenuItem> bar{

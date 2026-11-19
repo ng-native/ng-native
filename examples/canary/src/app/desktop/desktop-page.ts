@@ -18,6 +18,7 @@ import { AppWindows, OS, UndoStack } from '@ng-native/device';
 import { NativeHeader } from '@ng-native/router';
 import { page } from '../screen-styles.ts';
 import { LibraryWindow } from './library-window.ts';
+import { TitleBarWindow } from './title-bar-window.ts';
 
 /**
  * What a Mac app has that a phone app does not: a menu bar of the app's own, keyboard shortcuts,
@@ -97,6 +98,9 @@ import { LibraryWindow } from './library-window.ts';
 
       <text class="heading">Windows</text>
       <native-button testID="library" (press)="openLibrary()">Open Library</native-button>
+      <native-button testID="title-bar" (press)="openTitleBar()">
+        Open a Window with a Transparent Title Bar
+      </native-button>
       <text class="hint">{{ windowNote() }}</text>
 
       <text class="heading">Drag and drop</text>
@@ -178,6 +182,17 @@ export class DesktopPage {
     this.windowNote.set(
       window ? 'The library is open in its own window.' : 'This OS has one window.',
     );
+  }
+
+  protected async openTitleBar(): Promise<void> {
+    const window = await this.windows.open(TitleBarWindow, {
+      title: 'Title Bar',
+      width: 520,
+      height: 240,
+      titleBar: 'transparent',
+      autosave: false,
+    });
+    if (!window) this.windowNote.set('This OS has one window.');
   }
 
   protected dropped(drop: FileDropEvent): void {

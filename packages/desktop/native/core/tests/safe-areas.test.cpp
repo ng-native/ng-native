@@ -31,10 +31,14 @@ struct RecordingAreas final : ngn::SafeAreas {
     auto it = margins->find(node.view.tag);
     return it == margins->end() ? std::nullopt : std::optional(it->second);
   }
-  void emitInsetsChange(const ngn::ViewTree::Node &node, EdgeInsets insets, Rect frame, double leading) override {
+  void emitInsetsChange(const ngn::ViewTree::Node &node, EdgeInsets insets, Rect frame, double leading, double trailing)
+      override {
     std::ostringstream line;
     line << "provider " << node.view.tag << " " << text(insets) << " at " << frame.origin.x << "," << frame.origin.y
          << " leading " << leading;
+    if (trailing != 0) {
+      line << " trailing " << trailing;
+    }
     out->push_back(line.str());
   }
   void setStateInsets(const ngn::ViewTree::Node &node, EdgeInsets insets) override {
@@ -75,6 +79,18 @@ TEST_CASE("the window controls reach in from the leading edge, the right one rig
   // Controls overlapping the container still count from its leading edge.
   CHECK(ngn::titlebarLeading(80, 110, 100, false) == 110);
   CHECK(ngn::titlebarLeading(-10, 20, 100, true) == 110);
+}
+
+TEST_CASE("the window controls reach in from the trailing edge, the left one right to left") {
+  // A close button 46 points wide, 6 in from the right of a 360-point window, or from its left.
+  CHECK(ngn::titlebarTrailing(308, 354, 360, false) == 52);
+  CHECK(ngn::titlebarTrailing(6, 52, 360, true) == 52);
+  // Controls outside the container reach nothing.
+  CHECK(ngn::titlebarTrailing(-60, -10, 360, false) == 0);
+  CHECK(ngn::titlebarTrailing(370, 400, 360, true) == 0);
+  // Controls overlapping the container count from its trailing edge.
+  CHECK(ngn::titlebarTrailing(-10, 20, 100, false) == 110);
+  CHECK(ngn::titlebarTrailing(80, 110, 100, true) == 110);
 }
 
 TEST_CASE("a view gets the part of its container's insets it overlaps") {
@@ -147,6 +163,21 @@ TEST_CASE("the provider hears a change in the window controls' room alone") {
   auto controlsHidden = kWindow;
   controlsHidden.titlebarLeading = 0;
   f.mounting->setContainerInsets(1, controlsHidden);
+  CHECK(f.sent == Lines{"provider 2 52,0,0,0 at 0,0 leading 0"});
+}
+
+TEST_CASE("the provider hears a change in the trailing window controls' room alone, and their going") {
+  Fixture f;
+  auto header = kWindow;
+  header.titlebarLeading = 0;
+  header.titlebarTrailing = 42;
+  f.mounting->setContainerInsets(1, header);
+  auto provider = shadowView(2, "RNCSafeAreaProvider", {{0, 0}, {800, 600}});
+  f.mount({ShadowViewMutation::CreateMutation(provider), ShadowViewMutation::InsertMutation(1, provider, 0)});
+  CHECK(f.sent == Lines{"provider 2 52,0,0,0 at 0,0 leading 0 trailing 42"});
+  f.sent.clear();
+  header.titlebarTrailing = 0;
+  f.mounting->setContainerInsets(1, header);
   CHECK(f.sent == Lines{"provider 2 52,0,0,0 at 0,0 leading 0"});
 }
 

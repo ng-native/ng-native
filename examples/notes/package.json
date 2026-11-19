@@ -10,7 +10,7 @@
     "macos": "ng-native-desktop run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --project node",
-    "export": "expo export --platform ios --platform android --platform macos --output-dir dist"
+    "export": "expo export --platform ios --platform android --platform macos --platform linux --output-dir dist"
   },
   "dependencies": {
     "@angular/common": "22.2.0",
