@@ -3,6 +3,8 @@
 #include "portal.h"
 #include "system-access.h"
 
+#include "ngn/notification-schedule.h"
+
 #include <atomic>
 #include <cstdio>
 #include <optional>
@@ -49,8 +51,12 @@ NotificationSchedule::Clock glibClock() {
 
 class GtkNotificationCenter final : public NotificationCenter, public std::enable_shared_from_this<GtkNotificationCenter> {
  public:
-  GtkNotificationCenter(GApplication *application, std::shared_ptr<NotificationEvents> events, std::function<void()> raise)
-      : application_(G_APPLICATION(g_object_ref(application))), events_(std::move(events)), raise_(std::move(raise)) {}
+  GtkNotificationCenter(GApplication *application, std::shared_ptr<NotificationEvents> events, std::function<void()> raise,
+                        std::function<void(int)> showBadge)
+      : application_(G_APPLICATION(g_object_ref(application))),
+        events_(std::move(events)),
+        raise_(std::move(raise)),
+        showBadge_(std::move(showBadge)) {}
 
   ~GtkNotificationCenter() override {
     if (unsubscribe_) {
@@ -136,6 +142,9 @@ class GtkNotificationCenter final : public NotificationCenter, public std::enabl
   }
   void setBadge(int count) override {
     badge_ = count;
+    if (showBadge_) {
+      showBadge_(count);
+    }
   }
 
  private:
@@ -204,6 +213,7 @@ class GtkNotificationCenter final : public NotificationCenter, public std::enabl
   GApplication *application_;
   std::shared_ptr<NotificationEvents> events_;
   std::function<void()> raise_;
+  std::function<void(int)> showBadge_;
   std::unique_ptr<NotificationSchedule> schedule_;
   std::function<void()> unsubscribe_;
   std::atomic<int> badge_{0};
@@ -213,9 +223,9 @@ class GtkNotificationCenter final : public NotificationCenter, public std::enabl
 
 std::shared_ptr<NotificationCenter> makeNotificationCenter(GApplication *application, const std::string &appData,
                                                            std::shared_ptr<NotificationEvents> events, std::function<void()> raise,
-                                                           std::optional<NotificationSchedule::Clock> clock) {
-  auto center = std::make_shared<GtkNotificationCenter>(application, std::move(events), std::move(raise));
-  center->start(appData, clock ? std::move(*clock) : glibClock());
+                                                           std::function<void(int)> showBadge) {
+  auto center = std::make_shared<GtkNotificationCenter>(application, std::move(events), std::move(raise), std::move(showBadge));
+  center->start(appData, glibClock());
   return center;
 }
 

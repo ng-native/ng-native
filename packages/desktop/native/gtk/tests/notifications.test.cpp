@@ -112,11 +112,15 @@ TEST_CASE("A notification shows through the Notification portal as it comes due,
   auto events = std::make_shared<ngn::NotificationEvents>("linux");
   Heard heard(*events);
   int raised = 0;
-  auto center = ngn::gtk::makeNotificationCenter(G_APPLICATION(app), folder.path, events, [&raised] { ++raised; });
+  std::vector<int> badges;
+  auto center = ngn::gtk::makeNotificationCenter(G_APPLICATION(app), folder.path, events, [&raised] { ++raised; },
+                                                 [&badges](int count) { badges.push_back(count); });
   CHECK(center->canPost());
 
   std::optional<std::string> error = "unanswered";
-  center->add(request("lunch"), [&error](std::optional<std::string> e) { error = e; });
+  auto lunch = request("lunch");
+  lunch.badge = 4;
+  center->add(lunch, [&error](std::optional<std::string> e) { error = e; });
   CHECK_FALSE(error);
   ngn::testing::runUntil([&] { return portal.calls.size() == 1; });
   const auto &shown = portal.calls[0];
@@ -132,6 +136,11 @@ TEST_CASE("A notification shows through the Notification portal as it comes due,
   CHECK_FALSE(shown.token);
   CHECK(heard.count("received") == 1);
   CHECK(heard.events[0]["notification"]["request"]["content"]["data"]["table"] == 4);
+  // Its badge is the app's, drawn where the desktop shows one.
+  CHECK(center->badge() == 4);
+  CHECK(badges == std::vector<int>{4});
+  center->setBadge(0);
+  CHECK(badges == std::vector<int>{4, 0});
 
   portal.invoke("lunch", "ngn-notification");
   ngn::testing::runUntil([&] { return heard.count("response") == 1; });

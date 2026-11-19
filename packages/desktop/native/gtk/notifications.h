@@ -7,14 +7,12 @@
 // an application id posts, and the desktop's settings decide whether it shows. No push.
 #pragma once
 
-#include "ngn/notification-schedule.h"
 #include "ngn/notifications.h"
 
 #include <gio/gio.h>
 
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
 
 namespace ngn::gtk {
@@ -22,11 +20,11 @@ namespace ngn::gtk {
 // The app's action a notification's click runs, with the notification's identifier.
 inline constexpr const char *kNotificationAction = "ngn-notification";
 
-// `raise` brings the app to the front. The schedule starts at once, so what came due while the app
-// was closed shows as it launches. `clock` is the wall clock and GLib's timers, unless a test
-// gives its own.
+// `raise` brings the app to the front, and `showBadge`, when given, draws the badge count where the
+// desktop shows one (the launcher's). The schedule starts at once, so what came due while the app
+// was closed shows as it launches.
 std::shared_ptr<NotificationCenter> makeNotificationCenter(GApplication *application, const std::string &appData,
                                                            std::shared_ptr<NotificationEvents> events, std::function<void()> raise,
-                                                           std::optional<NotificationSchedule::Clock> clock = std::nullopt);
+                                                           std::function<void(int count)> showBadge = {});
 
 } // namespace ngn::gtk
