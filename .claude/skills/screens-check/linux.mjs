@@ -54,8 +54,11 @@ export function captureEnv(env, state, file, input) {
  */
 export function captureResult(log, scripted = false) {
   if (scripted && /\[ngn\] input script[^\n]*: /.test(log)) return 'failed';
-  if (/\[ngn\] captured /.test(log)) {
-    return !scripted || /\[ngn\] input script done/.test(log) ? 'captured' : 'failed';
+  const captured = /\[ngn\] captured /.exec(log);
+  if (captured) {
+    if (!scripted) return 'captured';
+    const done = log.indexOf('[ngn] input script done');
+    return done !== -1 && done < captured.index ? 'captured' : 'failed';
   }
   if (/\[ngn\] could not capture /.test(log)) return 'failed';
   return undefined;
@@ -108,16 +111,20 @@ export async function shoot(target, route) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
+  let missingOperand = false;
   const option = (name) => {
     const at = args.indexOf(name);
-    return at === -1 ? undefined : args.splice(at, 2)[1];
+    if (at === -1) return undefined;
+    const operand = args.splice(at, 2)[1];
+    if (operand === undefined) missingOperand = true;
+    return operand;
   };
   const host = option('--host') ?? process.env.NGN_DESKTOP_HOST;
   const bundle = option('--bundle');
   const scheme = option('--scheme');
   const out = option('--out');
   const input = option('--input');
-  if (!host || !bundle || !scheme || !out || args.length === 0) {
+  if (missingOperand || !host || !bundle || !scheme || !out || args.length === 0) {
     console.error(
       'Usage: linux.mjs --host <ngn-linux> --bundle <main.js> --scheme <scheme> --out <dir> [--input <script.input>] <route>...',
     );
