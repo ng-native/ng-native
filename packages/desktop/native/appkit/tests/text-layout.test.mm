@@ -296,4 +296,11 @@ TEST_CASE("A line through crosses the text and the spaces in it, in the decorati
   CFDictionaryRef attributes = CFAttributedStringGetAttributes(layout.string, 0, nullptr);
   CHECK(CFDictionaryGetValue(attributes, kCTUnderlineStyleAttributeName) != nullptr);
   CHECK(CFDictionaryGetValue(attributes, kCTUnderlineColorAttributeName) != nullptr);
+
+  // Faded with the text: transparent text has a transparent decoration.
+  both.textAttributes.opacity = 0;
+  auto faded = ngn::layoutText(stringOf({both}), paragraph, 400);
+  auto color = (CGColorRef)CFDictionaryGetValue(CFAttributedStringGetAttributes(faded.string, 0, nullptr), kCTUnderlineColorAttributeName);
+  REQUIRE(color != nullptr);
+  CHECK(CGColorGetAlpha(color) == 0);
 }

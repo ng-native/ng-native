@@ -358,7 +358,13 @@ CFAttributedStringRef makeAttributedString(const AttributedString &attributedStr
       }
       CFRelease(n);
       if (a.textDecorationColor) {
+        // Faded with the text, as its foreground is.
         CGColorRef decorationColor = cgColor(a.textDecorationColor);
+        if (!std::isnan(a.opacity)) {
+          CGColorRef faded = CGColorCreateCopyWithAlpha(decorationColor, CGColorGetAlpha(decorationColor) * a.opacity);
+          CGColorRelease(decorationColor);
+          decorationColor = faded;
+        }
         CFAttributedStringSetAttribute(out, range, kCTUnderlineColorAttributeName, decorationColor);
         CGColorRelease(decorationColor);
       }
