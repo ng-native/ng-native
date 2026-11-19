@@ -23,8 +23,10 @@ struct Windows {
   GtkApplication *app = ngn::gtk::startApplication("dev.ngnative.WindowsTest");
   std::shared_ptr<ngn::testing::FakeSystem> system = std::make_shared<ngn::testing::FakeSystem>();
   int quits = 0;
+  int lastClosed = 0;
   std::shared_ptr<ngn::gtk::GtkWindows> windows = std::make_shared<ngn::gtk::GtkWindows>(
-      ngn::gtk::GtkWindows::Hooks{.quit = [this] { ++quits; }}, app, ngn::MenuPlacement::PrimaryMenu);
+      ngn::gtk::GtkWindows::Hooks{.quit = [this] { ++quits; }, .lastWindowClosed = [this] { ++lastClosed; }}, app,
+      ngn::MenuPlacement::PrimaryMenu);
   std::shared_ptr<WindowHost> host = std::make_shared<WindowHost>(windows, system);
   std::vector<folly::dynamic> events;
   std::shared_ptr<void> listening;
@@ -112,22 +114,29 @@ TEST_CASE("a maximised window saves that with the size it goes back to, and open
   CHECK(width == 600);
 }
 
-TEST_CASE("the last window closing quits the app only when no app listens to decide") {
+TEST_CASE("the user closing the last window is the host's to act on only when no app listens to decide") {
   REQUIRE(ngn::testing::gtkReady());
   Windows w;
   w.listen();
   auto first = w.open({.title = "One"});
+  // The app's quitWhenLastWindowCloses decides, and it is listening: the request goes to it.
+  gtk_window_close(GTK_WINDOW(w.windows->window(first)));
+  settle();
+  CHECK(w.lastClosed == 0);
+  // The app closing its window, as it does when it agrees, or a reload closing it, quits nothing.
   w.windows->closeWindow(first);
   settle();
-  // The app's quitWhenLastWindowCloses decides, and it is listening.
-  CHECK(w.quits == 0);
   CHECK(w.windows->window(first) == nullptr);
+  CHECK(w.lastClosed == 0);
+  CHECK(w.quits == 0);
 
   w.listening.reset();
   auto second = w.open({.title = "Two"});
-  w.windows->closeWindow(second);
+  gtk_window_close(GTK_WINDOW(w.windows->window(second)));
   settle();
-  CHECK(w.quits == 1);
+  CHECK(w.windows->window(second) == nullptr);
+  CHECK(w.lastClosed == 1);
+  CHECK(w.quits == 0);
 }
 
 TEST_CASE("launching the app again raises its window, or asks the app to reopen one when it has none") {
