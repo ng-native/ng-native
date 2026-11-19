@@ -31,6 +31,7 @@ interface Tile {
       [horizontal]="horizontal()"
       [itemVisiblePercentThreshold]="50"
       [windowSize]="windowSize()"
+      [contentInset]="inset()"
       [virtualListNumColumns]="columns()"
       [virtualListColumnGap]="columnGap()"
       (viewableItemsChanged)="viewable.set($event.viewable.map(indexOf))"
@@ -57,6 +58,7 @@ export class VirtualColumns {
   readonly sticky = signal<readonly number[]>([]);
   readonly horizontal = signal(false);
   readonly windowSize = signal(5);
+  readonly inset = signal<{ bottom?: number } | undefined>(undefined);
   readonly viewable = signal<readonly number[]>([]);
   readonly ends: number[] = [];
   readonly indexOf = (row: { index: number }) => row.index;
