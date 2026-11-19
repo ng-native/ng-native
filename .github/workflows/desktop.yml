@@ -323,7 +323,10 @@ jobs:
           for _ in $(seq 120); do curl -fs -o /dev/null http://127.0.0.1:8081/status && break; sleep 1; done
           curl -fs -o /dev/null --max-time 600 \
             'http://127.0.0.1:8081/.expo/.virtual-metro-entry.bundle?platform=linux&dev=true'
-          docker run --rm --network host --user "$(id -u):$(id -g)" -e HOME=/tmp -e GTK_A11Y=none \
+          # The runner's passwd and group, so the user has an entry in the image: the launcher's fake
+          # system UI runs a session bus, which takes no client the system does not know.
+          docker run --rm --init --network host --user "$(id -u):$(id -g)" -e HOME=/tmp -e GTK_A11Y=none \
+            -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro \
             -e NGN_DESKTOP_HOST="$(cat "$probe/build-dir")/gtk/ngn-linux" \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/examples/notes" ngn-el9 \
             node_modules/.bin/vitest run --project linux
