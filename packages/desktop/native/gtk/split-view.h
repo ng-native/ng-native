@@ -74,6 +74,8 @@ class SplitViews {
   // Show Sidebar (F9, the header bar's sidebar button) for the window's split view. Whether there
   // was one.
   bool toggle(SurfaceId surfaceId);
+  // The same for one split view: a nested tabs host's sidebar button.
+  bool toggleHost(Tag split);
 
   // For tests: the AdwNavigationSplitView and its breakpoint, the window crossing the compact
   // width as the breakpoint says, and a source list's GtkListBox.
@@ -116,6 +118,8 @@ class SplitViews {
     bool tabs{false};
     std::vector<Tag> screens;
     GtkWidget *tabList{nullptr};
+    // A nested tabs host's button over its content that shows the tab list while compact.
+    GtkWidget *sidebarButton{nullptr};
   };
   struct Lists {
     std::vector<SourceList> lists;

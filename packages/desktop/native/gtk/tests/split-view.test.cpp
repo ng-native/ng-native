@@ -414,3 +414,80 @@ TEST_CASE("a tabs host is a split view whose sidebar lists its tabs and whose co
   CHECK(splits.splitWidget(2) == nullptr);
   CHECK(splits.lists(2).empty());
 }
+
+namespace {
+
+// The first descendant of `root` that is a button with this tooltip.
+GtkWidget *buttonTipped(GtkWidget *root, const char *tip) {
+  for (GtkWidget *c = gtk_widget_get_first_child(root); c; c = gtk_widget_get_next_sibling(c)) {
+    if (GTK_IS_BUTTON(c) && gtk_widget_get_tooltip_text(c) && std::string(gtk_widget_get_tooltip_text(c)) == tip) {
+      return c;
+    }
+    if (GtkWidget *found = buttonTipped(c, tip)) {
+      return found;
+    }
+  }
+  return nullptr;
+}
+
+} // namespace
+
+TEST_CASE("a tabs host inside a screen has a button that brings its tab list forward while compact") {
+  REQUIRE(ngn::testing::gtkReady());
+  TabsGlue glue;
+  MountedViews views{true, 800, 500};
+  views.backend->hooks.chooseTab = [&views](SurfaceId surface, Tag host, Tag screen) { views.mounting->chooseTab(surface, host, screen); };
+  // The window's own split view comes first; the host after it is not the window's.
+  auto outer = view(10, "NgNativeSplitView", nullptr, {{0, 0}, {800, 500}});
+  auto host = view(2, "RNSTabsHostIOS", std::make_shared<const ViewProps>(), {{0, 0}, {800, 500}});
+  auto library = view(3, "RNSTabsScreenIOS", tab("library", "Library"), {{0, 0}, {560, 500}});
+  auto search = view(4, "RNSTabsScreenIOS", tab("search", "Search"), {{0, 0}, {560, 500}});
+  views.mount({ShadowViewMutation::CreateMutation(outer), ShadowViewMutation::CreateMutation(host), ShadowViewMutation::CreateMutation(library),
+               ShadowViewMutation::CreateMutation(search), ShadowViewMutation::InsertMutation(MountedViews::kSurface, outer, 0),
+               ShadowViewMutation::InsertMutation(MountedViews::kSurface, host, 1), ShadowViewMutation::InsertMutation(2, library, 0),
+               ShadowViewMutation::InsertMutation(2, search, 1)});
+  auto &splits = views.backend->splitViews();
+  GtkWidget *split = splits.splitWidget(2);
+  REQUIRE(split);
+  CHECK(splits.windowSplit(MountedViews::kSurface) == 10);
+  GtkWidget *button = buttonTipped(split, "Show Tabs");
+  auto *navigation = ADW_NAVIGATION_SPLIT_VIEW(split);
+  REQUIRE(button);
+  // Wide: both lists side by side, nothing to bring forward.
+  CHECK_FALSE(gtk_widget_get_visible(button));
+  splits.setCompact(2, true);
+  CHECK(adw_navigation_split_view_get_show_content(navigation));
+  CHECK(gtk_widget_get_visible(button));
+  // The surface's Show Sidebar is the window's split view's, not this host's: the button is.
+  g_signal_emit_by_name(button, "clicked");
+  CHECK_FALSE(adw_navigation_split_view_get_show_content(navigation));
+  CHECK_FALSE(gtk_widget_get_visible(button));
+  splits.setCompact(2, false);
+  CHECK_FALSE(gtk_widget_get_visible(button));
+}
+
+TEST_CASE("a screen moved to another tabs host is no longer the first host's to unhost or size") {
+  REQUIRE(ngn::testing::gtkReady());
+  TabsGlue glue;
+  MountedViews views{true, 800, 500};
+  views.backend->hooks.chooseTab = [&views](SurfaceId surface, Tag host, Tag screen) { views.mounting->chooseTab(surface, host, screen); };
+  auto outer = view(10, "NgNativeSplitView", nullptr, {{0, 0}, {800, 500}});
+  auto first = view(2, "RNSTabsHostIOS", std::make_shared<const ViewProps>(), {{0, 0}, {400, 500}});
+  auto second = view(8, "RNSTabsHostIOS", std::make_shared<const ViewProps>(), {{400, 0}, {400, 500}});
+  auto moved = view(3, "RNSTabsScreenIOS", tab("moved", "Moved"), {{0, 0}, {300, 500}});
+  auto other = view(4, "RNSTabsScreenIOS", tab("other", "Other"), {{0, 0}, {300, 500}});
+  views.mount({ShadowViewMutation::CreateMutation(outer), ShadowViewMutation::CreateMutation(first), ShadowViewMutation::CreateMutation(second),
+               ShadowViewMutation::CreateMutation(moved), ShadowViewMutation::CreateMutation(other),
+               ShadowViewMutation::InsertMutation(MountedViews::kSurface, outer, 0), ShadowViewMutation::InsertMutation(MountedViews::kSurface, first, 1),
+               ShadowViewMutation::InsertMutation(MountedViews::kSurface, second, 2), ShadowViewMutation::InsertMutation(2, moved, 0),
+               ShadowViewMutation::InsertMutation(8, other, 0)});
+  auto &splits = views.backend->splitViews();
+  // Moved without being deleted: out of the first host, into the second.
+  views.mount({ShadowViewMutation::RemoveMutation(2, moved, 0), ShadowViewMutation::InsertMutation(8, moved, 1)});
+  GtkWidget *secondContent = adw_navigation_page_get_child(adw_navigation_split_view_get_content(ADW_NAVIGATION_SPLIT_VIEW(splits.splitWidget(8))));
+  CHECK(gtk_widget_is_ancestor(views.view(3), secondContent));
+  // The first host going takes only what it still holds.
+  views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, first, 1), ShadowViewMutation::DeleteMutation(first)});
+  CHECK(splits.splitWidget(2) == nullptr);
+  CHECK(gtk_widget_is_ancestor(views.view(3), secondContent));
+}

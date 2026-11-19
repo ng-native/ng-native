@@ -265,6 +265,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
             bash -euo pipefail -c '
               probe="$GITHUB_WORKSPACE/.linux-probe"
+              python3 native/scripts/atspi-check.test.py
               Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
               DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
                 "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/notes/main.js" --role "push button" --role label --relation described-by --tab

@@ -238,6 +238,27 @@ void SplitViews::place(SurfaceId surfaceId, Tag split, bool window) {
     contentChild = s.contentToolbar = adw_toolbar_view_new();
     adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(contentChild), s.contentSlot);
   }
+  if (s.tabs && !window) {
+    // A tabs host that is not the window's has no header bar of its own to carry a sidebar button,
+    // and its tab list is its sidebar: a button over the content brings it forward while compact.
+    GtkWidget *overlay = gtk_overlay_new();
+    gtk_overlay_set_child(GTK_OVERLAY(overlay), contentChild);
+    s.sidebarButton = gtk_button_new_from_icon_name("sidebar-show-symbolic");
+    gtk_widget_add_css_class(s.sidebarButton, "circular");
+    gtk_widget_set_halign(s.sidebarButton, GTK_ALIGN_START);
+    gtk_widget_set_valign(s.sidebarButton, GTK_ALIGN_START);
+    gtk_widget_set_margin_start(s.sidebarButton, 6);
+    gtk_widget_set_margin_top(s.sidebarButton, 6);
+    gtk_widget_set_tooltip_text(s.sidebarButton, "Show Tabs");
+    gtk_accessible_update_property(GTK_ACCESSIBLE(s.sidebarButton), GTK_ACCESSIBLE_PROPERTY_LABEL, "Show Tabs", -1);
+    gtk_widget_set_visible(s.sidebarButton, FALSE);
+    g_signal_connect_data(s.sidebarButton, "clicked", G_CALLBACK(+[](GtkButton *, gpointer data) {
+      auto *t = static_cast<RowTarget *>(data);
+      t->splits->toggleHost(t->parent);
+    }), new RowTarget{this, split}, [](gpointer data, GClosure *) { delete static_cast<RowTarget *>(data); }, GConnectFlags(0));
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), s.sidebarButton);
+    contentChild = overlay;
+  }
   AdwNavigationPage *sidebar = adw_navigation_page_new(sidebarChild, "Sidebar");
   AdwNavigationPage *content = adw_navigation_page_new(contentChild, "Content");
   // The router's back and forward are the only history: the stack's own pop is off.
@@ -350,6 +371,13 @@ void SplitViews::host(Split &s, Tag pane) {
 }
 
 void SplitViews::hostScreen(Split &s, Tag screen) {
+  // A screen Fabric moved here from another tabs host leaves that host's list, which would
+  // otherwise unhost it, and size it, as it goes.
+  for (auto &[tag, other] : splits_) {
+    if (&other != &s) {
+      std::erase(other.screens, screen);
+    }
+  }
   backend_.hostView(screen, s.contentSlot);
   if (std::find(s.screens.begin(), s.screens.end(), screen) == s.screens.end()) {
     s.screens.push_back(screen);
@@ -435,6 +463,9 @@ void SplitViews::show(Split &s) {
   }
   // The sidebar button moves with the sidebar: over it beside the content, else to the window's
   // header bar.
+  if (s.sidebarButton) {
+    gtk_widget_set_visible(s.sidebarButton, showing.stacked && showing.content);
+  }
   bool overSidebar = s.window && s.sidebarHeader && !showing.stacked;
   if (overSidebar != s.buttonOverSidebar) {
     s.buttonOverSidebar = overSidebar;
@@ -498,10 +529,15 @@ std::optional<Tag> SplitViews::windowSplit(SurfaceId surfaceId) const {
 
 bool SplitViews::toggle(SurfaceId surfaceId) {
   auto split = windowSplit(surfaceId);
-  if (!split) {
+  return split && toggleHost(*split);
+}
+
+bool SplitViews::toggleHost(Tag split) {
+  auto it = splits_.find(split);
+  if (it == splits_.end()) {
     return false;
   }
-  auto &s = splits_[*split];
+  auto &s = it->second;
   auto collapsed = s.folding.toggle();
   if (collapsed && s.collapse.toolkitChanged(*collapsed)) {
     send(backend_.data(s.sidebar), "sidebarCollapse", folly::dynamic::object("collapsed", *collapsed));

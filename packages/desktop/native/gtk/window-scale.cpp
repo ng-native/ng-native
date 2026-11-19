@@ -61,11 +61,21 @@ void followWindowScale(GtkWidget *window, std::function<void()> changed) {
   }
   // `scale` from GTK 4.12: it changes with every step `scale-factor` takes, and with fractional ones.
   bool fractional = g_object_class_find_property(G_OBJECT_GET_CLASS(surface), "scale") != nullptr;
-  g_signal_connect_data(
-      surface, fractional ? "notify::scale" : "notify::scale-factor",
-      G_CALLBACK(+[](GdkSurface *, GParamSpec *, gpointer data) { (*static_cast<std::function<void()> *>(data))(); }),
-      new std::function<void()>(std::move(changed)), [](gpointer data, GClosure *) { delete static_cast<std::function<void()> *>(data); },
-      GConnectFlags(0));
+  auto connect = [surface](const char *signal, std::function<void()> callback) {
+    g_signal_connect_data(
+        surface, signal, G_CALLBACK(+[](GdkSurface *, GParamSpec *, gpointer data) { (*static_cast<std::function<void()> *>(data))(); }),
+        new std::function<void()>(std::move(callback)), [](gpointer data, GClosure *) { delete static_cast<std::function<void()> *>(data); },
+        GConnectFlags(0));
+  };
+  connect(fractional ? "notify::scale" : "notify::scale-factor", changed);
+  // Showing is a change too: before it windowScale answers with the monitor's scale, and the
+  // compositor's own (1.25 where the monitor says 2) can have been announced before the surface
+  // mapped, so no notification follows it.
+  connect("notify::mapped", [surface, changed = std::move(changed)] {
+    if (gdk_surface_get_mapped(surface)) {
+      changed();
+    }
+  });
 }
 
 } // namespace ngn::gtk

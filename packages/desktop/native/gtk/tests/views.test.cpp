@@ -9,6 +9,8 @@
 
 #include <doctest/doctest.h>
 
+#include <dlfcn.h>
+
 #include <atomic>
 #include <thread>
 
@@ -251,8 +253,19 @@ TEST_CASE("a window's surface takes its fractional scale, and hears a change of 
   // Under a compositor at a fractional scale (NGN_TEST_SCALE: 1.25 under headless mutter), the
   // surface starts at it before the window shows, when GDK still rounds it up, and keeps it once it
   // shows; elsewhere, the whole number.
+  // With no override, the monitor's own: fractional from GTK 4.14 (gdk_monitor_get_scale, found at run
+  // time), else its whole number.
   const char *want = g_getenv("NGN_TEST_SCALE");
-  CHECK(started == doctest::Approx(want ? std::stod(want) : gtk_widget_get_scale_factor(window)));
+  double expected = want ? std::stod(want) : gtk_widget_get_scale_factor(window);
+  if (!want) {
+    using GetScale = double (*)(GdkMonitor *);
+    auto monitorScale = reinterpret_cast<GetScale>(dlsym(RTLD_DEFAULT, "gdk_monitor_get_scale"));
+    GdkMonitor *monitor = gdk_display_get_monitor_at_surface(gtk_widget_get_display(window), gtk_native_get_surface(GTK_NATIVE(window)));
+    if (monitor) {
+      expected = monitorScale ? monitorScale(monitor) : gdk_monitor_get_scale_factor(monitor);
+    }
+  }
+  CHECK(started == doctest::Approx(expected));
   windows.didMount(12);
   ngn::testing::runUntil([&] { return gtk_widget_get_mapped(window); });
   // GDK's own scale: the surface's `scale` from GTK 4.12, the whole-number factor below it.
@@ -269,7 +282,15 @@ TEST_CASE("a window's surface takes its fractional scale, and hears a change of 
   }
   rescaled.clear();
 
+  // The surface mapping is a notification too: a scale the compositor announced before it did, which
+  // the monitor's stood in for, is read again.
   int before = resized;
+  g_object_notify(G_OBJECT(surface), "mapped");
+  CHECK(resized == before + 1);
+  CHECK(rescaled == std::vector<GtkWidget *>{window});
+  rescaled.clear();
+
+  before = resized;
   // As GDK notifies when the window moves to a monitor of another scale, or the scale changes.
   g_object_notify(G_OBJECT(surface), fractional ? "scale" : "scale-factor");
   CHECK(resized == before + 1);
