@@ -6,6 +6,7 @@
 #include <react/renderer/core/ConcreteState.h>
 
 #include <algorithm>
+#include <optional>
 #include <utility>
 
 using namespace facebook::react;
@@ -55,8 +56,14 @@ void syncState(const ScrollBox &box, bool relayout) {
     box.relayoutOwed->store(true);
   }
   Point offset = offsetOf(box);
-  state->updateState([offset, owed = box.relayoutOwed](const ScrollViewState &old) -> StateData::Shared {
-    if (!owed->exchange(false) && old.contentOffset == offset) {
+  // React Native runs an update's callback again when its commit is retried: the update takes the
+  // owed relayout once, and each run after answers as the first did.
+  auto takes = std::make_shared<std::optional<bool>>();
+  state->updateState([offset, owed = box.relayoutOwed, takes](const ScrollViewState &old) -> StateData::Shared {
+    if (!takes->has_value()) {
+      *takes = owed->exchange(false);
+    }
+    if (!**takes && old.contentOffset == offset) {
       return nullptr;
     }
     auto data = std::make_shared<ScrollViewState>(old);
