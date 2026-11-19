@@ -532,6 +532,19 @@ void Headers::refresh() {
   }
 }
 
+void Headers::refreshChrome(SurfaceId surfaceId) {
+  layOut(surfaceId, shown_[surfaceId]);
+}
+
+void Headers::toggleSidebar(SurfaceId surfaceId) {
+  backend_.splitViews().toggle(surfaceId);
+}
+
+GtkWidget *Headers::sidebarButton(SurfaceId surfaceId) const {
+  auto it = shown_.find(surfaceId);
+  return it == shown_.end() ? nullptr : it->second.sidebarButton;
+}
+
 void Headers::removeSurface(SurfaceId surfaceId) {
   if (auto it = shown_.find(surfaceId); it != shown_.end()) {
     clear(surfaceId, it->second);
@@ -581,6 +594,7 @@ void Headers::clear(SurfaceId surfaceId, Shown &shown) {
   shown.packed.clear();
   shown.back = nullptr;
   shown.forward = nullptr;
+  shown.sidebarButton = nullptr;
   shown.buttons = {};
   if (bar && !shown.background.empty()) {
     gtk_widget_remove_css_class(bar, shown.background.c_str());
@@ -595,7 +609,11 @@ void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
   shown.bar = config && config->props ? headerBar(*config->props) : std::nullopt;
   auto subviews = subviewsOf(config);
   shown.layout = headerLayout(shown.bar.value_or(HeaderBar{}), subviews, shown.header && shown.header->canGoBack);
-  if (!bar || !shown.bar || shown.bar->hidden) {
+  // A window with a split view of its own keeps its sidebar button, and the pair, with no header
+  // in front, as the macOS toolbar does.
+  bool header = shown.bar && !shown.bar->hidden;
+  bool sidebar = backend_.splitViews().windowSplit(surfaceId).has_value();
+  if (!bar || (!header && !sidebar)) {
     return;
   }
   const HeaderLayout &layout = shown.layout;
@@ -603,6 +621,18 @@ void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
     shown.packed.push_back(GTK_WIDGET(g_object_ref(widget)));
     return widget;
   };
+  if (sidebar) {
+    GtkWidget *toggle = keep(gtk_button_new_from_icon_name("sidebar-show-symbolic"));
+    gtk_widget_set_tooltip_text(toggle, "Show Sidebar");
+    gtk_accessible_update_property(GTK_ACCESSIBLE(toggle), GTK_ACCESSIBLE_PROPERTY_LABEL, "Show Sidebar", -1);
+    auto *where = new ChevronTarget{this, surfaceId, NavigationDirection::Back};
+    g_signal_connect_data(toggle, "clicked", G_CALLBACK(+[](GtkButton *, gpointer data) {
+      auto *t = static_cast<ChevronTarget *>(data);
+      t->headers->toggleSidebar(t->surfaceId);
+    }), where, [](gpointer data, GClosure *) { delete static_cast<ChevronTarget *>(data); }, GConnectFlags(0));
+    adw_header_bar_pack_start(ADW_HEADER_BAR(bar), toggle);
+    shown.sidebarButton = toggle;
+  }
   auto slotFor = [&](Tag tag) {
     GtkWidget *slot = makeHostSlot();
     // Centred in the bar's height, as a toolbar item is.
@@ -615,9 +645,11 @@ void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
   };
   // The header's tint on its buttons, the back button's included, unless a button has its own; its
   // title colour on the title; its background colour on the bar.
-  std::string tint = colorClass("color", shown.bar->color);
-  shown.background = colorClass("background-color", shown.bar->backgroundColor);
-  addClass(bar, shown.background);
+  std::string tint = header ? colorClass("color", shown.bar->color) : std::string();
+  if (header) {
+    shown.background = colorClass("background-color", shown.bar->backgroundColor);
+    addClass(bar, shown.background);
+  }
   auto button = [&](const BarButton &b) {
     if (b.spacing) {
       GtkWidget *widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
@@ -648,8 +680,10 @@ void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
   // The pair leads the bar while the window has history, or, for an app that reports none, while
   // the stack can go back; the header's hideBackButton and its own left items replace it. The
   // layout is asked as though the screen could go back, so the history has its say as well.
-  bool backAllowed = headerLayout(*shown.bar, subviews, true).back;
-  shown.buttons = historyButtons(shown.history, shown.header && shown.header->canGoBack, !backAllowed);
+  // With no header, only the history has its say.
+  bool backAllowed = header && headerLayout(*shown.bar, subviews, true).back;
+  shown.buttons = header ? historyButtons(shown.history, shown.header && shown.header->canGoBack, !backAllowed)
+                         : historyButtons(shown.history, false, false);
   if (shown.buttons.shown) {
     GtkWidget *pair = keep(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
     gtk_widget_add_css_class(pair, "linked");
@@ -689,6 +723,9 @@ void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
     shown.back = chevron(NavigationDirection::Back);
     shown.forward = chevron(NavigationDirection::Forward);
     adw_header_bar_pack_start(ADW_HEADER_BAR(bar), pair);
+  }
+  if (!header) {
+    return;
   }
   for (Tag tag : layout.left) {
     adw_header_bar_pack_start(ADW_HEADER_BAR(bar), slotFor(tag));

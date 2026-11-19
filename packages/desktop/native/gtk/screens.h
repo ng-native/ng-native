@@ -111,6 +111,12 @@ class Headers {
   void refresh();
   // A view went: a header showing it lets it go.
   void forget(Tag tag);
+  // The window's split view came or went: its sidebar button with it (split-view.h).
+  void refreshChrome(SurfaceId surfaceId);
+  // Show Sidebar, from the sidebar button.
+  void toggleSidebar(SurfaceId surfaceId);
+  // The sidebar button, for tests; null when the window has no split view of its own.
+  GtkWidget *sidebarButton(SurfaceId surfaceId) const;
   // A surface went: its header, history and pair with it.
   void removeSurface(SurfaceId surfaceId);
   // The window's history, as the app's router reports it (MenuHost::history), for the pair.
@@ -140,6 +146,7 @@ class Headers {
     HistoryButtons buttons;
     GtkWidget *back{nullptr};
     GtkWidget *forward{nullptr};
+    GtkWidget *sidebarButton{nullptr};
     // The bar's background colour class.
     std::string background;
   };

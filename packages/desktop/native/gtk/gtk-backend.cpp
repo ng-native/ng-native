@@ -38,10 +38,12 @@ void relayout(GtkWidget *widget) {
 GtkBackend::GtkBackend()
     : uiThread_(std::this_thread::get_id()),
       headers_(std::make_unique<Headers>(*this)),
-      modals_(std::make_unique<Modals>(*this)) {}
+      modals_(std::make_unique<Modals>(*this)),
+      splitViews_(std::make_unique<SplitViews>(*this)) {}
 
 GtkBackend::~GtkBackend() {
   // Each gives back the views it hosts before the views go.
+  splitViews_.reset();
   modals_.reset();
   headers_.reset();
   for (auto &[tag, entry] : searchEntries_) {
@@ -201,6 +203,9 @@ void GtkBackend::createView(const ShadowView &view) {
     // in the content.
     gtk_widget_set_child_visible(widget, FALSE);
     hooks.containerRoot(view.tag, true);
+  } else if (d->component == SidebarSectionComponentName) {
+    // Its source list draws it, over the space it takes (split-view.h).
+    gtk_widget_set_child_visible(widget, FALSE);
   } else if (d->component == "RNSSearchBar") {
     GtkWidget *entry = makeSearchEntry(*this, view.tag);
     searchEntries_[view.tag] = GTK_WIDGET(g_object_ref_sink(entry));
@@ -225,6 +230,7 @@ void GtkBackend::deleteView(SurfaceId, Tag tag) {
   }
   modals_->unmounted(tag);
   headers_->forget(tag);
+  splitViews_->deleted(tag);
   unhostView(tag);
   if (viewData(it->second)->component == "RNSScreenStackHeaderConfig") {
     hooks.containerRoot(tag, false);
@@ -265,6 +271,7 @@ void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int ind
   if (viewData(c->second)->component == "ModalHostView") {
     modals_->mounted(surfaceId, child);
   }
+  splitViews_->inserted(parent, child);
 }
 
 void GtkBackend::removeChild(SurfaceId, Tag, Tag child, int) {
@@ -297,6 +304,7 @@ void GtkBackend::updateProps(const ShadowView &view) {
   if (GtkWidget *entry = searchEntry(view.tag); entry && view.props) {
     applySearchBar(entry, *view.props);
   }
+  splitViews_->propsChanged(view.tag);
   relayout(it->second);
 }
 
@@ -415,6 +423,7 @@ void GtkBackend::setFrontHeader(SurfaceId surfaceId, const std::optional<ScreenS
 
 void GtkBackend::didMount(SurfaceId surfaceId) {
   modals_->settle();
+  splitViews_->layOut();
   headers_->refresh();
   if (onMount) {
     onMount(surfaceId);
@@ -427,6 +436,14 @@ void GtkBackend::updateDesktopProps(SurfaceId, Tag tag, const DesktopProps &prop
     d->desktop = props;
     updateScrollers(*d);
   }
+}
+
+void GtkBackend::setSplitView(SurfaceId surfaceId, Tag split, bool window) {
+  splitViews_->place(surfaceId, split, window);
+}
+
+void GtkBackend::setSourceLists(SurfaceId, Tag parent, const std::vector<SourceList> &lists) {
+  splitViews_->setSourceLists(parent, lists);
 }
 
 void GtkBackend::setSvgDrawing(SurfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) {

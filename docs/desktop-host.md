@@ -77,6 +77,12 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   sheet, and a screen presented with `present()`, is an `AdwDialog` in the window on libadwaita
   1.5 and later, found at run time, and a drawn sheet on a dimmed overlay on 1.4; a cover fills the
   overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. A
+  `<split-view>` is an `AdwNavigationSplitView` in an `AdwBreakpointBin` (`split-view.h`), each
+  pane in a page of its own as a container for input, its size going back to layout as state. The
+  core owns collapse (`FoldingSplit`): the bin's breakpoint, at the core's `sidebarCompactWidth`,
+  only reports the width, and the split view's `collapsed` and `show-content` show the result. The
+  sections are a `GtkListBox` over their frames, drawn from the core's `sourceLists`, and Show
+  Sidebar (F9) and the header bar's sidebar button go to the window's split view. A
   presented screen's header is the sheet's own header bar, with Cancel at the start and bound to
   Escape and the last right item the default on Return. Close Window asks the presentation in
   front of the window to close (`Modals::front`) before the window. Each tray icon is a
