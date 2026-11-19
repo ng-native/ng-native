@@ -179,9 +179,9 @@ Fabric names are their own - whatever codegen produced from each library's spec 
 | ------------------------ | --------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `web-view`               | `react-native-webview`                              |                                                                              |
 | `slider`                 | `@react-native-community/slider`                    |                                                                              |
-| `date-time-picker`       | `@react-native-community/datetimepicker`            | iOS only. See below.                                                         |
+| `date-time-picker`       | `@react-native-community/datetimepicker`            | iOS and macOS. See below.                                                    |
 | `picker` / `picker-item` | `@react-native-picker/picker`                       | Items are `<picker-item>` children.                                          |
-| `segmented-control`      | `@react-native-segmented-control/segmented-control` | iOS only. See below.                                                         |
+| `segmented-control`      | `@react-native-segmented-control/segmented-control` | iOS and macOS. See below.                                                    |
 | `masked-view`            | `@react-native-masked-view/masked-view`             | `maskElement` is a prop, not a child.                                        |
 | `pager-view`             | `react-native-pager-view`                           | The swipeable pager a tab layout is built on.                                |
 | `lottie-view`            | `lottie-react-native`                               |                                                                              |
@@ -191,8 +191,10 @@ Fabric names are their own - whatever codegen produced from each library's spec 
 `segmented-control` is a view manager from before Fabric, run through the interop layer, which
 only installs its `onChange` native block when the prop is set - as React's handler does by being
 there. Bind `(change)` or nothing fires. `SegmentedControl` (`segmented-control.ts`) is a thin
-typed component over this element for strict templates: import it and keep registering the name -
-the component supplies the types, the registration is what makes the element commit.
+typed component over this element for strict templates, and it registers the element the first time
+one is made, so an app that imports it needs no `registerNativeViews` call; `DateTimePicker` does
+the same for its own. On iOS the library still has to be installed. On macOS the desktop host draws
+both as AppKit controls, with no library installed.
 
 On macOS `slider`, `picker` and `masked-view` are absent: their libraries have no macOS view, so
 the element is a plain view and the desktop host's view registry reports it missing. Use

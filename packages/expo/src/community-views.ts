@@ -83,3 +83,19 @@ export function registerNativeViews(...elements: readonly (keyof typeof NATIVE_V
     registerViewName(element, known[0], known[1]);
   }
 }
+
+/** The known views already registered by a component that draws one, so each is named once. */
+const claimed = new Set<string>();
+
+/**
+ * Registers `element` the first time a component that draws it is made: importing
+ * `SegmentedControl` or `DateTimePicker` is the app asking for the view, so it never commits as an
+ * empty view for want of a `registerNativeViews` call. The engine names a node's view at commit,
+ * after its component is made, so the first one is named too.
+ */
+export function claimNativeView(element: keyof typeof NATIVE_VIEWS): void {
+  if (claimed.has(element)) return;
+  claimed.add(element);
+  registerNativeViews(element);
+}
+

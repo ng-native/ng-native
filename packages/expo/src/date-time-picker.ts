@@ -5,7 +5,8 @@
  * library's native view rather than its React component, so what it takes is the view's own: the
  * date is `date` in milliseconds where the component's is `value` as a `Date`, the style is
  * `displayIOS`, and a pick is a `change` event carrying a `timestamp`. This claims the element so
- * strict templates know that, and takes a `Date` wherever the view takes milliseconds.
+ * strict templates know that, takes a `Date` wherever the view takes milliseconds, and registers
+ * the element the first time one is made, so no `registerNativeViews` call is needed.
  *
  * iOS only. On Android the library has no view, only a module that opens a dialog, and the element
  * commits as nothing.
@@ -13,6 +14,7 @@
 import { Component, input, output } from '@angular/core';
 import type { ControlSize } from '@ng-native/device';
 import type { NativeSyntheticEvent } from '@ng-native/fabric';
+import { claimNativeView } from './community-views.ts';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
 
 /** What the picker sends when the user picks: the moment in milliseconds, and its UTC offset. */
@@ -72,4 +74,8 @@ export class DateTimePicker {
   readonly change = output<DateTimePickerChangeEvent>();
   /** The compact picker's popover closed. */
   readonly pickerDismiss = output<NativeSyntheticEvent<null>>();
+
+  constructor() {
+    claimNativeView('date-time-picker');
+  }
 }
