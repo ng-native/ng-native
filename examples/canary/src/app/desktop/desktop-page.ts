@@ -15,7 +15,7 @@ import {
   View,
   type FileDropEvent,
 } from '@ng-native/components';
-import { AppWindows, OS, Tray, UndoStack, type OsName } from '@ng-native/device';
+import { AppWindows, Dialogs, OS, Tray, UndoStack, type OsName } from '@ng-native/device';
 import { DateTimePicker } from '@ng-native/expo';
 import { Notifications } from '@ng-native/expo/notifications';
 import { NativeHeader } from '@ng-native/router';
@@ -109,6 +109,12 @@ const MENU_NOTES: Record<OsName, string> = {
       </view>
       <text class="hint">A time between 9:00 and 17:30, which the picker keeps it within.</text>
 
+      <text class="heading">A choice of five</text>
+      <view class="desktop-row">
+        <native-button testID="choose" (press)="chooseColour()">Choose a Colour</native-button>
+      </view>
+      <text class="hint">{{ colour() }}</text>
+
       <text class="heading">Tray and badge</text>
       <view class="desktop-row">
         <native-button testID="tray" [disabled]="!tray.available()" (press)="toggleTray()">
@@ -194,7 +200,9 @@ export class DesktopPage {
   protected readonly menuNote = MENU_NOTES[this.os];
   protected readonly page = page;
 
+  private readonly dialogs = inject(Dialogs);
   protected readonly stars = signal(0);
+  protected readonly colour = signal('More than three choices stack one above another.');
   protected readonly opens = new Date(2026, 2, 14, 9, 0).getTime();
   protected readonly closes = new Date(2026, 2, 14, 17, 30).getTime();
   protected readonly time = signal(new Date(2026, 2, 14, 14, 45).getTime());
@@ -213,6 +221,15 @@ export class DesktopPage {
   protected readonly undoTitle = computed(() =>
     this.undo.undoLabel() ? 'Undo ' + this.undo.undoLabel() : 'Undo',
   );
+
+  protected async chooseColour(): Promise<void> {
+    const colours = ['Red', 'Orange', 'Green', 'Blue', 'Cancel'];
+    const at = await this.dialogs.choose('Pick a colour', [
+      ...colours.slice(0, 4).map((label) => ({ label })),
+      { label: 'Cancel', style: 'cancel' as const },
+    ]);
+    this.colour.set(at === null ? 'Dismissed.' : `Chose ${colours[at]}.`);
+  }
 
   protected addStar(): void {
     this.stars.update((count) => count + 1);
