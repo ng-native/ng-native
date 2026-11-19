@@ -5,7 +5,7 @@
  * image's `saveAsync()` edits and writes the file. Nothing native is held between calls, so
  * `release()` has nothing to free.
  */
-import { desktopHost } from './desktop-host.ts';
+import { desktopHost, rebuildHost } from './desktop-host.ts';
 
 type Expo = typeof import('expo-image-manipulator');
 type Action = import('expo-image-manipulator').Action;
@@ -37,7 +37,7 @@ export function desktopImageEditor(): Pick<Expo, 'ImageManipulator'> | null {
     const method = host[name];
     if (!method) {
       throw new Error(
-        `[angular-native] ImageEditor: this build of the macOS host has no ${name}: rebuild it with "npm run macos".`,
+        `[angular-native] ImageEditor: this build of the desktop host has no ${name}: ${rebuildHost()}.`,
       );
     }
     return method;
