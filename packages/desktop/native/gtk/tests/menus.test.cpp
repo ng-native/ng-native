@@ -101,6 +101,33 @@ TEST_CASE("the menu model holds the core's items, in sections between separators
   g_object_unref(group);
 }
 
+TEST_CASE("every item in a disabled menu is a disabled action, as a key press finds none of them") {
+  REQUIRE(ngn::testing::gtkReady());
+  std::vector<std::string> chosen;
+  std::vector<MenuItem> bar{
+      {.title = "Note",
+       .items = {{.title = "New", .command = MenuCommand::AppItem, .id = "new"},
+                 {.title = "Share",
+                  .items = {{.title = "Mail", .command = MenuCommand::AppItem, .key = "m", .modifiers = ngn::Control, .id = "mail"},
+                            {.title = "More", .items = {{.title = "Fax", .command = MenuCommand::AppItem, .id = "fax"}}}},
+                  .disabled = true}}},
+  };
+  GSimpleActionGroup *group = g_simple_action_group_new();
+  GMenuModel *model = ngn::gtk::buildMenu(bar, group, [&chosen](const MenuItem &item) { chosen.push_back(item.id); });
+  CHECK(ngn::findMenuItem(bar, ngn::KeyChord{.key = "m", .modifiers = ngn::Control}) == nullptr);
+  // New, an enabled menu's item, stays enabled; Mail, under the disabled Share, does not, nor Fax,
+  // in an enabled menu under it.
+  CHECK(g_action_group_get_action_enabled(G_ACTION_GROUP(group), "item-0"));
+  CHECK_FALSE(g_action_group_get_action_enabled(G_ACTION_GROUP(group), "item-1"));
+  CHECK_FALSE(g_action_group_get_action_enabled(G_ACTION_GROUP(group), "item-2"));
+  g_action_group_activate_action(G_ACTION_GROUP(group), "item-1", nullptr);
+  g_action_group_activate_action(G_ACTION_GROUP(group), "item-2", nullptr);
+  g_action_group_activate_action(G_ACTION_GROUP(group), "item-0", nullptr);
+  CHECK(chosen == std::vector<std::string>{"new"});
+  g_object_unref(model);
+  g_object_unref(group);
+}
+
 TEST_CASE("a window's primary menu or KDE menu bar shows the bar once it has one, and takes the new one") {
   REQUIRE(ngn::testing::gtkReady());
   for (auto placement : {ngn::MenuPlacement::PrimaryMenu, ngn::MenuPlacement::MenuBar}) {
@@ -174,6 +201,7 @@ TEST_CASE("a window's keys: the app's shortcuts first, then a menu item's key, t
         return false;
       },
       .navigation = [](const ngn::KeyChord &chord) { return ngn::navigationFor(chord, ngn::linuxOs()); },
+      .editingKey = [](const ngn::KeyChord &chord) { return ngn::editingChord(chord, ngn::linuxOs()); },
       .navigate = [&log](ngn::NavigationDirection d, GtkWindow *) { log.push_back(d == ngn::NavigationDirection::Back ? "back" : "forward"); },
       .menuKey = [&bar](const ngn::KeyChord &chord) { return ngn::findMenuItem(bar, chord); },
       .choose = [&log](const MenuItem &item, GtkWindow *) { log.push_back(item.title); },
@@ -196,15 +224,21 @@ TEST_CASE("a window's keys: the app's shortcuts first, then a menu item's key, t
   // GTK shows a button pressed for a moment before it clicks.
   ngn::testing::runUntil([&saves, &cancels] { return saves == 1 && cancels == 1; });
 
-  // In a text input: the app's shortcut still comes first, the entry keeps Ctrl+C, and Return is
-  // the entry's own (activate).
+  // In a text input: the app's shortcut still comes first, the entry keeps Ctrl+C and Ctrl+X, even
+  // from an item of the app's on Ctrl+X, and Return is the entry's own (activate).
+  bar.insert(bar.begin(), MenuItem{.title = "Note", .items = {{.title = "Cut Note", .command = MenuCommand::AppItem, .key = "x", .modifiers = ngn::Control, .id = "cut-note"}}});
   log.clear();
   gtk_widget_grab_focus(entry);
-  play("key k cmd\nkey c cmd\nkey q cmd\nkey return\n");
+  play("key k cmd\nkey c cmd\nkey x cmd\nkey q cmd\nkey return\n");
   CHECK(log == std::vector<std::string>{"shortcut in text", "Quit"});
   gint64 later = g_get_monotonic_time() + 400 * 1000;
   ngn::testing::runUntil([later] { return g_get_monotonic_time() > later; });
   CHECK(saves == 1);
+  // Out of one, the app's item takes it.
+  log.clear();
+  gtk_root_set_focus(GTK_ROOT(window), nullptr);
+  play("key x cmd\n");
+  CHECK(log == std::vector<std::string>{"Cut Note"});
 
   // A disabled default button takes no Return.
   gtk_root_set_focus(GTK_ROOT(window), nullptr);

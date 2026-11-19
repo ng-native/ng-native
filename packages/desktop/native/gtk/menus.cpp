@@ -49,7 +49,9 @@ struct Chosen {
   std::function<void(const MenuItem &)> chosen;
 };
 
-void addItems(GMenu *menu, const std::vector<MenuItem> &items, GSimpleActionGroup *group, const std::function<void(const MenuItem &)> &chosen, int &next) {
+// `disabled` when a menu above is: its items are too, as findMenuItem skips the whole branch.
+void addItems(GMenu *menu, const std::vector<MenuItem> &items, GSimpleActionGroup *group, const std::function<void(const MenuItem &)> &chosen, int &next,
+              bool disabled) {
   GMenu *section = g_menu_new();
   auto flush = [&] {
     if (g_menu_model_get_n_items(G_MENU_MODEL(section)) > 0) {
@@ -69,7 +71,7 @@ void addItems(GMenu *menu, const std::vector<MenuItem> &items, GSimpleActionGrou
     }
     if (!item.items.empty()) {
       GMenu *sub = g_menu_new();
-      addItems(sub, item.items, group, chosen, next);
+      addItems(sub, item.items, group, chosen, next, disabled || item.disabled);
       if (item.inlineItems) {
         flush();
         g_menu_append_section(menu, nullptr, G_MENU_MODEL(sub));
@@ -82,7 +84,7 @@ void addItems(GMenu *menu, const std::vector<MenuItem> &items, GSimpleActionGrou
     std::string name = actionName(next++);
     GSimpleAction *action = item.checked ? g_simple_action_new_stateful(name.c_str(), nullptr, g_variant_new_boolean(TRUE))
                                          : g_simple_action_new(name.c_str(), nullptr);
-    g_simple_action_set_enabled(action, !item.disabled);
+    g_simple_action_set_enabled(action, !disabled && !item.disabled);
     g_signal_connect_data(
         action, item.checked ? "change-state" : "activate", G_CALLBACK(+[](GSimpleAction *, GVariant *, gpointer data) {
           auto *c = static_cast<Chosen *>(data);
@@ -158,7 +160,7 @@ std::string acceleratorOf(const MenuItem &item) {
 GMenuModel *buildMenu(const std::vector<MenuItem> &items, GSimpleActionGroup *group, std::function<void(const MenuItem &)> chosen) {
   GMenu *menu = g_menu_new();
   int next = 0;
-  addItems(menu, items, group, chosen, next);
+  addItems(menu, items, group, chosen, next, false);
   return G_MENU_MODEL(menu);
 }
 
@@ -295,7 +297,8 @@ void routeKeys(GtkWindow *window, std::shared_ptr<KeyRouting> routing) {
           return TRUE;
         }
         const MenuItem *item = routing->menuKey ? routing->menuKey(chord) : nullptr;
-        if (!item || (text && isEditingCommand(item->command))) {
+        // A focused text input keeps its editing keys, from the app's items as from the OS's.
+        if (!item || (text && (isEditingCommand(item->command) || (routing->editingKey && routing->editingKey(chord))))) {
           return FALSE;
         }
         routing->choose(*item, window);
