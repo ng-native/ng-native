@@ -137,6 +137,15 @@ TEST_CASE("the user closing the last window is the host's to act on only when no
   CHECK(w.lastClosed == 0);
   CHECK(w.quits == 0);
 
+  // A window the core does not track closes at once, but the app still listens, so its
+  // quitWhenLastWindowCloses has decided already: the core's lastWindowClosed says no.
+  w.windows->openWindow(99, ngn::WindowRequest{.title = "Untracked"}, ngn::WindowPlacement{}, nullptr);
+  ngn::testing::runUntil([&w] { return w.windows->window(99) != nullptr; });
+  gtk_window_close(GTK_WINDOW(w.windows->window(99)));
+  settle();
+  CHECK(w.windows->window(99) == nullptr);
+  CHECK(w.lastClosed == 0);
+
   w.listening.reset();
   auto second = w.open({.title = "Two"});
   gtk_window_close(GTK_WINDOW(w.windows->window(second)));
