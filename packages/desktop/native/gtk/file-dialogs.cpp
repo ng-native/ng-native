@@ -24,21 +24,22 @@ std::string joined(const std::vector<std::string> &types) {
   return out;
 }
 
-// One filter of every type, as the portal takes it: (name, [(1, mime type)]).
-GVariant *portalFilter(const std::vector<std::string> &types) {
+// One filter of every type, as the portal takes it: (name, [(1, mime type)]), named `name` or the
+// types listed.
+GVariant *portalFilter(const std::vector<std::string> &types, const std::string &name) {
   GVariantBuilder patterns;
   g_variant_builder_init(&patterns, G_VARIANT_TYPE("a(us)"));
   for (const auto &type : types) {
     g_variant_builder_add(&patterns, "(us)", 1u, type.c_str());
   }
-  return g_variant_new("(s@a(us))", joined(types).c_str(), g_variant_builder_end(&patterns));
+  return g_variant_new("(s@a(us))", (name.empty() ? joined(types) : name).c_str(), g_variant_builder_end(&patterns));
 }
 
-void addFilter(GVariantBuilder *options, const std::vector<std::string> &types) {
+void addFilter(GVariantBuilder *options, const std::vector<std::string> &types, const std::string &name = "") {
   if (types.empty()) {
     return;
   }
-  GVariant *filter = g_variant_ref_sink(portalFilter(types));
+  GVariant *filter = g_variant_ref_sink(portalFilter(types, name));
   GVariantBuilder filters;
   g_variant_builder_init(&filters, G_VARIANT_TYPE("a(sa(us))"));
   g_variant_builder_add_value(&filters, filter);
@@ -64,10 +65,10 @@ std::vector<std::string> urisOf(GVariant *results) {
 }
 
 // Asks the FileChooser portal, against the front window: `fallBack` runs when no portal answers.
-void askPortal(const char *method, const char *title, GVariantBuilder *options, Paths done, std::function<void(Paths)> fallBack) {
-  portal::parentHandle(portal::frontWindow(), [method, title, options, done = std::move(done), fallBack = std::move(fallBack)](
+void askPortal(const char *method, std::string title, GVariantBuilder *options, Paths done, std::function<void(Paths)> fallBack) {
+  portal::parentHandle(portal::frontWindow(), [method, title = std::move(title), options, done = std::move(done), fallBack = std::move(fallBack)](
                                                   const std::string &parent, std::function<void()> drop) mutable {
-    portal::request(kFileChooser, method, g_variant_new("(ss)", parent.c_str(), title), options, nullptr,
+    portal::request(kFileChooser, method, g_variant_new("(ss)", parent.c_str(), title.c_str()), options, nullptr,
                     [done = std::move(done), fallBack = std::move(fallBack), drop = std::move(drop)](portal::Outcome outcome, GVariant *results) mutable {
                       drop();
                       if (outcome == portal::Outcome::Absent) {
@@ -82,13 +83,13 @@ void askPortal(const char *method, const char *title, GVariantBuilder *options, 
 }
 
 // GTK's own dialog, where no portal answers.
-GtkFileDialog *gtkDialog(const char *title, const std::vector<std::string> &types) {
+GtkFileDialog *gtkDialog(const char *title, const std::vector<std::string> &types, const std::string &name = "") {
   GtkFileDialog *dialog = gtk_file_dialog_new();
   gtk_file_dialog_set_title(dialog, title);
   gtk_file_dialog_set_modal(dialog, TRUE);
   if (!types.empty()) {
     GtkFileFilter *filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, joined(types).c_str());
+    gtk_file_filter_set_name(filter, (name.empty() ? joined(types) : name).c_str());
     for (const auto &type : types) {
       gtk_file_filter_add_mime_type(filter, type.c_str());
     }
@@ -145,9 +146,10 @@ class PortalFileDialogs final : public FileDialogs {
       GVariantBuilder *options = g_variant_builder_new(G_VARIANT_TYPE_VARDICT);
       g_variant_builder_add(options, "{sv}", "modal", g_variant_new_boolean(TRUE));
       g_variant_builder_add(options, "{sv}", "multiple", g_variant_new_boolean(request.multiple));
-      addFilter(options, request.types);
-      askPortal("OpenFile", request.multiple ? "Open Files" : "Open File", options, std::move(done), [request](Paths done) {
-        GtkFileDialog *dialog = gtkDialog(request.multiple ? "Open Files" : "Open File", request.types);
+      addFilter(options, request.types, request.filterName);
+      std::string title = !request.title.empty() ? request.title : request.multiple ? "Open Files" : "Open File";
+      askPortal("OpenFile", title, options, std::move(done), [request, title](Paths done) {
+        GtkFileDialog *dialog = gtkDialog(title.c_str(), request.types, request.filterName);
         if (request.multiple) {
           gtk_file_dialog_open_multiple(dialog, portal::frontWindow(), nullptr, finished, later([](GtkFileDialog *d, GAsyncResult *r, GError **e) {
             std::optional<std::vector<std::string>> out;

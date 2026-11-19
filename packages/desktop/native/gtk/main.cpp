@@ -851,6 +851,7 @@ int main(int argc, char *argv[]) {
     }
   }
   setRunningBundle(bundle);
+  auto fileDialogs = ngn::gtk::makeFileDialogs();
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
   // is left empty, and its module is not registered: JavaScript reads it as absent (NgNativeHost).
   auto desktopModules = ngn::addDesktopModules(
@@ -878,7 +879,7 @@ int main(int argc, char *argv[]) {
                                                      [badge](int count) { badge->setBadge(count); });
            },
        .undo = gHost.undo,
-       .fileDialogs = ngn::gtk::makeFileDialogs(),
+       .fileDialogs = fileDialogs,
        .fileWatcher = ngn::gtk::makeFileWatcher(),
        .location = ngn::gtk::makeLocationSource(),
        .bundle = ngn::bundleFactsOf(settings.plist),
@@ -886,6 +887,8 @@ int main(int argc, char *argv[]) {
        .pathMonitor = ngn::gtk::makePathMonitor(),
        .power = ngn::gtk::makePowerSource(),
        .fontRegistrar = ngn::gtk::makeFontRegistrar(),
+       // ImagePicker's library half: the FileChooser portal over the user's files. No camera yet.
+       .photoPicker = ngn::makeFilePhotoPicker(fileDialogs, caches + "/ImagePicker", ngn::gtk::imagePixelSize),
        .imageCodec = ngn::gtk::makeImageCodec(),
        .printSystem = ngn::gtk::makePrintSystem(surfaceWidgetOf),
        .crypto = ngn::gtk::makeCryptoSource(),

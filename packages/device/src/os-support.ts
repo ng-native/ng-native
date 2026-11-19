@@ -288,7 +288,14 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
     'yes',
     'absent',
   ]),
-  expoRow('ImagePicker', 'NgNativeImagePicker', NOT_ON_LINUX),
+  expoRow('ImagePicker', 'NgNativeImagePicker', [
+    'yes',
+    'the library through the file chooser; no camera',
+    'yes',
+    'yes',
+    'yes',
+    'absent',
+  ]),
   expoRow('KeepAwake', 'NgNativeKeepAwake'),
   expoRow('Locale', 'NgNativeLocalization'),
   expoRow('Location', 'NgNativeLocation', [

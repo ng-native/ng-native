@@ -1,8 +1,11 @@
 // DocumentPicker's dialogs, the clipboard and printing on GTK: the FileChooser and Print portals
 // against a stand-in, the display's GdkClipboard, and GtkPrintOperation's output as a PDF.
+#include "../app-windows.h"
 #include "../file-dialogs.h"
 #include "../host-sources.h"
+#include "../image-manipulator.h"
 #include "../printing.h"
+#include "ngn/photo-library.h"
 #include "mounted-views.h"
 #include "stand-in-portal.h"
 
@@ -86,6 +89,47 @@ TEST_CASE("DocumentPicker opens files through the FileChooser portal, with its t
   CHECK_FALSE(*chosen);
   CHECK_FALSE(portal.calls.back().multiple);
   CHECK(portal.calls.back().types.empty());
+}
+
+TEST_CASE("ImagePicker chooses images and videos through the FileChooser portal, and reads an image's size with gdk-pixbuf") {
+  REQUIRE(ngn::testing::gtkReady());
+  StandInPortal portal;
+  auto photo = temporaryPath("ngn-picked") + ".png";
+  std::ofstream(photo, std::ios::binary) << pngBytes(30, 20);
+  gchar *uri = g_filename_to_uri(photo.c_str(), nullptr, nullptr);
+  portal.uris = {uri};
+  g_free(uri);
+  auto caches = temporaryPath("ngn-picker-caches");
+  auto picker = ngn::makeFilePhotoPicker(ngn::gtk::makeFileDialogs(), caches, ngn::gtk::imagePixelSize);
+  std::optional<std::optional<std::vector<ngn::PhotoPicker::Picked>>> picked;
+  picker->pick(folly::dynamic::object("mediaTypes", folly::dynamic::array("images", "videos"))("allowsMultipleSelection", true),
+               [&picked](auto answer) { ngn::gtk::onMainContext([&picked, answer]() mutable { picked = std::move(answer); }); });
+  ngn::testing::runUntil([&] { return picked.has_value(); });
+  REQUIRE(portal.calls.size() == 1);
+  CHECK(portal.calls[0].method == "OpenFile");
+  CHECK(portal.calls[0].second == "Choose Images or Videos");
+  CHECK(portal.calls[0].multiple);
+  CHECK(portal.calls[0].types == std::vector<std::string>{"image/*", "video/*"});
+  CHECK(portal.calls[0].filterName == "Images and Videos");
+  REQUIRE(*picked);
+  REQUIRE((*picked)->size() == 1);
+  const auto &image = (**picked)[0];
+  CHECK(image.uri.starts_with(ngn::fileUri(caches)));
+  CHECK(image.mimeType == "image/png");
+  CHECK(image.width == 30);
+  CHECK(image.height == 20);
+  CHECK_FALSE(ngn::gtk::imagePixelSize(caches + "/none.png"));
+
+  // Cancelled.
+  portal.response = 1;
+  picked.reset();
+  picker->pick(folly::dynamic::object(), [&picked](auto answer) { ngn::gtk::onMainContext([&picked, answer]() mutable { picked = std::move(answer); }); });
+  ngn::testing::runUntil([&] { return picked.has_value(); });
+  CHECK_FALSE(*picked);
+  CHECK(portal.calls.back().second == "Choose an Image");
+  CHECK(portal.calls.back().types == std::vector<std::string>{"image/*"});
+  std::filesystem::remove_all(caches);
+  std::filesystem::remove(photo);
 }
 
 TEST_CASE("DocumentPicker saves through SaveFile with the suggested name, and chooses a folder through OpenFile") {
