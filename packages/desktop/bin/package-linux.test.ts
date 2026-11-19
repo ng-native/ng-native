@@ -928,6 +928,19 @@ describe('ng-native-desktop package --os linux', () => {
     }
   });
 
+  it('does not build an x64 host on a machine of another architecture, such as riscv64', async () => {
+    const { root, sys, calls } = linuxApp();
+    try {
+      await assert.rejects(
+        packageWith({ ...sys, arch: 'riscv64' }, ['--arch', 'x64']),
+        /builds on Linux only for now[\s\S]*no prebuilt Linux x64 host/,
+      );
+      assert.ok(!calls.some((call) => call.command.endsWith('build.sh')));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('packages on a Mac from the prebuilt Linux host, compiling with the macOS host hermesc', async () => {
     const { root, app, sys, calls } = linuxApp({ platform: 'darwin' });
     const cache = path.join(root, 'cache');
