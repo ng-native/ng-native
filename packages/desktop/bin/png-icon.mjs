@@ -75,6 +75,11 @@ function readHeader(png, body) {
   png.height = body.readUInt32BE(4);
   png.depth = body[8] ?? 0;
   png.type = body[9] ?? 0;
+  if (png.width > MAX_SIDE || png.height > MAX_SIDE) {
+    throw new Error(
+      `it is ${png.width} by ${png.height}; save it at ${MAX_SIDE} pixels a side or fewer`,
+    );
+  }
   if (body[12] !== 0) throw new Error('it is interlaced; save it without interlacing');
 }
 
@@ -150,6 +155,28 @@ function pixelColour({ type, depth, palette, transparency }, raw) {
   return [colours[index * 3] ?? 0, colours[index * 3 + 1] ?? 0, colours[index * 3 + 2] ?? 0, alpha];
 }
 
+/** The longest side this decodes: an icon is 1024, and a header can claim far more than it holds. */
+const MAX_SIDE = 4096;
+
+/**
+ * The image data inflated, which must be exactly `size` bytes: inflating stops there, so a
+ * stream that expands without end cannot use the memory.
+ *
+ * @param {Buffer[]} chunks
+ * @param {number} size
+ */
+function inflated(chunks, size) {
+  let data;
+  try {
+    data = inflateSync(Buffer.concat(chunks), { maxOutputLength: size });
+  } catch (error) {
+    if (error instanceof RangeError) throw new Error('its image data is more than its header says');
+    throw error;
+  }
+  if (data.length !== size) throw new Error('its image data is not the size its header says');
+  return data;
+}
+
 /** The bit depths each colour type may have. */
 const DEPTHS = /** @type {Record<number, number[]>} */ ({
   0: [1, 2, 4, 8, 16],
@@ -180,7 +207,7 @@ export function decodePng(bytes) {
   if (type === 3 && !png.palette) throw new Error('it has a palette type and no palette');
   const bitsPerPixel = channels * depth;
   const stride = Math.ceil((width * bitsPerPixel) / 8);
-  const rows = unfilterRows(inflateSync(Buffer.concat(png.data)), {
+  const rows = unfilterRows(inflated(png.data, (stride + 1) * height), {
     height,
     stride,
     // A pixel narrower than a byte filters against the byte before it.
