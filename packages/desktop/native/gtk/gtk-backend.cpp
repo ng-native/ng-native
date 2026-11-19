@@ -1,6 +1,8 @@
 #include "gtk-backend.h"
 
 #include "accessible.h"
+#include "image-view.h"
+#include "scroll-view.h"
 #include "text-field.h"
 #include "view-widget.h"
 
@@ -115,6 +117,11 @@ void GtkBackend::createView(const ShadowView &view) {
   d->layout = view.layoutMetrics;
   if (d->component == "TextInput") {
     makeTextField(widget, *d);
+  } else if (d->component == "ScrollView") {
+    makeScrollView(widget, *d);
+    applyScrollViewState(*d);
+  } else if (d->component == "Image") {
+    makeImageView(widget, *d);
   }
   applyViewProps(widget, *d);
   views_[view.tag] = widget;
@@ -147,13 +154,18 @@ void GtkBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
   }
   // Fabric's order is the drawing order. The index counts views only: a TextInput's field is a
   // child of its own, after them.
-  GtkWidget *sibling = gtk_widget_get_first_child(p->second);
+  GtkWidget *parentWidget = contentWidget(p->second);
+  GtkWidget *sibling = gtk_widget_get_first_child(parentWidget);
   for (int i = 0; sibling; sibling = gtk_widget_get_next_sibling(sibling)) {
     if (!NGN_IS_VIEW(sibling) || i++ == index) {
       break;
     }
   }
-  gtk_widget_insert_before(c->second, p->second, sibling);
+  gtk_widget_insert_before(c->second, parentWidget, sibling);
+  // An Image's source was picked before it had a window, at the first monitor's scale.
+  if (ViewData *d = viewData(c->second); d && d->image) {
+    applyImageProps(*d, gtk_widget_get_scale_factor(c->second));
+  }
 }
 
 void GtkBackend::removeChild(SurfaceId, Tag, Tag child, int) {
@@ -176,6 +188,10 @@ void GtkBackend::updateProps(const ShadowView &view) {
     applyAccessibility(it->second, *accessibility);
   }
   applyTextFieldProps(*d);
+  applyScrollViewProps(*d);
+  if (d->image) {
+    applyImageProps(*d, gtk_widget_get_scale_factor(it->second));
+  }
   relayout(it->second);
 }
 
@@ -184,6 +200,7 @@ void GtkBackend::updateState(const ShadowView &view) {
     ViewData *d = viewData(it->second);
     d->state = view.state;
     forgetText(*d);
+    applyScrollViewState(*d);
     // A Paragraph's label is its text, which is in its state, and so is whether it is static text
     // or no element at all.
     followRole(view);
@@ -240,6 +257,11 @@ void GtkBackend::followRole(const ShadowView &view) {
     gtk_widget_set_child_visible(child, childVisible);
     g_object_unref(child);
   }
+  // An Image hears a new scale through its widget: the new one listens too, and keeps the load.
+  // Once parented, so it picks by its window's scale rather than the first monitor's.
+  if (viewData(next)->image) {
+    makeImageView(next, *viewData(next));
+  }
   it->second = next;
   if (field && GTK_IS_TEXT(focus)) {
     // Focusing a GtkText selects all of it: the caret stays where the user left it.
@@ -258,8 +280,10 @@ void GtkBackend::updateLayout(const ShadowView &view) {
     ViewData *d = viewData(it->second);
     d->layout = view.layoutMetrics;
     forgetText(*d);
-    // A field's natural alignment follows the layout's direction.
+    // A field's natural alignment follows the layout's direction, and a scroll view's scroll bars
+    // the content's size against its own.
     applyTextFieldProps(*d);
+    updateScrollers(*d);
     relayout(it->second);
   }
 }
@@ -273,6 +297,7 @@ void GtkBackend::updateEventEmitter(const ShadowView &view) {
 void GtkBackend::dispatchCommand(Tag tag, const std::string &name, const folly::dynamic &args) {
   if (auto it = views_.find(tag); it != views_.end()) {
     textFieldCommand(*viewData(it->second), name, args);
+    scrollViewCommand(*viewData(it->second), name, args);
   }
 }
 
@@ -290,7 +315,13 @@ void GtkBackend::didMount(SurfaceId surfaceId) {
   }
 }
 
-void GtkBackend::updateDesktopProps(SurfaceId, Tag, const DesktopProps &) {}
+void GtkBackend::updateDesktopProps(SurfaceId, Tag tag, const DesktopProps &props) {
+  if (auto it = views_.find(tag); it != views_.end()) {
+    ViewData *d = viewData(it->second);
+    d->desktop = props;
+    updateScrollers(*d);
+  }
+}
 
 std::vector<facebook::react::ComponentDescriptorProvider> GtkBackend::componentProviders() const {
   return libraryComponents();
