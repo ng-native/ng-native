@@ -16,9 +16,18 @@ const { checkPublishing, compare, releaseVersion } = (await import(script.href))
 const published = ['0.0.1', '0.17.0', '0.17.1', '0.18.0', '0.18.1'];
 
 describe('the version a release takes', () => {
-  it('is the bump when no exact version is given', () => {
-    assert.equal(releaseVersion('minor', '', published, '0.18.1'), 'minor');
-    assert.equal(releaseVersion('patch', '  ', published, '0.18.1'), 'patch');
+  // Every job takes this output as the version, the prebuilt desktop hosts' URLs included, so a
+  // bump comes out as the version nx release makes of it from the version on disk.
+  it('is the version the bump makes when no exact version is given', () => {
+    assert.equal(releaseVersion('minor', '', published, '0.18.1'), '0.19.0');
+    assert.equal(releaseVersion('patch', '  ', published, '0.18.1'), '0.18.2');
+  });
+
+  it('bumps a prerelease on disk as semver does', () => {
+    const rc = [...published, '0.19.0-rc.0', '0.19.1-rc.0'];
+    assert.equal(releaseVersion('minor', '', rc, '0.19.0-rc.0'), '0.19.0');
+    assert.equal(releaseVersion('minor', '', rc, '0.19.1-rc.0'), '0.20.0');
+    assert.equal(releaseVersion('patch', '', rc, '0.19.1-rc.0'), '0.19.1');
   });
 
   it('is the exact version over the bump', () => {

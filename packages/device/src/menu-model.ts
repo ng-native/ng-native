@@ -149,6 +149,21 @@ function linuxMenuBar(appName: string): MenuGroupModel[] {
 }
 
 /**
+ * The groups of a merged menu bar (`mergeMenuBar`) that have no `menuRole` and are named as one
+ * of the default menus is: each is drawn as a second menu of that name beside the default one,
+ * since only a role merges a group into its menu.
+ */
+export function unmergedGroups(
+  defaults: readonly MenuGroupModel[],
+  merged: readonly MenuGroupModel[],
+): string[] {
+  const named = new Set(defaults.map((group) => group.label.toLowerCase()));
+  return merged
+    .filter((group) => !group.menuRole && named.has(group.label.toLowerCase()))
+    .map((group) => group.label);
+}
+
+/**
  * The menu bar every desktop app gets on `os`. On macOS: App, File, Edit, View, Window and Help,
  * each item with its role and standard shortcut. `Settings...` is in it until the merge, which
  * keeps it only when the app gives it a handler. File holds Print... (`mod+p`), which prints the
