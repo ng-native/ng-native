@@ -488,7 +488,6 @@ int main(int argc, char *argv[]) {
   gtk_window_set_default_size(GTK_WINDOW(gHost.appWindow), width, height);
   gHost.appSurface = ngn::gtk::makeSurfaceWidget(kAppSurface, [](int w, int h) {
     reportContainer(kAppSurface);
-    reportContainer(kAppSurface, w, h);
     // Each allocation, a new size or a new scale: Dimensions follows the window, as on macOS.
     if (gHost.state) {
       gHost.state->metrics.set(windowMetrics(w, h));
