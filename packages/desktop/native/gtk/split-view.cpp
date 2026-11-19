@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <string>
 
 using facebook::react::ConcreteState;
@@ -170,6 +171,54 @@ void SplitViews::moveHeaderBar(Split &s, bool overContent) {
   g_object_unref(header);
 }
 
+namespace {
+
+// Whether `widget` is in a window and shown there: no ancestor is hidden, or a covered child.
+bool shownInWindow(GtkWidget *widget) {
+  if (!widget || !gtk_widget_get_root(widget)) {
+    return false;
+  }
+  for (GtkWidget *w = widget; w; w = gtk_widget_get_parent(w)) {
+    if (!gtk_widget_get_visible(w) || !gtk_widget_get_child_visible(w)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+} // namespace
+
+void SplitViews::placeHeader(SurfaceId surfaceId) {
+  Split *shown = nullptr;
+  for (auto &[tag, s] : splits_) {
+    if (s.surfaceId == surfaceId && s.window && s.contentToolbar && shownInWindow(backend_.view(tag))) {
+      shown = &s;
+      break;
+    }
+  }
+  // Back over the window first, from a split view that is not the one it goes to.
+  for (auto &[tag, s] : splits_) {
+    if (s.surfaceId == surfaceId && &s != shown) {
+      moveHeaderBar(s, false);
+    }
+  }
+  if (shown) {
+    moveHeaderBar(*shown, true);
+  }
+}
+
+void SplitViews::placeHeaders() {
+  std::set<SurfaceId> surfaces;
+  for (const auto &[tag, s] : splits_) {
+    if (s.window && s.contentToolbar) {
+      surfaces.insert(s.surfaceId);
+    }
+  }
+  for (SurfaceId surfaceId : surfaces) {
+    placeHeader(surfaceId);
+  }
+}
+
 void SplitViews::tearDown(Split &s) {
   moveHeaderBar(s, false);
   for (Tag pane : {s.sidebar, s.content}) {
@@ -209,6 +258,19 @@ void SplitViews::place(SurfaceId surfaceId, Tag split, bool window) {
     s.sidebarHeader = adw_header_bar_new();
     adw_header_bar_set_show_title(ADW_HEADER_BAR(s.sidebarHeader), FALSE);
     adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(sidebarChild), s.sidebarHeader);
+    // A compact window shows the sidebar alone while the window's header bar, with the sidebar
+    // button, is on the hidden content: this brings the content back.
+    s.contentButton = gtk_button_new_from_icon_name("go-next-symbolic");
+    gtk_widget_set_tooltip_text(s.contentButton, "Show Content");
+    gtk_accessible_update_property(GTK_ACCESSIBLE(s.contentButton), GTK_ACCESSIBLE_PROPERTY_LABEL, "Show Content", -1);
+    gtk_widget_set_visible(s.contentButton, FALSE);
+    g_signal_connect_data(s.contentButton, "clicked", G_CALLBACK(+[](GtkButton *, gpointer data) {
+      auto *t = static_cast<RowTarget *>(data);
+      if (auto it = t->splits->splits_.find(t->parent); it != t->splits->splits_.end()) {
+        t->splits->toggle(it->second.surfaceId);
+      }
+    }), new RowTarget{this, split}, [](gpointer data, GClosure *) { delete static_cast<RowTarget *>(data); }, GConnectFlags(0));
+    adw_header_bar_pack_start(ADW_HEADER_BAR(s.sidebarHeader), s.contentButton);
     adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(sidebarChild), s.sidebarSlot);
     contentChild = s.contentToolbar = adw_toolbar_view_new();
     adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(contentChild), s.contentSlot);
@@ -255,7 +317,7 @@ void SplitViews::place(SurfaceId surfaceId, Tag split, bool window) {
   show(s);
   gtk_widget_queue_allocate(widget);
   if (fullHeight) {
-    moveHeaderBar(s, true);
+    placeHeader(surfaceId);
     // A header bar in a page shows the page's title when it has no title widget of its own: the
     // window's, as it showed over the whole window.
     // libadwaita asks every page for a title, so an untitled window leaves the page's.
@@ -335,6 +397,9 @@ void SplitViews::show(Split &s) {
   if (adw_navigation_split_view_get_show_content(view) != showing.content) {
     adw_navigation_split_view_set_show_content(view, showing.content);
   }
+  if (s.contentButton) {
+    gtk_widget_set_visible(s.contentButton, showing.stacked && !showing.content);
+  }
 }
 
 void SplitViews::propsChanged(Tag tag) {
@@ -397,6 +462,7 @@ void SplitViews::deleted(Tag tag) {
     tearDown(it->second);
     splits_.erase(it);
     if (window) {
+      placeHeader(surfaceId);
       backend_.headers().refreshChrome(surfaceId);
     }
   }
@@ -641,6 +707,11 @@ void SplitViews::refill(Tag parent) {
 GtkWidget *SplitViews::splitWidget(Tag split) const {
   auto it = splits_.find(split);
   return it == splits_.end() ? nullptr : it->second.view;
+}
+
+GtkWidget *SplitViews::contentButton(Tag split) const {
+  auto it = splits_.find(split);
+  return it == splits_.end() ? nullptr : it->second.contentButton;
 }
 
 AdwBreakpoint *SplitViews::breakpoint(Tag split) const {

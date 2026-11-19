@@ -75,7 +75,7 @@ TEST_CASE("a view that stops naming others has its relations cleared, and a dele
   CHECK(relations.didMount(1).empty());
 }
 
-TEST_CASE("an id names a view on the same surface only, the one made first where several have it") {
+TEST_CASE("an id names a view on the same surface only, the lowest tag where several have it") {
   ngn::AccessibilityRelations relations;
   relations.update(view(7, props("name"), 2));
   relations.update(view(4, props("", {"name"})));

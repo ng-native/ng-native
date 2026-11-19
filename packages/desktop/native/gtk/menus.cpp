@@ -284,7 +284,10 @@ void routeKeys(GtkWindow *window, std::shared_ptr<KeyRouting> routing) {
         }
         auto chord = chordOf(keyval, static_cast<GdkModifierType>(state & gtk_accelerator_get_default_mod_mask()));
         if (chord.key.empty()) {
-          return FALSE;
+          // No chord for the shortcuts and menus to match, but the keypad's arrows, Home, End and
+          // Tab are the focus's as their plain keys are, which have a chord. The chord the others
+          // read stays empty, so no binding of Home answers keypad Home.
+          return routing->focus && routing->focus(window, keyval, state);
         }
         bool text = textInputFocused(window);
         if (routing->shortcut && routing->shortcut(chord, text)) {

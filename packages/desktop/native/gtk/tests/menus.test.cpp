@@ -278,3 +278,44 @@ TEST_CASE("the app's undo history runs its actions on the UI thread, whichever t
   settle();
   CHECK(ran.size() == 1);
 }
+
+TEST_CASE("the keypad's navigation keys reach the focus callback as the plain ones do, and no binding of the plain key hears them") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkWidget *window = gtk_window_new();
+  std::vector<guint> focused;
+  std::vector<std::string> bound;
+  ngn::gtk::routeKeys(GTK_WINDOW(window), std::make_shared<ngn::gtk::KeyRouting>(ngn::gtk::KeyRouting{
+      .shortcut = [&bound](const ngn::KeyChord &chord, bool) {
+        bound.push_back(chord.key);
+        return false;
+      },
+      .focus = [&focused](GtkWindow *, guint keyval, GdkModifierType) {
+        focused.push_back(keyval);
+        return true;
+      },
+  }));
+  // The window's capture-phase key controller, as GTK would hand it the press.
+  GtkEventController *routing = nullptr;
+  GListModel *controllers = gtk_widget_observe_controllers(window);
+  for (guint i = 0; i < g_list_model_get_n_items(controllers) && !routing; i++) {
+    auto *c = static_cast<GtkEventController *>(g_list_model_get_item(controllers, i));
+    if (GTK_IS_EVENT_CONTROLLER_KEY(c) && gtk_event_controller_get_propagation_phase(c) == GTK_PHASE_CAPTURE) {
+      routing = c;
+    }
+    g_object_unref(c);
+  }
+  g_object_unref(controllers);
+  REQUIRE(routing);
+  auto press = [routing](guint keyval) {
+    gboolean used = FALSE;
+    g_signal_emit_by_name(routing, "key-pressed", keyval, 0u, GdkModifierType(0), &used);
+    return used;
+  };
+  for (guint keyval : {GDK_KEY_Home, GDK_KEY_KP_Home, GDK_KEY_KP_Left, GDK_KEY_KP_Up, GDK_KEY_KP_End, GDK_KEY_KP_Down}) {
+    CHECK(press(keyval));
+  }
+  CHECK(focused == std::vector<guint>{GDK_KEY_Home, GDK_KEY_KP_Home, GDK_KEY_KP_Left, GDK_KEY_KP_Up, GDK_KEY_KP_End, GDK_KEY_KP_Down});
+  // The shortcut lookup saw the plain Home only.
+  CHECK(bound == std::vector<std::string>{"Home"});
+  gtk_window_destroy(GTK_WINDOW(window));
+}
