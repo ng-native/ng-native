@@ -1307,18 +1307,21 @@ export class VirtualList<T> extends ScrollViewProps {
     const offset = this.topOf(index) + within;
     this.lastOffset = offset;
     this.anchor = { key: this.keyAt(index), within, items, index };
-    this.moveTo(index, true);
+    this.jumpTo(index);
+    this.moveTo(index);
     this.scrollToOffset({ offset: this.headerHeight() + offset, animated: options.animated });
   }
 
   /** Scroll to an offset along the list's own axis: x when it is horizontal, y otherwise. */
   scrollToOffset(options: { offset: number; animated?: boolean }): void {
     const { offset, animated = true } = options;
+    this.jumpTo(this.indexAt(offset - this.headerHeight()));
     const [x, y] = this.horizontal() ? [offset, 0] : [0, offset];
     this.engine.dispatchCommand(this.node, 'scrollTo', [x, y, animated]);
   }
 
   scrollToEnd(options: { animated?: boolean } = {}): void {
+    this.jumpTo(this.items().length - 1);
     this.engine.dispatchCommand(this.node, 'scrollToEnd', [options.animated ?? true]);
   }
 
@@ -1383,18 +1386,21 @@ export class VirtualList<T> extends ScrollViewProps {
     return { ahead: extra - behind, behind };
   }
 
-  /**
-   * Move the window to a new visible row. A jump past the rendered rows starts the fill over, so
-   * it renders one viewport, not the whole filled window, in a single pass. A scroll keeps it: one
-   * past the rendered rows is a fling outrunning them, which is what the fill is for.
-   */
-  private moveTo(visible: number, jump = false): void {
+  /** Move the window to a new visible row. */
+  private moveTo(visible: number): void {
     this.turn(Math.sign(visible - this.visible()));
-    const span = this.span();
-    if (jump && span && (visible < span.first || visible >= span.last)) {
-      this.fill.set({ before: 0, after: 0 });
-    }
     this.visible.set(visible);
+  }
+
+  /**
+   * Start the fill over before a scroll the list is told to make lands past the rendered rows, so
+   * it renders one viewport there, not the whole filled window, in a single pass. A scroll the
+   * user makes keeps it: one past the rendered rows is a fling outrunning them, which is what the
+   * fill is for.
+   */
+  private jumpTo(index: number): void {
+    const span = this.span();
+    if (span && (index < span.first || index >= span.last)) this.fill.set({ before: 0, after: 0 });
   }
 
   /**
@@ -1407,6 +1413,14 @@ export class VirtualList<T> extends ScrollViewProps {
     this.fill.set(this.reach());
   }
 
+  /** The side the window grows on next, ahead of the scroll first, or null once both are full. */
+  private nextFill(reach: { before: number; after: number }): 'before' | 'after' | null {
+    const { ahead, behind } = this.fillCaps();
+    const [front, back] =
+      this.direction() > 0 ? (['after', 'before'] as const) : (['before', 'after'] as const);
+    return reach[front] < ahead ? front : reach[back] < behind ? back : null;
+  }
+
   /**
    * Grow the window by a viewport once the JS thread has been free for a batch period, ahead of
    * the scroll first. Every window change restarts the wait, so a fling is never slowed by it.
@@ -1415,10 +1429,7 @@ export class VirtualList<T> extends ScrollViewProps {
     clearTimeout(this.fillTimer);
     const reach = this.reach();
     if (!this.span() || this.viewport() <= 0) return;
-    const { ahead, behind } = this.fillCaps();
-    const [front, back] =
-      this.direction() > 0 ? (['after', 'before'] as const) : (['before', 'after'] as const);
-    const side = reach[front] < ahead ? front : reach[back] < behind ? back : null;
+    const side = this.nextFill(reach);
     if (!side) return;
     this.fillTimer = setTimeout(
       () => this.fill.set({ ...reach, [side]: reach[side] + 1 }),

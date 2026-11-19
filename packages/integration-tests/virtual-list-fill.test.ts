@@ -41,7 +41,11 @@ describe('windowed list filling while idle', () => {
   let host: FakeFabricNode;
   let instance: {
     windowSize: { set(value: number): void };
-    list(): { scrollToIndex(options: { index: number }): void };
+    list(): {
+      scrollToIndex(options: { index: number }): void;
+      scrollToOffset(options: { offset: number; animated?: boolean }): void;
+      scrollToEnd(options?: { animated?: boolean }): void;
+    };
   };
   let unmount: () => void;
   const real = { setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
@@ -165,6 +169,41 @@ describe('windowed list filling while idle', () => {
     instance.list().scrollToIndex({ index: 500 });
     await settle();
     assert.deepEqual(edges(fabric), [498, 511]);
+  });
+
+  it('starts the fill over after scrollToOffset past the window', async () => {
+    await scrollTo(100);
+    await idle();
+    instance.list().scrollToOffset({ offset: 500 * ITEM_HEIGHT, animated: false });
+    // Native reports the offset it moved to.
+    await scrollTo(500);
+    assert.deepEqual(edges(fabric), [498, 511]);
+  });
+
+  it('keeps the fill for a scrollToOffset inside the window', async () => {
+    await scrollTo(100);
+    await idle();
+    instance.list().scrollToOffset({ offset: 105 * ITEM_HEIGHT, animated: false });
+    await scrollTo(105);
+    assert.deepEqual(edges(fabric), [95, 145]);
+  });
+
+  it('starts the fill over for a scrollToOffset to the row just past the window', async () => {
+    await scrollTo(100);
+    await idle();
+    // Rows 90 to 140 are rendered.
+    instance.list().scrollToOffset({ offset: 141 * ITEM_HEIGHT, animated: false });
+    await scrollTo(141);
+    assert.deepEqual(edges(fabric), [139, 152]);
+  });
+
+  it('starts the fill over after scrollToEnd', async () => {
+    await scrollTo(100);
+    await idle();
+    instance.list().scrollToEnd({ animated: false });
+    // The last viewport: rows 990 to 999.
+    await scrollTo(990);
+    assert.deepEqual(edges(fabric), [988, 999]);
   });
 
   it('follows windowSize up and down', async () => {
