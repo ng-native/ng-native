@@ -111,6 +111,57 @@ GtkWidget *accessibleWidget(const ViewData &view) {
   return view.field ? fieldWidget(*view.field) : view.widget;
 }
 
+namespace {
+
+struct AxActions {
+  GSimpleActionGroup *group{nullptr};
+  std::function<bool(GtkWidget *, AxVerb)> perform;
+};
+
+constexpr std::pair<const char *, AxVerb> kVerbs[] = {
+    {"press", AxVerb::Press}, {"increment", AxVerb::Increment}, {"decrement", AxVerb::Decrement}, {"cancel", AxVerb::Cancel}};
+
+} // namespace
+
+void applyAccessibleActions(GtkWidget *widget, const AxInfo &info, std::function<bool(GtkWidget *, AxVerb)> perform) {
+  auto *actions = static_cast<AxActions *>(g_object_get_data(G_OBJECT(widget), "ngn-ax-actions"));
+  bool offers = info.element && (info.offersPress || info.offersIncrement || info.offersCancel);
+  if (!actions && !offers) {
+    return;
+  }
+  if (!actions) {
+    actions = new AxActions{g_simple_action_group_new(), std::move(perform)};
+    for (const auto &[name, verb] : kVerbs) {
+      GSimpleAction *action = g_simple_action_new(name, nullptr);
+      g_signal_connect(action, "activate", G_CALLBACK(+[](GSimpleAction *self, GVariant *, gpointer data) {
+        auto *widget = static_cast<GtkWidget *>(data);
+        auto *actions = static_cast<AxActions *>(g_object_get_data(G_OBJECT(widget), "ngn-ax-actions"));
+        const char *name = g_action_get_name(G_ACTION(self));
+        for (const auto &[verbName, verb] : kVerbs) {
+          if (actions && std::string_view(name) == verbName) {
+            actions->perform(widget, verb);
+          }
+        }
+      }), widget);
+      g_action_map_add_action(G_ACTION_MAP(actions->group), G_ACTION(action));
+      g_object_unref(action);
+    }
+    gtk_widget_insert_action_group(widget, "accessibility", G_ACTION_GROUP(actions->group));
+    g_object_set_data_full(G_OBJECT(widget), "ngn-ax-actions", actions, +[](gpointer data) {
+      auto *a = static_cast<AxActions *>(data);
+      g_object_unref(a->group);
+      delete a;
+    });
+  }
+  auto enable = [actions](const char *name, bool on) {
+    g_simple_action_set_enabled(G_SIMPLE_ACTION(g_action_map_lookup_action(G_ACTION_MAP(actions->group), name)), on);
+  };
+  enable("press", info.element && info.offersPress);
+  enable("increment", info.element && info.offersIncrement);
+  enable("decrement", info.element && info.offersIncrement);
+  enable("cancel", info.element && info.offersCancel);
+}
+
 bool announceOn(GtkWidget *widget, const Announcement &announcement) {
   using Announce = void (*)(GtkAccessible *, const char *, int);
   static auto announce = reinterpret_cast<Announce>(dlsym(RTLD_DEFAULT, "gtk_accessible_announce"));

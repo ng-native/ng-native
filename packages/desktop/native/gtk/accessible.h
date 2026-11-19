@@ -37,6 +37,12 @@ void applyAccessibility(GtkWidget *widget, const AxInfo &info);
 // The widget that is the view's accessible element: a text input's field, else the view's own.
 GtkWidget *accessibleWidget(const ViewData &view);
 
+// The view's press, increment, decrement and cancel as the widget's `accessibility` actions, which
+// GTK lists on AT-SPI's Action interface for a screen reader to invoke, each enabled while `info`
+// offers it, as AppKit's perform methods are. `perform` sends one. A native control and a text
+// input's field are GTK's own widgets with GTK's own actions, and get none.
+void applyAccessibleActions(GtkWidget *widget, const AxInfo &info, std::function<bool(GtkWidget *, AxVerb)> perform);
+
 // Says `announcement` through `widget`'s window, at its priority, with gtk_accessible_announce,
 // found at run time: GTK 4.14 and later. Below it nothing is said. Whether it was.
 bool announceOn(GtkWidget *widget, const Announcement &announcement);

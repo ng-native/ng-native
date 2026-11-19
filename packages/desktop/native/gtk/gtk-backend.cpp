@@ -229,6 +229,7 @@ void GtkBackend::createView(const ShadowView &view) {
   d->props = view.props;
   d->state = view.state;
   d->emitter = view.eventEmitter;
+  d->surfaceId = view.surfaceId;
   d->layout = view.layoutMetrics;
   if (d->component == "TextInput") {
     makeTextField(widget, *d);
@@ -256,6 +257,7 @@ void GtkBackend::createView(const ShadowView &view) {
   makeControl(widget, *d);
   if (auto accessibility = accessibilityOf(view)) {
     applyAccessibility(accessibleWidget(*d), *accessibility);
+    applyActions(*d, *accessibility);
   }
   applyViewProps(widget, *d);
   views_[view.tag] = widget;
@@ -342,6 +344,7 @@ void GtkBackend::updateProps(const ShadowView &view) {
   applyViewProps(it->second, *d);
   if (auto accessibility = accessibilityOf(view)) {
     applyAccessibility(accessibleWidget(*d), *accessibility);
+    applyActions(*d, *accessibility);
   }
   applyTextFieldProps(*d);
   applyScrollViewProps(*d);
@@ -368,12 +371,31 @@ void GtkBackend::updateState(const ShadowView &view) {
     followRole(view);
     if (auto accessibility = accessibilityOf(view)) {
       applyAccessibility(accessibleWidget(*d), *accessibility);
+    applyActions(*d, *accessibility);
     }
     if (d->component == "Paragraph" && d->state) {
       accessibleTextChanged(d->widget, before, paragraphText(d->state));
     }
     gtk_widget_queue_draw(d->widget);
   }
+}
+
+void GtkBackend::applyActions(ViewData &d, const AxInfo &info) {
+  // A native control and a text input's field are GTK's own widgets, with GTK's own actions.
+  if (d.field || d.control) {
+    return;
+  }
+  applyAccessibleActions(d.widget, info, [this](GtkWidget *widget, AxVerb verb) {
+    ViewData *v = viewData(widget);
+    auto props = v ? std::dynamic_pointer_cast<const facebook::react::ViewProps>(v->props) : nullptr;
+    auto emitter = v ? std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(v->emitter) : nullptr;
+    if (!props) {
+      return false;
+    }
+    SurfaceId surface = v->surfaceId;
+    Tag tag = v->tag;
+    return performAxVerb(*props, emitter.get(), verb, [this, surface, tag] { return hooks.activate(surface, tag); });
+  });
 }
 
 void GtkBackend::followRole(const ShadowView &view) {
