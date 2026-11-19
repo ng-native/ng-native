@@ -1254,9 +1254,11 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
     gtk_popover_popup(GTK_POPOVER(presented.popover));
   }
   hold(surfaceId);
-  if (!gtk_widget_child_focus(presented.slot, GTK_DIR_TAB_FORWARD)) {
+  if (!gtk_widget_child_focus(presented.slot, GTK_DIR_TAB_FORWARD) && !presented.popover) {
     // Nothing in it takes focus (a drawn sheet of text): the slot does, so a background field that
     // had focus does not keep the keys, which GTK does not take back when it stops being focusable.
+    // Not a popover: GTK moves focus into that as it shows, and one with nothing to focus leaves
+    // the window's own focus alone (the popover takes it itself only when nothing had it).
     gtk_widget_set_focusable(presented.slot, TRUE);
     gtk_widget_grab_focus(presented.slot);
   }
