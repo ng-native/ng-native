@@ -9,6 +9,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <functional>
 
 using ngn::SvgBrush;
 using ngn::SvgElement;
@@ -247,6 +248,16 @@ namespace {
 std::atomic<int> gBrokenRequests{0};
 }
 
+namespace {
+// Runs its function when it goes out of scope, as a failed REQUIRE leaves the test too.
+struct AtExit {
+  std::function<void()> run;
+  ~AtExit() {
+    run();
+  }
+};
+} // namespace
+
 @interface BrokenImageProtocol : NSURLProtocol
 @end
 
@@ -270,11 +281,13 @@ std::atomic<int> gBrokenRequests{0};
 
 TEST_CASE("an svg image that failed to load is not asked for again on later draws") {
   [NSURLProtocol registerClass:BrokenImageProtocol.class];
+  AtExit unregister{[] { [NSURLProtocol unregisterClass:BrokenImageProtocol.class]; }};
   gBrokenRequests = 0;
   std::vector<uint8_t> data(4, 0);
   CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
   CGContextRef context = CGBitmapContextCreate(data.data(), 1, 1, 8, 4, space, kCGImageAlphaPremultipliedLast);
   CGColorSpaceRelease(space);
+  AtExit release{[context] { CGContextRelease(context); }};
   std::string uri = "ngn-broken-image://host/" + std::to_string(arc4random()) + ".png";
   auto draw = [&] {
     auto canvas = NGNMakeCGCanvas(context, CGSizeMake(1, 1), 1, nil);
@@ -296,8 +309,6 @@ TEST_CASE("an svg image that failed to load is not asked for again on later draw
     CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.3, false);
   }
   CHECK(gBrokenRequests == 1);
-  [NSURLProtocol unregisterClass:BrokenImageProtocol.class];
-  CGContextRelease(context);
 }
 
 // A layer that keeps the transform it is given, as the host's views' layers do (host-view.mm).
