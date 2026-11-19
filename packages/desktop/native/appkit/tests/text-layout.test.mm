@@ -269,3 +269,42 @@ TEST_CASE("Each paragraph's wrapped lines take that paragraph's direction") {
   CHECK_FALSE(layout.lines.front().rightToLeft);
   CHECK_FALSE(layout.lines.back().rightToLeft);
 }
+
+TEST_CASE("The measurer's lines give each line's box and the first baseline the drawing uses") {
+  ngn::CoreTextMeasurer measurer;
+  auto string = stringOf({fragment(kWords, 20)});
+  ParagraphAttributes paragraph;
+  auto layout = ngn::layoutText(string, paragraph, 200.5);
+  auto lines = measurer.lines(string, paragraph, 200);
+  REQUIRE(lines.size() == layout.lines.size());
+  REQUIRE(lines.size() > 1);
+  // The first baseline, from the top of the text, is where the drawing puts it.
+  CHECK(LineMeasurement::baseline(lines) == doctest::Approx(layout.lines[0].origin.y));
+  CHECK(LineMeasurement::baseline(lines) > 15);
+  CHECK(lines[0].frame.origin.y == 0);
+  CHECK(lines[1].frame.origin.y == doctest::Approx(lines[0].frame.size.height));
+  CHECK(lines[0].capHeight > lines[0].xHeight);
+  CHECK(lines[0].xHeight > 0);
+  CHECK(lines[0].descender > 0);
+  std::string joined;
+  for (const auto &line : lines) {
+    joined += line.text;
+  }
+  CHECK(joined == kWords);
+}
+
+TEST_CASE("A centred or right-aligned line reports where the drawing puts it") {
+  ngn::CoreTextMeasurer measurer;
+  ParagraphAttributes paragraph;
+  for (auto alignment : {TextAlignment::Center, TextAlignment::Right}) {
+    auto f = fragment("short", 16);
+    f.textAttributes.alignment = alignment;
+    auto lines = measurer.lines(stringOf({f}), paragraph, 300);
+    REQUIRE(lines.size() == 1);
+    // Ink starts where the line is reported to start, give or take the glyph's side bearing.
+    int ink = leftmostInk(ngn::layoutText(stringOf({f}), paragraph, 300.5), 300, 40);
+    CHECK(lines[0].frame.origin.x > 50);
+    CHECK(std::abs(ink - lines[0].frame.origin.x) < 3);
+  }
+}
+
