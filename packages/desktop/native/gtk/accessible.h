@@ -16,6 +16,11 @@
 
 #include <gtk/gtk.h>
 
+#include <functional>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace ngn::gtk {
 
 struct ViewData;
@@ -37,11 +42,25 @@ void applyAccessibility(GtkWidget *widget, const AxInfo &info);
 // The widget that is the view's accessible element: a text input's field, else the view's own.
 GtkWidget *accessibleWidget(const ViewData &view);
 
+// Where a view's accessible actions go: `perform` sends a press, increment, decrement or cancel,
+// and `send` a declared action by the name the app gave it.
+struct AccessibleActionSinks {
+  std::function<bool(GtkWidget *, AxVerb)> perform;
+  std::function<bool(GtkWidget *, const std::string &)> send;
+};
+
 // The view's press, increment, decrement and cancel as the widget's `accessibility` actions, which
 // GTK lists on AT-SPI's Action interface for a screen reader to invoke, each enabled while `info`
-// offers it, as AppKit's perform methods are. `perform` sends one. A native control and a text
-// input's field are GTK's own widgets with GTK's own actions, and get none.
-void applyAccessibleActions(GtkWidget *widget, const AxInfo &info, std::function<bool(GtkWidget *, AxVerb)> perform);
+// offers it, as AppKit's perform methods are; and its declared actions (`accessibilityActions`) as
+// its `custom` actions, as AppKit lists custom actions. GTK gives AT-SPI an action's name and no
+// label, so a screen reader reads `custom.<name>`. A native control and a text input's field are
+// GTK's own widgets with GTK's own actions, and get none.
+void applyAccessibleActions(GtkWidget *widget, const AxInfo &info, AccessibleActionSinks sinks);
+
+// The declared actions' GAction names, with the names the app declared: a GAction name takes only
+// letters, digits, '-' and '.', so each other character becomes '-', and a name already taken gets
+// a number ("delete-2").
+std::vector<std::pair<std::string, std::string>> customActionNames(const std::vector<AxAction> &declared);
 
 // Says `announcement` through `widget`'s window, at its priority, with gtk_accessible_announce,
 // found at run time: GTK 4.14 and later. Below it nothing is said. Whether it was.

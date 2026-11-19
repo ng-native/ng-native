@@ -2,6 +2,7 @@
 
 #include "app-windows.h"
 #include "box-paint.h"
+#include "window-scale.h"
 
 #include "ngn/file-system.h"
 #include "ngn/image-source.h"
@@ -171,13 +172,13 @@ void useImageLoading(std::shared_ptr<Http> http, std::shared_ptr<ImageCache> cac
 void makeImageView(GtkWidget *widget, ViewData &view) {
   g_signal_connect(widget, "notify::scale-factor", G_CALLBACK(+[](GtkWidget *scaled, GParamSpec *, gpointer) {
     if (ViewData *d = viewData(scaled); d && d->image) {
-      applyImageProps(*d, gtk_widget_get_scale_factor(scaled));
+      applyImageProps(*d, windowScale(scaled));
     }
   }), nullptr);
-  applyImageProps(view, gtk_widget_get_scale_factor(widget));
+  applyImageProps(view, windowScale(widget));
 }
 
-void applyImageProps(ViewData &view, int screenScale) {
+void applyImageProps(ViewData &view, double screenScale) {
   auto props = std::dynamic_pointer_cast<const ImageProps>(view.props);
   if (!props) {
     return;

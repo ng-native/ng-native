@@ -1,5 +1,7 @@
 #include "accessibility-settings.h"
 
+#include "settings-portal.h"
+
 #include <adwaita.h>
 #include <gtk/gtk.h>
 
@@ -8,9 +10,6 @@
 namespace ngn::gtk {
 
 namespace {
-
-// The org.freedesktop.appearance keys read from the settings portal.
-constexpr const char *kPortalKeys[] = {"reduced-motion", "contrast"};
 
 // An int or enum GtkSettings property newer than the floor, or `fallback` where GTK lacks it.
 int settingOr(GtkSettings *settings, const char *name, int fallback) {
@@ -26,14 +25,11 @@ int settingOr(GtkSettings *settings, const char *name, int fallback) {
   return out;
 }
 
-// A portal value, which ReadOne gives as is and the older Read wraps in another variant.
+// A portal number, 0 where the value is none.
 guint32 portalNumber(GVariant *value) {
-  GVariant *inner = value;
-  while (inner && g_variant_is_of_type(inner, G_VARIANT_TYPE_VARIANT)) {
-    inner = g_variant_get_variant(inner);
-  }
+  GVariant *inner = portalValue(value);
   guint32 n = inner && g_variant_is_of_type(inner, G_VARIANT_TYPE_UINT32) ? g_variant_get_uint32(inner) : 0;
-  if (inner && inner != value) {
+  if (inner) {
     g_variant_unref(inner);
   }
   return n;
@@ -59,36 +55,9 @@ AccessibilitySettingsWatcher::AccessibilitySettingsWatcher(std::function<void(co
   readGtk();
   report();
 
-  // The settings portal's reduced-motion and contrast, read once it answers and followed as they
-  // change.
-  g_dbus_proxy_new_for_bus(
-      G_BUS_TYPE_SESSION, G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES, nullptr, "org.freedesktop.portal.Desktop",
-      "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Settings", cancellable_,
-      +[](GObject *, GAsyncResult *result, gpointer data) {
-        GDBusProxy *proxy = g_dbus_proxy_new_for_bus_finish(result, nullptr);
-        if (!proxy) {
-          return;
-        }
-        auto *self = static_cast<AccessibilitySettingsWatcher *>(data);
-        self->portal_ = proxy;
-        auto changed = +[](AccessibilitySettingsWatcher *self, const char *, const char *signal, GVariant *params) {
-          const char *ns = nullptr;
-          const char *key = nullptr;
-          GVariant *value = nullptr;
-          if (std::strcmp(signal, "SettingChanged") == 0 && g_variant_is_of_type(params, G_VARIANT_TYPE("(ssv)"))) {
-            g_variant_get(params, "(&s&sv)", &ns, &key, &value);
-            if (std::strcmp(ns, "org.freedesktop.appearance") == 0) {
-              self->readPortal(key, value);
-            }
-            g_variant_unref(value);
-          }
-        };
-        g_signal_connect_swapped(proxy, "g-signal", G_CALLBACK(changed), self);
-        for (const char *key : kPortalKeys) {
-          self->readPortalSetting(key, "ReadOne");
-        }
-      },
-      this);
+  // The settings portal's reduced-motion and contrast.
+  portal_ = std::make_unique<SettingsPortal>(
+      std::vector<std::string>{"reduced-motion", "contrast"}, [this](const std::string &key, GVariant *value) { readPortal(key, value); });
 
   // AT-SPI's own status, which says whether a screen reader runs.
   g_dbus_proxy_new_for_bus(
@@ -116,10 +85,6 @@ AccessibilitySettingsWatcher::~AccessibilitySettingsWatcher() {
     g_signal_handlers_disconnect_by_data(settings, this);
   }
   g_signal_handlers_disconnect_by_data(adw_style_manager_get_default(), this);
-  if (portal_) {
-    g_signal_handlers_disconnect_by_data(portal_, this);
-    g_clear_object(&portal_);
-  }
   if (status_) {
     g_signal_handlers_disconnect_by_data(status_, this);
     g_clear_object(&status_);
@@ -139,42 +104,11 @@ void AccessibilitySettingsWatcher::readGtk() {
   sources_.highContrast = adw_style_manager_get_high_contrast(adw_style_manager_get_default()) || gtkContrast;
 }
 
-void AccessibilitySettingsWatcher::readPortalSetting(const char *key, const char *method) {
-  // ReadOne where the portal has it (version 2), Read on an older one. The key is one of
-  // kPortalKeys, which outlive the call.
-  struct Call {
-    AccessibilitySettingsWatcher *self;
-    const char *key;
-  };
-  g_dbus_proxy_call(
-      portal_, method, g_variant_new("(ss)", "org.freedesktop.appearance", key), G_DBUS_CALL_FLAGS_NONE, -1, cancellable_,
-      +[](GObject *proxy, GAsyncResult *result, gpointer data) {
-        auto call = *static_cast<Call *>(data);
-        delete static_cast<Call *>(data);
-        GError *error = nullptr;
-        GVariant *reply = g_dbus_proxy_call_finish(G_DBUS_PROXY(proxy), result, &error);
-        if (!reply) {
-          bool cancelled = g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
-          bool unknown = g_error_matches(error, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_METHOD);
-          g_error_free(error);
-          if (!cancelled && unknown) {
-            call.self->readPortalSetting(call.key, "Read");
-          }
-          return;
-        }
-        GVariant *value = g_variant_get_child_value(reply, 0);
-        call.self->readPortal(call.key, value);
-        g_variant_unref(value);
-        g_variant_unref(reply);
-      },
-      new Call{this, key});
-}
-
-void AccessibilitySettingsWatcher::readPortal(const char *key, GVariant *value) {
+void AccessibilitySettingsWatcher::readPortal(const std::string &key, GVariant *value) {
   // reduced-motion 1 is reduce; contrast 1 is higher.
-  if (std::strcmp(key, "reduced-motion") == 0) {
+  if (key == "reduced-motion") {
     sources_.portalReducedMotion = portalNumber(value) == 1;
-  } else if (std::strcmp(key, "contrast") == 0) {
+  } else if (key == "contrast") {
     sources_.portalContrast = portalNumber(value) == 1;
   }
   report();
@@ -195,6 +129,14 @@ void AccessibilitySettingsWatcher::report() {
     reported_ = settings;
     changed_(settings);
   }
+}
+
+WatchedHostState makeWatchedHostState() {
+  WatchedHostState made;
+  made.state = std::make_shared<HostState>();
+  // Heard at start, so the state is made before the watcher.
+  made.accessibility = std::make_unique<AccessibilitySettingsWatcher>([state = made.state](const AccessibilitySettings &settings) { state->accessibility.set(settings); });
+  return made;
 }
 
 } // namespace ngn::gtk

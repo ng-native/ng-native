@@ -11,9 +11,12 @@
 #include <gio/gio.h>
 
 #include <functional>
+#include <memory>
 #include <optional>
 
 namespace ngn::gtk {
+
+class SettingsPortal;
 
 class AccessibilitySettingsWatcher {
  public:
@@ -29,8 +32,7 @@ class AccessibilitySettingsWatcher {
 
  private:
   void readGtk();
-  void readPortalSetting(const char *key, const char *method);
-  void readPortal(const char *key, GVariant *value);
+  void readPortal(const std::string &key, GVariant *value);
   void readStatus();
   void report();
 
@@ -38,8 +40,18 @@ class AccessibilitySettingsWatcher {
   LinuxAccessibilitySources sources_;
   std::optional<AccessibilitySettings> reported_;
   GCancellable *cancellable_{nullptr};
-  GDBusProxy *portal_{nullptr};
+  std::unique_ptr<SettingsPortal> portal_;
   GDBusProxy *status_{nullptr};
 };
+
+// The host's state with its accessibility settings kept in step by a watcher: made together, so
+// the state of a running app never lacks its feed. Only the instance that runs the app makes one;
+// a second launch hands its links on and exits before it has any state to feed.
+struct WatchedHostState {
+  std::shared_ptr<HostState> state;
+  std::unique_ptr<AccessibilitySettingsWatcher> accessibility;
+};
+
+WatchedHostState makeWatchedHostState();
 
 } // namespace ngn::gtk

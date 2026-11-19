@@ -395,6 +395,58 @@ TEST_CASE("a view's press is an accessible action a screen reader invokes, enabl
   CHECK(pressed.size() == 1);
 }
 
+TEST_CASE("a view's declared actions are accessible actions named for them, which reach the app while it listens") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto actions = dynamic::array(dynamic::object("name", "archive")("label", "Archive"), dynamic::object("name", "mark read")("label", "Mark read"));
+  auto props = [&actions](bool listening) {
+    return desktopViewProps(dynamic::object("accessible", true)("accessibilityLabel", "Ada, Lunch")("accessibilityActions", actions)(
+        "onAccessibilityAction", listening));
+  };
+  auto row = MountedViews::shadow(2, "View", props(true), {{0, 0}, {50, 20}});
+  views.add(row);
+  ngn::testing::SentEvents<ViewEventEmitter> sent(*ngn::gtk::viewData(views.view(2)));
+  // Each under the widget's `custom` actions, where AT-SPI lists them, its name made a GAction's.
+  CHECK(gtk_widget_activate_action(views.view(2), "custom.archive", nullptr));
+  CHECK(gtk_widget_activate_action(views.view(2), "custom.mark-read", nullptr));
+  CHECK(sent.count("topAccessibilityAction") == 2);
+
+  // An action the app takes away goes.
+  actions = dynamic::array(dynamic::object("name", "mark read")("label", "Mark read"));
+  views.update(row, props(true));
+  CHECK_FALSE(gtk_widget_activate_action(views.view(2), "custom.archive", nullptr));
+  CHECK(gtk_widget_activate_action(views.view(2), "custom.mark-read", nullptr));
+  CHECK(sent.count("topAccessibilityAction") == 3);
+  // The app not listening hears nothing, as iOS sends an action only to a view that listens.
+  views.update(row, props(false));
+  gtk_widget_activate_action(views.view(2), "custom.mark-read", nullptr);
+  CHECK(sent.count("topAccessibilityAction") == 3);
+  // No longer an element: no actions.
+  views.update(row, desktopViewProps(dynamic::object("accessibilityElementsHidden", true)("accessibilityActions", actions)));
+  CHECK_FALSE(gtk_widget_activate_action(views.view(2), "custom.mark-read", nullptr));
+}
+
+TEST_CASE("a declared action reaches its sink by the name the app gave it, however GTK had to name it") {
+  REQUIRE(ngn::testing::gtkReady());
+  CHECK(ngn::gtk::customActionNames({{"archive", "Archive"}, {"mark read", "Mark read"}, {"mark-read", "Mark read too"}, {"", "Nameless"}}) ==
+        std::vector<std::pair<std::string, std::string>>{{"archive", "archive"}, {"mark-read", "mark read"}, {"mark-read-2", "mark-read"}, {"action", ""}});
+  GtkWidget *widget = GTK_WIDGET(g_object_ref_sink(gtk_label_new("row")));
+  std::vector<std::string> sent;
+  ngn::AxInfo info{.element = true, .customActions = {{"mark read", "Mark read"}, {"mark-read", "Mark read too"}}};
+  ngn::gtk::applyAccessibleActions(
+      widget, info,
+      {.perform = [](GtkWidget *, ngn::AxVerb) { return false; },
+       .send =
+           [&sent](GtkWidget *, const std::string &name) {
+             sent.push_back(name);
+             return true;
+           }});
+  CHECK(gtk_widget_activate_action(widget, "custom.mark-read-2", nullptr));
+  CHECK(gtk_widget_activate_action(widget, "custom.mark-read", nullptr));
+  CHECK(sent == std::vector<std::string>{"mark-read", "mark read"});
+  g_object_unref(widget);
+}
+
 TEST_CASE("an announcement is said through the window on GTK 4.14 and later, and nothing is said below") {
   REQUIRE(ngn::testing::gtkReady());
   MountedViews views;

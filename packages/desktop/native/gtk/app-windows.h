@@ -45,9 +45,12 @@ class GtkWindows final : public WindowBackend {
   struct Hooks {
     // A window's surface widget was made: the backend mounts into it and input reads it.
     std::function<void(SurfaceId surface, GtkWidget *widget)> addSurface;
-    // Start, size and stop the surface's app, with its size in points and its scale.
-    std::function<void(SurfaceId surface, int width, int height, int scale)> startSurface;
-    std::function<void(SurfaceId surface, int width, int height, int scale)> resizeSurface;
+    // Start and size the surface's app, with its size in points and its scale.
+    std::function<void(SurfaceId surface, int width, int height, double scale)> startSurface;
+    std::function<void(SurfaceId surface, int width, int height, double scale)> resizeSurface;
+    // The window's scale changed, a fractional step included (window-scale.h).
+    std::function<void(GtkWidget *window)> rescaled;
+    // Stop the surface's app.
     std::function<void(SurfaceId surface)> stopSurface;
     // GTK laid out the surface's window: its chrome may have moved.
     std::function<void(SurfaceId surface)> laidOut;

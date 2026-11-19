@@ -158,4 +158,9 @@ bool performAxVerb(
     AxVerb verb,
     const std::function<bool()> &click);
 
+// Sends the declared action `name` (one of AxInfo's customActions) through the view's emitter, to a
+// view that listens for actions, as iOS sends one only to such a view. Whether it was sent: what
+// AppKit's custom action handler and GTK's accessible action answer.
+bool sendAxAction(const facebook::react::ViewProps &props, const facebook::react::ViewEventEmitter *emitter, const std::string &name);
+
 } // namespace ngn

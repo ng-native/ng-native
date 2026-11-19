@@ -110,6 +110,19 @@ struct RowTarget {
   Tag parent;
 };
 
+constexpr const char *kTabsHost = "RNSTabsHostIOS";
+constexpr const char *kTabScreen = "RNSTabsScreenIOS";
+
+// Takes a source list's box out of wherever it is: a view, or a tab list's scrolled window.
+void detachBox(GtkWidget *box) {
+  GtkWidget *parent = gtk_widget_get_parent(box);
+  if (parent && GTK_IS_VIEWPORT(parent)) {
+    gtk_viewport_set_child(GTK_VIEWPORT(parent), nullptr);
+  } else if (parent) {
+    gtk_widget_unparent(box);
+  }
+}
+
 } // namespace
 
 void paneSlotAllocated(SplitViews *splits, Tag pane, int width, int height) {
@@ -120,6 +133,9 @@ SplitViews::~SplitViews() {
   if (flush_ != 0) {
     g_source_remove(flush_);
   }
+  if (choose_ != 0) {
+    g_source_remove(choose_);
+  }
   for (auto &[parent, l] : lists_) {
     if (l.refill != 0) {
       g_source_remove(l.refill);
@@ -128,9 +144,7 @@ SplitViews::~SplitViews() {
       backend_.unhostView(tag);
     }
     for (GtkWidget *box : l.boxes) {
-      if (gtk_widget_get_parent(box)) {
-        gtk_widget_unparent(box);
-      }
+      detachBox(box);
       g_object_unref(box);
     }
   }
@@ -179,6 +193,16 @@ void SplitViews::tearDown(Split &s) {
       backend_.hooks.containerRoot(pane, false);
     }
   }
+  if (s.tabs) {
+    // The tab list's box leaves with the scrolled window's viewport, and stays in lists_.
+    Tag host = NGN_PANE_SLOT(s.contentSlot)->pane;
+    for (Tag screen : s.screens) {
+      backend_.unhostView(screen);
+    }
+    backend_.hooks.detachInput(host);
+    backend_.hooks.containerRoot(host, false);
+    s.tabList = nullptr;
+  }
   if (s.bin && gtk_widget_get_parent(s.bin)) {
     gtk_widget_unparent(s.bin);
   }
@@ -194,6 +218,7 @@ void SplitViews::place(SurfaceId surfaceId, Tag split, bool window) {
   auto &s = splits_[split];
   s.surfaceId = surfaceId;
   s.window = window;
+  s.tabs = d->component == kTabsHost;
   s.view = adw_navigation_split_view_new();
   auto slot = [this](GtkWidget *&out) {
     out = GTK_WIDGET(g_object_new(ngn_pane_slot_get_type(), nullptr));
@@ -236,15 +261,35 @@ void SplitViews::place(SurfaceId surfaceId, Tag split, bool window) {
   adw_breakpoint_bin_add_breakpoint(ADW_BREAKPOINT_BIN(s.bin), s.breakpoint);
   d->split = s.bin;
   gtk_widget_set_parent(s.bin, widget);
-  // The panes already mounted, found before hosting moves them out.
+  if (s.tabs) {
+    // The tabs fill the sidebar's page; the screens share the content's, which is a container of
+    // its own rooted at the host, as on macOS.
+    s.tabList = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(s.tabList), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_widget_set_parent(s.tabList, s.sidebarSlot);
+    NGN_PANE_SLOT(s.contentSlot)->pane = split;
+    backend_.hooks.containerRoot(split, true);
+    backend_.hooks.attachInput(s.contentSlot, surfaceId, split);
+  }
+  // The panes (a tabs host's screens) already mounted, found before hosting moves them out.
   std::vector<Tag> panes;
   for (GtkWidget *c = gtk_widget_get_first_child(widget); c; c = gtk_widget_get_next_sibling(c)) {
-    if (ViewData *child = viewData(c); child && (child->component == SidebarComponentName || child->component == SplitContentComponentName)) {
+    ViewData *child = viewData(c);
+    bool pane = child && (s.tabs ? child->component == kTabScreen
+                                 : child->component == SidebarComponentName || child->component == SplitContentComponentName);
+    if (pane) {
       panes.push_back(child->tag);
     }
   }
   for (Tag pane : panes) {
-    host(s, pane);
+    if (s.tabs) {
+      hostScreen(s, pane);
+    } else {
+      host(s, pane);
+    }
+  }
+  if (s.tabs) {
+    showTabList(split);
   }
   applyWidths(s);
   if (const auto *p = paneProps(backend_.data(s.sidebar))) {
@@ -268,7 +313,10 @@ void SplitViews::place(SurfaceId surfaceId, Tag split, bool window) {
     // A header bar in a page shows the page's title when it has no title widget of its own: the
     // window's, as it showed over the whole window.
     // libadwaita asks every page for a title, so an untitled window leaves the page's.
-    if (GtkRoot *root = gtk_widget_get_root(widget); root && GTK_IS_WINDOW(root)) {
+    // The surface's window: a split view placed inside a screen still being pushed has no root yet.
+    // A tabs host's page takes the chosen tab's title instead (showTabList).
+    GtkRoot *root = s.tabs ? nullptr : gtk_widget_get_root(backend_.surfaceWidget(surfaceId));
+    if (root && GTK_IS_WINDOW(root)) {
       g_object_bind_property_full(
           root, "title", content, "title", G_BINDING_SYNC_CREATE,
           +[](GBinding *, const GValue *from, GValue *to, gpointer) -> gboolean {
@@ -301,9 +349,50 @@ void SplitViews::host(Split &s, Tag pane) {
   backend_.hooks.attachInput(slot, s.surfaceId, pane);
 }
 
+void SplitViews::hostScreen(Split &s, Tag screen) {
+  backend_.hostView(screen, s.contentSlot);
+  if (std::find(s.screens.begin(), s.screens.end(), screen) == s.screens.end()) {
+    s.screens.push_back(screen);
+  }
+  // A screen added later takes the size the others have.
+  if (int w = gtk_widget_get_width(s.contentSlot), h = gtk_widget_get_height(s.contentSlot); w > 0 && h > 0) {
+    reportSizeFromSlot(NGN_PANE_SLOT(s.contentSlot)->pane, w, h);
+  }
+}
+
+void SplitViews::showTabList(Tag split) {
+  auto it = splits_.find(split);
+  auto l = lists_.find(split);
+  if (it == splits_.end() || !it->second.tabList || l == lists_.end() || l->second.boxes.empty()) {
+    return;
+  }
+  // The content page's title, which the header bar shows when the tab's screen sets none of its own.
+  auto chosen = selectedRow(l->second.lists[0]);
+  for (const auto &group : l->second.lists[0].groups) {
+    for (const auto &row : group.rows) {
+      if (chosen == row.tag && !row.label.empty()) {
+        adw_navigation_page_set_title(adw_navigation_split_view_get_content(ADW_NAVIGATION_SPLIT_VIEW(it->second.view)), row.label.c_str());
+      }
+    }
+  }
+  GtkWidget *box = l->second.boxes[0];
+  GtkWidget *viewport = gtk_widget_get_parent(box);
+  if (viewport && gtk_widget_get_parent(viewport) == it->second.tabList) {
+    return;
+  }
+  detachBox(box);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(it->second.tabList), box);
+}
+
 void SplitViews::inserted(Tag parent, Tag child) {
   auto it = splits_.find(parent);
   const ViewData *d = backend_.data(child);
+  if (it != splits_.end() && it->second.tabs) {
+    if (d && d->component == kTabScreen) {
+      hostScreen(it->second, child);
+    }
+    return;
+  }
   if (it == splits_.end() || !d || (d->component != SidebarComponentName && d->component != SplitContentComponentName)) {
     return;
   }
@@ -440,6 +529,7 @@ void SplitViews::deleted(Tag tag) {
   }
   reported_.erase(tag);
   for (auto &[split, s] : splits_) {
+    std::erase(s.screens, tag);
     for (auto [pane, slot] : {std::pair{&s.sidebar, s.sidebarSlot}, std::pair{&s.content, s.contentSlot}}) {
       if (*pane == tag) {
         backend_.hooks.detachInput(tag);
@@ -457,6 +547,43 @@ void SplitViews::deleted(Tag tag) {
 // --- Source lists ------------------------------------------------------------------------------
 
 void SplitViews::setSourceLists(Tag parent, const std::vector<SourceList> &lists) {
+  // Only the selection moved (the app's answer to a choice, or the core's to a tab): the rows stay,
+  // since the pointer that chose one may still be on it, and the selection moves.
+  auto known = lists_.find(parent);
+  bool moved = known != lists_.end() && known->second.lists.size() == lists.size() && known->second.boxes.size() == lists.size() &&
+      !lists.empty() && known->second.refill == 0;
+  for (size_t i = 0; moved && i < lists.size(); i++) {
+    moved = known->second.lists[i] == lists[i] || onlySelectionDiffers(known->second.lists[i], lists[i]);
+  }
+  if (moved) {
+    known->second.lists = lists;
+    for (size_t i = 0; i < lists.size(); i++) {
+      select(known->second, i);
+    }
+    showTabList(parent);
+    return;
+  }
+  rebuild(parent, lists);
+}
+
+void SplitViews::select(Lists &l, size_t index) {
+  GtkWidget *box = l.boxes[index];
+  auto selected = selectedRow(l.lists[index]);
+  GtkListBoxRow *row = nullptr;
+  for (GtkWidget *c = gtk_widget_get_first_child(box); c && selected; c = gtk_widget_get_next_sibling(c)) {
+    if (GTK_IS_LIST_BOX_ROW(c) && g_object_get_data(G_OBJECT(c), "ngn-row") == GINT_TO_POINTER(*selected)) {
+      row = GTK_LIST_BOX_ROW(c);
+    }
+  }
+  if (gtk_list_box_get_selected_row(GTK_LIST_BOX(box)) == row) {
+    return;
+  }
+  l.syncing = true;
+  gtk_list_box_select_row(GTK_LIST_BOX(box), row);
+  l.syncing = false;
+}
+
+void SplitViews::rebuild(Tag parent, const std::vector<SourceList> &lists) {
   auto &l = lists_[parent];
   for (Tag tag : l.hosted) {
     backend_.unhostView(tag);
@@ -467,9 +594,7 @@ void SplitViews::setSourceLists(Tag parent, const std::vector<SourceList> &lists
   GtkWidget *parentWidget = backend_.view(parent);
   while (l.boxes.size() > lists.size()) {
     GtkWidget *box = l.boxes.back();
-    if (gtk_widget_get_parent(box)) {
-      gtk_widget_unparent(box);
-    }
+    detachBox(box);
     g_object_unref(box);
     l.boxes.pop_back();
   }
@@ -504,12 +629,19 @@ void SplitViews::setSourceLists(Tag parent, const std::vector<SourceList> &lists
     }), new RowTarget(*target), [](gpointer data, GClosure *) { delete static_cast<RowTarget *>(data); }, GConnectFlags(0));
     l.boxes.push_back(box);
   }
+  // A tabs host's list fills its sidebar instead, once it is placed.
+  const ViewData *parentData = backend_.data(parent);
+  bool tabs = parentData && parentData->component == kTabsHost;
   for (size_t i = 0; i < lists.size(); i++) {
     l.folds.setList(lists[i]);
-    if (parentWidget && gtk_widget_get_parent(l.boxes[i]) != parentWidget) {
+    if (!tabs && parentWidget && gtk_widget_get_parent(l.boxes[i]) != parentWidget) {
       gtk_widget_set_parent(l.boxes[i], parentWidget);
     }
     fill(parent, l, i);
+  }
+  if (tabs) {
+    showTabList(parent);
+    return;
   }
   layOut();
 }
@@ -623,6 +755,24 @@ void SplitViews::chose(Tag parent, Tag row) {
   if (it == lists_.end() || it->second.syncing) {
     return;
   }
+  if (auto split = splits_.find(parent); split != splits_.end() && split->second.tabs) {
+    chosenTab_ = {split->second.surfaceId, parent, row};
+    if (choose_ == 0) {
+      choose_ = g_idle_add_full(G_PRIORITY_DEFAULT, [](gpointer self) -> gboolean {
+        auto *splits = static_cast<SplitViews *>(self);
+        splits->choose_ = 0;
+        auto chosen = splits->chosenTab_;
+        splits->backend_.hooks.chooseTab(chosen.surfaceId, chosen.host, chosen.screen);
+        return G_SOURCE_REMOVE;
+      }, this, nullptr);
+    }
+    // At a compact width the choice brings the content forward.
+    if (split->second.folding.compact()) {
+      split->second.folding.chose();
+      show(split->second);
+    }
+    return;
+  }
   send(backend_.data(row), "sidebarSelect", folly::dynamic::object());
   // At a compact width the choice brings the content forward.
   for (auto &[tag, s] : splits_) {
@@ -673,7 +823,7 @@ void SplitViews::refill(Tag parent) {
   if (it == lists_.end()) {
     return;
   }
-  setSourceLists(parent, std::vector<SourceList>(it->second.lists));
+  rebuild(parent, std::vector<SourceList>(it->second.lists));
 }
 
 GtkWidget *SplitViews::splitWidget(Tag split) const {
@@ -696,7 +846,16 @@ std::vector<GtkWidget *> SplitViews::lists(Tag parent) const {
 void SplitViews::reportSizeFromSlot(Tag pane, int width, int height) {
   Size size{static_cast<Float>(width), static_cast<Float>(height)};
   reported_[pane] = size;
-  if (sizes_.report(pane, size) && flush_ == 0) {
+  // A tabs host's content slot sizes every screen still in it.
+  auto split = splits_.find(pane);
+  bool tabs = split != splits_.end() && split->second.tabs;
+  bool changed = false;
+  for (Tag target : tabs ? split->second.screens : std::vector<Tag>{pane}) {
+    if (!tabs || backend_.isHosted(target)) {
+      changed = sizes_.report(target, size) || changed;
+    }
+  }
+  if (changed && flush_ == 0) {
     // Once a frame at most, however many allocations a resize takes.
     flush_ = g_idle_add_full(G_PRIORITY_DEFAULT, [](gpointer self) -> gboolean {
       auto *splits = static_cast<SplitViews *>(self);

@@ -8,12 +8,14 @@ With --relation, a node must have that relation (as AT-SPI names it: "described-
 "labelled-by") to a node with a name: a view's `aria-describedby` or `aria-labelledby` reached GTK.
 With --heading, a heading must have that level (`aria-level`). With --announce, the node with that
 name is pressed through its AT-SPI action, as a screen reader presses it, and the host
-must send an announcement (`Accessibility.announce()` or a live region). GTK announces from 4.14 and
+must send an announcement (`Accessibility.announce()` or a live region). With --action NAME=ACTION,
+the node NAME's declared action ACTION (`accessibilityActions`, which GTK lists as `custom.ACTION`)
+is invoked the same way, and the app's answer must be an announcement too. GTK announces from 4.14 and
 says a heading's level over AT-SPI from 4.16; below those each is skipped, saying so. --url opens the
 app there.
 
     dbus-run-session -- atspi-check.py <ngn-linux> <bundle.js> [--url <link>] [--role "push button"]...
-        [--relation described-by]... [--heading 2] [--announce <name>] [--tab]
+        [--relation described-by]... [--heading 2] [--announce <name>] [--action <name>=<action>] [--tab]
 
 GTK 4 answers AT-SPI's Component.GrabFocus with NotSupported, in every release, so a screen reader
 cannot move the keyboard focus in a GTK 4 app and there is nothing here to check it with.
@@ -134,22 +136,29 @@ def check_heading(host, level, deadline):
     return "no heading at %s" % want
 
 
-def check_announce(host, name, deadline):
-    """Presses the node named `name` through its first AT-SPI action, then waits for the host to
-    announce something."""
+def action_index(node, action):
+    """The index of the node's AT-SPI action named `action`, or None."""
+    actions = node.queryAction()
+    names = [actions.getName(i) for i in range(actions.nActions)]
+    return names.index(action) if action in names else None
+
+
+def check_announce(host, name, deadline, action="accessibility.press"):
+    """Invokes the node named `name`'s AT-SPI action `action` (its press by default), then waits for
+    the host to announce something."""
     said = []
     listener = lambda event: said.append(str(event.any_data))
     pyatspi.Registry.registerEventListener(listener, "object:announcement")
     try:
-        node = first(host.pid, lambda n: n.name == name and n.queryAction().nActions > 0)
+        node = first(host.pid, lambda n: n.name == name and action_index(n, action) is not None)
         if node is None:
-            return "no node named %r with an action" % name
-        node.queryAction().doAction(0)
+            return "no node named %r with the action %r" % (name, action)
+        node.queryAction().doAction(action_index(node, action))
         while time.time() < deadline and not said:
             pump(0.5)
         if not said:
-            return "pressing %r announced nothing" % name
-        print("atspi-check: pressing %r announced %r" % (name, said[0]))
+            return "%s on %r announced nothing" % (action, name)
+        print("atspi-check: %s on %r announced %r" % (action, name, said[0]))
         return None
     finally:
         pyatspi.Registry.deregisterEventListener(listener, "object:announcement")
@@ -189,11 +198,13 @@ def main():
                         help="an AT-SPI relation (described-by, labelled-by) some node must have to a named node")
     parser.add_argument("--heading", type=int, help="a heading level the tree must hold (GTK 4.16 and later)")
     parser.add_argument("--announce", metavar="NAME", help="press the node NAME and require an announcement (GTK 4.14 and later)")
+    parser.add_argument("--action", metavar="NAME=ACTION",
+                        help="invoke the node NAME's declared action ACTION and require an announcement (GTK 4.14 and later)")
     parser.add_argument("--url", help="the link the app opens at")
     args = parser.parse_args()
     # GTK announces from 4.14 and gives a heading's level over AT-SPI from 4.16.
     minor = gtk_minor()
-    for flag, since in (("heading", 16), ("announce", 14)):
+    for flag, since in (("heading", 16), ("announce", 14), ("action", 14)):
         if getattr(args, flag) is not None and minor < since:
             print("atspi-check: --%s skipped: GTK 4.%d is below 4.%d" % (flag, minor, since))
             setattr(args, flag, None)
@@ -240,6 +251,9 @@ def main():
                     checks.append(lambda: check_heading(host, args.heading, deadline))
                 if args.announce:
                     checks.append(lambda: check_announce(host, args.announce, deadline))
+                if args.action:
+                    node, action = args.action.rsplit("=", 1)
+                    checks.append(lambda: check_announce(host, node, deadline, "custom." + action))
                 for check in checks:
                     failed = check()
                     if failed:
