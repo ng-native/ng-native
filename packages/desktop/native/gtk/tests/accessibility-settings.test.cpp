@@ -17,25 +17,26 @@ TEST_CASE("GNOME's Animations switch off is reduce motion, heard as it changes")
   std::vector<ngn::AccessibilitySettings> heard;
   try {
     ngn::gtk::AccessibilitySettingsWatcher watcher([&heard](const ngn::AccessibilitySettings &s) { heard.push_back(s); });
-    // At start, with nothing asking for less motion here.
-    REQUIRE(heard.size() == 1);
-    CHECK_FALSE(heard.back().reduceMotion);
+    // Heard at start. The portal and AT-SPI answer later, if at all, and say what this session says.
+    REQUIRE_FALSE(heard.empty());
+    auto otherwise = [&watcher] { return watcher.sources().portalReducedMotion || watcher.sources().gtkReducedMotion; };
     g_object_set(settings, "gtk-enable-animations", FALSE, nullptr);
-    REQUIRE(heard.size() == 2);
-    CHECK(heard.back().reduceMotion);
     CHECK_FALSE(watcher.sources().animations);
+    CHECK(heard.back().reduceMotion);
     // The same again is no change to report.
+    size_t count = heard.size();
     g_object_set(settings, "gtk-enable-animations", FALSE, nullptr);
-    CHECK(heard.size() == 2);
+    CHECK(heard.size() == count);
     g_object_set(settings, "gtk-enable-animations", TRUE, nullptr);
-    CHECK_FALSE(heard.back().reduceMotion);
+    CHECK(watcher.sources().animations);
+    CHECK(heard.back().reduceMotion == otherwise());
   } catch (...) {
     g_object_set(settings, "gtk-enable-animations", was, nullptr);
     throw;
   }
   // Gone, it hears no more.
   size_t count = heard.size();
-  g_object_set(settings, "gtk-enable-animations", FALSE, nullptr);
+  g_object_set(settings, "gtk-enable-animations", !was, nullptr);
   CHECK(heard.size() == count);
   g_object_set(settings, "gtk-enable-animations", was, nullptr);
 }
