@@ -276,6 +276,9 @@ void useFontLibrary(std::shared_ptr<const FontLibrary> library) {
   gFontLibrary = std::move(library);
 }
 
+// A line through a range of text, in kCTUnderlineStyle's numbers, which Core Text does not draw.
+static const CFStringRef kStrikethroughStyle = CFSTR("NGNStrikethroughStyle");
+
 CFAttributedStringRef makeAttributedString(const AttributedString &attributedString) {
   CFMutableAttributedStringRef out = CFAttributedStringCreateMutable(kCFAllocatorDefault, 0);
   CFAttributedStringBeginEditing(out);
@@ -336,12 +339,29 @@ CFAttributedStringRef makeAttributedString(const AttributedString &attributedStr
     CFAttributedStringSetAttribute(out, range, kCTParagraphStyleAttributeName, style);
     CFRelease(style);
 
-    if (a.textDecorationLineType == TextDecorationLineType::Underline ||
-        a.textDecorationLineType == TextDecorationLineType::UnderlineStrikethrough) {
-      int32_t single = kCTUnderlineStyleSingle;
-      CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &single);
-      CFAttributedStringSetAttribute(out, range, kCTUnderlineStyleAttributeName, n);
+    // Core Text draws an underline, in its style and colour; a line through is drawText's.
+    auto line = a.textDecorationLineType.value_or(TextDecorationLineType::None);
+    bool under = line == TextDecorationLineType::Underline || line == TextDecorationLineType::UnderlineStrikethrough;
+    bool through = line == TextDecorationLineType::Strikethrough || line == TextDecorationLineType::UnderlineStrikethrough;
+    if (under || through) {
+      auto decoration = a.textDecorationStyle.value_or(TextDecorationStyle::Solid);
+      int32_t style = decoration == TextDecorationStyle::Double ? kCTUnderlineStyleDouble : kCTUnderlineStyleSingle;
+      if (decoration == TextDecorationStyle::Dotted) {
+        style |= kCTUnderlinePatternDot;
+      } else if (decoration == TextDecorationStyle::Dashed) {
+        style |= kCTUnderlinePatternDash;
+      }
+      CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &style);
+      CFAttributedStringSetAttribute(out, range, under ? kCTUnderlineStyleAttributeName : kStrikethroughStyle, n);
+      if (under && through) {
+        CFAttributedStringSetAttribute(out, range, kStrikethroughStyle, n);
+      }
       CFRelease(n);
+      if (a.textDecorationColor) {
+        CGColorRef decorationColor = cgColor(a.textDecorationColor);
+        CFAttributedStringSetAttribute(out, range, kCTUnderlineColorAttributeName, decorationColor);
+        CGColorRelease(decorationColor);
+      }
     }
     CFRelease(font);
   }
@@ -442,6 +462,53 @@ TextLayout layoutText(
   return layout;
 }
 
+// Each run's line through, half its font's x-height above the baseline at `baseline`, the
+// underline's thickness and in the underline's colour, or the text's: a double one is two lines,
+// and a dotted or dashed one is stroked in that pattern.
+static void drawStrikethroughs(CTLineRef line, CGContextRef context, CGPoint baseline) {
+  CFArrayRef runs = CTLineGetGlyphRuns(line);
+  for (CFIndex i = 0; i < CFArrayGetCount(runs); i++) {
+    auto run = (CTRunRef)CFArrayGetValueAtIndex(runs, i);
+    CFDictionaryRef attributes = CTRunGetAttributes(run);
+    auto styleNumber = (CFNumberRef)CFDictionaryGetValue(attributes, kStrikethroughStyle);
+    auto font = (CTFontRef)CFDictionaryGetValue(attributes, kCTFontAttributeName);
+    if (styleNumber == nullptr || font == nullptr) {
+      continue;
+    }
+    int32_t style = 0;
+    CFNumberGetValue(styleNumber, kCFNumberSInt32Type, &style);
+    auto color = (CGColorRef)CFDictionaryGetValue(attributes, kCTUnderlineColorAttributeName);
+    if (color == nullptr) {
+      color = (CGColorRef)CFDictionaryGetValue(attributes, kCTForegroundColorAttributeName);
+    }
+    CFRange range = CTRunGetStringRange(run);
+    CGFloat start = CTLineGetOffsetForStringIndex(line, range.location, nullptr);
+    CGFloat end = CTLineGetOffsetForStringIndex(line, range.location + range.length, nullptr);
+    CGFloat left = std::min(start, end), width = std::fabs(end - start);
+    CGFloat thickness = std::max<CGFloat>(CTFontGetUnderlineThickness(font), 1);
+    CGFloat middle = baseline.y - CTFontGetXHeight(font) / 2;
+    bool twice = (style & 0xff) == kCTUnderlineStyleDouble;
+    CGContextSaveGState(context);
+    if (color != nullptr) {
+      CGContextSetStrokeColorWithColor(context, color);
+    }
+    CGContextSetLineWidth(context, thickness);
+    if (style & kCTUnderlinePatternDot) {
+      CGFloat dots[] = {thickness, thickness * 2};
+      CGContextSetLineDash(context, 0, dots, 2);
+    } else if (style & kCTUnderlinePatternDash) {
+      CGFloat dashes[] = {thickness * 4, thickness * 2};
+      CGContextSetLineDash(context, 0, dashes, 2);
+    }
+    for (CGFloat y : twice ? std::vector<CGFloat>{middle - thickness, middle + thickness} : std::vector<CGFloat>{middle}) {
+      CGContextMoveToPoint(context, baseline.x + left, y);
+      CGContextAddLineToPoint(context, baseline.x + left + width, y);
+    }
+    CGContextStrokePath(context);
+    CGContextRestoreGState(context);
+  }
+}
+
 void drawText(const TextLayout &layout, CGContextRef context, CGPoint origin, CGFloat boxWidth) {
   CGContextSaveGState(context);
   // The view is flipped; glyphs are drawn with an inverted text matrix rather than by flipping
@@ -468,6 +535,7 @@ void drawText(const TextLayout &layout, CGContextRef context, CGPoint origin, CG
     }
     CGContextSetTextPosition(context, origin.x + x, origin.y + l.origin.y);
     CTLineDraw(l.line, context);
+    drawStrikethroughs(l.line, context, CGPointMake(origin.x + x, origin.y + l.origin.y));
   }
   CGContextRestoreGState(context);
 }

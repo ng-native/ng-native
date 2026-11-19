@@ -269,3 +269,31 @@ TEST_CASE("Each paragraph's wrapped lines take that paragraph's direction") {
   CHECK_FALSE(layout.lines.front().rightToLeft);
   CHECK_FALSE(layout.lines.back().rightToLeft);
 }
+
+TEST_CASE("A line through crosses the text and the spaces in it, in the decoration's colour") {
+  auto plain = fragment("a      b", 20);
+  auto through = plain;
+  through.textAttributes.textDecorationLineType = TextDecorationLineType::Strikethrough;
+  ParagraphAttributes paragraph;
+  auto bare = inkedColumns(ngn::layoutText(stringOf({plain}), paragraph, 400), 400, 40);
+  auto crossed = inkedColumns(ngn::layoutText(stringOf({through}), paragraph, 400), 400, 40);
+  // The gap between a and b has ink only once it is struck through.
+  int gap = 0, struck = 0;
+  for (size_t x = 0; x < bare.size(); x++) {
+    if (!bare[x]) {
+      gap++;
+      struck += crossed[x] ? 1 : 0;
+    }
+  }
+  CHECK(gap > 300);
+  CHECK(struck > 20);
+
+  // Underlined and struck through, in a colour of its own.
+  auto both = plain;
+  both.textAttributes.textDecorationLineType = TextDecorationLineType::UnderlineStrikethrough;
+  both.textAttributes.textDecorationColor = colorFromRGBA(255, 0, 0, 255);
+  auto layout = ngn::layoutText(stringOf({both}), paragraph, 400);
+  CFDictionaryRef attributes = CFAttributedStringGetAttributes(layout.string, 0, nullptr);
+  CHECK(CFDictionaryGetValue(attributes, kCTUnderlineStyleAttributeName) != nullptr);
+  CHECK(CFDictionaryGetValue(attributes, kCTUnderlineColorAttributeName) != nullptr);
+}
