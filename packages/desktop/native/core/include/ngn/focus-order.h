@@ -14,6 +14,7 @@
 // items (compositeMove). A text input inside one keeps a Tab stop of its own.
 #pragma once
 
+#include "ngn/desktop-props.h"
 #include "ngn/view-tree.h"
 
 #include <optional>
@@ -24,6 +25,15 @@ namespace ngn {
 // How far Tab reaches, from the system's keyboard navigation setting: every focusable view, or
 // only text inputs (the Mac's default, where Option-Tab reaches everything).
 enum class TabReach { TextInputs, All };
+
+// Whether a plain view takes the focus a click, Tab or an assistive technology moves to it: when
+// `focusable` says so, or with any `tabIndex`. A text input and a native control take it in a
+// widget of their own.
+bool viewTakesFocus(const DesktopProps &props);
+
+// The container whose Tab order a Tab from `tag` walks: the nearest container root at or above it
+// (a sheet, a popover, a sidebar pane), else the root of its tree.
+Tag focusContainer(const ViewTree &tree, Tag tag);
 
 // The views Tab visits in the container `root`, in order. `focused` is the view with the focus,
 // which is a composite widget's stop.

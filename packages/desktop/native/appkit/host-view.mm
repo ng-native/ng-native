@@ -1,5 +1,6 @@
 #import "host-view.h"
 
+#include "ngn/focus-order.h"
 #include "ngn/view-transform.h"
 
 #import <QuartzCore/QuartzCore.h>
@@ -279,7 +280,7 @@ static ngn::InputDispatcher *gViewInput;
 // Any tabIndex takes the focus, -1 too, as on the web: out of Tab order, but where a click or the
 // arrow keys in a composite widget move it (focus-order.h).
 - (BOOL)acceptsFirstResponder {
-  return _desktop.focusable.value_or(false) || _desktop.tabIndex.has_value();
+  return ngn::viewTakesFocus(_desktop);
 }
 
 

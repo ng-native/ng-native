@@ -3,6 +3,7 @@
 #include "box-paint.h"
 #include "cairo-canvas.h"
 #include "image-view.h"
+#include "focus.h"
 #include "scroll-view.h"
 #include "text-field.h"
 
@@ -211,7 +212,10 @@ static void ngn_view_init(NgnView *self) {
 namespace ngn::gtk {
 
 GtkWidget *makeViewWidget(GtkAccessibleRole role) {
-  return GTK_WIDGET(g_object_new(NGN_TYPE_VIEW, "accessible-role", role, nullptr));
+  GtkWidget *widget = GTK_WIDGET(g_object_new(NGN_TYPE_VIEW, "accessible-role", role, nullptr));
+  // A view's own focus, the same for one made as the view mounts and one replacing it.
+  watchFocus(widget);
+  return widget;
 }
 
 GtkWidget *makeSurfaceWidget(SurfaceId surfaceId, std::function<void(int, int)> resized) {

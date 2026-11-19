@@ -12,6 +12,7 @@
 // played.
 #include "app-windows.h"
 #include "capture.h"
+#include "focus.h"
 #include "gtk-backend.h"
 #include "host-sources.h"
 #include "image-view.h"
@@ -301,9 +302,13 @@ void routeWindow(GtkWidget *surfaceWidget) {
     return;
   }
   g_object_set_data(G_OBJECT(window), "ngn-keys", GINT_TO_POINTER(1));
+  ngn::gtk::trackFocus(window);
   gHost.gtkMenus->attach(surfaceWidget);
   ngn::gtk::routeKeys(window, std::make_shared<ngn::gtk::KeyRouting>(ngn::gtk::KeyRouting{
       .shortcut = [](const ngn::KeyChord &chord, bool text) { return gHost.menus->keyDown(chord, text); },
+      .focus = [](GtkWindow *window, guint keyval, GdkModifierType state) {
+        return ngn::gtk::moveFocusByKey(window, keyval, state, *gHost.backend, gHost.mounting->tree());
+      },
       .navigation = [](const ngn::KeyChord &chord) { return ngn::navigationFor(chord, gHost.os); },
       .navigate = navigate,
       .menuKey = [](const ngn::KeyChord &chord) { return ngn::findMenuItem(gHost.gtkMenus->bar(), chord); },

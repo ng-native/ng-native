@@ -1,6 +1,7 @@
 #include "gtk-backend.h"
 
 #include "accessible.h"
+#include "focus.h"
 #include "image-view.h"
 #include "native-controls.h"
 #include "scroll-view.h"
@@ -434,6 +435,7 @@ void GtkBackend::updateDesktopProps(SurfaceId, Tag tag, const DesktopProps &prop
   if (auto it = views_.find(tag); it != views_.end()) {
     ViewData *d = viewData(it->second);
     d->desktop = props;
+    applyFocusable(it->second, *d);
     updateScrollers(*d);
   }
 }

@@ -172,9 +172,9 @@ TEST_CASE("a view whose role changes keeps the focus, in itself or in a field in
   // The field still hears the user.
   CHECK(ngn::gtk::viewData(views.view(3))->field->view == ngn::gtk::viewData(views.view(3)));
 
-  gtk_widget_set_focusable(views.view(2), TRUE);
+  views.update(group, desktopViewProps(dynamic::object("role", "form")("focusable", true)));
   REQUIRE(gtk_widget_grab_focus(views.view(2)));
-  views.update(group, desktopViewProps(dynamic::object("role", "region")));
+  views.update(group, desktopViewProps(dynamic::object("role", "region")("focusable", true)));
   CHECK(roleOf(views.view(2)) == GTK_ACCESSIBLE_ROLE_REGION);
   CHECK(gtk_widget_get_focusable(views.view(2)));
   CHECK(gtk_root_get_focus(gtk_widget_get_root(views.view(2))) == views.view(2));

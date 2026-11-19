@@ -143,7 +143,7 @@ TEST_CASE("a window's primary menu or KDE menu bar shows the bar once it has one
   }
 }
 
-TEST_CASE("a window's keys: the app's shortcuts first, then a menu item's key, then Return and Escape on its buttons") {
+TEST_CASE("a window's keys: the app's shortcuts first, then the focus keys, then a menu item's key, then Return and Escape on its buttons") {
   REQUIRE(ngn::testing::gtkReady());
   if (!onX11()) {
     MESSAGE("not X11: no keys can be played into GTK here");
@@ -175,6 +175,13 @@ TEST_CASE("a window's keys: the app's shortcuts first, then a menu item's key, t
         }
         return false;
       },
+      .focus = [&log](GtkWindow *, guint keyval, GdkModifierType) {
+        if (keyval == GDK_KEY_Tab || keyval == GDK_KEY_k) {
+          log.push_back("focus");
+          return true;
+        }
+        return false;
+      },
       .navigation = [](const ngn::KeyChord &chord) { return ngn::navigationFor(chord, ngn::linuxOs()); },
       .navigate = [&log](ngn::NavigationDirection d, GtkWindow *) { log.push_back(d == ngn::NavigationDirection::Back ? "back" : "forward"); },
       .menuKey = [&bar](const ngn::KeyChord &chord) { return ngn::findMenuItem(bar, chord); },
@@ -193,8 +200,9 @@ TEST_CASE("a window's keys: the app's shortcuts first, then a menu item's key, t
     settle();
     settle();
   };
-  play("key k cmd\nkey q cmd\nkey c cmd\nkey return\nkey escape\n");
-  CHECK(log == std::vector<std::string>{"shortcut", "Quit", "Copy"});
+  play("key k cmd\nkey q cmd\nkey c cmd\nkey return\nkey escape\nkey tab\n");
+  // Ctrl+K is the app's before the focus sees it; Tab is the focus's.
+  CHECK(log == std::vector<std::string>{"shortcut", "Quit", "Copy", "focus"});
   // GTK shows a button pressed for a moment before it clicks.
   ngn::testing::runUntil([&saves, &cancels] { return saves == 1 && cancels == 1; });
 
