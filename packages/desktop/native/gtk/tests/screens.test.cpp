@@ -11,6 +11,7 @@
 #include "ngn/screen-presentation.h"
 
 #include <adwaita.h>
+#include <clocale>
 #include <doctest/doctest.h>
 
 #include <react/renderer/components/FBReactNativeSpec/EventEmitters.h>
@@ -791,6 +792,118 @@ TEST_CASE("Return presses the default button of the modal in front, whichever la
   CHECK(backSent.count("topPressHeaderBarButtonItem") == 0);
   views.mount({ShadowViewMutation::RemoveMutation(2, front, 2), ShadowViewMutation::DeleteMutation(front),
                ShadowViewMutation::RemoveMutation(2, back, 1), ShadowViewMutation::DeleteMutation(back)});
+}
+
+TEST_CASE("a colour's CSS rule writes its alpha with a point in a locale that writes a comma") {
+  std::string saved = setlocale(LC_NUMERIC, nullptr);
+  struct Restore {
+    std::string locale;
+    ~Restore() { setlocale(LC_NUMERIC, locale.c_str()); }
+  } restore{saved};
+  if (!setlocale(LC_NUMERIC, "de_DE.UTF-8")) {
+    MESSAGE("de_DE.UTF-8 is not installed");
+    return;
+  }
+  std::string rule = ngn::gtk::colorRule("ngn-x", "color", 1.0f, 0.0f, 0.0f, 0.5f);
+  CHECK(rule == ".ngn-x { color: rgba(255, 0, 0, 0.500); }");
+}
+
+TEST_CASE("a disabled submenu leaves none of its entries to choose") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 400, 300);
+  GtkWidget *bar = ngn::gtk::chromeOf(views.surface)->headerBar;
+  auto props = std::make_shared<HeaderProps>();
+  props->bar.title = "Notes";
+  ngn::BarButton more = barButton("more", "More");
+  ngn::HeaderMenuItem leaf;
+  leaf.title = "Rename";
+  leaf.menuId = "rename";
+  ngn::HeaderMenuItem nested;
+  nested.title = "Nested";
+  nested.items = {leaf};
+  ngn::HeaderMenuItem sub;
+  sub.title = "Edit";
+  sub.disabled = true;
+  sub.items = {leaf, nested};
+  ngn::HeaderMenuItem open;
+  open.title = "Open";
+  open.items = {leaf};
+  more.menu = ngn::HeaderMenuItem{};
+  more.menu->items = {sub, open};
+  props->bar.right = {more};
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {400, 300}});
+  auto screen = shadow(3, "RNSScreen", nullptr, {{0, 0}, {400, 300}});
+  auto config = shadow(4, "RNSScreenStackHeaderConfig", props, {{0, 0}, {400, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {screen, 2}, {config, 3}});
+
+  auto menus = findAll(bar, [](GtkWidget *w) -> bool { return GTK_IS_MENU_BUTTON(w) && gtk_widget_get_visible(w); });
+  REQUIRE(menus.size() == 1);
+  GMenuModel *model = gtk_menu_button_get_menu_model(GTK_MENU_BUTTON(menus[0]));
+  auto *group = G_ACTION_GROUP(g_object_get_data(G_OBJECT(menus[0]), "ngn-menu-actions"));
+  REQUIRE((model && group));
+  auto enabled = [&](GMenuModel *menu, int index) {
+    char *action = nullptr;
+    REQUIRE(g_menu_model_get_item_attribute(menu, index, G_MENU_ATTRIBUTE_ACTION, "s", &action));
+    bool on = g_action_group_get_action_enabled(group, std::string(action).substr(4).c_str());
+    g_free(action);
+    return on;
+  };
+  GMenuModel *disabled = g_menu_model_get_item_link(model, 0, G_MENU_LINK_SUBMENU);
+  GMenuModel *deeper = g_menu_model_get_item_link(disabled, 1, G_MENU_LINK_SUBMENU);
+  GMenuModel *enabledSub = g_menu_model_get_item_link(model, 1, G_MENU_LINK_SUBMENU);
+  REQUIRE((disabled && deeper && enabledSub));
+  CHECK_FALSE(enabled(disabled, 0));
+  CHECK_FALSE(enabled(deeper, 0));
+  CHECK(enabled(enabledSub, 0));
+  g_object_unref(disabled);
+  g_object_unref(deeper);
+  g_object_unref(enabledSub);
+}
+
+TEST_CASE("an anchor the stack has covered leaves a presentation a sheet, not a popover nobody sees") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto anchor = shadow(5, "View", nullptr, {{20, 20}, {80, 30}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {anchor, 3}});
+  views.backend->setCovered(MountedViews::kSurface, 3, true);
+
+  auto sheet = shadow(7, "RNSScreen", presented("formSheet", 5), {{0, 0}, {800, 600}});
+  mountAll(views, {{sheet, 2}});
+  views.backend->modals().settle();
+  CHECK(views.backend->modals().popoverOf(7) == nullptr);
+  CHECK(views.backend->modals().slotOf(7) != nullptr);
+  views.mount({ShadowViewMutation::RemoveMutation(2, sheet, 1), ShadowViewMutation::DeleteMutation(sheet)});
+}
+
+TEST_CASE("a popover GTK closed stays up while the app has not unmounted its modal") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto anchor = shadow(5, "View", nullptr, {{20, 20}, {80, 30}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {anchor, 3}});
+  auto popover = shadow(7, "RNSScreen", presented("formSheet", 5), {{0, 0}, {800, 600}});
+  auto content = shadow(9, "View", nullptr, {{0, 0}, {200, 100}});
+  mountAll(views, {{popover, 2}, {content, 7}});
+  views.backend->modals().settle();
+  views.settle();
+  GtkWidget *shown = views.backend->modals().popoverOf(7);
+  REQUIRE(shown);
+  REQUIRE(gtk_widget_get_visible(shown));
+
+  // A click outside hides it, and asks the app; the app has not answered.
+  gtk_popover_popdown(GTK_POPOVER(shown));
+  ngn::testing::runUntil([shown] { return gtk_widget_get_visible(shown); });
+  CHECK(gtk_widget_get_visible(shown));
+
+  // The app accepts: it goes.
+  views.mount({ShadowViewMutation::RemoveMutation(2, popover, 1), ShadowViewMutation::DeleteMutation(popover)});
+  CHECK(views.backend->modals().popoverOf(7) == nullptr);
 }
 
 TEST_CASE("a surface finalized with its window is the backend's no more, for a header or modal let go of later") {

@@ -525,15 +525,25 @@ TEST_CASE("the cairo canvas draws what follows a mask whose bitmap cannot be mad
   square.lineTo(10, 10);
   square.lineTo(0, 10);
   square.close();
+  ngn::SvgPath corner;
+  corner.moveTo(5, 5);
+  corner.lineTo(10, 5);
+  corner.lineTo(10, 10);
+  corner.lineTo(5, 10);
+  corner.close();
   canvas->beginMask(false);
+  // The mask's own drawing must reach no pixel.
   canvas->fill(square, false, {.argb = 0xffffffff});
   canvas->endMask();
   canvas->endMasked();
   // Drawn after the mask: lost when the mask's error surface reaches the parent context.
-  canvas->fill(square, false, {.argb = 0xff00ff00});
+  canvas->fill(corner, false, {.argb = 0xff00ff00});
   canvas.reset();
   cairo_destroy(cr);
   cairo_surface_flush(surface);
-  CHECK(*reinterpret_cast<const uint32_t *>(cairo_image_surface_get_data(surface)) == 0xff00ff00);
+  const auto *pixels = reinterpret_cast<const uint32_t *>(cairo_image_surface_get_data(surface));
+  CHECK(pixels[7 * 10 + 7] == 0xff00ff00);
+  // Only the mask's own shape covers this one: it stays transparent.
+  CHECK(pixels[1 * 10 + 1] == 0);
   cairo_surface_destroy(surface);
 }
