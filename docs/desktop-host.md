@@ -63,8 +63,9 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   its last active window, or sends `reopen` when it has none shown. `--gapplication-service` starts
   it as the D-Bus service a packaged app's `DBusActivatable` desktop entry names. A window reports
   its size, maximised and full-screen state and focus to the core's `WindowHost`, which saves the
-  size and state but no place, and the host quits with the last window only when no app listens
-  (`WindowHost::lastWindowClosed`). A window shows with nothing
+  size and state but no place. The host quits when the user closes the last window only when no
+  app listens and the app's own window is not shown; an app or a reload closing a window never
+  quits it. A window shows with nothing
   focused, as on macOS, so a header's search field does not take the focus at launch. A `<modal>`
   sheet, and a screen presented with `present()`, is an `AdwDialog` in the window on libadwaita
   1.5 and later, found at run time, and a drawn sheet on a dimmed overlay on 1.4; a cover fills the
