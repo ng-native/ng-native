@@ -331,13 +331,14 @@ TEST_CASE("A line through a right-to-left run beside left-to-right text crosses 
   REQUIRE(width > 0);
   auto plain = inkedColumns(ngn::layoutText(make(false), paragraph, 400), 400, 40);
   auto struck = inkedColumns(layout, 400, 40);
-  // Every column the line adds is over the struck run.
-  int outside = 0;
+  // The line adds ink, and every column it adds is over the struck run.
+  int inside = 0, outside = 0;
   for (int x = 0; x < 400; x++) {
-    if (struck[static_cast<size_t>(x)] && !plain[static_cast<size_t>(x)] && (x < left - 1 || x > left + width + 1)) {
-      outside++;
+    if (struck[static_cast<size_t>(x)] && !plain[static_cast<size_t>(x)]) {
+      (x < left - 1 || x > left + width + 1 ? outside : inside)++;
     }
   }
+  CHECK(inside > 0);
   CHECK(outside == 0);
 }
 
