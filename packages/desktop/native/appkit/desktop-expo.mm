@@ -144,6 +144,11 @@ class Trackpad final : public HapticPlayer {
 
 } // namespace
 
+bool usesDataProtectionKeychain(const std::string &teamId, const std::set<std::string> &entitlements) {
+  return !teamId.empty() &&
+      (entitlements.contains("com.apple.application-identifier") || entitlements.contains("keychain-access-groups"));
+}
+
 std::shared_ptr<SecretStore> makeKeychain() {
   auto [team, entitlements] = ownSigning();
   if (!usesDataProtectionKeychain(team, entitlements)) {

@@ -18,7 +18,7 @@ TEST_CASE("machineFacts reads this Mac's model, OS and memory") {
   // Apple silicon names its model in the device tree.
   CHECK(facts.marketingName.has_value());
 #endif
-  auto module = ngn::makeDeviceModule(facts);
+  auto module = ngn::makeDeviceModule(facts, "macOS");
   CHECK(module->property("modelName").isString());
 }
 

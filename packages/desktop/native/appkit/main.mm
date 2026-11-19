@@ -13,7 +13,7 @@
 
 #import "animation-frames.h"
 #import "input-replay.h"
-#include "ngn/gestures.h"
+#include "ngn/host-views.h"
 #include "ngn/worklet-host.h"
 #import "notifications.h"
 #import "undo.h"
@@ -75,6 +75,7 @@
 #include "ngn/app-menus.h"
 #include "ngn/back-swipe.h"
 #include "ngn/core-modules.h"
+#include "ngn/desktop-modules.h"
 #include "ngn/default-menu.h"
 #include "ngn/desktop-modal.h"
 #include "ngn/input-dispatcher.h"
@@ -823,6 +824,8 @@ void showAppWindow() {
 
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
+    // The values the core takes from the OS it runs on (host-os.h).
+    const ngn::HostOs os = ngn::macOS();
     // What to run: argv and the environment in a dev run, and only the Info.plist in a packaged
     // app (launch-settings.h).
     NSDictionary *info = NSBundle.mainBundle.infoDictionary;
@@ -838,7 +841,7 @@ int main(int argc, const char *argv[]) {
           return [value isKindOfClass:NSString.class] ? std::optional<std::string>(value.UTF8String) : std::nullopt;
         },
         .resourcePath = NSBundle.mainBundle.resourcePath != nil ? NSBundle.mainBundle.resourcePath.UTF8String : "",
-    });
+    }, os);
     if (auto *usage = std::get_if<std::string>(&launch)) {
       fprintf(stderr, "%s\n", usage->c_str());
       return 2;
@@ -860,13 +863,10 @@ int main(int argc, const char *argv[]) {
     app.delegate = delegate;
 
     gHost.backend = std::make_shared<ngn::appkit::AppKitBackend>();
-    gHost.mounting = std::make_shared<ngn::MountingManager>(gHost.backend, gHost.backend);
-    gHost.input = std::make_unique<ngn::InputDispatcher>(gHost.mounting->tree());
-    ngn::appkit::installWorkletHost(gHost.mounting);
-    // react-native-gesture-handler's recognisers over the view tree, fed by the input dispatcher,
-    // their timers on the main queue.
-    static auto gestures = std::make_shared<ngn::Gestures>(
-        gHost.mounting->tree(), [](double ms, std::function<void()> fn) -> std::function<void()> {
+    // The mounting manager, the input dispatcher and the gesture recognisers over the backend
+    // (host-views.h), the recognisers' timers on the main queue.
+    auto views = ngn::makeHostViews(
+        gHost.backend, gHost.backend, [](double ms, std::function<void()> fn) -> std::function<void()> {
           auto cancelled = std::make_shared<std::atomic<bool>>(false);
           auto shared = std::make_shared<std::function<void()>>(std::move(fn));
           dispatch_after(dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(ms * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
@@ -876,13 +876,9 @@ int main(int argc, const char *argv[]) {
           });
           return [cancelled] { *cancelled = true; };
         });
-    gHost.input->setGestures(gestures.get());
-    // A worklet gesture's events go to Reanimated's handlers on the UI runtime, and a worklet's
-    // state manager comes back to the recognisers, while Reanimated is running.
-    gestures->onWorkletEvent = [](const std::string &name, Tag view, const folly::dynamic &body) {
-      ngn::workletHost().reanimatedEvent.call(name, view, body);
-    };
-    ngn::workletHost().setGestureState = [](int handlerTag, int state) { gestures->setState(handlerTag, state); };
+    gHost.mounting = views.mounting;
+    gHost.input = std::move(views.input);
+    ngn::appkit::installWorkletHost(gHost.mounting);
     // Each commit's time, for the performance budget (pnpm bench:macos), when asked for: every
     // frame of an animation commits, which would flood a dev run's terminal.
     if (settings.logCommits) {
@@ -1058,7 +1054,7 @@ int main(int argc, const char *argv[]) {
            });
          },
          .fakeSystemUI = settings.test && settings.test->fakeSystemUI,
-         .gestures = gestures,
+         .gestures = views.gestures,
          .runOnUiThread = [](std::function<void()> task) {
            auto shared = std::make_shared<std::function<void()>>(std::move(task));
            dispatch_async(dispatch_get_main_queue(), ^{
@@ -1096,13 +1092,13 @@ int main(int argc, const char *argv[]) {
     });
     gHost.windowHost = std::make_shared<ngn::WindowHost>(gHost.windows, system);
     gHost.windows->setHost(gHost.windowHost);
-    ngn::addModule(*modules, "NgNativeWindows", [] { return ngn::makeWindowsModule(gHost.windowHost); });
 
     gHost.menus = std::make_shared<ngn::MenuHost>(
         std::make_shared<AppKitMenus>(),
         ngn::DefaultMenuOptions{
-            .appName = std::string(title.UTF8String), .developer = ngn::DevServer::fromBundleUrl(bundle).has_value()});
-    ngn::addModule(*modules, "NgNativeMenus", [] { return ngn::makeMenusModule(gHost.menus); });
+            .appName = std::string(title.UTF8String),
+            .developer = ngn::DevServer::fromBundleUrl(bundle).has_value(),
+            .os = os});
     // Each window's history, as the app's router reports it, for its toolbar's chevrons.
     gHost.menus->historyChanged = [](SurfaceId surface) {
       dispatch_async(dispatch_get_main_queue(), ^{
@@ -1125,177 +1121,125 @@ int main(int argc, const char *argv[]) {
     gHost.tray = std::make_shared<ngn::TrayHost>(std::make_shared<ngn::appkit::AppKitTray>(
         [](const std::string &icon) { gHost.tray->press(icon); },
         [](const std::string &icon, const std::string &id) { gHost.tray->menuSelect(icon, id); }));
-    ngn::addModule(*modules, "NgNativeTray", [] { return ngn::makeTrayModule(gHost.tray); });
     gHost.dock = std::make_shared<ngn::appkit::AppKitDock>([](const std::string &id) { gHost.dockHost->menuSelect(id); });
     gHost.dockHost = std::make_shared<ngn::DockHost>(gHost.dock);
-    ngn::addModule(*modules, "NgNativeDock", [] { return ngn::makeDockModule(gHost.dockHost); });
-    {
-      // One launcher and one declaration for the process: a reload gets a new module over them.
-      static auto launcher = ngn::makePosixLauncher();
-      gHost.launcher = launcher;
-      static auto opener = ngn::appkit::makeShellOpener();
-      ngn::addModule(*modules, "NgNativeProcesses", [] { return ngn::makeProcessesModule(launcher, processes); });
-      ngn::addModule(*modules, "NgNativeShell", [] { return ngn::makeShellModule(opener, fileAccess); });
-      // The desktop Expo modules (DESKTOP_MODULES in @ng-native/expo).
-      static std::shared_ptr<ngn::SecretStore> keychain = ngn::appkit::makeKeychain();
-      static auto keychainService = appId;
-      if (settings.test) {
-        // The run's own items, removed as it ends, and any a crashed run left.
-        ngn::appkit::removeStaleTestItems(*settings.test);
-        auto prefixed = std::make_shared<ngn::PrefixedSecretStore>(keychain, settings.test->keychainPrefix());
-        ngn::appkit::onTestLaunchEnd([prefixed] { prefixed->clear(); });
-        keychain = prefixed;
-      }
-      static auto expoSystem = system;
-      static auto awake = std::make_shared<ngn::KeepAwakeTags>(ngn::appkit::makeSleepPreventer());
-      static auto haptics = ngn::appkit::makeHapticPlayer();
-      ngn::addModule(*modules, "NgNativeSecureStore", [] { return ngn::makeSecureStoreModule(keychain, keychainService); });
-      ngn::addModule(*modules, "NgNativeClipboard", [] { return ngn::makeDesktopClipboardModule(expoSystem, gHost.state); });
-      static auto notificationEvents = std::make_shared<ngn::NotificationEvents>();
-      static auto notifications = ngn::appkit::makeNotificationCenter(notificationEvents);
-      static auto pushTokens = std::make_shared<ngn::PushTokens>(ngn::appkit::makePushRegistrar(), notificationEvents);
-      gHost.push = pushTokens;
-      gHost.notificationEvents = notificationEvents;
-      ngn::addModule(*modules, "NgNativeNotifications", [] {
-        return ngn::makeNotificationsModule(notifications, notificationEvents, pushTokens);
-      });
-      static auto undo = ngn::appkit::makeUndoManager();
-      ngn::addModule(*modules, "NgNativeUndo", [] { return ngn::makeUndoModule(undo); });
-      ngn::addModule(*modules, "NgNativeKeepAwake", [] { return ngn::makeKeepAwakeModule(awake); });
-      ngn::addModule(*modules, "NgNativeHaptics", [] { return ngn::makeHapticsModule(haptics); });
-      static auto dialogs = settings.test && settings.test->fakeSystemUI ? ngn::makeDismissedFileDialogs()
-                                                                          : ngn::appkit::makeFileDialogs();
-      static auto fileWatcher = ngn::appkit::makeFileWatcher();
-      ngn::addModule(*modules, "NgNativeFileSystem", [] { return ngn::makeFileSystemModule(fileAccess, fileWatcher); });
-      ngn::addModule(*modules, "NgNativeDocumentPicker", [] { return ngn::makeDocumentPickerModule(dialogs, caches, fileAccess); });
-      // expo-sqlite keeps its databases in the app's documents, under SQLite; here, in its data.
-      static auto databases = system->appDataDirectory() + "/SQLite";
-      ngn::addModule(*modules, "NgNativeSqlite", [] { return ngn::makeSqliteModule(databases, fileAccess); });
-      static auto location = ngn::appkit::makeLocationSource();
-      static bool noPrompts = settings.noPrompts;
-      static auto geocoder = ngn::appkit::makeGeocoder();
-      ngn::addModule(*modules, "NgNativeLocation", [] { return ngn::makeLocationModule(location, noPrompts, geocoder); });
-      static auto authenticator = ngn::appkit::makeAuthenticator(noPrompts);
-      ngn::addModule(*modules, "NgNativeLocalAuthentication", [] { return ngn::makeLocalAuthenticationModule(authenticator); });
-      static auto bundleFacts = ngn::appkit::mainBundleFacts();
-      static auto appName = std::string(title.UTF8String);
-      ngn::addModule(*modules, "NgNativeApplication", [] { return ngn::makeApplicationModule(bundleFacts, keychainService, appName); });
-      static auto machine = ngn::appkit::machineFacts();
-      ngn::addModule(*modules, "NgNativeDevice", [] { return ngn::makeDeviceModule(machine); });
-      static auto pathMonitor = ngn::appkit::makePathMonitor();
-      ngn::addModule(*modules, "NgNativeNetwork", [] { return ngn::makeNetworkModule(pathMonitor); });
-      static auto power = ngn::appkit::makePowerSource();
-      ngn::addModule(*modules, "NgNativeBattery", [] { return ngn::makeBatteryModule(power); });
-      // The fonts loaded stay registered for the process, so their names outlast a reload too.
-      static auto fontLibrary = std::make_shared<ngn::FontLibrary>();
-      static auto fontRegistrar = ngn::appkit::makeFontRegistrar();
-      static auto fontHttp = network.http;
-      ngn::useFontLibrary(fontLibrary);
-      ngn::addModule(*modules, "NgNativeFont", [] {
-        return ngn::makeFontModule(fontRegistrar, fontLibrary, fontHttp, caches + "/fonts", fileAccess);
-      });
-      static auto authSession = ngn::appkit::makeAuthSession();
-      ngn::addModule(*modules, "NgNativeWebBrowser", [] { return ngn::makeWebBrowserModule(expoSystem, authSession, noPrompts); });
-      static auto textReader = ngn::appkit::makeTextReader();
-      ngn::addModule(*modules, "NgNativeTextRecognition", [] { return ngn::makeTextRecognitionModule(textReader, fileAccess); });
-      static auto calendars = ngn::appkit::makeCalendarStore();
-      ngn::addModule(*modules, "NgNativeCalendar", [] { return ngn::makeCalendarModule(calendars, noPrompts); });
-      // Players and recorders end with the runtime: a reload stops what the app played.
-      static auto audioOutput = ngn::appkit::makeAudioOutput();
-      static auto audioInput = ngn::appkit::makeAudioInput();
-      ngn::addModule(*modules, "NgNativeAudio", [] { return ngn::makeAudioModule(audioOutput, audioInput, caches + "/Audio", noPrompts, fileAccess); });
-      static auto videoOutput = ngn::appkit::makeVideoOutput();
-      ngn::addModule(*modules, "NgNativeVideo", [] { return ngn::makeVideoModule(videoOutput, fileAccess); });
-      static auto languageModel = ngn::appkit::makeLanguageModelEngine();
-      ngn::addModule(*modules, "NgNativeLocalLlm", [] { return ngn::makeLocalLlmModule(languageModel); });
-      ngn::addModule(*modules, "NgNativeScreenCapture", [] { return ngn::makeScreenCaptureModule(ngn::appkit::captureShield()); });
-      ngn::addModule(*modules, "NgNativeSplashScreen", [] { return ngn::makeSplashScreenModule(gSplash); });
-      static auto photos = ngn::appkit::makePhotoLibrary(caches);
-      ngn::addModule(*modules, "NgNativeMediaLibrary", [] { return ngn::makeMediaLibraryModule(photos, noPrompts, fileAccess); });
-      static auto cameraHardware = ngn::appkit::makeCameraHardware();
-      static auto cameraSheet = ngn::appkit::makeCameraSheet();
-      ngn::addModule(*modules, "NgNativeImagePicker", [] {
-        return ngn::makeImagePickerModule(photos, noPrompts, ngn::PickerCamera{.hardware = cameraHardware, .microphone = audioInput, .sheet = cameraSheet, .folder = caches + "/ImagePicker"});
-      });
-      static auto tracking = ngn::appkit::makeTrackingAuthority();
-      ngn::addModule(*modules, "NgNativeTrackingTransparency", [] { return ngn::makeTrackingModule(tracking, noPrompts); });
-      static auto imageHttp = network.http;
-      static auto addressLookup = ngn::appkit::makeAddressLookup();
-      ngn::addModule(*modules, "NgNativeAddressSearch", [] { return ngn::makeAddressSearchModule(addressLookup); });
-      ngn::addModule(*modules, "NgNativeAsset", [] { return ngn::makeAssetModule(imageHttp, caches, fileAccess); });
-      static auto symbolMeasurer = ngn::appkit::makeSymbolMeasurer();
-      ngn::addModule(*modules, "NgNativeSymbol", [] { return ngn::makeSymbolModule(symbolMeasurer); });
-      static auto sharePicker = ngn::appkit::makeSharePicker();
-      ngn::addModule(*modules, "NgNativeSharing", [] { return ngn::makeSharingModule(sharePicker, noPrompts, fileAccess); });
-      static auto imageCodec = ngn::appkit::makeImageCodec();
-      ngn::addModule(*modules, "NgNativeImageManipulator", [] {
-        return ngn::makeImageManipulatorModule(imageCodec, imageHttp, caches + "/ImageManipulator", fileAccess);
-      });
-      // <expo-image>'s bytes: 64 MB of them in memory, the rest on disk in the caches.
-      [NGNExpoImageView useHttp:imageHttp cache:std::make_shared<ngn::ImageCache>(caches + "/ExpoImage", 64 << 20)];
-      static auto cameraViews = std::make_shared<ngn::CameraViews>();
-      [NGNCameraView useHardware:cameraHardware views:cameraViews noPrompts:noPrompts];
-      ngn::addModule(*modules, "NgNativeCamera", [] { return ngn::makeCameraModule(cameraHardware, cameraViews, caches + "/Camera", noPrompts); });
-      static auto mapViews = std::make_shared<ngn::MapViews>();
-      [NGNMapView useViews:mapViews location:location];
-      ngn::addModule(*modules, "NgNativeMaps", [] { return ngn::makeMapsModule(mapViews); });
-      // Sign in with Apple: available only to an app signed with its entitlement.
-      static auto appleId = ngn::appkit::makeAppleIdProvider();
-      ngn::addModule(*modules, "NgNativeAppleAuthentication", [] { return ngn::makeAppleAuthenticationModule(appleId, noPrompts); });
-      static auto printSystem = ngn::appkit::makePrintSystem([](SurfaceId surface) -> NSWindow * {
-        return surface == kAppSurface ? gHost.appWindow : gHost.windows->window(surface);
-      });
-      ngn::addModule(*modules, "NgNativePrint", [] { return ngn::makePrintModule(printSystem, imageHttp, caches + "/Print", fileAccess, noPrompts); });
-      // react-native-webview's navigation answers; harmless in a host built without the library.
-      ngn::addModule(*modules, "RNCWebViewModule", [] { return ngn::makeWebViewModule(ngn::sharedNavigationLocks()); });
-      // A rating prompt only in a Mac App Store build: one sandboxed but shipped another way has none.
-      static auto packaged = ngn::appkit::packagedApp();
-      static auto reviewPrompt = ngn::appkit::makeReviewPrompt(packaged && packaged->distribution == "mas");
-      ngn::addModule(*modules, "NgNativeStoreReview", [] { return ngn::makeStoreReviewModule(reviewPrompt, noPrompts); });
-      static auto crypto = ngn::appkit::makeCryptoSource();
-      ngn::addModule(*modules, "NgNativeCrypto", [] { return ngn::makeCryptoModule(crypto); });
-      static auto locales = ngn::appkit::makeLocaleSource();
-      ngn::addModule(*modules, "NgNativeLocalization", [] {
-        return ngn::makeLocalizationModule(locales, ngn::appkit::systemRegionCode());
-      });
+    // The secrets' store: a test launch's own items, removed as it ends, and any a crashed run left.
+    std::shared_ptr<ngn::SecretStore> keychain = ngn::appkit::makeKeychain();
+    if (settings.test) {
+      ngn::appkit::removeStaleTestItems(*settings.test);
+      auto prefixed = std::make_shared<ngn::PrefixedSecretStore>(keychain, settings.test->keychainPrefix());
+      ngn::appkit::onTestLaunchEnd([prefixed] { prefixed->clear(); });
+      keychain = prefixed;
     }
-
     // A bundle on disk runs the newest update the Expo Updates client keeps, when the app has an
     // updates URL; one from a dev server never does.
-    {
-      bool fromDevServer = ngn::DevServer::fromBundleUrl(bundle).has_value();
-      gHost.updates = std::make_shared<ngn::UpdatesClient>(
-          ngn::updatesConfigFrom(settings, system->appDataDirectory(), bundle), network.http, ngn::appkit::makeUpdateCrypto());
-      if (!fromDevServer && gHost.updates->enabled()) {
-        bundle = gHost.updates->launch();
-        if (auto running = gHost.updates->running()) {
-          fprintf(stderr, "[ngn] running update %s\n", running->id.c_str());
-        }
+    bool fromDevServer = ngn::DevServer::fromBundleUrl(bundle).has_value();
+    gHost.updates = std::make_shared<ngn::UpdatesClient>(
+        ngn::updatesConfigFrom(settings, os, system->appDataDirectory(), bundle), network.http, ngn::appkit::makeUpdateCrypto());
+    if (!fromDevServer && gHost.updates->enabled()) {
+      bundle = gHost.updates->launch();
+      if (auto running = gHost.updates->running()) {
+        fprintf(stderr, "[ngn] running update %s\n", running->id.c_str());
       }
-      // Sparkle starts with the app, as its own updater does: one for the process.
-      static auto appUpdater = ngn::appkit::makeSparkleUpdater();
-      ngn::addModule(*modules, "NgNativeUpdates", [fromDevServer] {
-        return ngn::makeUpdatesModule(gHost.updates, fromDevServer, [](const std::string &next, std::function<void(bool)> done) {
-          setRunningBundle(next);
-          // The launch the module's beginReload just began.
-          uint64_t generation = gHost.updates->launchGeneration();
-          gHost.runtime->reload(next, [next, done, generation](bool loaded) {
-            if (!loaded) {
-              fprintf(stderr, "ngn-macos: the update's bundle %s did not load\n", next.c_str());
-            }
-            // A bundle that did not load never counts as a launch that succeeded; one that did counts
-            // from the first frame its own instance mounts on screen.
-            if (loaded) {
-              uint64_t instance = gHost.mounting->instance();
-              dispatch_async(dispatch_get_main_queue(), ^{
-                reloadLaunched(generation, instance);
-              });
-            }
-            done(loaded);
-          });
-        }, appUpdater);
-      });
     }
+    // The map and camera views reach the same location service and camera as their modules.
+    auto location = ngn::appkit::makeLocationSource();
+    auto cameraHardware = ngn::appkit::makeCameraHardware();
+    // A rating prompt only in a Mac App Store build: one sandboxed but shipped another way has none.
+    auto packaged = ngn::appkit::packagedApp();
+    // The desktop host's own modules over AppKit's sources (desktop-modules.h).
+    auto desktop = ngn::addDesktopModules(
+        *modules,
+        {.os = os,
+         .system = system,
+         .state = gHost.state,
+         .http = network.http,
+         .files = fileAccess,
+         .appId = appId,
+         .appName = std::string(title.UTF8String),
+         .caches = caches,
+         .noPrompts = settings.noPrompts,
+         .windows = gHost.windowHost,
+         .menus = gHost.menus,
+         .tray = gHost.tray,
+         .dock = gHost.dockHost,
+         .processes = processes,
+         .shell = ngn::appkit::makeShellOpener(),
+         .secrets = keychain,
+         .sleep = ngn::appkit::makeSleepPreventer(),
+         .haptics = ngn::appkit::makeHapticPlayer(),
+         .notifications = ngn::appkit::makeNotificationCenter,
+         .push = ngn::appkit::makePushRegistrar(),
+         .undo = ngn::appkit::makeUndoManager(),
+         .fileDialogs = settings.test && settings.test->fakeSystemUI ? ngn::makeDismissedFileDialogs()
+                                                                     : ngn::appkit::makeFileDialogs(),
+         .fileWatcher = ngn::appkit::makeFileWatcher(),
+         .location = location,
+         .geocoder = ngn::appkit::makeGeocoder(),
+         .authenticator = ngn::appkit::makeAuthenticator(settings.noPrompts),
+         .bundle = ngn::appkit::mainBundleFacts(),
+         .machine = ngn::appkit::machineFacts(),
+         .pathMonitor = ngn::appkit::makePathMonitor(),
+         .power = ngn::appkit::makePowerSource(),
+         .fontRegistrar = ngn::appkit::makeFontRegistrar(),
+         .authSession = ngn::appkit::makeAuthSession(),
+         .textReader = ngn::appkit::makeTextReader(),
+         .calendars = ngn::appkit::makeCalendarStore(),
+         .audioOutput = ngn::appkit::makeAudioOutput(),
+         .audioInput = ngn::appkit::makeAudioInput(),
+         .videoOutput = ngn::appkit::makeVideoOutput(),
+         .languageModel = ngn::appkit::makeLanguageModelEngine(),
+         .captureShield = ngn::appkit::captureShield(),
+         .splash = gSplash,
+         .photos = ngn::appkit::makePhotoLibrary(caches),
+         .cameraHardware = cameraHardware,
+         .cameraSheet = ngn::appkit::makeCameraSheet(),
+         .tracking = ngn::appkit::makeTrackingAuthority(),
+         .addressLookup = ngn::appkit::makeAddressLookup(),
+         .symbolMeasurer = ngn::appkit::makeSymbolMeasurer(),
+         .sharePicker = ngn::appkit::makeSharePicker(),
+         .imageCodec = ngn::appkit::makeImageCodec(),
+         // Sign in with Apple: available only to an app signed with its entitlement.
+         .appleId = ngn::appkit::makeAppleIdProvider(),
+         .printSystem = ngn::appkit::makePrintSystem([](SurfaceId surface) -> NSWindow * {
+           return surface == kAppSurface ? gHost.appWindow : gHost.windows->window(surface);
+         }),
+         .reviewPrompt = ngn::appkit::makeReviewPrompt(packaged && packaged->distribution == "mas"),
+         .crypto = ngn::appkit::makeCryptoSource(),
+         .locales = ngn::appkit::makeLocaleSource(),
+         .regionCode = ngn::appkit::systemRegionCode,
+         .updates = gHost.updates,
+         .fromDevServer = fromDevServer,
+         .reload =
+             [](const std::string &next, std::function<void(bool)> done) {
+               setRunningBundle(next);
+               // The launch the module's beginReload just began.
+               uint64_t generation = gHost.updates->launchGeneration();
+               gHost.runtime->reload(next, [next, done, generation](bool loaded) {
+                 if (!loaded) {
+                   fprintf(stderr, "ngn-macos: the update's bundle %s did not load\n", next.c_str());
+                 }
+                 // A bundle that did not load never counts as a launch that succeeded; one that did
+                 // counts from the first frame its own instance mounts on screen.
+                 if (loaded) {
+                   uint64_t instance = gHost.mounting->instance();
+                   dispatch_async(dispatch_get_main_queue(), ^{
+                     reloadLaunched(generation, instance);
+                   });
+                 }
+                 done(loaded);
+               });
+             },
+         // Sparkle starts with the app, as its own updater does: one for the process.
+         .appUpdater = ngn::appkit::makeSparkleUpdater()});
+    gHost.launcher = desktop.launcher;
+    gHost.push = desktop.push;
+    gHost.notificationEvents = desktop.notificationEvents;
+    ngn::useFontLibrary(desktop.fonts);
+    // <expo-image>'s bytes: 64 MB of them in memory, the rest on disk in the caches.
+    [NGNExpoImageView useHttp:network.http cache:std::make_shared<ngn::ImageCache>(caches + "/ExpoImage", 64 << 20)];
+    [NGNCameraView useHardware:cameraHardware views:desktop.cameraViews noPrompts:settings.noPrompts];
+    [NGNMapView useViews:desktop.mapViews location:location];
 
     setRunningBundle(bundle);
     gHost.runtime = std::make_unique<ngn::Runtime>(
@@ -1305,7 +1249,8 @@ int main(int argc, const char *argv[]) {
         modules, network, bundle,
         ngn::DebuggerIdentity{
             .appId = appId,
-            .deviceName = NSHost.currentHost.localizedName ? NSHost.currentHost.localizedName.UTF8String : "Mac"});
+            .deviceName = NSHost.currentHost.localizedName ? NSHost.currentHost.localizedName.UTF8String : "Mac",
+            .os = os.id});
     // Each surface lays out the way I18nManager.isRTL says for the instance running, read again
     // as a reload starts the next.
     gHost.runtime->rightToLeft = [system] { return ngn::appRightToLeft(*system); };

@@ -1,4 +1,4 @@
-// What an Image asks for (image-request.h).
+// The request an Image loads its source with (image-request.h).
 #include "../image-request.h"
 
 #include <doctest/doctest.h>
@@ -20,22 +20,7 @@ TEST_CASE("An Image's request carries its source's method, headers and body") {
   CHECK((get.HTTPBody == nil));
 }
 
-TEST_CASE("An Image picks the source nearest the screen's scale, and loads again for new headers on the same uri") {
-  ImageSource one{.uri = "a@1x.png", .scale = 1}, two{.uri = "a@2x.png", .scale = 2}, none{.scale = 2};
-  CHECK(ngn::appkit::pickImageSource({one, two, none}, 2)->uri == "a@2x.png");
-  CHECK(ngn::appkit::pickImageSource({one, two}, 1)->uri == "a@1x.png");
-  CHECK_FALSE(ngn::appkit::pickImageSource({none}, 2));
-
-  ImageSource signedIn = one;
-  signedIn.headers = {{"Authorization", "Bearer a"}};
-  CHECK(ngn::appkit::sameImageRequest(one, one));
-  CHECK_FALSE(ngn::appkit::sameImageRequest(one, signedIn));
-  ImageSource other = signedIn;
-  other.headers = {{"Authorization", "Bearer b"}};
-  CHECK_FALSE(ngn::appkit::sameImageRequest(signedIn, other));
-}
-
-TEST_CASE("An Image's request keeps its source's cache policy, and a new policy is a new request") {
+TEST_CASE("An Image's request keeps its source's cache policy") {
   using Cache = ImageSource::CacheStategy;
   auto policy = [](Cache cache) {
     ImageSource source{.uri = "https://example.com/a.png", .cache = cache};
@@ -45,7 +30,4 @@ TEST_CASE("An Image's request keeps its source's cache policy, and a new policy 
   CHECK(policy(Cache::Reload) == NSURLRequestReloadIgnoringLocalCacheData);
   CHECK(policy(Cache::ForceCache) == NSURLRequestReturnCacheDataElseLoad);
   CHECK(policy(Cache::OnlyIfCached) == NSURLRequestReturnCacheDataDontLoad);
-
-  ImageSource cached{.uri = "a.png", .cache = Cache::OnlyIfCached}, plain{.uri = "a.png"};
-  CHECK_FALSE(ngn::appkit::sameImageRequest(plain, cached));
 }

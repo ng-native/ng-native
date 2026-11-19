@@ -160,6 +160,11 @@ std::string pushFailure(const std::string &message);
 // the response that launched the app waits for getLastNotificationResponseAsync.
 class NotificationEvents {
  public:
+  // `os` is the host OS's id (HostOs), a device push token's `type`.
+  explicit NotificationEvents(std::string os) : os_(std::move(os)) {}
+  const std::string &os() const {
+    return os_;
+  }
   void received(double date, const NotificationRequest &request);
   void responded(double date, const NotificationRequest &request);
   // A new device token, in hex, while the app runs.
@@ -169,6 +174,7 @@ class NotificationEvents {
 
  private:
   void send(const folly::dynamic &event);
+  std::string os_;
   mutable std::mutex mutex_;
   std::optional<folly::dynamic> lastResponse_;
   // A dropped handle waits for its listener's call in progress, so a module going with a reload

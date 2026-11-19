@@ -6,7 +6,8 @@
 #
 # scripts/build.sh is the way in: it fetches the pinned sources into the per-user cache and passes
 # their paths here. NGN_BACKEND=none builds only the core and its tests (any OS, no Hermes), which
-# is what proves the core never reaches for a toolkit.
+# is what proves the core never reaches for a toolkit; with NGN_RUNTIME, the runtime half over
+# Hermes too, and its tests, still with no toolkit.
 cmake_minimum_required(VERSION 3.25)
 project(ngn_desktop LANGUAGES C CXX)
 
@@ -18,10 +19,12 @@ endif()
 set(NGN_BACKEND ${_default_backend} CACHE STRING "appkit or none")
 set_property(CACHE NGN_BACKEND PROPERTY STRINGS appkit none)
 option(NGN_TESTS "Build the core tests" ON)
+option(NGN_RUNTIME "With NGN_BACKEND=none, build the runtime half over Hermes too" OFF)
 
 set(RN_DIR "" CACHE PATH "The installed react-native package")
 set(NGN_SOURCES "" CACHE PATH "Sources fetched by scripts/fetch.sh (<cache>/src)")
 set(NGN_HERMES_BUILD "" CACHE PATH "Hermes built by scripts/build-hermes.sh")
+set(NGN_HERMES_PREBUILT "" CACHE PATH "React Native's prebuilt Hermes, from scripts/fetch-hermes.sh")
 foreach(var RN_DIR NGN_SOURCES)
   if(NOT IS_DIRECTORY "${${var}}")
     message(FATAL_ERROR "${var} is not set to a directory; build through scripts/build.sh")
@@ -51,7 +54,7 @@ endif()
 if(NGN_BACKEND STREQUAL "appkit")
   set(NGN_WITH_RUNTIME ON)
 elseif(NGN_BACKEND STREQUAL "none")
-  set(NGN_WITH_RUNTIME OFF)
+  set(NGN_WITH_RUNTIME ${NGN_RUNTIME})
 else()
   message(FATAL_ERROR "NGN_BACKEND must be appkit or none, not ${NGN_BACKEND}")
 endif()
@@ -91,7 +94,10 @@ add_library(ngn_core STATIC
     core/src/gestures.cpp
     core/src/glass.cpp
     core/src/header-bar.cpp
+    core/src/host-os.cpp
     core/src/host-state.cpp
+    core/src/host-views.cpp
+    core/src/image-source.cpp
     core/src/input-dispatcher.cpp
     core/src/input-script.cpp
     core/src/key-value-store.cpp
@@ -106,6 +112,7 @@ add_library(ngn_core STATIC
     core/src/text-input.cpp
     core/src/text-layout-manager.cpp
     core/src/tray-and-dock.cpp
+    core/src/undo-stacks.cpp
     core/src/safe-areas.cpp
     core/src/scrollers.cpp
     core/src/posix-launcher.cpp
@@ -116,6 +123,7 @@ add_library(ngn_core STATIC
     core/src/split-view.cpp
     core/src/svg.cpp
     core/src/symbol.cpp
+    core/src/system.cpp
     core/src/tabs-host.cpp
     core/src/download.cpp
     core/src/updates.cpp
@@ -142,6 +150,7 @@ add_library(ngn_core STATIC
     core/src/modules/core-modules.cpp
     core/src/modules/crypto.cpp
     core/src/modules/desktop-expo.cpp
+    core/src/modules/desktop-modules.cpp
     core/src/modules/file-system.cpp
     core/src/modules/fonts.cpp
     core/src/modules/image-loader.cpp
@@ -175,7 +184,8 @@ target_compile_options(ngn_core PRIVATE -Wall -Wextra -Werror -Wno-unused-parame
 if(NGN_TESTS)
   file(GLOB core_test_SRC CONFIGURE_DEPENDS core/tests/*.cpp)
   add_executable(ngn_core_tests ${core_test_SRC} core/testing/fake-backend.cpp core/testing/fake-network.cpp core/testing/fake-system.cpp)
-  target_include_directories(ngn_core_tests PRIVATE core/testing core/tests)
+  # shim/ for the SHA-256 shim's own test.
+  target_include_directories(ngn_core_tests PRIVATE core/testing core/tests shim)
   target_link_libraries(ngn_core_tests PRIVATE ngn_core doctest)
   # doctest includes <ciso646> under clang, which libstdc++ 15 marks deprecated with a #warning;
   # keep it a warning rather than an error under -Werror (libc++, on Apple, has no such warning).
@@ -184,6 +194,15 @@ if(NGN_TESTS)
     target_compile_options(ngn_core_tests PRIVATE
         $<$<CXX_COMPILER_ID:Clang>:-Wno-error=\#warnings>
         $<$<CXX_COMPILER_ID:GNU>:-Wno-error=cpp>)
+    # clang 22's -Wpedantic calls doctest's __COUNTER__ a C2y extension. -Wpedantic comes from
+    # React Native's interface options, which follow the target's own, so the exception goes on
+    # the sources, whose options come last.
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag(-Wc2y-extensions NGN_HAS_WC2Y_EXTENSIONS)
+    if(NGN_HAS_WC2Y_EXTENSIONS)
+      set(NGN_DOCTEST_SOURCE_OPTIONS -Wno-c2y-extensions)
+      set_source_files_properties(${core_test_SRC} PROPERTIES COMPILE_OPTIONS -Wno-c2y-extensions)
+    endif()
   endif()
   # The AppKit backend's own logic that needs no window: on macOS only, over the system's frameworks.
   if(APPLE)
@@ -233,11 +252,15 @@ if(NGN_TESTS)
         appkit/system.mm appkit/tests/system.test.mm
         appkit/image-request.mm appkit/tests/image-request.test.mm
         appkit/tests/pointer-buttons.test.mm
-        appkit/test-launch.mm appkit/desktop-expo.mm appkit/tests/test-launch.test.mm appkit/tests/locales.test.mm)
+        appkit/test-launch.mm appkit/desktop-expo.mm appkit/tests/test-launch.test.mm appkit/tests/locales.test.mm
+        appkit/tests/desktop-expo.test.mm)
     target_compile_options(ngn_core_tests PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
     target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit" "-framework WebKit" "-framework PDFKit" "-framework CoreImage" "-framework AuthenticationServices" "-framework AVKit" "-framework UserNotifications")
   endif()
   enable_testing()
+  if(NGN_HERMES_TEST_RPATH)
+    target_link_options(ngn_core_tests PRIVATE ${NGN_HERMES_TEST_RPATH})
+  endif()
   add_test(NAME core COMMAND ngn_core_tests)
 endif()
 
@@ -261,6 +284,28 @@ if(NGN_WITH_RUNTIME)
   file(CONFIGURE OUTPUT ${CMAKE_BINARY_DIR}/generated/red-box-errors.h CONTENT
       "// Generated by CMakeLists.txt from core/src/red-box-errors.js.\n#pragma once\nconstexpr const char *kRedBoxErrors = R\"ngn(@NGN_RED_BOX_ERRORS_JS@)ngn\";\n" @ONLY)
   target_include_directories(ngn_core_runtime PRIVATE ${CMAKE_BINARY_DIR}/generated)
+
+  # Hermes and the runtime half linked whole, as a host links them: what no backend links yet on
+  # Linux, so an unresolved symbol or a missing ICU fails here first.
+  if(NGN_TESTS)
+    file(GLOB runtime_test_SRC CONFIGURE_DEPENDS core/runtime-tests/*.cpp)
+    add_executable(ngn_runtime_tests ${runtime_test_SRC})
+    target_link_libraries(ngn_runtime_tests PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,ngn_core_runtime>" doctest)
+    # doctest's warnings, as for the core tests above.
+    if(NOT APPLE)
+      target_compile_options(ngn_runtime_tests PRIVATE
+          $<$<CXX_COMPILER_ID:Clang>:-Wno-error=\#warnings>
+          $<$<CXX_COMPILER_ID:GNU>:-Wno-error=cpp>)
+    endif()
+    if(NGN_DOCTEST_SOURCE_OPTIONS)
+      set_source_files_properties(${runtime_test_SRC} PROPERTIES COMPILE_OPTIONS ${NGN_DOCTEST_SOURCE_OPTIONS})
+    endif()
+    # A prebuilt Hermes framework loads through @rpath, as for the core tests above.
+    if(NGN_HERMES_TEST_RPATH)
+      target_link_options(ngn_runtime_tests PRIVATE ${NGN_HERMES_TEST_RPATH})
+    endif()
+    add_test(NAME runtime COMMAND ngn_runtime_tests)
+  endif()
 endif()
 
 # --- libraries' components (react-native-screens, react-native-safe-area-context) ---------------

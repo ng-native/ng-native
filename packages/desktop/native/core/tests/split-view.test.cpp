@@ -155,6 +155,24 @@ TEST_CASE("the sidebar's props are read under their pane names") {
   CHECK(group.collapsible);
 }
 
+TEST_CASE("a sidebar is dragged between its app's bounds, or 150 and 400, and starts at 240 inside them") {
+  auto widths = [](dynamic values) {
+    auto shared = props<ngn::SidebarComponentDescriptor>(std::move(values));
+    return ngn::sidebarWidths(&static_cast<const ngn::SplitPaneProps &>(*shared));
+  };
+  CHECK(ngn::sidebarWidths(nullptr) == ngn::SidebarWidths{.minimum = 150, .maximum = 400, .starting = 240});
+  CHECK(widths(dynamic::object()) == ngn::SidebarWidths{.minimum = 150, .maximum = 400, .starting = 240});
+  CHECK(widths(dynamic::object("paneMinWidth", 180)("paneMaxWidth", 300)) ==
+        ngn::SidebarWidths{.minimum = 180, .maximum = 300, .starting = 240});
+  // The start is held inside the bounds.
+  CHECK(widths(dynamic::object("paneMinWidth", 260)) == ngn::SidebarWidths{.minimum = 260, .maximum = 400, .starting = 260});
+  CHECK(widths(dynamic::object("paneMaxWidth", 200)) == ngn::SidebarWidths{.minimum = 150, .maximum = 200, .starting = 200});
+  // The widest is never below the narrowest, the app's bound or not.
+  CHECK(widths(dynamic::object("paneMinWidth", 500)) == ngn::SidebarWidths{.minimum = 500, .maximum = 500, .starting = 500});
+  CHECK(widths(dynamic::object("paneMinWidth", 300)("paneMaxWidth", 200)) ==
+        ngn::SidebarWidths{.minimum = 300, .maximum = 300, .starting = 300});
+}
+
 TEST_CASE("a pane is laid out at the size its toolkit reports, and by its style before that") {
   auto sidebar = node<ngn::SidebarComponentDescriptor>(3, dynamic::object("height", 50));
   auto content = node<ngn::SplitContentComponentDescriptor>(4, dynamic::object("flex", 1));

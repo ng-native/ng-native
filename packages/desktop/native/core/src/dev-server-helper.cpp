@@ -122,10 +122,11 @@ std::string DevServerHelper::getBundleUrl() const {
     return sourcePath_;
   }
   return fmt::format(
-      "http://{}:{}/{}.bundle?platform=macos&dev=true&minify=false&app={}",
+      "http://{}:{}/{}.bundle?platform={}&dev=true&minify=false&app={}",
       devServerHost_,
       devServerPort_,
       sourcePath_,
+      ngn::devServerOs(),
       appId_);
 }
 
@@ -146,7 +147,7 @@ void DevServerHelper::setupHMRClient() const {
   if (!server) {
     return;
   }
-  javaScriptModuleCallback_("HMRClient", "setup", server->hmrSetupArgs());
+  javaScriptModuleCallback_("HMRClient", "setup", server->hmrSetupArgs(ngn::devServerOs()));
 }
 
 } // namespace facebook::react

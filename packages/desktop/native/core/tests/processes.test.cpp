@@ -1,4 +1,5 @@
 #include "helpers.h"
+#include "ngn/host-os.h"
 #include "ngn/processes.h"
 
 #include <doctest/doctest.h>
@@ -155,7 +156,7 @@ ngn::ProcessesSetup setup(bool sandboxed = false) {
   return {
       .capabilities = ngn::parseCapabilities(gitCapabilities()),
       .environment = {{"HOME", "/Users/me"}, {"LANG", "en"}, {"SECRET", "token"}},
-      .lookup = {.isExecutable = [](const std::string &p) { return p == "/opt/homebrew/bin/git"; }},
+      .lookup = {.isExecutable = [](const std::string &p) { return p == "/opt/homebrew/bin/git"; }, .searchPath = ngn::macOS().searchPath},
       .sandboxed = sandboxed,
   };
 }
