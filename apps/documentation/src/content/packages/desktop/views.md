@@ -31,8 +31,8 @@ outer or inset, is a blurred layer under the children. A view that clips its ove
 its outer shadows.
 
 An `<image>` fits its picture to its box by `resizeMode`: `cover`, `contain`, `center` or `stretch`,
-and `repeat`, which tiles the picture at its own size from the box's top left corner, as React
-Native iOS does.
+and `repeat`, which tiles the picture from the box's top left corner at its pixel size divided by
+its source's `scale`, as React Native iOS does.
 
 ## Modals
 

@@ -152,3 +152,22 @@ TEST_CASE("An image goes from stretching to repeat and back") {
   auto again = drawnPixels(view, 200, 24);
   CHECK(is(at(again, 200, 1, 0), {255, 0, 0}));
 }
+
+TEST_CASE("An image with resizeMode repeat tiles a picture whose source has a scale at its size in points") {
+  MountedViews mounted;
+  // 2 pixels at a scale of 2 are one point: the tile repeats every point, so pixels one point apart
+  // show the same colour (the four quadrants averaged), where an unscaled tile shows red then green.
+  auto props = parsedProps<ImageComponentDescriptor>(folly::dynamic::object("resizeMode", "repeat")(
+      "source", folly::dynamic::array(folly::dynamic::object("uri", quadrantsUri())("scale", 2))));
+  auto image = MountedViews::shadow(5, "Image", props);
+  mounted.add(image);
+  NSView *view = mounted.view(5);
+  waitForImage(view);
+  [view displayIfNeeded];
+  auto data = drawnPixels(view, 200, 24);
+  Rgb origin = at(data, 200, 0, 0);
+  CHECK(!is(origin, {255, 0, 0}));
+  CHECK(is(at(data, 200, 1, 0), origin));
+  CHECK(is(at(data, 200, 0, 1), origin));
+  CHECK(is(at(data, 200, 7, 5), origin));
+}
