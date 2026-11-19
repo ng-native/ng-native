@@ -216,11 +216,13 @@ void applyTextFieldProps(ViewData &view) {
   }
   gtk_editable_set_alignment(GTK_EDITABLE(text), xalign);
   gtk_widget_set_direction(field.text, rightToLeft ? GTK_TEXT_DIR_RTL : GTK_TEXT_DIR_LTR);
-  // A controlled value JavaScript set, when it has seen every change the user made.
-  if (props->mostRecentEventCount >= field.eventCount && props->text != fieldText(field) &&
-      (!props->text.empty() || props->defaultValue.empty() || field.eventCount > 0)) {
+  // A controlled value JavaScript set, when it has seen every change the user made. Once per props:
+  // a layout update applies the same props again, which must not undo a setTextAndSelection.
+  if (field.controlledFrom != view.props && props->mostRecentEventCount >= field.eventCount &&
+      props->text != fieldText(field) && (!props->text.empty() || props->defaultValue.empty() || field.eventCount > 0)) {
     setText(field, props->text);
   }
+  field.controlledFrom = view.props;
 }
 
 void allocateTextField(ViewData &view, int width, int height) {
@@ -250,7 +252,8 @@ void textFieldCommand(ViewData &view, const std::string &name, const folly::dyna
     }
   } else if (name == "setTextAndSelection" && args.isArray() && args.size() >= 4) {
     // [mostRecentEventCount, value, start, end]: a value only when JavaScript has seen every change.
-    if (args[0].isInt() && args[0].asInt() < field.eventCount) {
+    // The count is a JavaScript number, which can arrive as a double.
+    if (args[0].isNumber() && args[0].asDouble() < field.eventCount) {
       return;
     }
     if (args[1].isString()) {

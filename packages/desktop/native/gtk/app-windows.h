@@ -23,8 +23,11 @@ class GtkWindows final : public WindowBackend {
     std::function<void(SurfaceId surface, int width, int height, int scale)> startSurface;
     std::function<void(SurfaceId surface, int width, int height, int scale)> resizeSurface;
     std::function<void(SurfaceId surface)> stopSurface;
-    // Every window closed, or the app agreed to quit.
+    // The app agreed to quit, or nothing was listening when it was asked to.
     std::function<void()> quit;
+    // The user closed the last of these windows. The host decides: the app's own window may still
+    // be open.
+    std::function<void()> lastWindowClosed;
   };
 
   explicit GtkWindows(Hooks hooks);
