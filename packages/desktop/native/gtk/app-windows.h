@@ -25,8 +25,9 @@ void presentWithoutInitialFocus(GtkWindow *window);
 GtkApplication *startApplication(const std::string &appId);
 
 // Calls `laidOut` each time GTK has laid out the realized `window` and is about to draw it (its
-// frame clock's paint phase), for what moves with its chrome.
-void afterLayout(GtkWidget *window, std::function<void()> laidOut);
+// frame clock's paint phase), for what moves with its chrome. Returns the handler's id on that
+// clock, for whoever must stop it before `laidOut`'s captures go; 0 when the window has no clock.
+gulong afterLayout(GtkWidget *window, std::function<void()> laidOut);
 
 class GtkWindows final : public WindowBackend {
  public:
@@ -48,6 +49,10 @@ class GtkWindows final : public WindowBackend {
 
   // Windows of `application`, with the app's menus where `menus` says.
   GtkWindows(Hooks hooks, GtkApplication *application, MenuPlacement menus);
+  // Windows still open stay open, no longer calling back into these.
+  ~GtkWindows() override;
+  GtkWindows(const GtkWindows &) = delete;
+  GtkWindows &operator=(const GtkWindows &) = delete;
 
   // The host the close button asks first. Set once, before any window opens.
   void setHost(std::weak_ptr<WindowHost> host);
@@ -69,7 +74,13 @@ class GtkWindows final : public WindowBackend {
     GtkWidget *window{nullptr};
     GtkWidget *surface{nullptr};
     bool shown{false};
+    // The handlers that call back into these windows, stopped when the window closes or these go.
+    gulong scaled{0};
+    gulong closeRequested{0};
+    GdkFrameClock *clock{nullptr};
+    gulong laidOut{0};
   };
+  static void disconnect(Window &entry);
   void open(SurfaceId surface, const WindowRequest &request, const WindowPlacement &placement, std::function<void()> opened);
   void close(SurfaceId surface);
 
