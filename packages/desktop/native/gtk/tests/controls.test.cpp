@@ -134,6 +134,50 @@ TEST_CASE("a switch is a GtkSwitch: the user's change is sent, and the app's val
   CHECK(events.sent.size() == 1);
 }
 
+TEST_CASE("a switch keeps the slide a click started through an update to another prop") {
+  REQUIRE(ngn::testing::gtkReady());
+  using Descriptor = ngn::SwitchControlComponentDescriptor;
+  // GTK's animations on while the test runs, as on a desktop, and the setting's own again after.
+  struct Animations {
+    GtkSettings *settings = gtk_settings_get_default();
+    gboolean was = TRUE;
+    Animations() {
+      g_object_get(settings, "gtk-enable-animations", &was, nullptr);
+      g_object_set(settings, "gtk-enable-animations", TRUE, nullptr);
+    }
+    ~Animations() {
+      g_object_set(settings, "gtk-enable-animations", was, nullptr);
+    }
+  } animations;
+  Events events;
+  MountedViews views(false, 200, 100);
+  auto view = control(3, "Switch", controlProps<Descriptor>(folly::dynamic::object("value", false)));
+  views.add(view);
+  GtkWidget *toggle = controlOf(views, 3);
+  REQUIRE(GTK_IS_SWITCH(toggle));
+  gtk_widget_activate(toggle);
+  REQUIRE_FALSE(gtk_switch_get_active(GTK_SWITCH(toggle)));
+
+  // The app's same value, with a new label, while the switch slides: not MountedViews::update,
+  // whose two frames could outlast the slide.
+  auto current = views.mounting->tree().find(3)->view;
+  auto next = current;
+  next.props = controlProps<Descriptor>(folly::dynamic::object("value", false)("accessibilityLabel", "Wi-Fi"));
+  views.mounting->executeMount(
+      MountedViews::kSurface,
+      facebook::react::MountingTransaction(
+          MountedViews::kSurface, 1, {facebook::react::ShadowViewMutation::UpdateMutation(current, next, MountedViews::kSurface)}, {}));
+  auto applied = std::make_shared<bool>(false);
+  views.backend->runOnUiThread([applied] { *applied = true; });
+  ngn::testing::runUntil([applied] { return *applied; });
+  REQUIRE_FALSE(gtk_switch_get_active(GTK_SWITCH(toggle)));
+  gtk_test_accessible_assert_property(toggle, GTK_ACCESSIBLE_PROPERTY_LABEL, "Wi-Fi");
+
+  ngn::testing::runUntil([toggle] { return gtk_switch_get_active(GTK_SWITCH(toggle)); });
+  REQUIRE(events.sent.size() == 1);
+  CHECK(events.sent[0].payload["value"] == true);
+}
+
 TEST_CASE("an activity indicator spins while animating, hides when stopped unless asked not to, and takes its colour") {
   REQUIRE(ngn::testing::gtkReady());
   using Descriptor = ngn::ActivityIndicatorControlComponentDescriptor;
@@ -170,6 +214,31 @@ TEST_CASE("an activity indicator spins while animating, hides when stopped unles
   large.size = "large";
   CHECK(measurer.measure(ngn::ControlKind::ActivityIndicator, large) == facebook::react::Size{32, 32});
   CHECK(measurer.measure(ngn::ControlKind::ActivityIndicator, {}) == facebook::react::Size{16, 16});
+}
+
+TEST_CASE("a stopped activity indicator that stays shown draws its icon") {
+  REQUIRE(ngn::testing::gtkReady());
+  using Descriptor = ngn::ActivityIndicatorControlComponentDescriptor;
+  MountedViews views(false, 200, 100);
+  views.add(control(4, "ActivityIndicatorView", controlProps<Descriptor>(folly::dynamic::object("animating", false)("hidesWhenStopped", false))));
+  GtkWidget *spinner = controlOf(views, 4);
+  REQUIRE(GTK_IS_SPINNER(spinner));
+  REQUIRE(gtk_widget_get_visible(spinner));
+  // The pixels it draws, not GTK's flag alone: Adwaita's stylesheet makes a stopped spinner
+  // transparent, which leaves GTK no node to render and no texture.
+  REQUIRE(gtk_widget_get_width(spinner) > 0);
+  int drawn = 0;
+  if (GdkTexture *texture = ngn::gtk::renderWidget(spinner)) {
+    int width = gdk_texture_get_width(texture);
+    int height = gdk_texture_get_height(texture);
+    std::vector<guchar> data(static_cast<size_t>(width) * height * 4);
+    gdk_texture_download(texture, data.data(), static_cast<size_t>(width) * 4);
+    g_object_unref(texture);
+    for (size_t i = 3; i < data.size(); i += 4) {
+      drawn += data[i] > 0;
+    }
+  }
+  CHECK(drawn > 0);
 }
 
 TEST_CASE("a segmented control shows its segments and selection, and sends the segment the user picks") {
@@ -389,6 +458,85 @@ TEST_CASE("a date picker sends the offset of the day it sends, when a bound move
   for (GDateTime *d : {winter, summer, before}) {
     g_date_time_unref(d);
   }
+}
+
+TEST_CASE("a date picker keeps the month the user browses to through an update to another prop") {
+  REQUIRE(ngn::testing::gtkReady());
+  using Descriptor = ngn::DatePickerComponentDescriptor;
+  MountedViews views(false, 300, 100);
+  GDateTime *noon = g_date_time_new_local(2026, 3, 14, 12, 30, 0);
+  double ms = static_cast<double>(g_date_time_to_unix(noon)) * 1000;
+  g_date_time_unref(noon);
+  auto view = control(7, "RNDateTimePicker", controlProps<Descriptor>(folly::dynamic::object("date", ms)("mode", "date")));
+  views.add(view);
+  GtkWidget *calendar = gtk_popover_get_child(gtk_menu_button_get_popover(GTK_MENU_BUTTON(controlOf(views, 7))));
+  REQUIRE(GTK_IS_CALENDAR(calendar));
+  auto month = [calendar] {
+    GDateTime *at = gtk_calendar_get_date(GTK_CALENDAR(calendar));
+    int m = g_date_time_get_month(at);
+    g_date_time_unref(at);
+    return m;
+  };
+  REQUIRE(month() == 3);
+  // The user browses with the calendar's first arrow (the previous month's) to another month.
+  std::vector<GtkWidget *> pending{calendar};
+  GtkWidget *arrow = nullptr;
+  while (!pending.empty() && !arrow) {
+    GtkWidget *w = pending.front();
+    pending.erase(pending.begin());
+    if (w != calendar && GTK_IS_BUTTON(w)) {
+      arrow = w;
+    }
+    for (GtkWidget *child = gtk_widget_get_first_child(w); child; child = gtk_widget_get_next_sibling(child)) {
+      pending.push_back(child);
+    }
+  }
+  REQUIRE(arrow);
+  g_signal_emit_by_name(arrow, "clicked");
+  int browsed = month();
+  REQUIRE(browsed != 3);
+
+  views.update(view, controlProps<Descriptor>(folly::dynamic::object("date", ms)("mode", "date")("accessibilityHint", "Due date")));
+  CHECK(month() == browsed);
+  // A new date from the app shows its month.
+  GDateTime *june = g_date_time_new_local(2026, 6, 1, 12, 0, 0);
+  double juneMs = static_cast<double>(g_date_time_to_unix(june)) * 1000;
+  g_date_time_unref(june);
+  views.update(view, controlProps<Descriptor>(folly::dynamic::object("date", juneMs)("mode", "date")));
+  CHECK(month() == 6);
+  // The same date taken away and given back, after the user browsed away again, shows its month.
+  g_signal_emit_by_name(arrow, "clicked");
+  REQUIRE(month() != 6);
+  views.update(view, controlProps<Descriptor>(folly::dynamic::object("mode", "date")));
+  views.update(view, controlProps<Descriptor>(folly::dynamic::object("date", juneMs)("mode", "date")));
+  CHECK(month() == 6);
+}
+
+TEST_CASE("a date picker holding a date GLib cannot represent sends a picked day at its start, without GLib criticals") {
+  REQUIRE(ngn::testing::gtkReady());
+  using Descriptor = ngn::DatePickerComponentDescriptor;
+  Events events;
+  MountedViews views(false, 300, 100);
+  // In the year 33658, past GLib's 9999.
+  views.add(control(7, "RNDateTimePicker", controlProps<Descriptor>(folly::dynamic::object("date", 1e15)("mode", "date"))));
+  GtkWidget *calendar = gtk_popover_get_child(gtk_menu_button_get_popover(GTK_MENU_BUTTON(controlOf(views, 7))));
+  int criticals = 0;
+  // Removed on every exit path: the handler holds &criticals.
+  struct Handler {
+    guint id;
+    ~Handler() {
+      g_log_remove_handler("GLib", id);
+    }
+  } handler{g_log_set_handler("GLib", G_LOG_LEVEL_CRITICAL, [](const gchar *, GLogLevelFlags, const gchar *, gpointer count) {
+    ++*static_cast<int *>(count);
+  }, &criticals)};
+  GDateTime *day = g_date_time_new_local(2026, 3, 16, 0, 0, 0);
+  double start = static_cast<double>(g_date_time_to_unix(day)) * 1000;
+  gtk_calendar_select_day(GTK_CALENDAR(calendar), day);
+  g_date_time_unref(day);
+  REQUIRE(events.sent.size() == 1);
+  CHECK(events.sent[0].payload["timestamp"].asDouble() == doctest::Approx(start));
+  CHECK(criticals == 0);
 }
 
 TEST_CASE("the controls measure as GTK lays them out") {
