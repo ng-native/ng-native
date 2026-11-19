@@ -154,6 +154,33 @@ import { page } from '../screen-styles.ts';
         </x-example>
       </x-section>
 
+      <x-section
+        title="Effects"
+        note="Drawn over the whole view, its children included. macOS only here."
+      >
+        <x-example
+          title="filter"
+          note="Each function in the order listed."
+          code="grayscale(1) | sepia(1) | hue-rotate(90deg) | blur(4px)"
+        >
+          <view [style]="row">
+            <view class="fx fx-gray"></view><view class="fx fx-sepia"></view
+            ><view class="fx fx-hue"></view><view class="fx fx-blur"></view>
+          </view>
+        </x-example>
+        <x-example
+          title="mix-blend-mode"
+          note="A child blended with what is drawn under it."
+          code="mix-blend-mode: multiply | screen"
+        >
+          <view class="blend-host">
+            <view class="blend-band"></view>
+            <view class="blend-dot blend-multiply"></view>
+            <view class="blend-dot blend-screen"></view>
+          </view>
+        </x-example>
+      </x-section>
+
       <x-section title="Feedback">
         <x-example
           title="Pressed state"
@@ -180,6 +207,56 @@ import { page } from '../screen-styles.ts';
 
     .edge {
       border-bottom-color: var(--line);
+    }
+
+    .fx {
+      width: 56px;
+      height: 56px;
+      border-radius: 8px;
+      background-color: rgb(59, 110, 245);
+    }
+    .platform-macos .fx-gray {
+      filter: grayscale(1);
+    }
+    .platform-macos .fx-sepia {
+      filter: sepia(1);
+    }
+    .platform-macos .fx-hue {
+      filter: hue-rotate(90deg);
+    }
+    .platform-macos .fx-blur {
+      filter: blur(4px);
+    }
+
+    .blend-host {
+      height: 72px;
+      border-radius: 10px;
+      overflow: hidden;
+      background-color: rgb(255, 214, 0);
+    }
+    .blend-band {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      right: 0;
+      background-color: rgb(47, 191, 159);
+    }
+    .blend-dot {
+      position: absolute;
+      top: 12px;
+      width: 48px;
+      height: 48px;
+      border-radius: 24px;
+      background-color: rgb(200, 60, 160);
+    }
+    .platform-macos .blend-multiply {
+      left: 25%;
+      mix-blend-mode: multiply;
+    }
+    .platform-macos .blend-screen {
+      left: 62%;
+      mix-blend-mode: screen;
     }
 
     /* On a coloured fill, which is the same in either appearance. */

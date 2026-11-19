@@ -13,6 +13,7 @@
 #import "scroll-view.h"
 #import "split-view.h"
 #import "svg-view.h"
+#import "view-effects.h"
 #import "symbol-view.h"
 #import "glass-view.h"
 
@@ -211,6 +212,9 @@ static ngn::InputDispatcher *gViewInput;
   // drawRect draws the box (ngn/view-box.h), which the layer does not.
   BOOL _boxDrawn;
   NSMutableArray<CALayer *> *_shadowLayers;
+  // The `filter` and `mix-blend-mode` on the layer now, so a layout does not set them again.
+  std::vector<ngn::FilterStep> _filterSteps;
+  BlendMode _blendMode;
   // The transform from the props, as NGNViewLayer holds it.
   CATransform3D _transform;
 }
@@ -653,6 +657,7 @@ static BOOL focusFromKeyboard() {
   layer.masksToBounds = viewProps->yogaStyle.overflow() != facebook::yoga::Overflow::Visible;
   layer.mask = box.clip ? shapeLayer(*box.clip, NO, self.bounds) : nil;
   [self applyShadows:box.shadows];
+  [self applyEffects:*viewProps];
   // Its transform, about its centre on a layer anchored at its corner (view-transform.h).
   CATransform3D transform = CATransform3DIdentity;
   if (auto matrix = ngn::layerTransform(*viewProps, _layout)) {
@@ -671,6 +676,33 @@ static BOOL focusFromKeyboard() {
     [self setNeedsDisplay:YES];
   }
   _boxDrawn = box.drawn;
+}
+
+// `filter` and `mix-blend-mode` as Core Animation filters on the layer, which apply to the view's
+// children too, and to nothing at all when the props have none: a filter or blend removed is
+// taken off.
+- (void)applyEffects:(const ViewProps &)props {
+  auto steps = ngn::filterSteps(props.filter);
+  CALayer *layer = self.layer;
+  if (steps != _filterSteps) {
+    _filterSteps = steps;
+    NSArray<CIFilter *> *filters = ngn::appkit::layerFilters(steps);
+    if (filters != nil) {
+      self.layerUsesCoreImageFilters = YES;
+    }
+    layer.filters = filters;
+  }
+  if (props.mixBlendMode != _blendMode) {
+    _blendMode = props.mixBlendMode;
+    NSString *blend = ngn::appkit::blendFilterName(_blendMode);
+    if (blend != nil) {
+      self.layerUsesCoreImageFilters = YES;
+    }
+    layer.compositingFilter = blend;
+  }
+  if (layer.filters.count == 0 && layer.compositingFilter == nil) {
+    self.layerUsesCoreImageFilters = NO;
+  }
 }
 
 // Each box shadow as a layer under the children, as RCTViewComponentView adds them.

@@ -30,6 +30,13 @@ gradients (`background-image`) are drawn with their size, position and repeat, a
 outer or inset, is a blurred layer under the children. A view that clips its overflow also clips
 its outer shadows.
 
+`filter` is drawn as Core Image filters on the view's layer, which apply to the view and its
+children, in the order listed: `blur()`, `brightness()`, `contrast()`, `grayscale()`,
+`hue-rotate()`, `invert()`, `opacity()`, `saturate()` and `sepia()`, with the colour functions
+working on sRGB values as Chrome's do. `drop-shadow()` is not drawn (use `box-shadow`). A
+`mix-blend-mode` blends the view with what is drawn under it, as React Native iOS does, in every
+mode but `plus-darker`.
+
 ## Modals
 
 A `<modal>` with `pageSheet`, `formSheet` or no presentation style is an NSWindow sheet on its

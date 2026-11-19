@@ -81,6 +81,7 @@ add_library(ngn_appkit OBJECT
     text-layout.mm
     text-recognition.mm
     undo.mm
+    view-effects.mm
     updates.mm
     web-browser.mm
     app-updater.mm)
@@ -132,7 +133,7 @@ if(NGN_TESTS)
   add_executable(ngn_appkit_tests ../core/tests/main.cpp tests/views/accessibility.test.mm tests/views/svg-foreign-object.test.mm
     tests/views/tab-walk.test.mm tests/views/camera-view.test.mm tests/views/text-input-alignment.test.mm
     tests/views/image-view.test.mm tests/views/modal-beside-split.test.mm
-    tests/views/split-under-pushed-screen.test.mm)
+    tests/views/split-under-pushed-screen.test.mm tests/views/view-effects.test.mm)
   target_include_directories(ngn_appkit_tests PRIVATE ../core/tests)
   target_link_libraries(ngn_appkit_tests PRIVATE ngn_appkit doctest ${NGN_APPKIT_FRAMEWORKS})
   if(NGN_HERMES_TEST_RPATH)

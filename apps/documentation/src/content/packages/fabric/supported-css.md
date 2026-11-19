@@ -169,6 +169,11 @@ variant compiles to exactly that), and it is kept.
 }
 ```
 
+On macOS the desktop host draws every function but `drop-shadow()` as Core Image filters on the
+view's layer, applied in the order listed over the view and its children, so a macOS build keeps
+them and drops a `drop-shadow()` with a warning (use `box-shadow`, or scope the rule to the other
+platforms). A blur's edge spreads past the view's box, as on the web.
+
 A component's stylesheet is compiled for the platform Metro is bundling, so an unscoped rule keeps
 its filter in the Android build and drops it with a warning in the iOS build; a sheet compiled with
 no platform, such as a component under a test, has to suit both. A Tailwind sheet serves both
