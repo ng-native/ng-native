@@ -43,14 +43,15 @@ module.exports = ({ config }) => config;
 A Linux package runs on the desktop's own GTK and libadwaita, or, for a Flatpak, on the GNOME
 runtime it brings. The host is built on AlmaLinux 9, so it needs glibc 2.34 at most.
 
-| Library    | At least | Where it matters                                                        |
-| ---------- | -------- | ----------------------------------------------------------------------- |
-| glibc      | 2.34     | `deb` and `rpm`                                                         |
-| GTK        | 4.10     | `deb` and `rpm`; accessibility announcements need 4.14                  |
-| libadwaita | 1.4      | `deb` and `rpm`; dialogs use 1.5, spinners 1.6 and toggle groups 1.7    |
-| libsecret  | any      | `deb` and `rpm`: SecureStore                                            |
-| GStreamer  | 1.22     | `deb` and `rpm`                                                         |
-| OpenSSL    | 3        | the host links the system's, so `deb` and `rpm` depend on it by library |
+| Library         | At least | Where it matters                                                        |
+| --------------- | -------- | ----------------------------------------------------------------------- |
+| glibc           | 2.34     | `deb` and `rpm`                                                         |
+| GTK             | 4.10     | `deb` and `rpm`; accessibility announcements need 4.14                  |
+| libadwaita      | 1.4      | `deb` and `rpm`; dialogs use 1.5, spinners 1.6 and toggle groups 1.7    |
+| libsecret       | any      | `deb` and `rpm`: SecureStore                                            |
+| glib-networking | any      | `deb` and `rpm`: the desktop's proxy settings                           |
+| GStreamer       | 1.22     | `deb` and `rpm`                                                         |
+| OpenSSL         | 3        | the host links the system's, so `deb` and `rpm` depend on it by library |
 
 The host checks for each newer API as it starts and uses an older one where it is missing, so a
 newer libadwaita changes how a dialog or a spinner is drawn and not whether the app runs.
