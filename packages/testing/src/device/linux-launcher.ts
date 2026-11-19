@@ -323,6 +323,16 @@ function signalGroup(group: number, signal: NodeJS.Signals): void {
   }
 }
 
+/** Whether the group `group` has any process, a zombie included: the kernel's answer, at once. */
+function groupExists(group: number): boolean {
+  try {
+    process.kill(-group, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Whether any process of the group `group` is left. A zombie is not: when the process running
  * Vitest is PID 1 (a container started without `--init`), what the session leaves behind is
@@ -334,12 +344,7 @@ function groupAlive(group: number): boolean {
     const alive = liveGroupMember(group);
     if (alive !== undefined) return alive;
   }
-  try {
-    process.kill(-group, 0);
-    return true;
-  } catch {
-    return false;
-  }
+  return groupExists(group);
 }
 
 /** Whether `/proc` lists a process of group `group` that is not a zombie, or undefined without `/proc`. */
@@ -415,16 +420,17 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
         exited,
         async stop() {
           const group = child.pid;
-          if (group !== undefined && groupAlive(group)) {
+          if (group !== undefined && groupExists(group)) {
             signalGroup(group, 'SIGTERM');
             await Promise.race([
               untilGroupGone(group),
               new Promise((resolve) => setTimeout(resolve, options.stopGraceMs ?? 3000)),
             ]);
-            if (groupAlive(group)) {
-              signalGroup(group, 'SIGKILL');
-              await untilGroupGone(group);
-            }
+            // Sent even when the scan found the group gone, since a scan can miss a process forked
+            // while it ran. Killing a group is atomic against fork, and the group only shrinks
+            // after it, so the wait that follows can trust a scan.
+            signalGroup(group, 'SIGKILL');
+            await untilGroupGone(group);
           }
           if (launch.container) {
             spawnSync(options.docker ?? 'docker', ['rm', '-f', launch.container], {
