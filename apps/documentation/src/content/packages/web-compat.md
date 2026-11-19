@@ -137,7 +137,9 @@ Some libraries listen by names that Angular's event-manager plugins read: Taiga 
 `@angular/platform-browser`, which such a library depends on already.
 
 ```ts
+import { provideWebCompat } from '@ng-native/web-compat';
 import { provideEventPlugins } from '@ng-native/web-compat/event-plugins';
+import { provideTaiga } from '@taiga-ui/core';
 
 export const appConfig = {
   providers: [provideWebCompat(), provideEventPlugins(), provideTaiga()],
