@@ -31,13 +31,26 @@ mount(rootTag, App, getFabricUIManager(), {
 `provideMainWindow({ autoOpen: false })` starts with no window, for an app that lives in the menu
 bar; `AppWindows.openMain()` opens it later. On macOS the app keeps running when its last window
 closes, and a click on its Dock icon opens the main window again. `quitWhenLastWindowCloses: true`
-quits instead. The main window's root component is made when that window opens, so `mount`'s
-`componentRef` throws until then.
+quits instead. On Linux the app quits with its last window unless `quitWhenLastWindowCloses: false`
+keeps it, and launching it again opens the main window. The main window's root component is made
+when that window opens, so `mount`'s `componentRef` throws until then.
 
 The options every window takes are `title`, `width`, `height`, `minWidth`, `minHeight`, `maxWidth`,
 `maxHeight`, `resizable`, `titleBar` (`'default'`, `'transparent'` or `'hidden'`), `fullScreen` and
 `autosave`. A window's frame is saved and restored on the next launch, under `main`, its route
-outlet or its `restoreKey`; `autosave: false` turns that off.
+outlet or its `restoreKey`; `autosave: false` turns that off. On Linux only the size comes back,
+maximised or full screen when the window was, and never a place: the desktop places each window.
+
+On Linux the title bar is the window's libadwaita header bar. `'default'` keeps the content below
+it; `'transparent'` makes the bar flat and runs the content under it, clear of it by the safe area's
+top inset; `'hidden'` does the same and hides the window's title. The window controls stay in
+every mode, as on macOS.
+
+A Linux app runs once. Launching it again, from the desktop's launcher, a link to its scheme or a
+file it opens, goes to the instance already running: its window comes to the front, and the link
+or the file's `file://` URL reaches `DeepLinks`. Installed from a deb, an rpm or a Flatpak, its
+desktop entry is D-Bus activatable, so the desktop starts it through the session bus and hands it
+what to open the same way.
 
 ## Component windows
 

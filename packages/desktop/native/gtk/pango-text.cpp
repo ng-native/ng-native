@@ -1,5 +1,9 @@
 #include "pango-text.h"
 
+#include "ngn/surface-metrics.h"
+
+#include <gtk/gtk.h>
+
 #include <react/renderer/graphics/Color.h>
 
 #include <algorithm>
@@ -182,6 +186,25 @@ TextLayout layoutText(const AttributedString &text, const ParagraphAttributes &p
 
 Size PangoTextMeasurer::measure(const AttributedString &text, const ParagraphAttributes &paragraph, Float maxWidth) const {
   return layoutText(text, paragraph, maxWidth, lineHeights_).size;
+}
+
+float desktopFontScale() {
+  int dpi = -1;
+  if (GtkSettings *settings = gtk_settings_get_default()) {
+    g_object_get(settings, "gtk-xft-dpi", &dpi, nullptr);
+  }
+  return xftFontScale(dpi);
+}
+
+void watchFontScale(std::function<void()> changed) {
+  if (GtkSettings *settings = gtk_settings_get_default()) {
+    g_signal_connect_data(
+        settings, "notify::gtk-xft-dpi", G_CALLBACK(+[](GObject *, GParamSpec *, gpointer data) {
+          (*static_cast<std::function<void()> *>(data))();
+        }),
+        new std::function<void()>(std::move(changed)),
+        [](gpointer data, GClosure *) { delete static_cast<std::function<void()> *>(data); }, GConnectFlags(0));
+  }
 }
 
 } // namespace ngn::gtk

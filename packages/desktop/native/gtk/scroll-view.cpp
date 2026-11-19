@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <set>
 #include <utility>
 
 using namespace facebook::react;
@@ -150,6 +151,91 @@ void enableControllers(ScrollBox &box, bool enabled) {
   }
 }
 
+// Every scroll view's box, which a change to the desktop's scroll bars reaches.
+std::set<ScrollBox *> &scrollBoxes() {
+  static std::set<ScrollBox *> boxes;
+  return boxes;
+}
+
+// `scrollbar-width: thin`: a narrower slider, which a classic scroll bar's gutter follows.
+void installThinScrollbars() {
+  static bool installed = false;
+  if (installed || !gdk_display_get_default()) {
+    return;
+  }
+  installed = true;
+  GtkCssProvider *css = gtk_css_provider_new();
+  gtk_css_provider_load_from_data(
+      css,
+      "scrolledwindow.ngn-thin-scrollbars > scrollbar slider { margin: 0; border-width: 1px; }"
+      // Only the thickness narrows: the theme's minimum length along the scrolling axis stays, so
+      // the thumb of a long document remains big enough to grab.
+      "scrolledwindow.ngn-thin-scrollbars > scrollbar.vertical slider { min-width: 3px; }"
+      "scrolledwindow.ngn-thin-scrollbars > scrollbar.horizontal slider { min-height: 3px; }"
+      "scrolledwindow.ngn-thin-scrollbars > scrollbar { padding: 0; }",
+      -1);
+  gtk_style_context_add_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref(css);
+}
+
+// A new scroll bar style applies as GTK next draws, and Adwaita eases a scroll bar's width into
+// it: the gutter is measured again after each frame until the width has held for 10 frames, for
+// at most 120.
+void remeasureAfterFrames(ScrollBox *box) {
+  // Only a classic scroll bar takes a gutter, whose width this is.
+  if (scrollerStyle(box->scrolled) != ScrollerStyle::Legacy) {
+    return;
+  }
+  GdkFrameClock *clock = gtk_widget_get_frame_clock(box->scrolled);
+  box->remeasureFrames = 120;
+  box->steadyFrames = 0;
+  box->measuredWidth = -1;
+  if (!clock) {
+    return;
+  }
+  if (box->remeasure != 0) {
+    if (box->remeasureClock == clock) {
+      return;
+    }
+    // Moved to another window while measuring: the old clock may never paint again.
+    g_signal_handlers_disconnect_by_data(box->remeasureClock, box);
+    box->remeasure = 0;
+    g_clear_object(&box->remeasureClock);
+  }
+  box->remeasureClock = GDK_FRAME_CLOCK(g_object_ref(clock));
+  box->remeasure = g_signal_connect(clock, "after-paint", G_CALLBACK(+[](GdkFrameClock *clock, gpointer data) {
+    auto *box = static_cast<ScrollBox *>(data);
+    float width = classicScrollerWidth(box->scrolled);
+    box->steadyFrames = width == box->measuredWidth ? box->steadyFrames + 1 : 0;
+    bool settled = box->steadyFrames >= 10 || --box->remeasureFrames <= 0;
+    box->measuredWidth = width;
+    updateScrollers(*box->view);
+    if (settled) {
+      g_signal_handler_disconnect(clock, std::exchange(box->remeasure, 0));
+      g_clear_object(&box->remeasureClock);
+    } else {
+      gtk_widget_queue_draw(box->scrolled);
+    }
+  }), box);
+  gtk_widget_queue_draw(box->scrolled);
+}
+
+// The desktop switching between overlay and classic scroll bars: every scroll view's gutter
+// follows, as GTK's own scroll bars do.
+void watchScrollerStyle(GtkWidget *widget) {
+  static bool watching = false;
+  if (watching) {
+    return;
+  }
+  watching = true;
+  g_signal_connect(gtk_widget_get_settings(widget), "notify::gtk-overlay-scrolling", G_CALLBACK(+[](GObject *, GParamSpec *, gpointer) {
+    for (ScrollBox *box : scrollBoxes()) {
+      updateScrollers(*box->view);
+      remeasureAfterFrames(box);
+    }
+  }), nullptr);
+}
+
 } // namespace
 
 void onScrollOffset(ScrollOffsetChanged changed) {
@@ -190,6 +276,10 @@ void makeScrollView(GtkWidget *widget, ViewData &view) {
   g_signal_connect(horizontal(*box), "value-changed", G_CALLBACK(scrolled), box);
   g_signal_connect(vertical(*box), "value-changed", G_CALLBACK(scrolled), box);
   view.scroll = box;
+  scrollBoxes().insert(box);
+  watchScrollerStyle(box->scrolled);
+  // Measured before it had a style of its own (`thin`, or the display's): again once it shows.
+  g_signal_connect(box->scrolled, "map", G_CALLBACK(+[](GtkWidget *, gpointer data) { remeasureAfterFrames(static_cast<ScrollBox *>(data)); }), box);
   applyScrollViewProps(view);
 }
 
@@ -207,6 +297,13 @@ void destroyScrollView(ViewData &view) {
     document->documentOf = nullptr;
   }
   ScrollerGutters::shared().remove(view.tag);
+  scrollBoxes().erase(box);
+  g_signal_handlers_disconnect_by_data(box->scrolled, box);
+  if (box->remeasure != 0) {
+    // A window destroyed meanwhile has already dropped its clock's handlers.
+    g_signal_handlers_disconnect_by_data(box->remeasureClock, box);
+    g_clear_object(&box->remeasureClock);
+  }
   if (gtk_widget_get_parent(box->scrolled)) {
     gtk_widget_unparent(box->scrolled);
   }
@@ -264,6 +361,16 @@ void updateScrollers(ViewData &view) {
     return !shown ? GTK_POLICY_EXTERNAL : visibility.autohides ? GTK_POLICY_AUTOMATIC : GTK_POLICY_ALWAYS;
   };
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(box->scrolled), policy(visibility.horizontal), policy(visibility.vertical));
+  installThinScrollbars();
+  bool thin = view.desktop.scrollbarWidth == ScrollbarWidth::Thin;
+  if (thin != gtk_widget_has_css_class(box->scrolled, "ngn-thin-scrollbars")) {
+    if (thin) {
+      gtk_widget_add_css_class(box->scrolled, "ngn-thin-scrollbars");
+    } else {
+      gtk_widget_remove_css_class(box->scrolled, "ngn-thin-scrollbars");
+    }
+    remeasureAfterFrames(box);
+  }
   auto style = scrollerStyle(box->scrolled);
   auto gutter = scrollerGutter(style, style == ScrollerStyle::Legacy ? classicScrollerWidth(box->scrolled) : 0, visibility);
   // Recorded only once there is a state to update, so a gutter is never recorded that no layout

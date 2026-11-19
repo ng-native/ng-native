@@ -30,6 +30,11 @@ export interface DocumentType {
   readonly role?: 'editor' | 'viewer';
   /** Uniform type identifiers, where the kind has them, e.g. `net.daringfireball.markdown`. */
   readonly utis?: readonly string[];
+  /**
+   * MIME types, e.g. `text/markdown`: what a Linux desktop opens with the app, since its desktop
+   * entry lists types by MIME type and not by extension.
+   */
+  readonly mimeTypes?: readonly string[];
   /** An icon in the app's assets for documents of this kind. */
   readonly icon?: string;
 }
@@ -61,6 +66,7 @@ export interface DesktopOptions {
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const EXTENSION = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const UTI = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
+const MIME_TYPE = /^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*$/;
 const PACKAGE = /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -101,7 +107,7 @@ export function desktopOptionProblems(options: unknown): string[] {
       report(where, 'must be an object');
       return;
     }
-    unknownKeys(type, ['name', 'extensions', 'role', 'utis', 'icon'], where, report);
+    unknownKeys(type, ['name', 'extensions', 'role', 'utis', 'mimeTypes', 'icon'], where, report);
     if (typeof type['name'] !== 'string' || type['name'] === '') {
       report(`${where}.name`, 'a name is required');
     }
@@ -119,6 +125,9 @@ export function desktopOptionProblems(options: unknown): string[] {
     }
     list(type['utis'], `${where}.utis`, report, (uti, at) => {
       if (typeof uti !== 'string' || !UTI.test(uti)) report(at, 'is not a type identifier');
+    });
+    list(type['mimeTypes'], `${where}.mimeTypes`, report, (mime, at) => {
+      if (typeof mime !== 'string' || !MIME_TYPE.test(mime)) report(at, 'is not a MIME type');
     });
     if (type['icon'] !== undefined && typeof type['icon'] !== 'string') {
       report(`${where}.icon`, 'must be a string');

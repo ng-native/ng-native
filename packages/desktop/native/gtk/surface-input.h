@@ -36,6 +36,9 @@ int buttonBit(unsigned gdkButton);
 
 // The CSS name GTK's cursors go by, or null for the default.
 const char *cursorName(facebook::react::Cursor cursor);
+// The cursor GTK shows for `cursor`, falling back to `default` where the cursor theme has none of
+// that name; null for `auto`, which is the widget's own. The caller owns it.
+GdkCursor *makeCursor(facebook::react::Cursor cursor);
 
 // Feeds `widget`'s pointer events to `input` as the container `container` of `surfaceId`.
 void attachPointerInput(GtkWidget *widget, facebook::react::SurfaceId surfaceId, ContainerId container, InputSink *input);

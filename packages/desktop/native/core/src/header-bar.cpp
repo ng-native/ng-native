@@ -1,5 +1,7 @@
 #include "ngn/header-bar.h"
 
+#include <algorithm>
+
 namespace ngn {
 
 namespace {
@@ -99,6 +101,24 @@ std::optional<SearchBarCommand> searchBarCommand(const std::string &name, const 
     return SearchBarCommand{.kind = SearchBarCommand::SetText, .text = args[0].getString()};
   }
   return std::nullopt;
+}
+
+HeaderLayout headerLayout(const HeaderBar &bar, std::vector<HeaderSubview> subviews, bool canGoBack) {
+  std::sort(subviews.begin(), subviews.end(), [](const HeaderSubview &a, const HeaderSubview &b) { return a.tag < b.tag; });
+  HeaderLayout layout;
+  for (const auto &subview : subviews) {
+    if (subview.type == "left") {
+      layout.left.push_back(subview.tag);
+    } else if (subview.type == "center") {
+      layout.center.push_back(subview.tag);
+    } else if (subview.type == "right") {
+      layout.right.push_back(subview.tag);
+    } else if (subview.type == "searchBar") {
+      layout.searchBars.push_back(subview.tag);
+    }
+  }
+  layout.back = canGoBack && !bar.hideBackButton && layout.left.empty() && bar.left.empty();
+  return layout;
 }
 
 } // namespace ngn

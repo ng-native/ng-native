@@ -89,9 +89,9 @@ struct Control {
 };
 
 // A layout off the UI thread, as the JS thread's.
-Size measure(const ShadowNode &node, Size max = {1000, 1000}) {
+Size measure(const ShadowNode &node, Size max = {1000, 1000}, float fontScale = 1) {
   const auto &layoutable = dynamic_cast<const LayoutableShadowNode &>(node);
-  return layoutable.measureContent({}, {.minimumSize = {0, 0}, .maximumSize = max});
+  return layoutable.measureContent({.fontSizeMultiplier = fontScale}, {.minimumSize = {0, 0}, .maximumSize = max});
 }
 
 template <class Descriptor>
@@ -231,6 +231,22 @@ TEST_CASE("a control's size is measured again when a measured input changes, and
         Size{140, 22});
   CHECK(c.measurer->kinds.size() == 3);
   CHECK(c.backend->pending() == 0);
+}
+
+TEST_CASE("a control is measured again when the desktop's text scaling changes") {
+  Control<ngn::NativeButtonComponentDescriptor> c;
+  auto save = c.node(folly::dynamic::object("title", "Save"));
+  CHECK(c.measureOnUiThread(*save) == Size{120, 22});
+  // The same props laid out at a new text size multiplier miss the size held for the old one.
+  CHECK(measure(*save, {1000, 1000}, 1.25) == Size{120, 22});
+  c.backend->drain();
+  CHECK(c.measurer->titles == std::vector<std::string>{"Save", "Save"});
+  CHECK(*c.relaidOut == std::vector<Tag>{9});
+  // And back: measured again, the size for 1.25 let go.
+  measure(*save);
+  c.backend->drain();
+  CHECK(c.measurer->titles.size() == 3);
+  CHECK(c.sizes->held() == 1);
 }
 
 TEST_CASE("a measurement a control no longer wants is not made") {
@@ -412,4 +428,10 @@ TEST_CASE("a search field parses what <search-field> commits, its type included"
   c.measureOnUiThread(*c.node(folly::dynamic::object("controlSize", "large")));
   CHECK(c.measurer->kinds == std::vector<ngn::ControlKind>{ngn::ControlKind::SearchField});
   CHECK(c.measurer->sizes == std::vector<ngn::ControlSize>{ngn::ControlSize::Large});
+}
+
+TEST_CASE("a button's kind is empty until the element sets one") {
+  Control<ngn::NativeButtonComponentDescriptor> c;
+  CHECK(c.props(folly::dynamic::object("title", "Save"))->kind.empty());
+  CHECK(c.props(folly::dynamic::object("kind", "default"))->kind == "default");
 }
