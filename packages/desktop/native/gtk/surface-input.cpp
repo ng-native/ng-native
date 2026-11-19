@@ -138,6 +138,11 @@ std::optional<WheelDelta> wheelDelta(GdkEvent *event) {
   return delta;
 }
 
+std::function<bool(GtkWidget *, const PointerInput &)> &contextMenuShower() {
+  static std::function<bool(GtkWidget *, const PointerInput &)> shower;
+  return shower;
+}
+
 gboolean pointerEvent(GtkEventControllerLegacy *, GdkEvent *event, gpointer user) {
   auto *s = static_cast<PointerState *>(user);
   GdkEventType type = gdk_event_get_event_type(event);
@@ -161,7 +166,7 @@ gboolean pointerEvent(GtkEventControllerLegacy *, GdkEvent *event, gpointer user
       input.buttons = s->buttons;
       input.pressure = 0.5f;
       input.clickCount = s->clicks.press(gdk_event_get_time(event), point->x, point->y, button);
-      if (button == 3 && s->input->contextMenu(input)) {
+      if (button == 3 && ((contextMenuShower() && contextMenuShower()(s->widget, input)) || s->input->contextMenu(input))) {
         return FALSE;
       }
       s->input->pointerDown(input);
@@ -197,6 +202,10 @@ void pointerLeft(GtkEventControllerMotion *, gpointer user) {
 }
 
 } // namespace
+
+void setContextMenuShower(std::function<bool(GtkWidget *widget, const PointerInput &input)> shower) {
+  contextMenuShower() = std::move(shower);
+}
 
 void attachPointerInput(GtkWidget *widget, SurfaceId surfaceId, ContainerId container, InputSink *input) {
   auto *state = new PointerState{.widget = widget, .surfaceId = surfaceId, .container = container, .input = input};

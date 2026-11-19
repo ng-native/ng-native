@@ -407,7 +407,7 @@ TEST_CASE("a bar button's menu is a menu button, and the header's colours reach 
   // The bar button's, not the window's primary menu, hidden until the app has menus.
   auto menus = findAll(bar, [](GtkWidget *w) -> bool { return GTK_IS_MENU_BUTTON(w) && gtk_widget_get_visible(w); });
   REQUIRE(menus.size() == 1);
-  GMenuModel *model = gtk_menu_button_get_menu_model(GTK_MENU_BUTTON(menus[0]));
+  GMenuModel *model = ngn::testing::menuButtonModel(menus[0]);
   REQUIRE(model);
   REQUIRE(g_menu_model_get_n_items(model) == 2);
   // The disabled entry's action is off; the checked one's carries its state.
@@ -603,7 +603,12 @@ TEST_CASE("Escape asks the modal in front to close, whichever layer's shortcut r
     auto *controller = g_list_model_get_item(controllers, i);
     if (GTK_IS_SHORTCUT_CONTROLLER(controller)) {
       auto *shortcut = GTK_SHORTCUT(g_list_model_get_item(G_LIST_MODEL(controller), 0));
-      ran = gtk_shortcut_action_activate(gtk_shortcut_get_action(shortcut), GtkShortcutActionFlags(0), layer, nullptr);
+      // Return is consumed too while a modal is in front, so pick Escape's shortcut by its trigger.
+      char *label = gtk_shortcut_trigger_to_string(gtk_shortcut_get_trigger(shortcut));
+      if (std::string(label).find("Escape") != std::string::npos) {
+        ran = gtk_shortcut_action_activate(gtk_shortcut_get_action(shortcut), GtkShortcutActionFlags(0), layer, nullptr);
+      }
+      g_free(label);
       g_object_unref(shortcut);
     }
     g_object_unref(controller);
@@ -678,6 +683,51 @@ TEST_CASE("Return presses the default button of the modal in front, whichever la
                ShadowViewMutation::RemoveMutation(2, back, 1), ShadowViewMutation::DeleteMutation(back)});
 }
 
+TEST_CASE("Return is the sheet's when it has no default button, so a default button behind it is not pressed") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  gtk_window_set_resizable(GTK_WINDOW(views.window), FALSE);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto firstConfig = shadow(4, "RNSScreenStackHeaderConfig", header("Notes"), {{0, 0}, {800, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {firstConfig, 3}});
+  auto sheet = shadow(7, "RNSScreen", presented("formSheet"), {{0, 0}, {800, 600}});
+  auto sheetConfig = shadow(8, "RNSScreenStackHeaderConfig", header("Plain"), {{0, 0}, {800, 44}});
+  mountAll(views, {{sheet, 2}, {sheetConfig, 7}});
+  views.backend->modals().settle();
+  REQUIRE_FALSE(views.backend->modals().inDialog(7));
+
+  GtkWidget *slot = views.backend->modals().slotOf(7);
+  REQUIRE(slot);
+  GtkWidget *overlay = ngn::gtk::chromeOf(views.surface)->overlay;
+  GtkWidget *layer = slot;
+  while (layer && gtk_widget_get_parent(layer) != overlay) {
+    layer = gtk_widget_get_parent(layer);
+  }
+  REQUIRE(layer);
+  GListModel *controllers = gtk_widget_observe_controllers(layer);
+  bool found = false, consumed = false;
+  for (guint i = 0; i < g_list_model_get_n_items(controllers); ++i) {
+    auto *controller = g_list_model_get_item(controllers, i);
+    if (GTK_IS_SHORTCUT_CONTROLLER(controller)) {
+      auto *shortcut = GTK_SHORTCUT(g_list_model_get_item(G_LIST_MODEL(controller), 0));
+      char *label = gtk_shortcut_trigger_to_string(gtk_shortcut_get_trigger(shortcut));
+      if (std::string(label).find("Return") != std::string::npos) {
+        found = true;
+        consumed = gtk_shortcut_action_activate(gtk_shortcut_get_action(shortcut), GtkShortcutActionFlags(0), layer, nullptr);
+      }
+      g_free(label);
+      g_object_unref(shortcut);
+    }
+    g_object_unref(controller);
+  }
+  g_object_unref(controllers);
+  REQUIRE(found);
+  CHECK(consumed);
+  views.mount({ShadowViewMutation::RemoveMutation(2, sheet, 1), ShadowViewMutation::DeleteMutation(sheet)});
+}
+
 TEST_CASE("a colour's CSS rule writes its alpha with a point in a locale that writes a comma") {
   std::string saved = setlocale(LC_NUMERIC, nullptr);
   struct Restore {
@@ -723,7 +773,7 @@ TEST_CASE("a disabled submenu leaves none of its entries to choose") {
 
   auto menus = findAll(bar, [](GtkWidget *w) -> bool { return GTK_IS_MENU_BUTTON(w) && gtk_widget_get_visible(w); });
   REQUIRE(menus.size() == 1);
-  GMenuModel *model = gtk_menu_button_get_menu_model(GTK_MENU_BUTTON(menus[0]));
+  GMenuModel *model = ngn::testing::menuButtonModel(menus[0]);
   auto *group = G_ACTION_GROUP(g_object_get_data(G_OBJECT(menus[0]), "ngn-menu-actions"));
   REQUIRE((model && group));
   auto enabled = [&](GMenuModel *menu, int index) {
@@ -743,6 +793,57 @@ TEST_CASE("a disabled submenu leaves none of its entries to choose") {
   g_object_unref(disabled);
   g_object_unref(deeper);
   g_object_unref(enabledSub);
+}
+
+TEST_CASE("two submenus with one title in a bar button's menu each open their own entries") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 400, 300);
+  GtkWidget *bar = ngn::gtk::chromeOf(views.surface)->headerBar;
+  auto props = std::make_shared<HeaderProps>();
+  props->bar.title = "Notes";
+  ngn::BarButton more = barButton("more", "More");
+  ngn::HeaderMenuItem open;
+  open.title = "Open";
+  open.menuId = "open";
+  ngn::HeaderMenuItem exportItem;
+  exportItem.title = "Export";
+  exportItem.menuId = "export";
+  ngn::HeaderMenuItem first;
+  first.title = "File";
+  first.items = {open};
+  ngn::HeaderMenuItem second;
+  second.title = "File";
+  second.items = {exportItem};
+  more.menu = ngn::HeaderMenuItem{};
+  more.menu->items = {first, second};
+  props->bar.right = {more};
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {400, 300}});
+  auto screen = shadow(3, "RNSScreen", nullptr, {{0, 0}, {400, 300}});
+  auto config = shadow(4, "RNSScreenStackHeaderConfig", props, {{0, 0}, {400, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {screen, 2}, {config, 3}});
+
+  auto menus = findAll(bar, [](GtkWidget *w) -> bool { return GTK_IS_MENU_BUTTON(w) && gtk_widget_get_visible(w); });
+  REQUIRE(menus.size() == 1);
+  GtkPopover *popover = gtk_menu_button_get_popover(GTK_MENU_BUTTON(menus[0]));
+  REQUIRE(GTK_IS_POPOVER_MENU(popover));
+  // A sliding menu would open both by the one title, so the second would show Open.
+  CHECK_FALSE(ngn::testing::sharedPageName(GTK_WIDGET(popover)));
+  GMenuModel *model = ngn::testing::menuButtonModel(menus[0]);
+  REQUIRE(model);
+  REQUIRE(g_menu_model_get_n_items(model) == 2);
+  auto entryOf = [model](int index) {
+    GMenuModel *submenu = g_menu_model_get_item_link(model, index, G_MENU_LINK_SUBMENU);
+    char *label = nullptr;
+    REQUIRE(submenu);
+    REQUIRE(g_menu_model_get_item_attribute(submenu, 0, G_MENU_ATTRIBUTE_LABEL, "s", &label));
+    std::string entry = label;
+    g_free(label);
+    g_object_unref(submenu);
+    return entry;
+  };
+  CHECK(entryOf(0) == "Open");
+  CHECK(entryOf(1) == "Export");
 }
 
 TEST_CASE("an anchor the stack has covered leaves a presentation a sheet, not a popover nobody sees") {

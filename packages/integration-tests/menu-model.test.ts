@@ -29,6 +29,29 @@ function outline(groups: readonly MenuGroupModel[]): Record<string, string[]> {
 const DEFAULTS = defaultMenuBar('Notes');
 
 describe('the default menu bar', () => {
+  it("is Linux's own on Linux: no Services, Hide, Minimize or window list, and the app's menu last", () => {
+    assert.deepEqual(outline(defaultMenuBar('Notes', 'linux')), {
+      File: ['Close Window', '-', 'Print...'],
+      Edit: ['Undo', 'Redo', '-', 'Cut', 'Copy', 'Paste', 'Select All', '-', 'Find'],
+      View: ['Back', 'Forward', '-', 'Show Sidebar', 'Full Screen'],
+      Notes: ['Preferences', '-', 'About Notes', '-', 'Quit'],
+    });
+    // An app's group goes after View, before the app's menu, and Preferences shows with a handler.
+    const merged = mergeMenuBar(defaultMenuBar('Notes', 'linux'), [
+      { label: 'Note', items: [{ label: 'New', select: () => {} }] },
+      {
+        label: 'Notes',
+        menuRole: 'app',
+        items: [{ label: 'Settings', menuRole: 'settings', select: () => {} }],
+      },
+    ]);
+    assert.deepEqual(
+      merged.map((group) => group.label),
+      ['File', 'Edit', 'View', 'Note', 'Notes'],
+    );
+    assert.deepEqual(outline(merged)['Notes'], ['Settings', '-', 'About Notes', '-', 'Quit']);
+  });
+
   it('has App, File, Edit, View, Window and Help, with their standard items and shortcuts', () => {
     assert.deepEqual(outline(DEFAULTS), {
       Notes: [

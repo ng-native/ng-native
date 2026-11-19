@@ -108,5 +108,11 @@ MenuPlacement linuxMenuPlacement(std::string_view currentDesktop);
 
 // The item with this command anywhere in `menus`, or null.
 const MenuItem *findMenuItem(const std::vector<MenuItem> &menus, MenuCommand command);
+// The enabled item a key press chooses anywhere in `menus`, or null: its key, a letter in either
+// case, with exactly its modifiers. A toolkit whose menus do not take their own keys (GTK's, drawn
+// in a popover) looks a press up here.
+const MenuItem *findMenuItem(const std::vector<MenuItem> &menus, const KeyChord &chord);
+// Undo, Redo, Cut, Copy, Paste, Delete and Select All: what a focused text input does itself.
+bool isEditingCommand(MenuCommand command);
 
 } // namespace ngn

@@ -240,6 +240,11 @@ TEST_CASE("a shortcut the app listens for is its, and says whether a text input 
   CHECK(f.host->keyDown({.key = "c", .modifiers = ngn::Command}, false));
   CHECK(f.events.size() == 2);
   CHECK(f.events[0] == "ngNativeMenus {\"id\":\"s1\",\"textInputFocused\":true,\"type\":\"shortcut\"}");
+  // The OS's primary modifier alone, with the letter in either case (Caps Lock on GTK).
+  CHECK(ngn::editingChord({.key = "C", .modifiers = ngn::Control}, ngn::linuxOs()));
+  CHECK_FALSE(ngn::editingChord({.key = "c", .modifiers = ngn::Command}, ngn::linuxOs()));
+  CHECK_FALSE(ngn::editingChord({.key = "z", .modifiers = ngn::Control | ngn::Shift}, ngn::linuxOs()));
+  CHECK_FALSE(ngn::editingChord({.key = "k", .modifiers = ngn::Control}, ngn::linuxOs()));
 
   // A new list replaces the old.
   f.module->call("setShortcuts", dynamic::array(dynamic::array()));

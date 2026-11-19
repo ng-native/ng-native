@@ -1,5 +1,7 @@
 #include "ngn/default-menu.h"
 
+#include <cctype>
+
 namespace ngn {
 
 namespace {
@@ -132,6 +134,48 @@ std::vector<MenuItem> linuxMenuBar(const DefaultMenuOptions &options) {
   }
   bar.push_back(menu(app, {item("About " + app, MenuCommand::About), separator(), item("Quit", MenuCommand::Quit, "q", Control)}));
   return bar;
+}
+
+namespace {
+
+std::string lowerKey(std::string key) {
+  if (key.size() == 1) {
+    key[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(key[0])));
+  }
+  return key;
+}
+
+} // namespace
+
+const MenuItem *findMenuItem(const std::vector<MenuItem> &menus, const KeyChord &chord) {
+  for (const auto &m : menus) {
+    if (m.separator || m.disabled) {
+      continue;
+    }
+    if (m.items.empty() && !m.key.empty() && m.modifiers == chord.modifiers && lowerKey(m.key) == lowerKey(chord.key)) {
+      return &m;
+    }
+    if (auto found = findMenuItem(m.items, chord)) {
+      return found;
+    }
+  }
+  return nullptr;
+}
+
+bool isEditingCommand(MenuCommand command) {
+  switch (command) {
+    case MenuCommand::Undo:
+    case MenuCommand::Redo:
+    case MenuCommand::Cut:
+    case MenuCommand::Copy:
+    case MenuCommand::Paste:
+    case MenuCommand::PasteAndMatchStyle:
+    case MenuCommand::Delete:
+    case MenuCommand::SelectAll:
+      return true;
+    default:
+      return false;
+  }
 }
 
 const MenuItem *findMenuItem(const std::vector<MenuItem> &menus, MenuCommand command) {
