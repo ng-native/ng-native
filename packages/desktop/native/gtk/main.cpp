@@ -14,6 +14,7 @@
 #include "animation-frames.h"
 #include "app-info.h"
 #include "app-windows.h"
+#include "battery.h"
 #include "capture.h"
 #include "crypto.h"
 #include "file-dialogs.h"
@@ -27,7 +28,9 @@
 #include "input-replay.h"
 #include "launcher-badge.h"
 #include "locales.h"
+#include "location.h"
 #include "menus.h"
+#include "network-state.h"
 #include "notifications.h"
 #include "pango-text.h"
 #include "printing.h"
@@ -782,9 +785,11 @@ int main(int argc, char *argv[]) {
        .undo = gHost.undo,
        .fileDialogs = ngn::gtk::makeFileDialogs(),
        .fileWatcher = ngn::gtk::makeFileWatcher(),
+       .location = ngn::gtk::makeLocationSource(),
        .bundle = ngn::bundleFactsOf(settings.plist),
        .machine = ngn::gtk::machineFacts(),
        .pathMonitor = ngn::gtk::makePathMonitor(),
+       .power = ngn::gtk::makePowerSource(),
        .fontRegistrar = ngn::gtk::makeFontRegistrar(),
        .imageCodec = ngn::gtk::makeImageCodec(),
        .printSystem = ngn::gtk::makePrintSystem(surfaceWidgetOf),

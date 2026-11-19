@@ -404,6 +404,12 @@ TEST_CASE("a drag's urls split into files, named by their last part, and other u
   CHECK_FALSE(ngn::dragItems({"https://example.com/"}, std::string("https://example.com/")).text);
   CHECK_FALSE(ngn::dragItems({"file:///Users/me/My%20Notes.md"}, std::string("/Users/me/My Notes.md")).text);
   CHECK(ngn::dragItems({"https://example.com/"}, std::string("Example")).text == "Example");
+  // A file manager's drag of two files offers their paths a line each.
+  CHECK_FALSE(ngn::dragItems({"file:///tmp/a.txt", "file:///tmp/b%20c.txt"}, std::string("/tmp/a.txt\n/tmp/b c.txt\n")).text);
+  CHECK_FALSE(ngn::dragItems({"https://a.example/", "https://b.example/"}, std::string("https://a.example/\r\nhttps://b.example/")).text);
+  // A link and words about it are both dragged.
+  CHECK(ngn::dragItems({"https://a.example/"}, std::string("https://a.example/\nRead this")).text == "https://a.example/\nRead this");
+  CHECK(ngn::dragItems({}, std::string("")).text == "");
 
   folly::json::serialization_opts opts;
   opts.sort_keys = true;

@@ -6,7 +6,6 @@
 #include "ngn/app-menus.h"
 #include "ngn/app-windows.h"
 #include "ngn/native-controls.h"
-#include "ngn/network-state.h"
 #include "ngn/system.h"
 #include "ngn/undo.h"
 
@@ -36,9 +35,6 @@ std::shared_ptr<MenuBackend> makeNoMenus();
 // The app's undo history (`UndoStack`): the core's UndoStacks, which GTK has no manager of its own
 // for, kept on the UI thread whichever thread asks, as AppKit's NSUndoManager is.
 std::shared_ptr<UndoManager> makeUndoManager();
-
-// Whether the network is reachable, from GLib's GNetworkMonitor.
-std::shared_ptr<PathMonitor> makePathMonitor();
 
 // How big GTK draws each native control (native-controls.h).
 std::shared_ptr<ControlMeasurer> makeControlMeasurer();

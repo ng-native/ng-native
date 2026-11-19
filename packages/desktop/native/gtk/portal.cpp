@@ -146,6 +146,12 @@ void replied(GObject *source, GAsyncResult *result, gpointer data) {
   }
   auto &request = *it->second;
   if (!request.returnsRequest) {
+    if (request.started && g_variant_is_of_type(reply, G_VARIANT_TYPE("(o)"))) {
+      const gchar *path = nullptr;
+      g_variant_get(reply, "(&o)", &path);
+      auto started = std::move(request.started);
+      started(path);
+    }
     g_variant_unref(reply);
     finish(id, Outcome::Done, nullptr);
     return;
@@ -327,6 +333,19 @@ void close(const std::string &path) {
     }
     if (GDBusConnection *bus = connection()) {
       g_dbus_connection_call(bus, gInjected ? nullptr : kBusName, path->c_str(), "org.freedesktop.portal.Request", "Close",
+                             nullptr, nullptr, G_DBUS_CALL_FLAGS_NONE, -1, nullptr, nullptr, nullptr);
+      g_object_unref(bus);
+    }
+    return G_SOURCE_REMOVE;
+  }, heap);
+}
+
+void closeSession(const std::string &path) {
+  auto *heap = new std::string(path);
+  g_main_context_invoke(nullptr, +[](gpointer data) -> gboolean {
+    std::unique_ptr<std::string> path(static_cast<std::string *>(data));
+    if (GDBusConnection *bus = connection()) {
+      g_dbus_connection_call(bus, gInjected ? nullptr : kBusName, path->c_str(), "org.freedesktop.portal.Session", "Close",
                              nullptr, nullptr, G_DBUS_CALL_FLAGS_NONE, -1, nullptr, nullptr, nullptr);
       g_object_unref(bus);
     }
