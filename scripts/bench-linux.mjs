@@ -90,13 +90,14 @@ const read = (file) => {
 
 /**
  * Context switches over a window, from each thread's count at its start and end: a thread that
- * started in the window counts from zero, and one that ended in it drops out, so threads coming and
- * going never make the count go down.
+ * started in the window counts from zero. A thread that ended in it took its switches with it, so
+ * the count is unknown and reads as null, not as a total that is too low.
  *
  * @param {Map<string, number>} before
  * @param {Map<string, number>} after
  */
 export function switchesBetween(before, after) {
+  for (const tid of before.keys()) if (!after.has(tid)) return null;
   let total = 0;
   for (const [tid, count] of after) total += count - (before.get(tid) ?? 0);
   return total;
