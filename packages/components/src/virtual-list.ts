@@ -331,7 +331,7 @@ export class VirtualList<T> extends ScrollViewProps {
   readonly overscan = input(4, { transform: numberOr(4) });
   /**
    * How many viewports of rows the list fills, as FlatList's `windowSize`: the one on screen and
-   * up to `windowSize - 1` more around it, with the overscan rows on top. While the JS thread is
+   * up to `windowSize - 1` more around it. While the JS thread is
    * idle the window grows a viewport at a time, ahead of the scroll direction first, so a fling
    * lands on rows already drawn. About two-thirds of the extra viewports go ahead of the scroll and
    * the rest behind. `1` renders the visible rows and the overscan only.
