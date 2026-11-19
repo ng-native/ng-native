@@ -75,7 +75,8 @@ buttons reach into the pane that last reported, from its leading edge, so a tool
 clear of them: their width in a window with no sidebar and in the sidebar pane they sit over, and
 `0px` in the content pane beside a sidebar, which they do not reach. It is one value for the app,
 not one per pane: it holds what the most recent provider reported, so a content pane that reports
-after the sidebar sets it to `0px` until the sidebar reports again. It is `0px` on every other OS.
+after the sidebar sets it to `0px` until the sidebar reports again. It is `0px` on every other OS
+but Linux.
 
 `--safe-area-inset-titlebar-trailing` is the same measure from the pane's trailing edge, for window
 controls on that side. It is `0px` on macOS, whose controls are on the leading side, and on every

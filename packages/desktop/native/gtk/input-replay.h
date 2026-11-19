@@ -13,10 +13,18 @@
 #include <optional>
 #include <string>
 
+// Xlib's Display, without its header.
+struct _XDisplay;
+
 namespace ngn::gtk {
 
 // Why the script cannot play here, or nothing when it can.
 std::optional<std::string> inputReplayProblem(GtkWidget *window, const InputScript &script);
+
+#ifdef GDK_WINDOWING_X11
+// Why XTest cannot post to this X connection: libXtst missing, or the server without the extension.
+std::optional<std::string> xtestProblem(_XDisplay *display);
+#endif
 
 // Plays the script into `window` from now, a step at a time on the main loop, and logs
 // "[ngn] input script done" after the last. False, having logged why, when it cannot play.

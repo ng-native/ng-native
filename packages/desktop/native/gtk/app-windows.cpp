@@ -85,12 +85,12 @@ std::vector<std::string> openUrls(const std::vector<std::string> &openArgs) {
   return urls;
 }
 
-void afterLayout(GtkWidget *window, std::function<void()> laidOut) {
+gulong afterLayout(GtkWidget *window, std::function<void()> laidOut) {
   GdkFrameClock *clock = gtk_widget_get_frame_clock(window);
   if (!clock) {
-    return;
+    return 0;
   }
-  g_signal_connect_data(
+  return g_signal_connect_data(
       clock, "paint", G_CALLBACK(+[](GdkFrameClock *, gpointer data) { (*static_cast<std::function<void()> *>(data))(); }),
       new std::function<void()>(std::move(laidOut)), [](gpointer data, GClosure *) { delete static_cast<std::function<void()> *>(data); },
       GConnectFlags(0));
@@ -125,9 +125,20 @@ GtkWindows::GtkWindows(Hooks hooks, GtkApplication *application, MenuPlacement m
     : hooks_(std::move(hooks)), application_(application), menus_(menus) {}
 
 GtkWindows::~GtkWindows() {
+  // Handlers first, which call back into these, then the windows still open.
   auto open = std::exchange(windows_, {});
-  for (auto &[surface, window] : open) {
-    gtk_window_destroy(GTK_WINDOW(window.window));
+  for (auto &[surface, entry] : open) {
+    disconnect(entry);
+    gtk_window_destroy(GTK_WINDOW(entry.window));
+  }
+}
+
+void GtkWindows::disconnect(Window &entry) {
+  g_clear_signal_handler(&entry.scaled, entry.window);
+  g_clear_signal_handler(&entry.closeRequested, entry.window);
+  if (entry.clock) {
+    g_clear_signal_handler(&entry.laidOut, entry.clock);
+    g_clear_object(&entry.clock);
   }
 }
 
@@ -174,7 +185,8 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   adw_application_window_set_content(ADW_APPLICATION_WINDOW(window), wrapInChrome(widget, {.titleBar = request.titleBar, .menus = menus_}));
   windows_[surface] = {.window = window, .surface = widget};
   // A move to a monitor of another scale changes no size, so the surface widget does not report it.
-  g_signal_connect_data(
+  Window &entry = windows_[surface];
+  entry.scaled = g_signal_connect_data(
       window, "notify::scale-factor", G_CALLBACK(+[](GtkWidget *scaled, GParamSpec *, gpointer data) {
         auto *r = static_cast<CloseRequest *>(data);
         GtkWidget *content = r->windows->surfaceWidget(r->surface);
@@ -185,7 +197,7 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
       }),
       new CloseRequest{this, surface}, [](gpointer data, GClosure *) { delete static_cast<CloseRequest *>(data); }, GConnectFlags(0));
   auto *request_ = new CloseRequest{this, surface};
-  g_signal_connect_data(
+  entry.closeRequested = g_signal_connect_data(
       window, "close-request", G_CALLBACK(+[](GtkWindow *, gpointer data) -> gboolean {
         auto *r = static_cast<CloseRequest *>(data);
         auto host = r->windows->host_.lock();
@@ -214,11 +226,15 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   }
   // Realized, so the surface knows its scale, but not shown until its first frame mounts.
   gtk_widget_realize(window);
-  afterLayout(window, [this, surface] {
+  entry.laidOut = afterLayout(window, [this, surface] {
     if (hooks_.laidOut) {
       hooks_.laidOut(surface);
     }
   });
+  // Held with the handler, which goes before the window: the clock is its surface's until then.
+  if (entry.laidOut) {
+    entry.clock = GDK_FRAME_CLOCK(g_object_ref(gtk_widget_get_frame_clock(window)));
+  }
   if (hooks_.startSurface) {
     hooks_.startSurface(surface, width, height, gtk_widget_get_scale_factor(window));
   }
@@ -315,6 +331,7 @@ void GtkWindows::close(SurfaceId surface) {
     return;
   }
   GtkWidget *window = it->second.window;
+  disconnect(it->second);
   windows_.erase(it);
   if (hooks_.stopSurface) {
     hooks_.stopSurface(surface);
