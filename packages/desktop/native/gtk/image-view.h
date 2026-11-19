@@ -15,6 +15,7 @@
 #include <gtk/gtk.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -35,6 +36,10 @@ struct ImageLoad {
 
 // The client and the cache every Image loads through. Without them, a load fails.
 void useImageLoading(std::shared_ptr<Http> http, std::shared_ptr<ImageCache> cache);
+
+// Reads `source` as an Image does and decodes it off the UI thread, answering once, in a later turn
+// of the UI thread: a texture the caller owns, or null and why.
+void readImage(const facebook::react::ImageSource &source, std::function<void(GdkTexture *texture, const std::string &error)> done);
 
 // Loads the source the view's props pick, and picks again as the widget's scale changes: in a
 // window on another monitor, or moved to one.

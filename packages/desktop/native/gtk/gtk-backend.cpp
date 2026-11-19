@@ -101,6 +101,29 @@ void GtkBackend::serviceUiThread() {
   g_main_context_iteration(nullptr, FALSE);
 }
 
+namespace {
+
+// react-native-svg's elements draw nothing of their own: the svg draws them. A foreignObject's
+// views stay hidden with them.
+void hideSvgElement(GtkWidget *widget) {
+  const std::string &component = viewData(widget)->component;
+  if (component.starts_with("RNSVG") && component != "RNSVGSvgView") {
+    gtk_widget_set_child_visible(widget, FALSE);
+  }
+}
+
+// Takes `widget` out of its parent, if it has one. GTK makes an unparented widget visible again:
+// one setCovered or hideSvgElement hid stays hidden where it is inserted next.
+void unparentStayingHidden(GtkWidget *widget) {
+  if (gtk_widget_get_parent(widget)) {
+    gboolean childVisible = gtk_widget_get_child_visible(widget);
+    gtk_widget_unparent(widget);
+    gtk_widget_set_child_visible(widget, childVisible);
+  }
+}
+
+} // namespace
+
 void GtkBackend::createView(const ShadowView &view) {
   auto accessibility = accessibilityOf(view);
   GtkWidget *widget = makeViewWidget(accessibleRole(view));
@@ -123,6 +146,7 @@ void GtkBackend::createView(const ShadowView &view) {
   } else if (d->component == "Image") {
     makeImageView(widget, *d);
   }
+  hideSvgElement(widget);
   applyViewProps(widget, *d);
   views_[view.tag] = widget;
   if (view.tag == view.surfaceId) {
@@ -149,9 +173,7 @@ void GtkBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
   if (p == views_.end() || c == views_.end()) {
     return;
   }
-  if (gtk_widget_get_parent(c->second)) {
-    gtk_widget_unparent(c->second);
-  }
+  unparentStayingHidden(c->second);
   // Fabric's order is the drawing order. The index counts views only: a TextInput's field is a
   // child of its own, after them.
   GtkWidget *parentWidget = contentWidget(p->second);
@@ -162,6 +184,8 @@ void GtkBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
     }
   }
   gtk_widget_insert_before(c->second, parentWidget, sibling);
+  // An svg element's view stays hidden, however it came here.
+  hideSvgElement(c->second);
   // An Image's source was picked before it had a window, at the first monitor's scale.
   if (ViewData *d = viewData(c->second); d && d->image) {
     applyImageProps(*d, gtk_widget_get_scale_factor(c->second));
@@ -169,8 +193,8 @@ void GtkBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
 }
 
 void GtkBackend::removeChild(SurfaceId, Tag, Tag child, int) {
-  if (auto c = views_.find(child); c != views_.end() && gtk_widget_get_parent(c->second)) {
-    gtk_widget_unparent(c->second);
+  if (auto c = views_.find(child); c != views_.end()) {
+    unparentStayingHidden(c->second);
   }
 }
 
@@ -320,6 +344,13 @@ void GtkBackend::updateDesktopProps(SurfaceId, Tag tag, const DesktopProps &prop
     ViewData *d = viewData(it->second);
     d->desktop = props;
     updateScrollers(*d);
+  }
+}
+
+void GtkBackend::setSvgDrawing(SurfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) {
+  if (auto it = views_.find(svg); it != views_.end() && viewData(it->second)->component == "RNSVGSvgView") {
+    viewData(it->second)->svg = std::move(document);
+    gtk_widget_queue_draw(it->second);
   }
 }
 

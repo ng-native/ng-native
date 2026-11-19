@@ -10,6 +10,7 @@
 #include "pango-text.h"
 
 #include "ngn/desktop-props.h"
+#include "ngn/svg.h"
 
 #include <react/renderer/core/EventEmitter.h>
 #include <react/renderer/core/LayoutMetrics.h>
@@ -32,6 +33,7 @@ namespace ngn::gtk {
 
 struct ImageLoad;
 struct ScrollBox;
+class SvgImageHold;
 struct TextField;
 
 struct ViewData {
@@ -54,6 +56,10 @@ struct ViewData {
   ScrollBox *scroll{nullptr};
   // A scroll view's document: as large as the content it scrolls, which GTK reads from its measure.
   ScrollBox *documentOf{nullptr};
+  // An svg's document, which the core builds from the elements under it.
+  std::shared_ptr<const SvgDocument> svg;
+  // The images its last draw asked for, kept for it in the shared cache.
+  std::shared_ptr<SvgImageHold> svgImages;
 
   // A surface's widget: its root view fills it, and it reports its size as it changes.
   bool surface{false};

@@ -1,6 +1,7 @@
 #include "view-widget.h"
 
 #include "box-paint.h"
+#include "cairo-canvas.h"
 #include "image-view.h"
 #include "scroll-view.h"
 #include "text-field.h"
@@ -108,6 +109,42 @@ void snapshotText(ViewData *d, GtkSnapshot *snapshot) {
   gtk_snapshot_restore(snapshot);
 }
 
+// An svg's document, drawn with cairo in the view's bounds, as the macOS host draws it in its own.
+void snapshotSvg(GtkWidget *widget, ViewData *d, GtkSnapshot *snapshot) {
+  const auto &size = d->layout.frame.size;
+  if (!d->svg || size.width <= 0 || size.height <= 0) {
+    // What it drew before is no longer held.
+    if (d->svgImages) {
+      d->svgImages->drawn();
+    }
+    return;
+  }
+  graphene_rect_t bounds;
+  graphene_rect_init(&bounds, 0, 0, static_cast<float>(size.width), static_cast<float>(size.height));
+  cairo_t *cr = gtk_snapshot_append_cairo(snapshot, &bounds);
+  cairo_rectangle(cr, 0, 0, size.width, size.height);
+  cairo_clip(cr);
+  // An <image> loaded later draws the svg again, while the view is there to draw.
+  GWeakRef *weak = g_new0(GWeakRef, 1);
+  g_weak_ref_init(weak, widget);
+  auto ref = std::shared_ptr<GWeakRef>(weak, [](GWeakRef *w) {
+    g_weak_ref_clear(w);
+    g_free(w);
+  });
+  if (!d->svgImages) {
+    d->svgImages = std::make_shared<ngn::gtk::SvgImageHold>();
+  }
+  auto canvas = ngn::gtk::makeCairoCanvas(cr, size.width, size.height, gtk_widget_get_scale_factor(widget), [ref] {
+    if (auto *view = static_cast<GtkWidget *>(g_weak_ref_get(ref.get()))) {
+      gtk_widget_queue_draw(view);
+      g_object_unref(view);
+    }
+  }, d->svgImages.get());
+  ngn::drawSvg(*d->svg, size.width, size.height, *canvas);
+  d->svgImages->drawn();
+  cairo_destroy(cr);
+}
+
 void viewSnapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
   ViewData *d = NGN_VIEW(widget)->data;
   bool clipped = false;
@@ -118,6 +155,7 @@ void viewSnapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
     if (d->component == "Paragraph" && d->state) {
       snapshotText(d, snapshot);
     }
+    snapshotSvg(widget, d, snapshot);
     clipped = ngn::gtk::pushOverflowClip(snapshot, box);
   }
   for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {

@@ -42,51 +42,25 @@ void failed(ViewData &view, const std::string &message) {
   }
 }
 
-// An answer on the UI thread, for the load it belongs to.
+// What a read answers, on the UI thread: a texture the caller then owns, or null and why.
 struct Answer {
-  std::weak_ptr<ImageLoad> load;
-  uint64_t turn;
+  std::function<void(GdkTexture *, const std::string &)> done;
   GdkTexture *texture{nullptr};
   std::string error;
-  Answer(std::weak_ptr<ImageLoad> load, uint64_t turn) : load(std::move(load)), turn(turn) {}
+  Answer() = default;
+  Answer(const Answer &) = delete;
+  Answer &operator=(const Answer &) = delete;
   ~Answer() {
     if (texture) {
       g_object_unref(texture);
     }
   }
-  Answer(const Answer &) = delete;
-  Answer &operator=(const Answer &) = delete;
 };
-
-void answered(Answer &answer) {
-  auto load = answer.load.lock();
-  if (!load || load->turn != answer.turn || !load->view) {
-    return;
-  }
-  ViewData &view = *load->view;
-  if (!answer.texture) {
-    failed(view, answer.error);
-  } else {
-    GdkTexture *texture = std::exchange(answer.texture, nullptr);
-    setTexture(*load, texture);
-    load->error.clear();
-    if (auto e = emitterOf(view)) {
-      ImageSource source;
-      source.uri = load->source->uri;
-      source.size = {static_cast<Float>(gdk_texture_get_width(texture)), static_cast<Float>(gdk_texture_get_height(texture))};
-      e->onLoad(source);
-      e->onLoadEnd();
-    }
-  }
-  if (view.widget) {
-    gtk_widget_queue_draw(view.widget);
-  }
-}
 
 // Queued for the UI thread's loop, never run in the caller's turn, which can be the UI thread's
 // own (a cache hit) or a network thread that took the main context between two of its turns.
 void answer(std::shared_ptr<Answer> answer) {
-  onMainContext([answer = std::move(answer)] { answered(*answer); });
+  onMainContext([answer = std::move(answer)] { answer->done(std::exchange(answer->texture, nullptr), answer->error); });
 }
 
 struct Decode {
@@ -126,6 +100,42 @@ void load(ViewData &view) {
   if (!load.source) {
     return;
   }
+  if (auto e = emitterOf(view)) {
+    e->onLoadStart();
+  }
+  std::weak_ptr<ImageLoad> weak = view.image;
+  readImage(*load.source, [weak, turn](GdkTexture *texture, const std::string &error) {
+    auto load = weak.lock();
+    // An answer for a load since superseded, or for a view that went, shows nothing.
+    if (!load || load->turn != turn || !load->view) {
+      if (texture) {
+        g_object_unref(texture);
+      }
+      return;
+    }
+    ViewData &view = *load->view;
+    if (!texture) {
+      failed(view, error);
+    } else {
+      setTexture(*load, texture);
+      load->error.clear();
+      if (auto e = emitterOf(view)) {
+        ImageSource source;
+        source.uri = load->source->uri;
+        source.size = {static_cast<Float>(gdk_texture_get_width(texture)), static_cast<Float>(gdk_texture_get_height(texture))};
+        e->onLoad(source);
+        e->onLoadEnd();
+      }
+    }
+    if (view.widget) {
+      gtk_widget_queue_draw(view.widget);
+    }
+  });
+}
+
+} // namespace
+
+void readImage(const ImageSource &source, std::function<void(GdkTexture *texture, const std::string &error)> done) {
   std::shared_ptr<Http> http;
   std::shared_ptr<ImageCache> cache;
   {
@@ -134,25 +144,23 @@ void load(ViewData &view) {
     cache = gCache;
   }
   if (!http) {
-    failed(view, "Images cannot load: the host gave no HTTP client");
+    auto reply = std::make_shared<Answer>();
+    reply->done = std::move(done);
+    reply->error = "Images cannot load: the host gave no HTTP client";
+    answer(std::move(reply));
     return;
   }
-  if (auto e = emitterOf(view)) {
-    e->onLoadStart();
-  }
-  std::weak_ptr<ImageLoad> weak = view.image;
-  loadImageSource(http, cache, viewFileAccess().get(), *load.source, [weak, turn](std::string bytes, const std::string &error) {
-    auto reply = std::make_shared<Answer>(weak, turn);
+  loadImageSource(http, cache, viewFileAccess().get(), source, [done = std::move(done)](std::string bytes, const std::string &error) {
+    auto reply = std::make_shared<Answer>();
+    reply->done = done;
+    reply->error = error;
     if (!error.empty()) {
-      reply->error = error;
       answer(std::move(reply));
     } else {
       decodeOffThread(std::move(reply), std::move(bytes));
     }
   });
 }
-
-} // namespace
 
 void useImageLoading(std::shared_ptr<Http> http, std::shared_ptr<ImageCache> cache) {
   std::lock_guard lock(gLoadingMutex);
