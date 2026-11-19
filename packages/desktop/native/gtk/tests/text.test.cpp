@@ -564,14 +564,15 @@ TEST_CASE("autoCapitalize words fits a long paste in linear time, and maxLength 
   views.add(MountedViews::shadow(3, "TextInput", textInputProps(dynamic::object("autoCapitalize", "words")("maxLength", 2)), {{10, 50}, {150, 40}}));
   auto *pasted = ngn::gtk::viewData(views.view(2))->field;
   auto *marked = ngn::gtk::viewData(views.view(3))->field;
-  std::string paste(100000, 'a');
+  std::string paste(200000, 'a');
   int position = 0;
   auto started = std::chrono::steady_clock::now();
   gtk_editable_insert_text(GTK_EDITABLE(pasted->text), paste.c_str(), -1, &position);
   auto took = std::chrono::steady_clock::now() - started;
   CHECK(ngn::gtk::fieldText(*pasted) == "Aaaa");
-  // Character by character from the start, this took seconds.
-  CHECK(took < std::chrono::milliseconds(500));
+  // Linear, this takes milliseconds; scanning from the start for each character, close to a minute.
+  // A bound far from both holds on a busy machine.
+  CHECK(took < std::chrono::seconds(5));
   // b with a combining acute is one character over two units: the cut keeps all of it or none.
   position = 0;
   gtk_editable_insert_text(GTK_EDITABLE(marked->text), "ab\xCC\x81", -1, &position);
