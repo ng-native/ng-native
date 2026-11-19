@@ -269,12 +269,42 @@ TEST_CASE("a sidebar with an autosave name keeps whether it is collapsed, which 
   launch(false, [&](MountedViews &views, auto &sent) {
     CHECK(collapsed(views));
     CHECK(sent.count("topSidebarCollapse") + sent.count("sidebarCollapse") == 1);
-    // The app opening it is saved too.
+    // An update that leaves the collapsed input alone (a width) keeps it as restored and saved.
     views.update(views.mounting->tree().find(3)->view,
-                 parsedProps<ngn::SidebarComponentDescriptor>(dynamic::object("collapsed", false)("autosaveName", "mail")));
+                 parsedProps<ngn::SidebarComponentDescriptor>(dynamic::object("collapsed", false)("autosaveName", "mail")("paneMinWidth", 200)));
+    CHECK(collapsed(views));
+    CHECK(preferences["NgNativeSidebarCollapsed mail"] == true);
+    // The app changing the input is saved too.
+    views.update(views.mounting->tree().find(3)->view,
+                 parsedProps<ngn::SidebarComponentDescriptor>(dynamic::object("collapsed", true)("autosaveName", "mail")("paneMinWidth", 200)));
+    views.update(views.mounting->tree().find(3)->view,
+                 parsedProps<ngn::SidebarComponentDescriptor>(dynamic::object("collapsed", false)("autosaveName", "mail")("paneMinWidth", 200)));
     CHECK_FALSE(collapsed(views));
   });
   CHECK(preferences["NgNativeSidebarCollapsed mail"] == false);
+}
+
+TEST_CASE("a sidebar inserted after its split was placed restores what the user left too") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views{true, 800, 500};
+  auto &splits = views.backend->splitViews();
+  std::map<std::string, folly::dynamic> preferences{{"NgNativeSidebarCollapsed mail", true}};
+  splits.readPreference = [&preferences](const std::string &key) -> std::optional<folly::dynamic> {
+    auto it = preferences.find(key);
+    return it == preferences.end() ? std::nullopt : std::optional(it->second);
+  };
+  splits.writePreference = [&preferences](const std::string &key, const folly::dynamic &value) { preferences[key] = value; };
+  auto split = view(2, "NgNativeSplitView", nullptr, {{0, 0}, {800, 500}});
+  auto sidebar = view(
+      3, "NgNativeSidebar",
+      parsedProps<ngn::SidebarComponentDescriptor>(dynamic::object("collapsed", false)("autosaveName", "mail")), {{0, 0}, {240, 500}});
+  auto content = view(4, "NgNativeSplitContent", nullptr, {{240, 0}, {560, 500}});
+  views.mount({ShadowViewMutation::CreateMutation(split), ShadowViewMutation::CreateMutation(sidebar),
+               ShadowViewMutation::CreateMutation(content)});
+  views.mount({ShadowViewMutation::InsertMutation(MountedViews::kSurface, split, 0), ShadowViewMutation::InsertMutation(2, content, 0)});
+  views.mount({ShadowViewMutation::InsertMutation(2, sidebar, 0)});
+  CHECK(adw_navigation_split_view_get_collapsed(ADW_NAVIGATION_SPLIT_VIEW(splits.splitWidget(2))));
+  CHECK(preferences["NgNativeSidebarCollapsed mail"] == true);
 }
 
 TEST_CASE("a sidebar's sections are a list box over their frames, its rows selected as the app says") {

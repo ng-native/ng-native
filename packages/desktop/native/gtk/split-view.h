@@ -102,6 +102,8 @@ class SplitViews {
     Tag sidebar{-1};
     Tag content{-1};
     SidebarCollapse collapse;
+    // The collapsed input as last applied, so an update that leaves it alone does not reapply it.
+    std::optional<bool> collapsedProp;
     // Where the sidebar button was last laid out: over the sidebar, or in the window's header bar.
     bool buttonOverSidebar{false};
     FoldingSplit folding;
@@ -119,6 +121,9 @@ class SplitViews {
     bool syncing{false};
   };
   void host(Split &s, Tag pane);
+  // A sidebar first hosted, by placing the split or inserting the sidebar: its widths, the app's
+  // collapsed prop, then the saved preference over it.
+  void applySidebar(Split &s);
   // Moves the window's header bar over the content pane, or back over the whole window.
   void moveHeaderBar(Split &s, bool overContent);
   void tearDown(Split &s);

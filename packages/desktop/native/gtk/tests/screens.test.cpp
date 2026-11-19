@@ -1054,6 +1054,30 @@ TEST_CASE("a cover or a drawn sheet holds the rest of the window still, its wind
   CHECK(reachedByTab(window, views.view(5)));
 }
 
+TEST_CASE("a drawn sheet with nothing to focus takes the focus from a background field, without a Tab first") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views(true, 800, 600);
+  gtk_window_set_resizable(GTK_WINDOW(views.window), FALSE);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {focusableView(5, {{20, 80}, {100, 30}}), 3}});
+  views.settle();
+  GtkWidget *field = views.view(5);
+  gtk_window_set_focus(GTK_WINDOW(views.window), field);
+  REQUIRE(gtk_root_get_focus(GTK_ROOT(views.window)) == field);
+  auto modal = shadow(6, "ModalHostView", nullptr, {{0, 0}, {800, 600}});
+  mountAll(views, {{modal, MountedViews::kSurface}});
+  views.backend->modals().settle();
+  views.settle();
+  REQUIRE_FALSE(views.backend->modals().inDialog(6));
+  GtkWidget *slot = views.backend->modals().slotOf(6);
+  REQUIRE(slot);
+  GtkWidget *focus = gtk_root_get_focus(GTK_ROOT(views.window));
+  CHECK(focus != field);
+  CHECK(focus == slot);
+  views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, modal, 1), ShadowViewMutation::DeleteMutation(modal)});
+}
+
 TEST_CASE("a cover holds the menus still: the menu bar takes nothing, and F10 opens no primary menu") {
   REQUIRE(ngn::testing::gtkReady());
   for (auto placement : {ngn::MenuPlacement::MenuBar, ngn::MenuPlacement::PrimaryMenu}) {

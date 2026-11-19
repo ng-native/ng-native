@@ -1237,7 +1237,12 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
     gtk_popover_popup(GTK_POPOVER(presented.popover));
   }
   hold(surfaceId);
-  gtk_widget_child_focus(presented.slot, GTK_DIR_TAB_FORWARD);
+  if (!gtk_widget_child_focus(presented.slot, GTK_DIR_TAB_FORWARD)) {
+    // Nothing in it takes focus (a drawn sheet of text): the slot does, so a background field that
+    // had focus does not keep the keys, which GTK does not take back when it stops being focusable.
+    gtk_widget_set_focusable(presented.slot, TRUE);
+    gtk_widget_grab_focus(presented.slot);
+  }
   if (auto emitter = std::dynamic_pointer_cast<const ModalHostViewEventEmitter>(d->emitter)) {
     emitter->onShow({});
   }
