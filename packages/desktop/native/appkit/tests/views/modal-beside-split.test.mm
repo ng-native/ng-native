@@ -13,10 +13,17 @@ using ngn::testing::viewProps;
 
 TEST_CASE("A modal beside a split view that took the window opens over the window") {
   MountedViews mounted;
-  // Set by the host at launch: where the panes' containers send their input.
-  ngn::InputSink *before = NGNSplitView.input;
+  // Set by the host at launch: where the panes' and the modal's containers send their input.
+  // Put back on every way out, before `mounted` (and its input) goes.
+  struct Restore {
+    ngn::InputSink *split = NGNSplitView.input;
+    ngn::InputSink *modal = NGNModalHostView.input;
+    ~Restore() {
+      NGNSplitView.input = split;
+      NGNModalHostView.input = modal;
+    }
+  } restore;
   NGNSplitView.input = &mounted.input;
-  ngn::InputSink *modalBefore = NGNModalHostView.input;
   NGNModalHostView.input = &mounted.input;
   auto split = MountedViews::shadow(5, ngn::SplitViewComponentName, viewProps(folly::dynamic::object()));
   mounted.add(split);
@@ -37,6 +44,4 @@ TEST_CASE("A modal beside a split view that took the window opens over the windo
   }
   CHECK((mounted.view(9).window != nil));
   [splitView uninstall];
-  NGNSplitView.input = before;
-  NGNModalHostView.input = modalBefore;
 }

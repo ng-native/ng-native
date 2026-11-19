@@ -90,7 +90,9 @@ void AppKitBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int 
     // window's content, surface and all. The modal goes over the surface's window all the same.
     NSView *over = parentView;
     if (over.window == nil) {
-      NSView *content = NGNWindowOfSplit(surfaces_[@(surfaceId)]).contentView;
+      // A surface already removed (a mount queued before it went) has no window to give.
+      NGNSurfaceView *surface = surfaces_[@(surfaceId)];
+      NSView *content = surface != nil ? NGNWindowOfSplit(surface).contentView : nil;
       over = content != nil ? content : parentView;
     }
     [(NGNModalHostView *)childView presentOver:over];
