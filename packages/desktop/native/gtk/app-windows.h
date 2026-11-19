@@ -53,8 +53,8 @@ class GtkWindows final : public WindowBackend {
     std::function<void(SurfaceId surface)> laidOut;
     // The app agreed to quit, or nothing was listening when it was asked to.
     std::function<void()> quit;
-    // The user closed the last of these windows. The host decides: the app's own window may still
-    // be open.
+    // The user closed the last of these windows, and no app listens to decide (the core's
+    // WindowHost::lastWindowClosed). The host decides: the app's own window may still be open.
     std::function<void()> lastWindowClosed;
   };
 
