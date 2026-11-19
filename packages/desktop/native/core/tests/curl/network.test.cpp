@@ -727,8 +727,9 @@ TEST_CASE("a WebSocket over libcurl opens with the server's subprotocol, echoes 
 // React Native's HMR client opens Metro's /hot by the bundle's http url, which NSURLSession takes.
 TEST_CASE("a WebSocket over libcurl opens an http url as ws, as NSURLSession does") {
   TestServer server;
-  auto network = ngn::makeCurlNetwork();
+  // Before the network, so that they outlive the callbacks its thread may still run.
   SocketRecorder lower, upper;
+  auto network = ngn::makeCurlNetwork();
   auto l = network.webSockets->connect(server.url("/ws"), {}, {}, lower.callbacks());
   auto u = network.webSockets->connect("HTTP" + server.url("/ws").substr(4), {}, {}, upper.callbacks());
   REQUIRE(l);

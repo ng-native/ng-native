@@ -1,5 +1,6 @@
 #include "image-view.h"
 
+#include "app-windows.h"
 #include "box-paint.h"
 
 #include "ngn/file-system.h"
@@ -8,6 +9,7 @@
 #include <react/renderer/components/image/ImageEventEmitter.h>
 #include <react/renderer/components/image/ImageProps.h>
 
+#include <algorithm>
 #include <mutex>
 #include <utility>
 
@@ -38,6 +40,53 @@ void failed(ViewData &view, const std::string &message) {
     e->onError({.error = message});
     e->onLoadEnd();
   }
+}
+
+// What a read answers, on the UI thread: a texture the caller then owns, or null and why.
+struct Answer {
+  std::function<void(GdkTexture *, const std::string &)> done;
+  GdkTexture *texture{nullptr};
+  std::string error;
+  Answer() = default;
+  Answer(const Answer &) = delete;
+  Answer &operator=(const Answer &) = delete;
+  ~Answer() {
+    if (texture) {
+      g_object_unref(texture);
+    }
+  }
+};
+
+// Queued for the UI thread's loop, never run in the caller's turn, which can be the UI thread's
+// own (a cache hit) or a network thread that took the main context between two of its turns.
+void answer(std::shared_ptr<Answer> answer) {
+  onMainContext([answer = std::move(answer)] { answer->done(std::exchange(answer->texture, nullptr), answer->error); });
+}
+
+struct Decode {
+  std::shared_ptr<Answer> answer;
+  std::string bytes;
+};
+
+// GDK decodes on any thread: the UI thread only draws, even for bytes the cache held.
+void decode(gpointer data, gpointer) {
+  std::unique_ptr<Decode> job(static_cast<Decode *>(data));
+  GBytes *bytes = g_bytes_new(job->bytes.data(), job->bytes.size());
+  GError *problem = nullptr;
+  job->answer->texture = gdk_texture_new_from_bytes(bytes, &problem);
+  g_bytes_unref(bytes);
+  if (!job->answer->texture) {
+    job->answer->error = std::string("Could not decode the image: ") + (problem ? problem->message : "unknown format");
+  }
+  if (problem) {
+    g_error_free(problem);
+  }
+  answer(std::move(job->answer));
+}
+
+void decodeOffThread(std::shared_ptr<Answer> answer, std::string bytes) {
+  static GThreadPool *pool = g_thread_pool_new(decode, nullptr, static_cast<gint>(std::max(1u, g_get_num_processors())), FALSE, nullptr);
+  g_thread_pool_push(pool, new Decode{std::move(answer), std::move(bytes)}, nullptr);
 }
 
 void load(ViewData &view) {
@@ -94,36 +143,22 @@ void readImage(const ImageSource &source, std::function<void(GdkTexture *texture
     http = gHttp;
     cache = gCache;
   }
-  struct Answer {
-    std::function<void(GdkTexture *, const std::string &)> done;
-    GdkTexture *texture{nullptr};
-    std::string error;
-  };
-  auto answer = [](gpointer data) -> gboolean {
-    std::unique_ptr<Answer> a(static_cast<Answer *>(data));
-    a->done(a->texture, a->error);
-    return G_SOURCE_REMOVE;
-  };
   if (!http) {
-    g_main_context_invoke(nullptr, answer, new Answer{.done = std::move(done), .error = "Images cannot load: the host gave no HTTP client"});
+    auto reply = std::make_shared<Answer>();
+    reply->done = std::move(done);
+    reply->error = "Images cannot load: the host gave no HTTP client";
+    answer(std::move(reply));
     return;
   }
-  loadImageSource(http, cache, viewFileAccess().get(), source, [done = std::move(done), answer](std::string bytes, const std::string &error) {
-    auto *a = new Answer{.done = done, .error = error};
-    if (error.empty()) {
-      // GDK decodes on any thread: the UI thread only draws.
-      GBytes *data = g_bytes_new(bytes.data(), bytes.size());
-      GError *problem = nullptr;
-      a->texture = gdk_texture_new_from_bytes(data, &problem);
-      g_bytes_unref(data);
-      if (!a->texture) {
-        a->error = std::string("Could not decode the image: ") + (problem ? problem->message : "unknown format");
-      }
-      if (problem) {
-        g_error_free(problem);
-      }
+  loadImageSource(http, cache, viewFileAccess().get(), source, [done = std::move(done)](std::string bytes, const std::string &error) {
+    auto reply = std::make_shared<Answer>();
+    reply->done = done;
+    reply->error = error;
+    if (!error.empty()) {
+      answer(std::move(reply));
+    } else {
+      decodeOffThread(std::move(reply), std::move(bytes));
     }
-    g_main_context_invoke(nullptr, answer, a);
   });
 }
 
@@ -131,6 +166,15 @@ void useImageLoading(std::shared_ptr<Http> http, std::shared_ptr<ImageCache> cac
   std::lock_guard lock(gLoadingMutex);
   gHttp = std::move(http);
   gCache = std::move(cache);
+}
+
+void makeImageView(GtkWidget *widget, ViewData &view) {
+  g_signal_connect(widget, "notify::scale-factor", G_CALLBACK(+[](GtkWidget *scaled, GParamSpec *, gpointer) {
+    if (ViewData *d = viewData(scaled); d && d->image) {
+      applyImageProps(*d, gtk_widget_get_scale_factor(scaled));
+    }
+  }), nullptr);
+  applyImageProps(view, gtk_widget_get_scale_factor(widget));
 }
 
 void applyImageProps(ViewData &view, int screenScale) {
