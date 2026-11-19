@@ -648,7 +648,8 @@ int main(int argc, char *argv[]) {
   for (const auto &url : ngn::gtk::openUrls(settings.openArgs)) {
     gHost.state->receiveUrl(url, false);
   }
-  auto curl = ngn::makeCurlNetwork();
+  // Cookies last between launches, in the app's data folder, as macOS keeps them.
+  auto curl = ngn::makeCurlNetwork({.cookieFile = joined(appData, "cookies.txt")});
   ngn::NetworkClients network{curl.http, curl.webSockets};
   // Images load through the same client, and are kept in memory for the process.
   ngn::gtk::useImageLoading(network.http, std::make_shared<ngn::ImageCache>("", 64 << 20));

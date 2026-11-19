@@ -10,8 +10,8 @@
 // NSURLSession does on macOS: redirects are followed, a request's timeout is the longest it may go
 // without a byte in either direction (a header line counts once it is whole, as libcurl hands over
 // only whole ones), compressed bodies arrive decoded, `file:` and `data:` urls
-// answer 200 with no headers, and requests with credentials share one cookie store. Unlike macOS's,
-// that store is kept in memory for the process only, and a proxy comes only from libcurl's
+// answer 200 with no headers, and requests with credentials share one cookie store, which the
+// cookie file keeps between launches as NSHTTPCookieStorage does. A proxy comes only from libcurl's
 // environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY`, `NO_PROXY` and the rest), not the
 // desktop's settings. A `file:` url that is not a regular file is refused. TLS is the system's
 // OpenSSL, verifying against the certificates findCaCertificates() locates.
@@ -26,12 +26,20 @@
 
 namespace ngn {
 
+struct CurlOptions {
+  // Where the cookie store is kept between launches, in libcurl's (Netscape's) cookie file format,
+  // readable by the user alone. Its lasting cookies are loaded at the start, and it is written again
+  // whenever a request or connection has finished and the store differs from the file: a session
+  // cookie, or one that has expired, is never written. Empty keeps the store in memory.
+  std::string cookieFile;
+};
+
 // The two clients over one thread, which stops once both are gone.
 struct CurlNetwork {
   std::shared_ptr<Http> http;
   std::shared_ptr<WebSockets> webSockets;
 };
-CurlNetwork makeCurlNetwork();
+CurlNetwork makeCurlNetwork(CurlOptions options = {});
 
 // Where TLS finds the trusted certificates: a bundle file, else a directory of hashed ones. Both
 // empty leave it to OpenSSL's own default, which is the distribution's when its libcrypto is

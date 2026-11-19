@@ -19,7 +19,10 @@
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
+#include <filesystem>
 #include <fstream>
+#include <future>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -592,6 +595,52 @@ TEST_CASE("requests over libcurl with credentials share cookies until they are c
   // A response's cookies are not kept for a request without credentials.
   get("/set-cookie", false);
   CHECK(echoedHeader(echoed(*get("/echo", true)), "cookie") == "<none>");
+}
+
+TEST_CASE("cookies over libcurl outlive the process in the cookie file, all but session ones, until they are cleared") {
+  TestServer server;
+  auto file = std::filesystem::temp_directory_path() / ("ngn-cookies-" + std::to_string(getpid())) / "cookies.txt";
+  struct Remove {
+    std::filesystem::path dir;
+    ~Remove() {
+      std::filesystem::remove_all(dir);
+    }
+  } remove{file.parent_path()};
+  auto get = [&](ngn::CurlNetwork &network, const std::string &path) {
+    auto r = std::make_shared<Recorder>();
+    network.http->send({.url = server.url(path), .withCredentials = true}, Recorder::owned(r));
+    REQUIRE(r->waitForComplete());
+    return r;
+  };
+  auto cookies = [&](ngn::CurlNetwork &network) { return echoedHeader(echoed(*get(network, "/echo")), "cookie"); };
+  {
+    auto first = ngn::makeCurlNetwork({.cookieFile = file.string()});
+    get(first, "/set-cookies");
+    CHECK(cookies(first) == "flavour=lemon; visit=1; token=abc");
+  }
+  // Saved as each request finishes, readable by the user alone.
+  REQUIRE(std::filesystem::exists(file));
+  using std::filesystem::perms;
+  CHECK((std::filesystem::status(file).permissions() & perms::all) == (perms::owner_read | perms::owner_write));
+  {
+    // The next launch has the lasting cookies, HttpOnly included, and not the session's.
+    auto next = ngn::makeCurlNetwork({.cookieFile = file.string()});
+    CHECK(cookies(next) == "flavour=lemon; token=abc");
+    std::promise<bool> cleared;
+    next.http->clearCookies([&](bool any) { cleared.set_value(any); });
+    CHECK(cleared.get_future().get());
+  }
+  {
+    auto afterClear = ngn::makeCurlNetwork({.cookieFile = file.string()});
+    CHECK(cookies(afterClear) == "<none>");
+  }
+  // A cookie that has expired since it was saved is not sent.
+  {
+    std::ofstream out(file, std::ios::trunc);
+    out << "127.0.0.1\tFALSE\t/\tFALSE\t1000\told\tgone\n127.0.0.1\tFALSE\t/\tFALSE\t" << (time(nullptr) + 3600) << "\tfresh\tyes\n";
+  }
+  auto later = ngn::makeCurlNetwork({.cookieFile = file.string()});
+  CHECK(cookies(later) == "fresh=yes");
 }
 
 TEST_CASE("a compressed body over libcurl arrives decoded") {

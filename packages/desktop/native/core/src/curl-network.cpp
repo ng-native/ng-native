@@ -4,6 +4,7 @@
 
 #include <curl/curl.h>
 
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -12,7 +13,10 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <ctime>
 #include <deque>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <mutex>
 #include <string_view>
@@ -87,6 +91,35 @@ std::string errorText(CURLcode code) {
     default:
       return "A network error occurred (libcurl error " + std::to_string(static_cast<int>(code)) + ").";
   }
+}
+
+// Whether a cookie line in libcurl's (Netscape's) format is one to keep past this launch: one with
+// an expiry still to come. A session cookie's expiry is 0. `#HttpOnly_` lines are cookies; other `#`
+// lines and blank ones are not.
+bool lastingCookie(std::string_view line, time_t now) {
+  if (line.empty() || (line[0] == '#' && line.rfind("#HttpOnly_", 0) != 0)) {
+    return false;
+  }
+  size_t at = 0;
+  for (int field = 0; field < 4; ++field) {
+    at = line.find('\t', at);
+    if (at == std::string_view::npos) {
+      return false;
+    }
+    ++at;
+  }
+  auto end = line.find('\t', at);
+  if (end == std::string_view::npos) {
+    return false;
+  }
+  long long expires = 0;
+  for (char c : line.substr(at, end - at)) {
+    if (c < '0' || c > '9') {
+      return false;
+    }
+    expires = expires * 10 + (c - '0');
+  }
+  return expires > now;
 }
 
 bool startsWithNoCase(std::string_view text, std::string_view prefix) {
@@ -330,13 +363,19 @@ struct Socket {
 
 class Engine {
  public:
-  Engine() {
+  explicit Engine(CurlOptions options) : options_(std::move(options)) {
     initCurl();
     multi_ = curl_multi_init();
     share_ = curl_share_init();
     // Every handle lives on the thread, so the shared cookie store needs no lock.
     curl_share_setopt(share_, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
     ca_ = findCaCertificates();
+    if (!options_.cookieFile.empty()) {
+      // A handle of its own reads and fills the shared store.
+      cookies_ = curl_easy_init();
+      useCookies(cookies_);
+      loadCookies();
+    }
   }
 
   ~Engine() {
@@ -348,6 +387,10 @@ class Engine {
     }
     transfers_.clear();
     sockets_.clear();
+    if (cookies_ != nullptr) {
+      saveCookies();
+      curl_easy_cleanup(cookies_);
+    }
     curl_multi_cleanup(multi_);
     curl_share_cleanup(share_);
   }
@@ -521,6 +564,8 @@ class Engine {
     curl_slist_free_all(cookies);
     curl_easy_setopt(e, CURLOPT_COOKIELIST, "ALL");
     curl_easy_cleanup(e);
+    // Cleared for the next launch too.
+    saveCookies();
     if (done) {
       done(any);
     }
@@ -616,6 +661,56 @@ class Engine {
     curl_easy_setopt(e, CURLOPT_SHARE, share_);
     // An empty name turns the cookie engine on without reading a file.
     curl_easy_setopt(e, CURLOPT_COOKIEFILE, "");
+  }
+
+  // The cookie file's lasting cookies into the store.
+  void loadCookies() {
+    std::ifstream in(options_.cookieFile);
+    std::string line;
+    time_t now = time(nullptr);
+    while (std::getline(in, line)) {
+      if (lastingCookie(line, now)) {
+        curl_easy_setopt(cookies_, CURLOPT_COOKIELIST, line.c_str());
+        saved_ += line + "\n";
+      }
+    }
+  }
+
+  // The store's lasting cookies into the cookie file, when they differ from what it holds: written
+  // beside it, readable by the user alone, then moved over it, so a crash leaves one or the other.
+  void saveCookies() {
+    if (cookies_ == nullptr) {
+      return;
+    }
+    curl_slist *list = nullptr;
+    curl_easy_getinfo(cookies_, CURLINFO_COOKIELIST, &list);
+    std::string text;
+    time_t now = time(nullptr);
+    for (auto *item = list; item != nullptr; item = item->next) {
+      if (lastingCookie(item->data, now)) {
+        text += std::string(item->data) + "\n";
+      }
+    }
+    curl_slist_free_all(list);
+    if (text == saved_) {
+      return;
+    }
+    std::error_code error;
+    std::filesystem::path file(options_.cookieFile);
+    std::filesystem::create_directories(file.parent_path(), error);
+    auto partial = options_.cookieFile + ".partial";
+    int fd = open(partial.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    if (fd < 0) {
+      return;
+    }
+    std::string out = "# Netscape HTTP Cookie File\n" + text;
+    bool written = ::write(fd, out.data(), out.size()) == static_cast<ssize_t>(out.size());
+    written = ::close(fd) == 0 && written;
+    if (written && rename(partial.c_str(), options_.cookieFile.c_str()) == 0) {
+      saved_ = std::move(text);
+    } else {
+      unlink(partial.c_str());
+    }
   }
 
   // Sends a close frame after what is already queued, and waits kCloseWait for the handshake.
@@ -764,10 +859,12 @@ class Engine {
 
   void finished() {
     int left = 0;
+    bool any = false;
     while (CURLMsg *msg = curl_multi_info_read(multi_, &left)) {
       if (msg->msg != CURLMSG_DONE) {
         continue;
       }
+      any = true;
       CURL *e = msg->easy_handle;
       CURLcode result = msg->data.result;
       if (auto t = takeTransfer(e)) {
@@ -798,6 +895,10 @@ class Engine {
         }
         break;
       }
+    }
+    // A response or a handshake may have set cookies.
+    if (any) {
+      saveCookies();
     }
   }
 
@@ -1110,8 +1211,12 @@ class Engine {
     return static_cast<int>(std::max<int64_t>(wait + 1, 0));
   }
 
+  CurlOptions options_;
   CURLM *multi_;
   CURLSH *share_;
+  // Reads and fills the store for the cookie file, with what the file last held.
+  CURL *cookies_{nullptr};
+  std::string saved_;
   CaCertificates ca_;
   std::mutex mutex_;
   std::vector<std::function<void()>> queue_;
@@ -1127,7 +1232,7 @@ class Engine {
 // thread itself (a callback dropping a client) leaves it to finish on its own.
 class Client {
  public:
-  Client() : engine_(std::make_shared<Engine>()) {
+  explicit Client(CurlOptions options) : engine_(std::make_shared<Engine>(std::move(options))) {
     thread_ = std::thread([engine = engine_] { engine->run(); });
   }
 
@@ -1253,8 +1358,8 @@ class CurlWebSockets final : public WebSockets {
 
 } // namespace
 
-CurlNetwork makeCurlNetwork() {
-  auto client = std::make_shared<Client>();
+CurlNetwork makeCurlNetwork(CurlOptions options) {
+  auto client = std::make_shared<Client>(std::move(options));
   return {.http = std::make_shared<CurlHttp>(client), .webSockets = std::make_shared<CurlWebSockets>(client)};
 }
 
