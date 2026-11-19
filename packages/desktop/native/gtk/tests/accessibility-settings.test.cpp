@@ -35,6 +35,13 @@ TEST_CASE("the settings portal's contrast is increase contrast, read at start an
   CHECK(heard.back().reduceMotion);
 }
 
+TEST_CASE("the portal stand-in shuts down when asked before its worker reaches the loop") {
+  // The worker waits 300 ms before its loop and the constructor 50 ms for the name, so the
+  // destructor's quit comes first. A quit that is lost leaves the join waiting for ever.
+  ngn::testing::FakeSettingsPortal portal({}, 300, 50);
+  CHECK_FALSE(portal.owned());
+}
+
 TEST_CASE("GNOME's Animations switch off is reduce motion, heard as it changes") {
   REQUIRE(ngn::testing::gtkReady());
   GtkSettings *settings = gtk_settings_get_default();

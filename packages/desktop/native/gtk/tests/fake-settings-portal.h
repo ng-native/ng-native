@@ -23,7 +23,10 @@ class FakeSettingsPortal {
   // Values by namespace and key, as the portal holds them.
   using Key = std::pair<std::string, std::string>;
 
-  explicit FakeSettingsPortal(std::map<Key, GVariant *> values = {}) : values_(std::move(values)) {
+  // `startDelayMs` holds the worker back before its loop, and `waitMs` is how long the constructor
+  // waits for the name, both for testing a slow start.
+  explicit FakeSettingsPortal(std::map<Key, GVariant *> values = {}, int startDelayMs = 0, int waitMs = 2000)
+      : values_(std::move(values)), startDelayMs_(startDelayMs), waitMs_(waitMs) {
     for (auto &[key, value] : values_) {
       g_variant_ref_sink(value);
     }
@@ -35,14 +38,20 @@ class FakeSettingsPortal {
     loop_ = g_main_loop_new(context_, FALSE);
     thread_ = std::thread([this, address = std::string(address)] { run(address); });
     // Until the name is the fake's, or the thread gave up.
-    for (int i = 0; i < 400 && !owned_ && !failed_; ++i) {
+    for (int i = 0; i < waitMs_ / 5 && !owned_ && !failed_; ++i) {
       g_usleep(5000);
     }
   }
 
   ~FakeSettingsPortal() {
     if (thread_.joinable()) {
-      g_main_loop_quit(loop_);
+      // From a source on the worker's context, so a quit asked before the worker reaches its loop
+      // lands once the loop runs. g_main_context_invoke would run it here, on a free context.
+      GSource *quit = g_idle_source_new();
+      g_source_set_callback(
+          quit, [](gpointer loop) { g_main_loop_quit(static_cast<GMainLoop *>(loop)); return G_SOURCE_REMOVE; }, loop_, nullptr);
+      g_source_attach(quit, context_);
+      g_source_unref(quit);
       thread_.join();
     }
     if (loop_) {
@@ -131,6 +140,7 @@ class FakeSettingsPortal {
         bus_, "org.freedesktop.portal.Desktop", G_BUS_NAME_OWNER_FLAGS_REPLACE,
         [](GDBusConnection *, const gchar *, gpointer data) { static_cast<FakeSettingsPortal *>(data)->owned_ = true; },
         [](GDBusConnection *, const gchar *, gpointer data) { static_cast<FakeSettingsPortal *>(data)->failed_ = true; }, this, nullptr);
+    g_usleep(startDelayMs_ * 1000);
     g_main_loop_run(loop_);
     g_bus_unown_name(name);
     g_dbus_connection_unregister_object(bus_, object);
@@ -141,6 +151,8 @@ class FakeSettingsPortal {
   }
 
   std::map<Key, GVariant *> values_;
+  int startDelayMs_;
+  int waitMs_;
   std::mutex mutex_;
   GMainContext *context_{nullptr};
   GMainLoop *loop_{nullptr};

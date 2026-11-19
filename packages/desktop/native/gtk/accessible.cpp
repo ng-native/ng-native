@@ -125,7 +125,7 @@ constexpr std::pair<const char *, AxVerb> kVerbs[] = {
 
 void applyAccessibleActions(GtkWidget *widget, const AxInfo &info, std::function<bool(GtkWidget *, AxVerb)> perform) {
   auto *actions = static_cast<AxActions *>(g_object_get_data(G_OBJECT(widget), "ngn-ax-actions"));
-  bool offers = info.element && (info.offersPress || info.offersIncrement || info.offersCancel);
+  bool offers = info.element && !info.disabled && (info.offersPress || info.offersIncrement || info.offersCancel);
   if (!actions && !offers) {
     return;
   }
@@ -156,10 +156,13 @@ void applyAccessibleActions(GtkWidget *widget, const AxInfo &info, std::function
   auto enable = [actions](const char *name, bool on) {
     g_simple_action_set_enabled(G_SIMPLE_ACTION(g_action_map_lookup_action(G_ACTION_MAP(actions->group), name)), on);
   };
-  enable("press", info.element && info.offersPress);
-  enable("increment", info.element && info.offersIncrement);
-  enable("decrement", info.element && info.offersIncrement);
-  enable("cancel", info.element && info.offersCancel);
+  // GTK checks the widget's sensitivity, not the accessible disabled state, so a disabled view
+  // offers no action of its own accord.
+  bool live = info.element && !info.disabled;
+  enable("press", live && info.offersPress);
+  enable("increment", live && info.offersIncrement);
+  enable("decrement", live && info.offersIncrement);
+  enable("cancel", live && info.offersCancel);
 }
 
 bool announceOn(GtkWidget *widget, const Announcement &announcement) {

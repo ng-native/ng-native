@@ -361,7 +361,13 @@ void GtkBackend::updateProps(const ShadowView &view) {
 void GtkBackend::updateState(const ShadowView &view) {
   if (auto it = views_.find(view.tag); it != views_.end()) {
     ViewData *d = viewData(it->second);
-    std::string before = d->state && d->component == "Paragraph" ? paragraphText(d->state) : std::string();
+    bool paragraph = d->component == "Paragraph";
+    std::string before = d->state && paragraph ? paragraphText(d->state) : std::string();
+    std::string after = view.state && paragraph ? paragraphText(view.state) : std::string();
+    // The old text goes before the contents change, the new one comes after.
+    if (before != after) {
+      accessibleTextRemoved(d->widget, before);
+    }
     d->state = view.state;
     forgetText(*d);
     applyScrollViewState(*d);
@@ -372,8 +378,8 @@ void GtkBackend::updateState(const ShadowView &view) {
       applyAccessibility(accessibleWidget(*d), *accessibility);
     applyActions(*d, *accessibility);
     }
-    if (d->component == "Paragraph" && d->state) {
-      accessibleTextChanged(d->widget, before, paragraphText(d->state));
+    if (before != after) {
+      accessibleTextInserted(d->widget, after);
     }
     gtk_widget_queue_draw(d->widget);
   }

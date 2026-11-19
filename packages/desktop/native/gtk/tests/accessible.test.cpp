@@ -352,6 +352,76 @@ TEST_CASE("a paragraph is read by word and line through GtkAccessibleText on GTK
   CHECK(at(0, word) == "Saved");
 }
 
+TEST_CASE("a paragraph's text attributes are empty, NULL-terminated arrays, as GTK 4.14's AT-SPI handler indexes them") {
+  ngn::gtk::AccessibleTextInterface iface{};
+  ngn::gtk::fillAccessibleTextInterface(&iface);
+  REQUIRE(iface.get_attributes);
+  REQUIRE(iface.get_default_attributes);
+  char **names = nullptr, **values = nullptr;
+  iface.get_default_attributes(nullptr, &names, &values);
+  REQUIRE((names && values));
+  CHECK(names[0] == nullptr);
+  CHECK(values[0] == nullptr);
+  g_strfreev(names);
+  g_strfreev(values);
+  gsize count = 7;
+  gpointer ranges = nullptr;
+  names = values = nullptr;
+  CHECK_FALSE(iface.get_attributes(nullptr, 0, &count, &ranges, &names, &values));
+  CHECK(count == 0);
+  REQUIRE((names && values));
+  CHECK(names[0] == nullptr);
+  g_strfreev(names);
+  g_strfreev(values);
+}
+
+namespace {
+
+struct TextChange {
+  int change;
+  unsigned int end;
+  std::string textThen;
+};
+std::vector<TextChange> g_textChanges;
+
+void recordTextChange(GtkAccessible *self, int change, unsigned int, unsigned int end) {
+  ngn::gtk::ViewData *d = ngn::gtk::viewData(GTK_WIDGET(self));
+  g_textChanges.push_back({change, end, d && d->state ? ngn::paragraphText(d->state) : ""});
+}
+
+} // namespace
+
+TEST_CASE("a paragraph's old text is removed before its state changes and the new text inserted after") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto paragraph = MountedViews::shadow(2, "Paragraph", desktopViewProps(dynamic::object()), {{0, 0}, {150, 20}});
+  paragraph.state = paragraphState("alpha");
+  views.add(paragraph);
+  g_textChanges.clear();
+  ngn::gtk::setAccessibleTextUpdate(recordTextChange);
+  try {
+    auto current = views.mounting->tree().find(2)->view;
+    auto next = current;
+    next.state = paragraphState("beta");
+    views.mount({ShadowViewMutation::UpdateMutation(current, next, MountedViews::kSurface)});
+    // The same text again says nothing.
+    current = next;
+    views.mount({ShadowViewMutation::UpdateMutation(current, next, MountedViews::kSurface)});
+  } catch (...) {
+    ngn::gtk::setAccessibleTextUpdate(nullptr);
+    throw;
+  }
+  ngn::gtk::setAccessibleTextUpdate(nullptr);
+  REQUIRE(g_textChanges.size() == 2);
+  // GtkAccessibleTextContentChange: INSERT is 0, REMOVE 1.
+  CHECK(g_textChanges[0].change == 1);
+  CHECK(g_textChanges[0].end == 5);
+  CHECK(g_textChanges[0].textThen == "alpha");
+  CHECK(g_textChanges[1].change == 0);
+  CHECK(g_textChanges[1].end == 4);
+  CHECK(g_textChanges[1].textThen == "beta");
+}
+
 TEST_CASE("a view's press is an accessible action a screen reader invokes, enabled while the view offers it") {
   REQUIRE(ngn::testing::gtkReady());
   MountedViews views;
@@ -371,6 +441,15 @@ TEST_CASE("a view's press is an accessible action a screen reader invokes, enabl
   gtk_widget_activate_action(views.view(2), "accessibility.increment", nullptr);
   CHECK_FALSE(gtk_widget_activate_action(views.view(3), "accessibility.press", nullptr));
   CHECK(pressed.size() == 1);
+
+  // Disabled: the press goes, and comes back when it is enabled.
+  views.update(button, desktopViewProps(dynamic::object("role", "button")("accessible", true)("accessibilityLabel", "Save")("accessibilityState", dynamic::object("disabled", true))));
+  gtk_widget_activate_action(views.view(2), "accessibility.press", nullptr);
+  CHECK(pressed.size() == 1);
+  views.update(button, desktopViewProps(dynamic::object("role", "button")("accessible", true)("accessibilityLabel", "Save")));
+  CHECK(gtk_widget_activate_action(views.view(2), "accessibility.press", nullptr));
+  CHECK(pressed.size() == 2);
+  pressed.pop_back();
 
   // No longer an element: the press goes.
   views.update(button, desktopViewProps(dynamic::object("accessibilityElementsHidden", true)));
