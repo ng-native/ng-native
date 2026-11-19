@@ -195,6 +195,8 @@ export const system = {
   },
   /** @param {string} file */
   readFile: (file) => readFileSync(file, 'utf8'),
+  /** @param {string} dir */
+  mkdir: (dir) => mkdirSync(dir, { recursive: true }),
   /** @param {string} file */
   readBytes: (file) => new Uint8Array(readFileSync(file)),
   /**
@@ -409,7 +411,7 @@ function hostBuildDir(sys, reactNative, build) {
     arch,
   });
   if (prebuilt.dir) return prebuilt.dir;
-  if (os === 'linux' && (sys.platform !== 'linux' || arch !== linuxArch(sys))) {
+  if (os === 'linux' && !buildsLinuxHere(sys, arch)) {
     throw new UsageError(
       `The Linux desktop host builds on Linux only for now, on the architecture it is for, and no ` +
         `prebuilt Linux ${arch} host fits this app (${prebuilt.reason}). Package on Linux on ${arch}.`,
@@ -427,6 +429,19 @@ function hostBuildDir(sys, reactNative, build) {
 /**
  * @typedef {'x64' | 'arm64'} LinuxArch
  */
+
+/**
+ * Whether this machine builds the Linux host for `arch`: Linux, on that architecture, which is
+ * one of the two a host is built for (a RISC-V machine is not x64).
+ *
+ * @param {typeof system} sys
+ * @param {LinuxArch} arch
+ */
+function buildsLinuxHere(sys, arch) {
+  return (
+    sys.platform === 'linux' && (sys.arch === 'x64' || sys.arch === 'arm64') && sys.arch === arch
+  );
+}
 
 /**
  * This machine's architecture as a Linux host is built for it.

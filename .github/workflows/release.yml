@@ -93,9 +93,11 @@ jobs:
     strategy:
       matrix:
         flavour: [debug, release]
-    # It builds fetched third-party sources, so it gets no write access and keeps no token.
+    # It builds fetched third-party sources, so it gets no write access, and its read-only token
+    # goes only to the step that fetches main's host, before anything is built.
     permissions:
       contents: read
+      actions: read
     # Unchanged inputs pack a kept host in under 2 minutes, and a change with ccache warm builds in
     # about 5 (dry runs 43990876531 and 43991351989). The limit is for the build from scratch that
     # anything the action cannot check falls back to: 50 minutes for release and 52 for debug, cold
@@ -117,6 +119,7 @@ jobs:
           version: ${{ needs.validate.outputs.version }}
           base-url: https://github.com/${{ github.repository }}/releases/download/v${{ needs.validate.outputs.version }}
           out: .prebuilt
+          github-token: ${{ github.token }}
 
       # .prebuilt is a dot folder, which upload-artifact leaves out unless told otherwise.
       - uses: actions/upload-artifact@v7
