@@ -455,7 +455,7 @@ TextLayout layoutText(
     if (fixed <= 0) {
       baseline = y + ascent;
     }
-    layout.lines.push_back({line, CGPointMake(0, baseline), width, rightToLeftAt(layout.string, r.location, paragraph)});
+    layout.lines.push_back({line, CGPointMake(0, baseline), width, rightToLeftAt(layout.string, r.location, paragraph), y, height});
     widest = std::max(widest, width);
     y += height;
     at += count;
@@ -520,30 +520,36 @@ static void drawStrikethroughs(CTLineRef line, CGContextRef context, CGPoint bas
   }
 }
 
+// How far right of the box's left edge a line starts: its paragraph's alignment in a box this wide.
+static CGFloat lineOffset(const TextLayout &layout, const TextLine &l, CGFloat boxWidth) {
+  CFRange r = CTLineGetStringRange(l.line);
+  CTTextAlignment alignment = kCTTextAlignmentNatural;
+  CTParagraphStyleRef style = r.length > 0
+      ? (CTParagraphStyleRef)CFAttributedStringGetAttribute(
+            layout.string, r.location, kCTParagraphStyleAttributeName, nullptr)
+      : nullptr;
+  if (style != nullptr) {
+    CTParagraphStyleGetValueForSpecifier(style, kCTParagraphStyleSpecifierAlignment, sizeof(alignment), &alignment);
+  }
+  CGFloat x = 0;
+  if (alignment == kCTTextAlignmentCenter) {
+    x = (boxWidth - l.width) / 2;
+  } else if (alignment == kCTTextAlignmentRight) {
+    x = boxWidth - l.width;
+  } else if (alignment == kCTTextAlignmentJustified && l.rightToLeft) {
+    // A justified paragraph's last line follows the paragraph's direction.
+    x = boxWidth - l.width;
+  }
+  return x;
+}
+
 void drawText(const TextLayout &layout, CGContextRef context, CGPoint origin, CGFloat boxWidth) {
   CGContextSaveGState(context);
   // The view is flipped; glyphs are drawn with an inverted text matrix rather than by flipping
   // the whole context, so line origins stay top-down.
   CGContextSetTextMatrix(context, CGAffineTransformMakeScale(1, -1));
   for (const auto &l : layout.lines) {
-    CFRange r = CTLineGetStringRange(l.line);
-    CTTextAlignment alignment = kCTTextAlignmentNatural;
-    CTParagraphStyleRef style = r.length > 0
-        ? (CTParagraphStyleRef)CFAttributedStringGetAttribute(
-              layout.string, r.location, kCTParagraphStyleAttributeName, nullptr)
-        : nullptr;
-    if (style != nullptr) {
-      CTParagraphStyleGetValueForSpecifier(style, kCTParagraphStyleSpecifierAlignment, sizeof(alignment), &alignment);
-    }
-    CGFloat x = 0;
-    if (alignment == kCTTextAlignmentCenter) {
-      x = (boxWidth - l.width) / 2;
-    } else if (alignment == kCTTextAlignmentRight) {
-      x = boxWidth - l.width;
-    } else if (alignment == kCTTextAlignmentJustified && l.rightToLeft) {
-      // A justified paragraph's last line follows the paragraph's direction.
-      x = boxWidth - l.width;
-    }
+    CGFloat x = lineOffset(layout, l, boxWidth);
     CGContextSetTextPosition(context, origin.x + x, origin.y + l.origin.y);
     CTLineDraw(l.line, context);
     drawStrikethroughs(l.line, context, CGPointMake(origin.x + x, origin.y + l.origin.y));
@@ -561,4 +567,42 @@ facebook::react::Size CoreTextMeasurer::measure(
   }
 }
 
+LinesMeasurements CoreTextMeasurer::lines(
+    const AttributedString &text,
+    const ParagraphAttributes &paragraph,
+    facebook::react::Float width) const {
+  @autoreleasepool {
+    // The slack drawing gives the width Yoga rounded (NGNView's drawRect:), so the lines match.
+    auto layout = layoutText(text, paragraph, width + 0.5);
+    CFStringRef string = layout.string ? CFAttributedStringGetString(layout.string) : nullptr;
+    LinesMeasurements lines;
+    for (const auto &l : layout.lines) {
+      CGFloat ascent = 0, descent = 0, leading = 0;
+      CTLineGetTypographicBounds(l.line, &ascent, &descent, &leading);
+      CFRange range = CTLineGetStringRange(l.line);
+      NSString *lineText = string ? (__bridge NSString *)string : @"";
+      lineText = [lineText substringWithRange:NSMakeRange(range.location, range.length)];
+      CGFloat capHeight = 0, xHeight = 0;
+      CFArrayRef runs = CTLineGetGlyphRuns(l.line);
+      if (CFArrayGetCount(runs) > 0) {
+        auto font = (CTFontRef)CFDictionaryGetValue(
+            CTRunGetAttributes((CTRunRef)CFArrayGetValueAtIndex(runs, 0)), kCTFontAttributeName);
+        if (font != nullptr) {
+          capHeight = CTFontGetCapHeight(font);
+          xHeight = CTFontGetXHeight(font);
+        }
+      }
+      lines.emplace_back(
+          std::string(lineText.UTF8String),
+          facebook::react::Rect{{static_cast<Float>(lineOffset(layout, l, width)), static_cast<Float>(l.top)}, {static_cast<Float>(l.width), static_cast<Float>(l.height)}},
+          static_cast<Float>(descent),
+          static_cast<Float>(capHeight),
+          static_cast<Float>(l.origin.y - l.top),
+          static_cast<Float>(xHeight));
+    }
+    return lines;
+  }
+}
+
 } // namespace ngn
+

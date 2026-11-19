@@ -17,6 +17,8 @@ struct TextLine {
   CGPoint origin; // baseline origin, y measured from the top of the text box
   CGFloat width;
   bool rightToLeft{false}; // its paragraph runs right to left, so a justified last line is on the right
+  CGFloat top{0};           // the top of its line box, from the top of the text box
+  CGFloat height{0};        // its line box's height
 };
 
 struct TextLayout {
@@ -53,6 +55,10 @@ class CoreTextMeasurer final : public TextMeasurer {
       const facebook::react::AttributedString &text,
       const facebook::react::ParagraphAttributes &paragraph,
       facebook::react::Float maxWidth) const override;
+  facebook::react::LinesMeasurements lines(
+      const facebook::react::AttributedString &text,
+      const facebook::react::ParagraphAttributes &paragraph,
+      facebook::react::Float width) const override;
 };
 
 } // namespace ngn
