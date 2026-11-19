@@ -116,6 +116,10 @@ void snapshotText(ViewData *d, GtkSnapshot *snapshot) {
 void snapshotSvg(GtkWidget *widget, ViewData *d, GtkSnapshot *snapshot) {
   const auto &size = d->layout.frame.size;
   if (!d->svg || size.width <= 0 || size.height <= 0) {
+    // What it drew before is no longer held.
+    if (d->svgImages) {
+      d->svgImages->drawn();
+    }
     return;
   }
   graphene_rect_t bounds;
@@ -130,13 +134,17 @@ void snapshotSvg(GtkWidget *widget, ViewData *d, GtkSnapshot *snapshot) {
     g_weak_ref_clear(w);
     g_free(w);
   });
+  if (!d->svgImages) {
+    d->svgImages = std::make_shared<ngn::gtk::SvgImageHold>();
+  }
   auto canvas = ngn::gtk::makeCairoCanvas(cr, size.width, size.height, gtk_widget_get_scale_factor(widget), [ref] {
     if (auto *view = static_cast<GtkWidget *>(g_weak_ref_get(ref.get()))) {
       gtk_widget_queue_draw(view);
       g_object_unref(view);
     }
-  });
+  }, d->svgImages.get());
   ngn::drawSvg(*d->svg, size.width, size.height, *canvas);
+  d->svgImages->drawn();
   cairo_destroy(cr);
 }
 
