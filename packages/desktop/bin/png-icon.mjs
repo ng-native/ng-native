@@ -1,9 +1,9 @@
 /**
  * Scales a PNG app icon to the hicolor theme's sizes, in JavaScript, so a Linux package's icons come
  * out the same from a Mac as from Linux with no image tool. It reads the PNGs an icon is saved as
- * (8 or 16 bits a channel; grey, RGB, palette, with alpha or not; not interlaced) and writes 8-bit
- * RGBA, averaging each output pixel's area with its colour weighted by alpha. A grey or RGB image's
- * one transparent colour (its `tRNS` key) is drawn opaque: an icon with transparency has alpha.
+ * (1 to 16 bits a sample; grey, RGB, palette, with alpha or not; not interlaced, with a `tRNS` colour
+ * key or palette alpha) and writes 8-bit RGBA, averaging each output pixel's area with its colour
+ * weighted by alpha.
  */
 import { crc32, deflateSync, inflateSync } from 'node:zlib';
 
@@ -119,23 +119,45 @@ function unfilterRows(raw, { height, stride, bytesPerPixel }) {
 }
 
 /**
- * One pixel as RGBA, from its samples (the high byte of each, for 16 bits) and, for a palette
- * image, the palette and its alpha. A grey or RGB image's single transparent colour is not read.
+ * One pixel as RGBA, from its samples as stored (`raw`, at the image's own depth) and, for a palette
+ * image, the palette and its alpha. A grey or RGB image's one transparent colour (its `tRNS` key) is
+ * compared with the stored samples, before they are reduced to 8 bits.
  *
  * @param {PngChunks} png
- * @param {(channel: number) => number} sample
+ * @param {(channel: number) => number} raw
  * @returns {[number, number, number, number]}
  */
-function pixelColour({ type, palette, transparency }, sample) {
-  if (type === 0) return [sample(0), sample(0), sample(0), 255];
-  if (type === 4) return [sample(0), sample(0), sample(0), sample(1)];
-  if (type === 2) return [sample(0), sample(1), sample(2), 255];
-  if (type === 6) return [sample(0), sample(1), sample(2), sample(3)];
-  const index = sample(0);
+function pixelColour({ type, depth, palette, transparency }, raw) {
+  const to8 = (/** @type {number} */ channel) => {
+    const value = raw(channel);
+    if (depth === 8) return value;
+    return depth === 16 ? value >> 8 : Math.round((value * 255) / ((1 << depth) - 1));
+  };
+  /** @param {number} channels */
+  const keyed = (channels) =>
+    transparency !== null &&
+    transparency.length >= channels * 2 &&
+    Array.from({ length: channels }, (_, channel) => channel).every(
+      (channel) => raw(channel) === transparency.readUInt16BE(channel * 2),
+    );
+  if (type === 0) return [to8(0), to8(0), to8(0), keyed(1) ? 0 : 255];
+  if (type === 4) return [to8(0), to8(0), to8(0), to8(1)];
+  if (type === 2) return [to8(0), to8(1), to8(2), keyed(3) ? 0 : 255];
+  if (type === 6) return [to8(0), to8(1), to8(2), to8(3)];
+  const index = raw(0);
   const colours = /** @type {Buffer} */ (palette);
   const alpha = transparency?.[index] ?? 255;
   return [colours[index * 3] ?? 0, colours[index * 3 + 1] ?? 0, colours[index * 3 + 2] ?? 0, alpha];
 }
+
+/** The bit depths each colour type may have. */
+const DEPTHS = /** @type {Record<number, number[]>} */ ({
+  0: [1, 2, 4, 8, 16],
+  2: [8, 16],
+  3: [1, 2, 4, 8],
+  4: [8, 16],
+  6: [8, 16],
+});
 
 /**
  * The image in a PNG file, as 8-bit RGBA. Throws, naming what it does not read, for anything else.
@@ -152,21 +174,30 @@ export function decodePng(bytes) {
   const { width, height, depth, type } = png;
   const channels = CHANNELS[type];
   if (!channels || width === 0 || height === 0) throw new Error('its header is not one this reads');
-  if (depth !== 8 && depth !== 16) {
-    throw new Error(`it has ${depth} bits a channel; save it with 8 or 16`);
+  if (!DEPTHS[type]?.includes(depth)) {
+    throw new Error(`it has ${depth} bits a channel, which PNG does not allow for its colour type`);
   }
   if (type === 3 && !png.palette) throw new Error('it has a palette type and no palette');
-  const bytesPerPixel = (channels * depth) / 8;
+  const bitsPerPixel = channels * depth;
+  const stride = Math.ceil((width * bitsPerPixel) / 8);
   const rows = unfilterRows(inflateSync(Buffer.concat(png.data)), {
     height,
-    stride: width * bytesPerPixel,
-    bytesPerPixel,
+    stride,
+    // A pixel narrower than a byte filters against the byte before it.
+    bytesPerPixel: Math.max(1, bitsPerPixel / 8),
   });
   const rgba = new Uint8Array(width * height * 4);
   for (let pixel = 0; pixel < width * height; pixel++) {
-    const sample = (/** @type {number} */ channel) =>
-      rows[pixel * bytesPerPixel + (channel * depth) / 8] ?? 0;
-    rgba.set(pixelColour(png, sample), pixel * 4);
+    const row = Math.floor(pixel / width) * stride;
+    const start = (pixel % width) * bitsPerPixel;
+    const raw = (/** @type {number} */ channel) => {
+      const bit = start + channel * depth;
+      const byte = row + (bit >> 3);
+      if (depth === 16) return ((rows[byte] ?? 0) << 8) | (rows[byte + 1] ?? 0);
+      if (depth === 8) return rows[byte] ?? 0;
+      return ((rows[byte] ?? 0) >> (8 - depth - (bit & 7))) & ((1 << depth) - 1);
+    };
+    rgba.set(pixelColour(png, raw), pixel * 4);
   }
   return { width, height, rgba };
 }
