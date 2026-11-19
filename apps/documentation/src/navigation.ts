@@ -102,6 +102,7 @@ export const GUIDE: NavSection = {
       path: 'guide/desktop',
       title: 'Build for the Mac',
       children: [
+        { path: 'guide/desktop-linux', title: 'Build for Linux' },
         { path: 'guide/desktop-differences', title: 'What differs' },
         { path: 'guide/desktop-sizing', title: 'Sizing for the Mac' },
         { path: 'guide/desktop-imports', title: 'Where APIs come from' },
@@ -308,12 +309,13 @@ export const PACKAGES: NavSection = {
     {
       path: 'packages/desktop',
       title: 'Desktop',
-      summary: 'The macOS host, and the command that builds, runs and packages the app',
+      summary: 'The macOS and Linux hosts, and the command that builds, runs and packages the app',
       children: [
         { path: 'packages/desktop/views', title: 'Views and controls' },
         { path: 'packages/desktop/windows-and-menus', title: 'Windows, menus and the Dock' },
         { path: 'packages/desktop/accessibility', title: 'Focus and accessibility' },
-        { path: 'packages/desktop/expo-modules', title: 'Expo modules on macOS' },
+        { path: 'packages/desktop/expo-modules', title: 'Expo modules on the desktop' },
+        { path: 'packages/desktop/portals', title: 'Portals on Linux' },
         { path: 'packages/desktop/development', title: 'Debugging and launch settings' },
         { path: 'packages/desktop/packaging', title: 'Inside a package' },
       ],

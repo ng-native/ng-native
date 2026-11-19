@@ -68,27 +68,31 @@ compiled by the same transform Metro uses. The Vitest builder's options are `wat
 script does, so that once [Tailwind](/packages/tailwind) is added, the sheet `src/main.ts` imports
 exists on a fresh checkout. A project without a Metro config runs `ngc` alone.
 
-## macOS
+## macOS and Linux
 
 ```sh
 ng generate @ng-native/schematics:desktop native
 ```
 
-This adds macOS to a native app: `@ng-native/desktop` in the root `package.json`, `macos` in
-`expo.platforms` with `experiments.outOfTreePlatforms: true` (Expo drops `macos` from every bundle
-and export without it, and says nothing), `@ng-native/desktop` among the config plugins in
-`app.json`, `/dist/macos` in the project's `.gitignore`, and two targets on the `expo` builder:
+This adds macOS and Linux to a native app: `@ng-native/desktop` in the root `package.json`, `macos`
+and `linux` in `expo.platforms` with `experiments.outOfTreePlatforms: true` (Expo drops them from
+every bundle and export without it, and says nothing), `@ng-native/desktop` among the config
+plugins in `app.json`, `/dist/macos` and `/dist/linux` in the project's `.gitignore`, and three
+targets on the `expo` builder:
 
-| Command                 | What runs                                                                 |
-| ----------------------- | ------------------------------------------------------------------------- |
-| `ng run native:macos`   | `ng-native-desktop run`: builds the desktop host and opens the app in it. |
-| `ng run native:package` | `ng-native-desktop package`: the `.app`, `.dmg` or Mac App Store package. |
+| Command                 | What runs                                                                                                                     |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `ng run native:macos`   | `ng-native-desktop run`: on a Mac, builds the desktop host and opens the app in it.                                           |
+| `ng run native:linux`   | `ng-native-desktop run --os linux`: on Linux, the same, in GTK.                                                               |
+| `ng run native:package` | `ng-native-desktop package`: the `.app`, `.dmg` or Mac App Store package; on Linux the app folder, `.deb`, `.rpm` or Flatpak. |
 
-The Expo CLI has no `run:macos`, so the builder runs `ng-native-desktop` from
-[`@ng-native/desktop`](/packages/desktop) for these two. `macos` loads the app from the dev server
-`ng serve native` runs, and takes `--port` for another one. `package` makes the `.app`; another
-format goes to it through the target's `args` in `angular.json`, for instance as a configuration
-that `ng run native:package:dmg` runs:
+The Expo CLI has no `run:macos` or `run:linux`, so the builder runs `ng-native-desktop` from
+[`@ng-native/desktop`](/packages/desktop) for these three. `macos` and `linux` load the app from
+the dev server `ng serve native` runs, and take `--port` for another one; `linux` runs on Linux
+only, and on a Mac it stops and names packaging. `package` makes the machine's own default package;
+another format goes to it through the target's `args` in `angular.json`, for instance as a
+configuration that `ng run native:package:dmg` runs, with `"args": ["--os", "linux", "--format",
+"deb", "--maintainer", "Ada Lovelace <ada@example.com>"]` for a `.deb`:
 
 ```json
 "package": {
@@ -100,8 +104,9 @@ that `ng run native:package:dmg` runs:
 }
 ```
 
-Running the schematic again changes nothing, and it stops with an error on a project with no
-`app.json`, which is not an Angular Native app.
+An app that has `macos` alone gains `linux`, and running the schematic again changes nothing. It
+stops with an error on a project with no `app.json`, which is not an Angular Native app. See
+[Build for Linux](/guide/desktop-linux) for the Linux setup.
 
 ## iOS and Android
 
@@ -110,7 +115,7 @@ ng generate @ng-native/schematics:mobile native
 ```
 
 This adds iOS and Android to a desktop-only app (see [Options](#options)), undoing what
-`--desktop-only` left out: `ios` and `android` in `expo.platforms` beside `macos`, the phone
+`--desktop-only` left out: `ios` and `android` in `expo.platforms` beside `macos` and `linux`, the phone
 settings a mobile app's `app.json` has (portrait orientation, `ios.supportsTablet`, and
 `android.package`, which is the iOS bundle identifier), `expo-status-bar` and `expo-system-ui` in
 the root `package.json` and the project's own, whose native modules Expo autolinks, and two targets
@@ -123,7 +128,7 @@ on the `expo` builder:
 
 Both take the `serve` target's port, which `expo run:ios` builds into the app. A setting the app
 already has stays as it is, and running the schematic again changes nothing. It leaves the app's
-screens, its Vitest projects and its `test` target, which runs `node-macos`, as they are. It stops
+screens, its Vitest projects and its `test` target, which runs `node-macos` and `node-linux`, as they are. It stops
 with an error on a project with no `app.json`, which is not an Angular Native app.
 
 ## ng generate
@@ -160,17 +165,19 @@ ng generate @ng-native/schematics:component profile-card --project native
 `ng generate @ng-native/schematics:application mobile` adds another native app to the same
 workspace, and takes `--prefix` for its components' selectors as well.
 
-`--desktop-only` makes a macOS-only app from the desktop template (`@ng-native/template-desktop`):
-`macos` alone in `expo.platforms`, its sidebar and menu bar starter screen, `@ng-native/desktop`
-and `@ng-native/expo` in place of the phone's status bar and system UI packages, and `macos` and
-`package` targets (see [macOS](#macos)) in place of `run-ios` and `run-android`. `ng add` and
-`ng generate @ng-native/schematics:application` both take it. Its `vitest.config.mts` has two
-projects: `node-macos`, in Node, which its `test` target runs alone through the Vitest builder's
-`project` option (`"options": { "project": "node-macos" }`), and `macos`, which runs
-`src/**/*.device.ts` inside the app and opens it. `src/app/app.device.ts` is the example, and its
+`--desktop-only` makes a desktop-only app from the desktop template (`@ng-native/template-desktop`):
+`macos` and `linux` alone in `expo.platforms`, its sidebar and menu bar starter screen,
+`@ng-native/desktop` and `@ng-native/expo` in place of the phone's status bar and system UI
+packages, and `macos`, `linux` and `package` targets (see [macOS and Linux](#macos-and-linux)) in
+place of `run-ios` and `run-android`. `ng add` and
+`ng generate @ng-native/schematics:application` both take it. Its `vitest.config.mts` has four
+projects: `node-macos` and `node-linux`, in Node, which its `test` target runs alone through the
+Vitest builder's `project` option (`"options": { "project": ["node-macos", "node-linux"] }`), and
+`macos` and `linux`, which run `src/**/*.device.ts` inside the app and open it. `src/app/app.device.ts` is the example, and its
 `metro.config.js` adds the in-app tests only when Metro starts with `EXPO_PUBLIC_DEVICE_TESTS=1`:
 run `EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start` in the project's folder, then
-`npx vitest --project macos` there.
+`npx vitest --project macos` (on a Mac) or `npx vitest --project linux` (in GTK, on Linux or on a
+Mac in a container) there.
 
 `--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`. It defaults to
 `com.<scope>.<name>`, from the npm scope of the root `package.json`'s name and the app's name with
