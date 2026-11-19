@@ -380,6 +380,8 @@ void scrollViewCommand(ViewData &view, const std::string &name, const folly::dyn
     return;
   }
   if (name == "scrollTo" && args.isArray() && args.size() >= 2 && args[0].isNumber() && args[1].isNumber()) {
+    // A starting offset still waiting would move the content back after the command.
+    box->pendingOffset.reset();
     moveTo(*box, {static_cast<Float>(args[0].asDouble()), static_cast<Float>(args[1].asDouble())});
   } else if (name == "scrollToEnd") {
     Size page = viewportOf(*box);
@@ -390,6 +392,7 @@ void scrollViewCommand(ViewData &view, const std::string &name, const folly::dyn
     } else {
       target.x = std::max<Float>(0, box->content.width - page.width);
     }
+    box->pendingOffset.reset();
     moveTo(*box, target);
   }
 }

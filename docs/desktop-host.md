@@ -68,9 +68,10 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   the host quits when the user closes the last window and the app's own window is not shown
   (`WindowHost::lastWindowClosed`); a reload closing a window never quits it. A window shows with nothing
   focused, as on macOS, so a header's search field does not take the focus at launch. A `<modal>`
-  sheet, and a screen presented with `present()`, is an `AdwDialog` in the window on libadwaita
-  1.5 and later, found at run time, and a drawn sheet on a dimmed overlay on 1.4; a cover fills the
-  overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. A
+  sheet, and a screen presented with `present()`, is an `AdwDialog` in a resizable window on
+  libadwaita 1.5 and later, found at run time, and a drawn sheet on a dimmed overlay on 1.4 or over
+  a window that is not resizable, where libadwaita would open a window of its own; a cover fills
+  the overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. A
   presented screen's header is the sheet's own header bar, with Cancel at the start and bound to
   Escape and the last right item the default on Return.
 - `native/scripts`: fetching the pinned sources, building Hermes and building the host.
