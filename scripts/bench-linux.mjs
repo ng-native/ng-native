@@ -30,7 +30,15 @@
  * reason and the pull request.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -139,12 +147,16 @@ export async function measure(
   let log = '';
   child.stdout.on('data', (chunk) => (log += chunk));
   child.stderr.on('data', (chunk) => (log += chunk));
+  // A host that never starts emits `error` and no `exit`: reject the measurement, after cleanup.
+  const failed = new Promise((_, reject) => child.once('error', reject));
+  failed.catch(() => {});
+  const pause = (ms) => Promise.race([wait(ms), failed]);
   try {
     for (let waited = 0; firstFrameMs(log) === null && waited < 10_000; waited += 100)
-      await wait(100);
-    await wait(settleMs);
+      await pause(100);
+    await pause(settleMs);
     const before = sample(child.pid, ticksPerSecond);
-    await wait(idleMs);
+    await pause(idleMs);
     const after = sample(child.pid, ticksPerSecond);
     const seconds = idleMs / 1000;
     const delta = (a, b) => (a === null || b === null ? null : b - a);
@@ -201,6 +213,9 @@ export function bytecode(host, bundle, dir) {
     stdio: 'inherit',
   });
   if (compiled.status !== 0) throw new Error(`hermesc could not compile ${bundle}.`);
+  // The host reads assets from beside the bundle it launches, as the export lays them out.
+  const assets = path.join(path.dirname(bundle), 'assets');
+  if (existsSync(assets)) symlinkSync(assets, path.join(dir, 'assets'));
   return out;
 }
 
