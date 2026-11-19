@@ -6,6 +6,7 @@
 #include "app-windows.h"
 #include "locales.h"
 #include "native-controls.h"
+#include "portal.h"
 #include "system-access.h"
 
 #include "ngn/posix-locale.h"
@@ -217,7 +218,7 @@ class GtkSystem final : public System {
   void announce(const Announcement &announcement) override {
     // Through the window in front, as macOS posts it on the application: GTK announces through a
     // widget, and reads it out from its window.
-    onMainContext([announcement] { announceOn(GTK_WIDGET(frontWindow()), announcement); });
+    onMainContext([announcement] { announceOn(GTK_WIDGET(portal::frontWindow()), announcement); });
   }
   std::string appDataDirectory() override {
     g_mkdir_with_parents(appData_.c_str(), 0700);
