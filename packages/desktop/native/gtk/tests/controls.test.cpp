@@ -7,6 +7,7 @@
 #include <adwaita.h>
 #include <doctest/doctest.h>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -103,12 +104,14 @@ TEST_CASE("a switch is a GtkSwitch: the user's change is sent, and the app's val
   CHECK(gtk_switch_get_active(GTK_SWITCH(toggle)));
   // One switch to assistive technology: the GtkSwitch, not the view around it, though the element
   // names its role.
-  auto withRole = controlProps<Descriptor>(folly::dynamic::object("value", true)("accessibilityRole", "switch")("accessibilityLabel", "Wi-Fi"));
+  auto withRole = controlProps<Descriptor>(
+      folly::dynamic::object("value", true)("accessibilityRole", "switch")("accessibilityLabel", "Wi-Fi")("accessibilityHint", "Joins known networks"));
   views.update(view, withRole);
   toggle = controlOf(views, 3);
   CHECK(gtk_accessible_get_accessible_role(GTK_ACCESSIBLE(views.view(3))) == GTK_ACCESSIBLE_ROLE_GENERIC);
   CHECK(gtk_accessible_get_accessible_role(GTK_ACCESSIBLE(toggle)) == GTK_ACCESSIBLE_ROLE_SWITCH);
   gtk_test_accessible_assert_property(toggle, GTK_ACCESSIBLE_PROPERTY_LABEL, "Wi-Fi");
+  gtk_test_accessible_assert_property(toggle, GTK_ACCESSIBLE_PROPERTY_DESCRIPTION, "Joins known networks");
   CHECK(events.sent.empty());
 
   // The user turns it off.
@@ -123,6 +126,9 @@ TEST_CASE("a switch is a GtkSwitch: the user's change is sent, and the app's val
   // The app's value, and its setValue command, change it without an event.
   views.update(view, controlProps<Descriptor>(folly::dynamic::object("value", true)));
   CHECK(gtk_switch_get_active(GTK_SWITCH(toggle)));
+  // Its label and hint go with the app's.
+  CHECK_FALSE(gtk_test_accessible_has_property(GTK_ACCESSIBLE(toggle), GTK_ACCESSIBLE_PROPERTY_LABEL));
+  CHECK_FALSE(gtk_test_accessible_has_property(GTK_ACCESSIBLE(toggle), GTK_ACCESSIBLE_PROPERTY_DESCRIPTION));
   views.backend->dispatchCommand(3, "setValue", folly::dynamic::array(false));
   CHECK_FALSE(gtk_switch_get_active(GTK_SWITCH(toggle)));
   CHECK(events.sent.size() == 1);
@@ -249,6 +255,53 @@ TEST_CASE("a search field sends each change with its count, its submit and cance
   g_signal_emit_by_name(entry, "stop-search");
   CHECK(std::string(gtk_editable_get_text(GTK_EDITABLE(entry))).empty());
   CHECK(events.sent.back().name == "pressCancel");
+
+  // The clear icon empties the field and cancels too, as AppKit's clear button does: the click
+  // reaches every gesture on the icon, GTK's own among them.
+  gtk_editable_set_text(GTK_EDITABLE(entry), "pear");
+  GtkWidget *icon = nullptr;
+  for (GtkWidget *child = gtk_widget_get_first_child(entry); child; child = gtk_widget_get_next_sibling(child)) {
+    if (GTK_IS_IMAGE(child) && g_strcmp0(gtk_image_get_icon_name(GTK_IMAGE(child)), "edit-clear-symbolic") == 0) {
+      icon = child;
+    }
+  }
+  REQUIRE(icon);
+  size_t before = events.sent.size();
+  GListModel *controllers = gtk_widget_observe_controllers(icon);
+  for (guint i = 0; i < g_list_model_get_n_items(controllers); ++i) {
+    gpointer controller = g_list_model_get_item(controllers, i);
+    if (GTK_IS_GESTURE_CLICK(controller)) {
+      g_signal_emit_by_name(controller, "released", 1, 4.0, 4.0);
+    }
+    g_object_unref(controller);
+  }
+  g_object_unref(controllers);
+  CHECK(std::string(gtk_editable_get_text(GTK_EDITABLE(entry))).empty());
+  REQUIRE(events.sent.size() == before + 2);
+  CHECK(events.sent[before].name == "changeText");
+  CHECK(events.sent[before].payload["text"] == "");
+  CHECK(events.sent[before + 1].name == "pressCancel");
+}
+
+TEST_CASE("a search field's blur takes the focus from it alone, not from another field") {
+  REQUIRE(ngn::testing::gtkReady());
+  using Descriptor = ngn::SearchFieldComponentDescriptor;
+  MountedViews views(false, 300, 120);
+  views.add(control(6, "ViewManagerAdapter_NgNativeSearchField", controlProps<Descriptor>(folly::dynamic::object())));
+  views.add(MountedViews::shadow(8, "ViewManagerAdapter_NgNativeSearchField", controlProps<Descriptor>(folly::dynamic::object()), {{10, 60}, {160, 40}}));
+  GtkWidget *first = controlOf(views, 6);
+  GtkWidget *second = controlOf(views, 8);
+  GtkRoot *root = gtk_widget_get_root(first);
+
+  views.backend->dispatchCommand(8, "focus", folly::dynamic::array());
+  GtkWidget *focus = gtk_root_get_focus(root);
+  REQUIRE(focus);
+  REQUIRE(gtk_widget_is_ancestor(focus, second));
+  views.backend->dispatchCommand(6, "blur", folly::dynamic::array());
+  CHECK(gtk_root_get_focus(root) == focus);
+
+  views.backend->dispatchCommand(8, "blur", folly::dynamic::array());
+  CHECK(gtk_root_get_focus(root) == nullptr);
 }
 
 TEST_CASE("a date picker shows its date and picks a day in a calendar, keeping the time of day and its bounds") {
@@ -293,6 +346,47 @@ TEST_CASE("a date picker shows its date and picks a day in a calendar, keeping t
   CHECK_FALSE(gtk_widget_get_sensitive(button));
   g_free(time);
   for (GDateTime *d : {noon, bound, later, picked, past}) {
+    g_date_time_unref(d);
+  }
+}
+
+TEST_CASE("a date picker sends the offset of the day it sends, when a bound moves it across a daylight-saving change") {
+  REQUIRE(ngn::testing::gtkReady());
+  // London's time zone while the test runs, and the run's own again after.
+  struct LondonTime {
+    std::optional<std::string> was;
+    LondonTime() {
+      if (const char *tz = g_getenv("TZ")) {
+        was = tz;
+      }
+      g_setenv("TZ", "Europe/London", TRUE);
+    }
+    ~LondonTime() {
+      if (was) {
+        g_setenv("TZ", was->c_str(), TRUE);
+      } else {
+        g_unsetenv("TZ");
+      }
+    }
+  } london;
+  using Descriptor = ngn::DatePickerComponentDescriptor;
+  Events events;
+  MountedViews views(false, 300, 100);
+  // Winter time on the date, summer time from the minimum on.
+  GDateTime *winter = g_date_time_new_local(2026, 3, 14, 12, 30, 0);
+  GDateTime *summer = g_date_time_new_local(2026, 4, 2, 9, 0, 0);
+  REQUIRE(g_date_time_get_utc_offset(winter) == 0);
+  REQUIRE(g_date_time_get_utc_offset(summer) == 60 * G_TIME_SPAN_MINUTE);
+  double min = static_cast<double>(g_date_time_to_unix(summer)) * 1000;
+  auto view = control(7, "RNDateTimePicker", controlProps<Descriptor>(folly::dynamic::object("date", static_cast<double>(g_date_time_to_unix(winter)) * 1000)("minimumDate", min)("mode", "date")));
+  views.add(view);
+  GtkWidget *calendar = gtk_popover_get_child(gtk_menu_button_get_popover(GTK_MENU_BUTTON(controlOf(views, 7))));
+  GDateTime *before = g_date_time_new_local(2026, 3, 20, 0, 0, 0);
+  gtk_calendar_select_day(GTK_CALENDAR(calendar), before);
+  REQUIRE(events.sent.size() == 1);
+  CHECK(events.sent[0].payload["timestamp"].asDouble() == doctest::Approx(min));
+  CHECK(events.sent[0].payload["utcOffset"].asDouble() == doctest::Approx(60));
+  for (GDateTime *d : {winter, summer, before}) {
     g_date_time_unref(d);
   }
 }
