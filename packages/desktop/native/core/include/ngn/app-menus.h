@@ -5,7 +5,8 @@
 // The bar the app sends is the whole merged bar, its defaults included. An item with a `menuRole`
 // is the OS's own command unless the app marks it `handled`; every other item is the app's, and
 // choosing it sends `menuSelect` with its id. Shortcuts match a key press before the menus see it;
-// one on an editing key (Cmd-Z, X, C, V, A) still goes on to a focused text input, which owns it.
+// one on an editing key (the OS's primary modifier with Z, X, C, V or A: Cmd-Z on macOS) still goes
+// on to a focused text input, which owns it.
 #pragma once
 
 #include "ngn/default-menu.h"
@@ -26,14 +27,6 @@ namespace ngn {
 
 using facebook::react::SurfaceId;
 
-// A key press: the key as the web names it (a character, or "ArrowLeft", "Enter", "F5"...) and the
-// modifiers held (MenuModifier).
-struct KeyChord {
-  std::string key;
-  unsigned modifiers{0};
-  bool operator==(const KeyChord &) const = default;
-};
-
 // The entries of a menu as the app sends them (a context menu's, or one group's items).
 std::vector<MenuItem> parseMenu(const folly::dynamic &entries);
 // The app's whole bar, with the host's Developer menu before Help when `options.developer`.
@@ -46,9 +39,10 @@ enum class NavigationInput { MouseButton4, MouseButton5, SwipeLeft, SwipeRight }
 
 // The OS's back and forward inputs: mouse buttons 4 and 5, a swipe (right goes back in a
 // left-to-right layout and left in a right-to-left one, as a page follows the fingers and as Safari
-// swaps them), and Cmd-[ and Cmd-]. Cmd-Left stays with text editing.
+// swaps them), and the OS's back and forward keys (Cmd-[ and Cmd-] on macOS, where Cmd-Left stays
+// with text editing).
 std::optional<NavigationDirection> navigationFor(NavigationInput input, bool rightToLeft = false);
-std::optional<NavigationDirection> navigationFor(const KeyChord &chord);
+std::optional<NavigationDirection> navigationFor(const KeyChord &chord, const HostOs &os);
 
 // A window's back and forward history, as the app's router reports it (`setHistory`): the titles
 // of the entries behind and ahead, nearest first.

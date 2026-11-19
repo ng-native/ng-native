@@ -417,14 +417,6 @@ TEST_CASE("a moving store reads through to the old one and moves what it finds t
   CHECK(store.get("app", "kept") == "old");
 }
 
-TEST_CASE("the Data Protection keychain is used when the app's signature has a Team ID and an app identity") {
-  CHECK(ngn::usesDataProtectionKeychain("ABCDE12345", {"com.apple.application-identifier"}));
-  CHECK(ngn::usesDataProtectionKeychain("ABCDE12345", {"keychain-access-groups"}));
-  // Developer ID with no identity entitlement, ad hoc, and unsigned: the file keychain.
-  CHECK_FALSE(ngn::usesDataProtectionKeychain("ABCDE12345", {"com.apple.security.device.camera"}));
-  CHECK_FALSE(ngn::usesDataProtectionKeychain("", {"com.apple.application-identifier"}));
-}
-
 TEST_CASE("A test launch's SecureStore keeps its items under its own prefix and clears what it wrote") {
   auto secrets = std::make_shared<MemorySecrets>();
   secrets->items[{"com.example.app", "token"}] = "the app's own";

@@ -1,5 +1,6 @@
 # What the runtime half needs beyond the renderer: Hermes, built statically by
-# scripts/build-hermes.sh, and the one OpenSSL call React Native's dev-server helper makes.
+# scripts/build-hermes.sh, with off macOS the static ICU it was built against, and the one OpenSSL
+# call React Native's dev-server helper makes.
 
 if(IS_DIRECTORY "${NGN_HERMES_PREBUILT}")
   # React Native's prebuilt Hermes on macOS: a dynamic framework, which the binary finds beside
@@ -37,6 +38,15 @@ list(APPEND _hermes_link ${_hermes_context})
 if(APPLE)
   # Intl is built over Foundation, as in React Native's Apple builds.
   list(APPEND _hermes_link "-framework Foundation")
+else()
+  # Its Unicode layer over the ICU scripts/build-icu.sh built beside it, data and all.
+  foreach(lib icui18n icuuc icudata)
+    if(NOT EXISTS ${NGN_HERMES_BUILD}/icu/lib/lib${lib}.a)
+      message(FATAL_ERROR "${NGN_HERMES_BUILD} has no ICU (icu/lib/lib${lib}.a); build through scripts/build.sh")
+    endif()
+    list(APPEND _hermes_link ${NGN_HERMES_BUILD}/icu/lib/lib${lib}.a)
+  endforeach()
+  list(APPEND _hermes_link ${CMAKE_DL_LIBS} pthread)
 endif()
 foreach(alias hermesvm libhermes)
   add_library(hermes-engine::${alias} INTERFACE IMPORTED GLOBAL)

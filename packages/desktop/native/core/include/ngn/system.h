@@ -7,6 +7,8 @@
 #include <folly/dynamic.h>
 
 #include <functional>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -97,6 +99,51 @@ class System {
 
   // Where the app keeps its own files, created if missing.
   virtual std::string appDataDirectory() = 0;
+};
+
+// The colour scheme a backend's System answers: the app's override while one holds, the system's
+// own otherwise. Any thread.
+class ColorSchemeOverride {
+ public:
+  explicit ColorSchemeOverride(std::string systemScheme);
+  // What System::colorScheme answers.
+  std::string current() const;
+  // The app's override, or none to follow the system again.
+  void set(std::optional<std::string> scheme);
+  // The system's own scheme changed (or was read again), override or not.
+  void systemChanged(std::string scheme);
+  // What a change to `scheme` applied, as System::setColorScheme tells it: that scheme, or the
+  // system's for none. Not the latest override, which a later change may have set already.
+  std::string applied(const std::optional<std::string> &scheme) const;
+
+ private:
+  mutable std::mutex mutex_;
+  std::string system_;
+  std::optional<std::string> override_;
+};
+
+// Strings that persist across launches, the backend's (NSUserDefaults on macOS). Any thread.
+class StringStore {
+ public:
+  virtual ~StringStore() = default;
+  virtual std::optional<std::string> get(const std::string &key) = 0;
+  virtual void set(const std::string &key, const std::string &value) = 0;
+  virtual void remove(const std::string &key) = 0;
+};
+
+// System::preference and setPreference over a string store: each value as JSON, and each key
+// prefixed with the app's id when the store is shared with other apps (on macOS, a bare host
+// binary's defaults, which every app run with it reads). A stored value that is not JSON reads as
+// nothing.
+class JsonPreferences {
+ public:
+  JsonPreferences(std::shared_ptr<StringStore> store, const std::string &appId, bool sharedStore);
+  std::optional<folly::dynamic> get(const std::string &key) const;
+  void set(const std::string &key, const std::optional<folly::dynamic> &value) const;
+
+ private:
+  std::shared_ptr<StringStore> store_;
+  std::string prefix_;
 };
 
 } // namespace ngn

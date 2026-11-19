@@ -56,6 +56,18 @@ class SplitPaneProps final : public facebook::react::ViewProps {
   std::string autosaveName;
 };
 
+// The narrowest and widest a sidebar is dragged to, and the width it starts at when its toolkit's
+// autosave holds none: the app's bounds, or 150 and 400 where it sets none, with the widest never
+// below the narrowest.
+struct SidebarWidths {
+  facebook::react::Float minimum{0};
+  facebook::react::Float maximum{0};
+  facebook::react::Float starting{0};
+  bool operator==(const SidebarWidths &) const = default;
+};
+// `props` is the sidebar's, or null before it has any.
+SidebarWidths sidebarWidths(const SplitPaneProps *props);
+
 // The size the toolkit gives a pane, or a custom row's width (height unused). Zero until it reports.
 struct SplitPaneState {
   facebook::react::Size size{};

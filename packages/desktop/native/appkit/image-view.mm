@@ -4,6 +4,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 #include "ngn/file-system.h"
+#include "ngn/image-source.h"
 
 #include <react/renderer/components/image/ImageEventEmitter.h>
 #include <react/renderer/components/image/ImageProps.h>
@@ -75,8 +76,8 @@ using namespace facebook::react;
   _imageLayer.contentsGravity = self.layer.contentsGravity;
   // The source whose scale is nearest the screen's, as React Native iOS picks.
   double screenScale = self.window ? self.window.backingScaleFactor : NSScreen.mainScreen.backingScaleFactor;
-  auto source = ngn::appkit::pickImageSource(p->sources, screenScale);
-  if (source.has_value() == _source.has_value() && (!source || ngn::appkit::sameImageRequest(*source, *_source))) {
+  auto source = ngn::pickImageSource(p->sources, screenScale);
+  if (source.has_value() == _source.has_value() && (!source || ngn::sameImageRequest(*source, *_source))) {
     return;
   }
   _source = source;

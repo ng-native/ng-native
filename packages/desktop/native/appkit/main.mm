@@ -824,6 +824,8 @@ void showAppWindow() {
 
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
+    // The values the core takes from the OS it runs on (host-os.h).
+    const ngn::HostOs os = ngn::macOS();
     // What to run: argv and the environment in a dev run, and only the Info.plist in a packaged
     // app (launch-settings.h).
     NSDictionary *info = NSBundle.mainBundle.infoDictionary;
@@ -839,7 +841,7 @@ int main(int argc, const char *argv[]) {
           return [value isKindOfClass:NSString.class] ? std::optional<std::string>(value.UTF8String) : std::nullopt;
         },
         .resourcePath = NSBundle.mainBundle.resourcePath != nil ? NSBundle.mainBundle.resourcePath.UTF8String : "",
-    });
+    }, os);
     if (auto *usage = std::get_if<std::string>(&launch)) {
       fprintf(stderr, "%s\n", usage->c_str());
       return 2;
@@ -1094,7 +1096,9 @@ int main(int argc, const char *argv[]) {
     gHost.menus = std::make_shared<ngn::MenuHost>(
         std::make_shared<AppKitMenus>(),
         ngn::DefaultMenuOptions{
-            .appName = std::string(title.UTF8String), .developer = ngn::DevServer::fromBundleUrl(bundle).has_value()});
+            .appName = std::string(title.UTF8String),
+            .developer = ngn::DevServer::fromBundleUrl(bundle).has_value(),
+            .os = os});
     // Each window's history, as the app's router reports it, for its toolbar's chevrons.
     gHost.menus->historyChanged = [](SurfaceId surface) {
       dispatch_async(dispatch_get_main_queue(), ^{
@@ -1131,7 +1135,7 @@ int main(int argc, const char *argv[]) {
     // updates URL; one from a dev server never does.
     bool fromDevServer = ngn::DevServer::fromBundleUrl(bundle).has_value();
     gHost.updates = std::make_shared<ngn::UpdatesClient>(
-        ngn::updatesConfigFrom(settings, system->appDataDirectory(), bundle), network.http, ngn::appkit::makeUpdateCrypto());
+        ngn::updatesConfigFrom(settings, os, system->appDataDirectory(), bundle), network.http, ngn::appkit::makeUpdateCrypto());
     if (!fromDevServer && gHost.updates->enabled()) {
       bundle = gHost.updates->launch();
       if (auto running = gHost.updates->running()) {
@@ -1146,7 +1150,8 @@ int main(int argc, const char *argv[]) {
     // The desktop host's own modules over AppKit's sources (desktop-modules.h).
     auto desktop = ngn::addDesktopModules(
         *modules,
-        {.system = system,
+        {.os = os,
+         .system = system,
          .state = gHost.state,
          .http = network.http,
          .files = fileAccess,
@@ -1244,7 +1249,8 @@ int main(int argc, const char *argv[]) {
         modules, network, bundle,
         ngn::DebuggerIdentity{
             .appId = appId,
-            .deviceName = NSHost.currentHost.localizedName ? NSHost.currentHost.localizedName.UTF8String : "Mac"});
+            .deviceName = NSHost.currentHost.localizedName ? NSHost.currentHost.localizedName.UTF8String : "Mac",
+            .os = os.id});
     // Each surface lays out the way I18nManager.isRTL says for the instance running, read again
     // as a reload starts the next.
     gHost.runtime->rightToLeft = [system] { return ngn::appRightToLeft(*system); };

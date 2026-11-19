@@ -30,10 +30,14 @@ const Map kUpdatesEnv{
     {"NGN_DESKTOP_CAPABILITIES", R"({"spawn":[{"program":"/bin/sh"}]})"},
 };
 
+std::variant<ngn::LaunchSettings, std::string> launch(ngn::LaunchSources sources) {
+  return ngn::launchSettings(std::move(sources), ngn::macOS());
+}
+
 } // namespace
 
 TEST_CASE("A dev run takes its bundle, module, title, app id and capabilities from argv") {
-  auto result = ngn::launchSettings({
+  auto result = launch({
       .args = {"http://localhost:8081/x.bundle", "--module", "app", "--title", "Notes", "--app-id", "dev.notes",
                "--capabilities", "{}"},
       .env = from({}),
@@ -49,16 +53,16 @@ TEST_CASE("A dev run takes its bundle, module, title, app id and capabilities fr
   CHECK(settings.capabilitiesJson == "{}");
   CHECK(settings.initialUrl.empty());
   auto linked = std::get<ngn::LaunchSettings>(
-      ngn::launchSettings({.args = {"/tmp/b.js", "--url", "notes://note/7"}, .env = from({}), .plist = from({})}));
+      launch({.args = {"/tmp/b.js", "--url", "notes://note/7"}, .env = from({}), .plist = from({})}));
   CHECK(linked.initialUrl == "notes://note/7");
 
   // The environment's capabilities when argv has none.
-  auto env = std::get<ngn::LaunchSettings>(ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from(kUpdatesEnv), .plist = from({})}));
+  auto env = std::get<ngn::LaunchSettings>(launch({.args = {"/tmp/b.js"}, .env = from(kUpdatesEnv), .plist = from({})}));
   CHECK(env.capabilitiesJson == kUpdatesEnv.at("NGN_DESKTOP_CAPABILITIES"));
 
-  CHECK(std::holds_alternative<std::string>(ngn::launchSettings({.args = {}, .env = from({}), .plist = from({})})));
+  CHECK(std::holds_alternative<std::string>(launch({.args = {}, .env = from({}), .plist = from({})})));
   CHECK(std::holds_alternative<std::string>(
-      ngn::launchSettings({.args = {"a.js", "b.js"}, .env = from({}), .plist = from({})})));
+      launch({.args = {"a.js", "b.js"}, .env = from({}), .plist = from({})})));
 }
 
 TEST_CASE("A packaged app runs what its Info.plist says, whatever argv and the environment say") {
@@ -69,7 +73,7 @@ TEST_CASE("A packaged app runs what its Info.plist says, whatever argv and the e
            {"-psn_0_12345"},
        }) {
     CAPTURE(args.size());
-    auto result = ngn::launchSettings(
+    auto result = launch(
         {.args = args, .env = from(kUpdatesEnv), .plist = from(kPackagedPlist), .resourcePath = "/Applications/Notes.app/Contents/Resources"});
     REQUIRE(std::holds_alternative<ngn::LaunchSettings>(result));
     auto settings = std::get<ngn::LaunchSettings>(result);
@@ -85,18 +89,18 @@ TEST_CASE("A packaged app runs what its Info.plist says, whatever argv and the e
 
 TEST_CASE("The dev switches (input script, rotor and commit logs) work in a dev run and never in a packaged app") {
   const Map env{{"NGN_INPUT_SCRIPT", "/tmp/clicks.txt"}, {"NGN_LOG_ROTORS", "1"}, {"NGN_LOG_COMMITS", "1"}};
-  auto dev = std::get<ngn::LaunchSettings>(ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from(env), .plist = from({})}));
+  auto dev = std::get<ngn::LaunchSettings>(launch({.args = {"/tmp/b.js"}, .env = from(env), .plist = from({})}));
   CHECK(dev.inputScript == "/tmp/clicks.txt");
   CHECK(dev.logRotors);
   CHECK(dev.logCommits);
   // Only "1" turns a log on, and nothing set leaves them all off.
-  auto other = std::get<ngn::LaunchSettings>(ngn::launchSettings(
+  auto other = std::get<ngn::LaunchSettings>(launch(
       {.args = {"/tmp/b.js"}, .env = from({{"NGN_LOG_ROTORS", "yes"}, {"NGN_LOG_COMMITS", "0"}}), .plist = from({})}));
   CHECK_FALSE(other.logRotors);
   CHECK_FALSE(other.logCommits);
   CHECK(other.inputScript.empty());
 
-  auto packaged = std::get<ngn::LaunchSettings>(ngn::launchSettings(
+  auto packaged = std::get<ngn::LaunchSettings>(launch(
       {.args = {}, .env = from(env), .plist = from(kPackagedPlist), .resourcePath = "/Applications/Notes.app/Contents/Resources"}));
   CHECK(packaged.inputScript.empty());
   CHECK_FALSE(packaged.logRotors);
@@ -108,15 +112,15 @@ TEST_CASE("A packaged app's bundle file cannot name a path outside its Resources
     CAPTURE(file);
     Map plist = kPackagedPlist;
     plist["NGNBundleFile"] = file;
-    auto result = ngn::launchSettings({.args = {}, .env = from({}), .plist = from(plist), .resourcePath = "/A.app/Contents/Resources"});
+    auto result = launch({.args = {}, .env = from({}), .plist = from(plist), .resourcePath = "/A.app/Contents/Resources"});
     CHECK(std::holds_alternative<std::string>(result));
   }
 }
 
 TEST_CASE("Updates settings come from the Info.plist, and from the environment only in a dev run") {
-  auto packaged = std::get<ngn::LaunchSettings>(ngn::launchSettings(
+  auto packaged = std::get<ngn::LaunchSettings>(launch(
       {.args = {}, .env = from(kUpdatesEnv), .plist = from(kPackagedPlist), .resourcePath = "/A.app/Contents/Resources"}));
-  auto config = ngn::updatesConfigFrom(packaged, "/data", "/A.app/Contents/Resources/main.jsbundle");
+  auto config = ngn::updatesConfigFrom(packaged, ngn::macOS(), "/data", "/A.app/Contents/Resources/main.jsbundle");
   CHECK(config.url.empty());
   CHECK(config.runtimeVersion.empty());
   CHECK(config.certificatePem.empty());
@@ -127,24 +131,24 @@ TEST_CASE("Updates settings come from the Info.plist, and from the environment o
   plist["NGNUpdatesURL"] = "https://updates.example/manifest";
   plist["NGNRuntimeVersion"] = "2";
   plist["NGNUpdatesCodeSigningKeyId"] = "k1";
-  auto withUpdates = std::get<ngn::LaunchSettings>(ngn::launchSettings(
+  auto withUpdates = std::get<ngn::LaunchSettings>(launch(
       {.args = {}, .env = from(kUpdatesEnv), .plist = from(plist), .resourcePath = "/A.app/Contents/Resources"}));
-  config = ngn::updatesConfigFrom(withUpdates, "/data", "b");
+  config = ngn::updatesConfigFrom(withUpdates, ngn::macOS(), "/data", "b");
   CHECK(config.url == "https://updates.example/manifest");
   CHECK(config.runtimeVersion == "2");
   CHECK(config.keyId == "k1");
   CHECK(config.certificatePem.empty());
   CHECK(config.embeddedBundle == "b");
 
-  auto dev = std::get<ngn::LaunchSettings>(ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from(kUpdatesEnv), .plist = from({})}));
-  config = ngn::updatesConfigFrom(dev, "/data", "/tmp/b.js");
+  auto dev = std::get<ngn::LaunchSettings>(launch({.args = {"/tmp/b.js"}, .env = from(kUpdatesEnv), .plist = from({})}));
+  config = ngn::updatesConfigFrom(dev, ngn::macOS(), "/data", "/tmp/b.js");
   CHECK(config.url == "https://evil.example/manifest");
   CHECK(config.platform == "ios");
 
   // No runtime version, no updates.
-  auto noVersion = std::get<ngn::LaunchSettings>(ngn::launchSettings(
+  auto noVersion = std::get<ngn::LaunchSettings>(launch(
       {.args = {"/tmp/b.js"}, .env = from({{"NGN_UPDATES_URL", "https://x"}}), .plist = from({})}));
-  CHECK(ngn::updatesConfigFrom(noVersion, "/data", "b").url.empty());
+  CHECK(ngn::updatesConfigFrom(noVersion, ngn::macOS(), "/data", "b").url.empty());
 }
 
 TEST_CASE("A test launch keeps its state under NGN_STATE_DIR and names the rest by NGN_RUN_ID") {
@@ -154,7 +158,7 @@ TEST_CASE("A test launch keeps its state under NGN_STATE_DIR and names the rest 
       {"NGN_RUN_ID", "6f1c-AB12"},
       {"NGN_TESTS_FAKE_SYSTEM_UI", "1"},
   };
-  auto settings = std::get<ngn::LaunchSettings>(ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from(env), .plist = from({})}));
+  auto settings = std::get<ngn::LaunchSettings>(launch({.args = {"/tmp/b.js"}, .env = from(env), .plist = from({})}));
   REQUIRE(settings.test.has_value());
   CHECK(settings.test->stateDir == "/tmp/state-1");
   CHECK(settings.test->applicationSupport() == "/tmp/state-1/Application Support");
@@ -168,7 +172,7 @@ TEST_CASE("A test launch keeps its state under NGN_STATE_DIR and names the rest 
   // Real system UI when the run asks for it.
   Map real = env;
   real.erase("NGN_TESTS_FAKE_SYSTEM_UI");
-  auto withUi = std::get<ngn::LaunchSettings>(ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from(real), .plist = from({})}));
+  auto withUi = std::get<ngn::LaunchSettings>(launch({.args = {"/tmp/b.js"}, .env = from(real), .plist = from({})}));
   CHECK_FALSE(withUi.test->fakeSystemUI);
   CHECK_FALSE(withUi.noPrompts);
 
@@ -176,12 +180,12 @@ TEST_CASE("A test launch keeps its state under NGN_STATE_DIR and names the rest 
   for (const char *value : {"0", "", "true"}) {
     Map off = env;
     off["NGN_TESTS"] = value;
-    auto plain = std::get<ngn::LaunchSettings>(ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from(off), .plist = from({})}));
+    auto plain = std::get<ngn::LaunchSettings>(launch({.args = {"/tmp/b.js"}, .env = from(off), .plist = from({})}));
     CHECK_FALSE(plain.test.has_value());
     CHECK_FALSE(plain.noPrompts);
   }
   auto prompts = std::get<ngn::LaunchSettings>(
-      ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from({{"NGN_NO_PROMPTS", "1"}}), .plist = from({})}));
+      launch({.args = {"/tmp/b.js"}, .env = from({{"NGN_NO_PROMPTS", "1"}}), .plist = from({})}));
   CHECK(prompts.noPrompts);
   CHECK_FALSE(prompts.test.has_value());
 }
@@ -195,7 +199,7 @@ TEST_CASE("A test launch with no usable state directory or run id does not start
            {{"NGN_TESTS", "1"}, {"NGN_STATE_DIR", "/tmp/s"}, {"NGN_RUN_ID", "a b"}},
        }) {
     CAPTURE(env.size());
-    auto result = ngn::launchSettings({.args = {"/tmp/b.js"}, .env = from(env), .plist = from({})});
+    auto result = launch({.args = {"/tmp/b.js"}, .env = from(env), .plist = from({})});
     REQUIRE(std::holds_alternative<std::string>(result));
     CHECK(std::get<std::string>(result).find("NGN_TESTS=1") != std::string::npos);
   }
@@ -203,7 +207,7 @@ TEST_CASE("A test launch with no usable state directory or run id does not start
 
 TEST_CASE("A packaged app is never a test launch") {
   const Map env{{"NGN_TESTS", "1"}, {"NGN_STATE_DIR", "/tmp/s"}, {"NGN_RUN_ID", "abc"}, {"NGN_TESTS_FAKE_SYSTEM_UI", "1"}};
-  auto settings = std::get<ngn::LaunchSettings>(ngn::launchSettings(
+  auto settings = std::get<ngn::LaunchSettings>(launch(
       {.args = {}, .env = from(env), .plist = from(kPackagedPlist), .resourcePath = "/A.app/Contents/Resources"}));
   CHECK_FALSE(settings.test.has_value());
   CHECK_FALSE(settings.noPrompts);

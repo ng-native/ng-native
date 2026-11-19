@@ -365,7 +365,7 @@ void NotificationEvents::responded(double date, const NotificationRequest &reque
 }
 
 void NotificationEvents::tokenChanged(const std::string &token) {
-  send(folly::dynamic::object("type", "token")("token", folly::dynamic::object("type", "macos")("data", token)));
+  send(folly::dynamic::object("type", "token")("token", folly::dynamic::object("type", os_)("data", token)));
 }
 
 std::optional<folly::dynamic> NotificationEvents::lastResponse() const {
@@ -512,14 +512,14 @@ struct Notifications : NativeModule {
       center->setBadge(static_cast<int>(args[0].asDouble()));
       promise.resolve(true);
     });
-    promise("getDevicePushTokenAsync", [push](const folly::dynamic &, JsPromise promise) {
+    promise("getDevicePushTokenAsync", [push, os = events->os()](const folly::dynamic &, JsPromise promise) {
       if (!push) {
         promise.reject("Remote notifications are not available in this build of the desktop host.");
         return;
       }
-      push->request([promise](std::optional<std::string> token, std::string error) {
+      push->request([promise, os](std::optional<std::string> token, std::string error) {
         if (token) {
-          promise.resolve(folly::dynamic::object("type", "macos")("data", *token));
+          promise.resolve(folly::dynamic::object("type", os)("data", *token));
         } else {
           promise.reject(error);
         }

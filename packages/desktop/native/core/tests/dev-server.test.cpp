@@ -1,6 +1,8 @@
 #include "ngn/dev-server.h"
 
 #include <doctest/doctest.h>
+#include <stdexcept>
+#include <string>
 
 TEST_CASE("a Metro bundle URL names the dev server, the entry and the OS") {
   auto server = ngn::DevServer::fromBundleUrl(
@@ -24,10 +26,12 @@ TEST_CASE("the port defaults to the scheme's, and https connects over wss") {
   CHECK(ngn::DevServer::fromBundleUrl("http://10.0.0.2/index.bundle")->port == 80);
 }
 
-TEST_CASE("a bundle URL without a platform asks for macos") {
-  CHECK(ngn::DevServer::fromBundleUrl("http://localhost:8081/index.bundle?dev=true")->platform == "macos");
-  CHECK(ngn::DevServer::fromBundleUrl("http://localhost:8081/index.bundle")->platform == "macos");
-  CHECK(ngn::DevServer::fromBundleUrl("http://h:1/a.bundle?x=1&platform=ios")->platform == "ios");
+TEST_CASE("the HMR client is set up for the host's OS when the bundle URL names no platform") {
+  CHECK(ngn::DevServer::fromBundleUrl("http://localhost:8081/index.bundle?dev=true")->platform.empty());
+  CHECK(ngn::DevServer::fromBundleUrl("http://localhost:8081/index.bundle")->hmrSetupArgs("linux")[0] == "linux");
+  CHECK(ngn::DevServer::fromBundleUrl("http://localhost:8081/index.bundle")->hmrSetupArgs("macos")[0] == "macos");
+  // The URL's own platform wins.
+  CHECK(ngn::DevServer::fromBundleUrl("http://h:1/a.bundle?x=1&platform=ios")->hmrSetupArgs("linux")[0] == "ios");
 }
 
 TEST_CASE("a path on disk is not a dev server") {
@@ -41,7 +45,7 @@ TEST_CASE("a path on disk is not a dev server") {
 TEST_CASE("the HMR client is set up with the OS and entry of the bundle URL") {
   auto server = ngn::DevServer::fromBundleUrl("http://127.0.0.1:8082/src/main.bundle?platform=macos&dev=true");
   REQUIRE(server);
-  auto args = server->hmrSetupArgs();
+  auto args = server->hmrSetupArgs("macos");
   REQUIRE(args.size() == 6);
   CHECK(args[0] == "macos");
   CHECK(args[1] == "src/main");
@@ -57,12 +61,19 @@ TEST_CASE("an IPv6 dev server keeps its brackets and its port") {
   CHECK(server->host == "[::1]");
   CHECK(server->port == 8082);
   CHECK(server->packagerConnectionUrl() == "ws://[::1]:8082/message");
-  CHECK(server->hmrSetupArgs()[2] == "[::1]");
-  CHECK(server->hmrSetupArgs()[3] == 8082);
+  CHECK(server->hmrSetupArgs("macos")[2] == "[::1]");
+  CHECK(server->hmrSetupArgs("macos")[3] == 8082);
   auto unported = ngn::DevServer::fromBundleUrl("https://[fe80::1]/index.bundle");
   REQUIRE(unported);
   CHECK(unported->host == "[fe80::1]");
   CHECK(unported->port == 443);
   CHECK_FALSE(ngn::DevServer::fromBundleUrl("http://[::1]x/index.bundle"));
   CHECK_FALSE(ngn::DevServer::fromBundleUrl("http://[::1/index.bundle"));
+}
+
+TEST_CASE("an empty OS id for the dev server is refused, and leaves the one it had") {
+  // Only the refused call, so the process's OS id is never changed.
+  std::string before = ngn::devServerOs();
+  CHECK_THROWS_AS(ngn::setDevServerOs(""), std::invalid_argument);
+  CHECK(ngn::devServerOs() == before);
 }

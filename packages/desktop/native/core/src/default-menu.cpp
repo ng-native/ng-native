@@ -20,6 +20,10 @@ MenuItem menu(std::string title, std::vector<MenuItem> items, MenuRole role = Me
 } // namespace
 
 std::vector<MenuItem> defaultMenuBar(const DefaultMenuOptions &options) {
+  return options.os.menuBar(options);
+}
+
+std::vector<MenuItem> macOSMenuBar(const DefaultMenuOptions &options) {
   const std::string &app = options.appName;
   std::vector<MenuItem> bar{
       menu(
@@ -53,8 +57,8 @@ std::vector<MenuItem> defaultMenuBar(const DefaultMenuOptions &options) {
       menu(
           "View",
           {
-              item("Back", MenuCommand::Back, "["),
-              item("Forward", MenuCommand::Forward, "]"),
+              item("Back", MenuCommand::Back, options.os.back.key, options.os.back.modifiers),
+              item("Forward", MenuCommand::Forward, options.os.forward.key, options.os.forward.modifiers),
               separator(),
               item("Show Sidebar", MenuCommand::ToggleSidebar, "s", Command | Control),
               item("Enter Full Screen", MenuCommand::ToggleFullScreen, "f", Command | Control),

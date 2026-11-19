@@ -6,7 +6,7 @@
 //   (CFBundleDisplayName, else CFBundleName). A dev run's binary has no bundle: its id and name are
 //   the app's own (app.json's), and its versions null.
 // - NgNativeDevice: brand and manufacturer "Apple", modelName (the Mac's marketing name, else its
-//   model identifier), modelId ("Mac15,3"), osName "macOS", osVersion, osBuildId, deviceName,
+//   model identifier), modelId ("Mac15,3"), osName ("macOS"), osVersion, osBuildId, deviceName,
 //   totalMemory, supportedCpuArchitectures, isDevice true (a Mac is never a simulator) and
 //   deviceType 3, expo-device's DESKTOP.
 #pragma once
@@ -47,6 +47,7 @@ struct MachineFacts {
 
 // `appId` and `appName` stand in for what a bundle with no Info.plist does not have.
 std::shared_ptr<NativeModule> makeApplicationModule(BundleFacts bundle, std::string appId, std::string appName);
-std::shared_ptr<NativeModule> makeDeviceModule(MachineFacts machine);
+// `osName` is the host OS's name (HostOs).
+std::shared_ptr<NativeModule> makeDeviceModule(MachineFacts machine, std::string osName);
 
 } // namespace ngn

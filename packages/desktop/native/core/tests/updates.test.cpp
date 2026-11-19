@@ -65,6 +65,7 @@ struct Fixture {
     return {
         .url = "https://u.example/manifest",
         .runtimeVersion = "1.0.0",
+        .platform = "macos",
         .certificatePem = std::move(certificate),
         .directory = dir,
         .embeddedBundle = "/app/Contents/Resources/main.jsbundle",

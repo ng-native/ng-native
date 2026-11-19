@@ -1,5 +1,6 @@
 // The core's copy of the spawn rules, held to the cases @ng-native/device's spawn-rules.test.ts
 // holds the TypeScript to: most of them attempts to get past the rules.
+#include "ngn/host-os.h"
 #include "ngn/spawn-rules.h"
 
 #include <doctest/doctest.h>
@@ -26,6 +27,7 @@ ngn::ProgramLookup at(std::vector<std::string> executables, std::vector<std::str
         return std::find(executables.begin(), executables.end(), p) != executables.end();
       },
       .isStub = [stubs](const std::string &p) { return std::find(stubs.begin(), stubs.end(), p) != stubs.end(); },
+      .searchPath = ngn::macOS().searchPath,
   };
 }
 
@@ -164,7 +166,7 @@ TEST_CASE("the program matches as declared, and a bare name only where it was pi
 }
 
 TEST_CASE("a bare name resolves on the system folders then Homebrew's, never the inherited PATH") {
-  CHECK(ngn::kSearchPath == std::vector<std::string>{"/usr/bin", "/bin", "/usr/sbin", "/sbin", "/opt/homebrew/bin", "/usr/local/bin"});
+  CHECK(ngn::macOS().searchPath == std::vector<std::string>{"/usr/bin", "/bin", "/usr/sbin", "/sbin", "/opt/homebrew/bin", "/usr/local/bin"});
   CHECK(ngn::resolveProgram("git", at({"/usr/bin/git", "/opt/homebrew/bin/git"})) == "/usr/bin/git");
   CHECK(ngn::resolveProgram("ffmpeg", at({"/opt/homebrew/bin/ffmpeg"})) == "/opt/homebrew/bin/ffmpeg");
   CHECK_FALSE(ngn::resolveProgram("git", at({"/tmp/evil/git"})));
