@@ -108,6 +108,17 @@ export {
   type UiToolbarItemPlacement,
 } from './expo-ui-components.ts';
 export { ExpoImage, type ExpoImageContentFit, type ExpoImageSource } from './expo-image.ts';
+export { ExpoBlur, type BlurMethod, type BlurTint } from './expo-blur.ts';
+export { ExpoGL } from './expo-gl.ts';
+export { ExpoLivePhoto, type LivePhotoAsset } from './expo-live-photo.ts';
+export { ExpoMeshGradient } from './expo-mesh-gradient.ts';
+export {
+  ExpoVideo,
+  type VideoButtonOptions,
+  type VideoContentFit,
+  type VideoFullscreenOptions,
+  type VideoViewPlayer,
+} from './expo-video.ts';
 export {
   ExpoGlass,
   ExpoGlassContainer,

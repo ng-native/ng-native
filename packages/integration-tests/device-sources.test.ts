@@ -746,6 +746,45 @@ describe('the colour scheme and app state sources', () => {
     });
   });
 
+  it("forwards each scheme to Android's night-mode module too, after React Native's", () => {
+    // React Native's `setColorScheme` sets AppCompat's default night mode, which an activity
+    // handling `uiMode` itself loses to the system's scheme within a second of launch (#1563).
+    const asked: string[] = [];
+    const native = {
+      Appearance: {
+        getColorScheme: () => 'light',
+        addChangeListener: () => ({ remove: () => {} }),
+        setColorScheme: (scheme: string) => void asked.push(`appearance ${scheme}`),
+      },
+    };
+    const host = globalThis as Record<string, unknown>;
+    host['expo'] = {
+      modules: {
+        NgNativeColorScheme: {
+          setColorScheme: (scheme: string) => void asked.push(`night mode ${scheme}`),
+        },
+      },
+    };
+    try {
+      withNative(native, () => {
+        const source = colorSchemeSource();
+        source.set?.('dark');
+        source.set?.('light');
+        source.set?.(null);
+      });
+    } finally {
+      delete host['expo'];
+    }
+    assert.deepEqual(asked, [
+      'appearance dark',
+      'night mode dark',
+      'appearance light',
+      'night mode light',
+      'appearance unspecified',
+      'night mode unspecified',
+    ]);
+  });
+
   it('tells every source of a scheme the app sets, though the platform sends no change', () => {
     // On iOS a full-screen modal takes the root view out of the window, and React Native hears of
     // an appearance change only from that view, so `setColorScheme` emits nothing until the modal
