@@ -21,6 +21,7 @@ on:
       - 'packages/desktop/native/scripts/launch-cell.sh'
       - 'scripts/bench-linux.mjs'
       - 'scripts/bench-linux-budget.json'
+      - 'examples/notes/bench/**'
       - 'packages/desktop/native/docker/Dockerfile.fedora'
   workflow_dispatch:
 
@@ -100,13 +101,18 @@ jobs:
           pnpm exec expo export:embed --platform linux --dev false \
             --bundle-output "$GITHUB_WORKSPACE/.linux-nightly/main.js" \
             --assets-dest "$GITHUB_WORKSPACE/.linux-nightly/assets"
+          # The bench's workload (examples/notes/bench/linux-bench.ts), with the same Metro config.
+          pnpm exec expo export:embed --platform linux --dev false --entry-file bench/linux-bench.ts \
+            --bundle-output "$GITHUB_WORKSPACE/.linux-nightly/workload/main.js" \
+            --assets-dest "$GITHUB_WORKSPACE/.linux-nightly/workload/assets"
 
       # The timed budget, in the setting it is gated in: this image at runner class, Xvfb, cairo.
       - name: Measure the host against the Linux budget
         run: |
           docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ngn-el9 \
-            node scripts/bench-linux.mjs --host .linux-nightly/ngn-linux --bundle .linux-nightly/main.js
+            node scripts/bench-linux.mjs --host .linux-nightly/ngn-linux --bundle .linux-nightly/main.js \
+              --workload-bundle .linux-nightly/workload/main.js
 
       - uses: actions/upload-artifact@v7
         with:

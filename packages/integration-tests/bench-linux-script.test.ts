@@ -6,6 +6,7 @@
  */
 import assert from 'node:assert/strict';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -22,6 +23,20 @@ const bench = (await import(new URL('../../scripts/bench-linux.mjs', import.meta
   ): { idleCpu: number | null; idleWakeups: number | null };
   bytecode(host: string, bundle: string, dir: string): string;
   benchEnv(env: Record<string, string | undefined>): Record<string, string | undefined>;
+  HostEvents: new () => {
+    events: { kind: string; ms: number; at: number }[];
+    push(chunk: string, at: number): void;
+  };
+  workloadMetrics(measured: {
+    events: { kind: string; ms: number; at: number }[];
+    steps: Record<string, { from?: number; to?: number }>;
+    pss: { before: number | null; after: number | null };
+  }): Record<string, number | null>;
+  measureWorkload(
+    host: string,
+    bundle: string,
+    options?: { port?: number; timeoutMs?: number; stopGraceMs?: number; firstFrameMs?: number },
+  ): Promise<Record<string, number | null>>;
   measure(
     host: string,
     bundle: string,
@@ -56,6 +71,14 @@ const macos = (await import(new URL('../../scripts/bench-macos.mjs', import.meta
     budget: { ceilings: Record<string, number> },
   ): { ok: boolean; results: { metric: string; status: string }[] };
 };
+
+async function freePort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as { port: number };
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
 
 describe('reading /proc', () => {
   it('reads CPU time from stat, after a command name with spaces and parentheses', () => {
@@ -201,6 +224,11 @@ describe('the Linux budget', () => {
       idleWakeups: 5,
       memoryMb: 110,
       hostMb: 30,
+      mountMs: 15,
+      scrollFrameMs: 10,
+      resizeCommitMs: 8,
+      resizeCommitsPerFrame: 1,
+      extraWindowMb: 20,
     });
     const { ok, results } = macos.judge({}, budget);
     assert.equal(ok, false);
@@ -212,6 +240,102 @@ describe('the Linux budget', () => {
       const expected = waived.some((one) => one.metric === result.metric) ? 'waived' : 'missing';
       assert.equal(result.status, expected, result.metric);
     }
+  });
+});
+
+describe('what the host logged, and when', () => {
+  it('reads commits and frames from each line, with the time its chunk arrived', () => {
+    const output = new bench.HostEvents();
+    output.push('[ngn] commit 2.5 ms\n[ngn] frame 7.1 ms\nsomething else\n', 10);
+    output.push('[ngn] first frame 120 ms after launch\n', 20);
+    assert.deepEqual(output.events, [
+      { kind: 'commit', ms: 2.5, at: 10 },
+      { kind: 'frame', ms: 7.1, at: 10 },
+    ]);
+  });
+
+  it('holds a line that a chunk ends in the middle of until the rest comes, at the later time', () => {
+    const output = new bench.HostEvents();
+    output.push('[ngn] frame 3', 5);
+    assert.deepEqual(output.events, []);
+    output.push('.5 ms\n[ngn] commit 1 ms\n', 9);
+    assert.deepEqual(output.events, [
+      { kind: 'frame', ms: 3.5, at: 9 },
+      { kind: 'commit', ms: 1, at: 9 },
+    ]);
+  });
+});
+
+describe('the workload metrics', () => {
+  const event = (kind: string, ms: number, at: number) => ({ kind, ms, at });
+  const steps = {
+    mount: { from: 100, to: 200 },
+    scroll: { from: 200, to: 300 },
+    resize: { from: 300, to: 400 },
+  };
+  const pss = { before: 100, after: 118.5 };
+
+  it('takes each step from what was logged inside it, and not from another step', () => {
+    const metrics = bench.workloadMetrics({
+      events: [
+        event('commit', 99, 50), // before the first step
+        event('commit', 3, 120),
+        event('commit', 12, 150), // the mount's slowest commit
+        event('commit', 40, 250), // a commit while scrolling is not the mount's
+        event('frame', 4, 210),
+        event('frame', 9, 230),
+        event('frame', 6, 260),
+        event('frame', 90, 120), // a frame while mounting is not a scroll frame
+        event('commit', 2, 310),
+        event('commit', 5, 330),
+        event('commit', 7.5, 350),
+        event('frame', 3, 315),
+        event('frame', 3, 335),
+        event('frame', 3, 355),
+        event('frame', 3, 375),
+        event('commit', 60, 450), // after the last step
+      ],
+      steps,
+      pss,
+    });
+    assert.deepEqual(metrics, {
+      mountMs: 12,
+      scrollFrameMs: 6,
+      resizeCommitMs: 7.5,
+      resizeCommitsPerFrame: 0.75,
+      extraWindowMb: 18.5,
+    });
+  });
+
+  it('counts a commit at a step end, and not one at its start', () => {
+    const metrics = bench.workloadMetrics({
+      events: [event('commit', 9, 100), event('commit', 8, 200)],
+      steps: { mount: { from: 100, to: 200 } },
+      pss: { before: null, after: null },
+    });
+    assert.equal(metrics['mountMs'], 8);
+  });
+
+  it('reads nothing for a step that logged nothing, or that never ended, so the run fails', () => {
+    const metrics = bench.workloadMetrics({
+      events: [event('commit', 5, 150)],
+      steps: { mount: { from: 100 }, scroll: { from: 200, to: 300 } },
+      pss: { before: 100, after: null },
+    });
+    assert.deepEqual(metrics, {
+      mountMs: null,
+      scrollFrameMs: null,
+      resizeCommitMs: null,
+      resizeCommitsPerFrame: null,
+      extraWindowMb: null,
+    });
+    // Commits with no frame between them are not a ratio.
+    const noFrames = bench.workloadMetrics({
+      events: [event('commit', 5, 350)],
+      steps,
+      pss,
+    });
+    assert.equal(noFrames['resizeCommitsPerFrame'], null);
   });
 });
 
@@ -324,6 +448,87 @@ describe('measuring a host', { skip: process.platform !== 'linux' }, () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+/**
+ * A stand-in for the workload's app: logs what the host would, and asks the bench's server to start,
+ * to bracket each step and to finish, as examples/notes/bench/linux-bench.ts does.
+ */
+const workloadHost = (steps: string[], options: { crashBeforeDone?: boolean } = {}) =>
+  [
+    `#!${process.execPath}`,
+    "const http = require('node:http');",
+    'const port = process.env.NGN_BENCH_PORT;',
+    "const tell = (path) => new Promise((resolve, reject) => http.get(`http://127.0.0.1:${port}/${path}`, (r) => { r.resume(); r.on('end', resolve); }).on('error', reject));",
+    'const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));',
+    "console.error('[ngn] first frame 50 ms after launch');",
+    '(async () => {',
+    "  await tell('start');",
+    `  for (const step of ${JSON.stringify(steps)}) {`,
+    '    const [name, ...lines] = step.split("|");',
+    '    await tell(`begin/${name}`);',
+    '    for (const line of lines) console.error(line);',
+    '    await sleep(100);',
+    '    await tell(`end/${name}`);',
+    '  }',
+    options.crashBeforeDone ? '  process.exit(7);' : "  await tell('done');",
+    '  setTimeout(() => {}, 600_000);',
+    '})();',
+  ].join('\n');
+
+describe('measuring the workload', { skip: process.platform !== 'linux' }, () => {
+  const measureOf = async (script: string, port: number, options = {}) => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'bench-linux-workload-'));
+    try {
+      const host = path.join(dir, 'ngn-linux');
+      writeFileSync(host, script);
+      chmodSync(host, 0o755);
+      return await bench.measureWorkload(host, path.join(dir, 'main.hbc'), {
+        port,
+        timeoutMs: 20_000,
+        stopGraceMs: 300,
+        firstFrameMs: 5000,
+        ...options,
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it('brackets each step through the server and reads the host output inside it', async () => {
+    const metrics = await measureOf(
+      workloadHost([
+        'mount|[ngn] commit 4 ms|[ngn] commit 11.5 ms',
+        'scroll|[ngn] frame 2 ms|[ngn] frame 8 ms|[ngn] frame 4 ms',
+        'resize|[ngn] commit 3 ms|[ngn] frame 1 ms|[ngn] commit 6 ms|[ngn] frame 1 ms',
+        'window',
+      ]),
+      await freePort(),
+    );
+    assert.equal(metrics['mountMs'], 11.5);
+    assert.equal(metrics['scrollFrameMs'], 4);
+    assert.equal(metrics['resizeCommitMs'], 6);
+    assert.equal(metrics['resizeCommitsPerFrame'], 1);
+    // The stand-in does not grow, but its memory was sampled at both ends of the window step.
+    assert.ok(metrics['extraWindowMb'] !== null && Math.abs(metrics['extraWindowMb']!) < 5);
+  });
+
+  it('rejects, with what the host said, when the host ends before the workload does', async () => {
+    await assert.rejects(
+      measureOf(
+        workloadHost(['mount|[ngn] commit 1 ms'], { crashBeforeDone: true }),
+        await freePort(),
+      ),
+      /ended \(7\) before the workload finished[\s\S]*first frame/,
+    );
+  });
+
+  it('rejects a workload that does not finish in time', async () => {
+    await assert.rejects(
+      measureOf(workloadHost(['mount|[ngn] commit 1 ms']), await freePort(), { timeoutMs: 100 }),
+      /did not finish in 100 ms/,
+    );
   });
 });
 
