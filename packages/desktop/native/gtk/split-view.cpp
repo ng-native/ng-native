@@ -251,6 +251,15 @@ void SplitViews::place(SurfaceId surfaceId, Tag split, bool window) {
     if (auto collapsed = s.collapse.propChanged(p->collapsed)) {
       s.folding.setCollapsed(*collapsed);
     }
+    // What the user left it as last time wins over the app's prop, which hears of it, as an
+    // NSSplitView's autosave restores its divider on macOS.
+    auto key = sidebarCollapsedKey(p->autosaveName);
+    if (auto saved = key && readPreference ? savedSidebarCollapsed(readPreference(*key)) : std::nullopt) {
+      if (s.collapse.toolkitChanged(*saved)) {
+        send(backend_.data(s.sidebar), "sidebarCollapse", folly::dynamic::object("collapsed", *saved));
+      }
+      s.folding.setCollapsed(*saved);
+    }
   }
   show(s);
   gtk_widget_queue_allocate(widget);
@@ -335,6 +344,13 @@ void SplitViews::show(Split &s) {
   if (adw_navigation_split_view_get_show_content(view) != showing.content) {
     adw_navigation_split_view_set_show_content(view, showing.content);
   }
+  // The sidebar button moves with the sidebar: over it beside the content, else to the window's
+  // header bar.
+  bool overSidebar = s.window && s.sidebarHeader && !showing.stacked;
+  if (overSidebar != s.buttonOverSidebar) {
+    s.buttonOverSidebar = overSidebar;
+    backend_.headers().refreshChrome(s.surfaceId);
+  }
 }
 
 void SplitViews::propsChanged(Tag tag) {
@@ -351,8 +367,26 @@ void SplitViews::propsChanged(Tag tag) {
     if (auto collapsed = s.collapse.propChanged(p->collapsed)) {
       s.folding.setCollapsed(*collapsed);
       show(s);
+      autosave(s);
     }
   }
+}
+
+void SplitViews::autosave(const Split &s) {
+  const auto *p = paneProps(backend_.data(s.sidebar));
+  auto key = p ? sidebarCollapsedKey(p->autosaveName) : std::nullopt;
+  if (key && writePreference) {
+    writePreference(*key, folly::dynamic(s.collapse.collapsed()));
+  }
+}
+
+GtkWidget *SplitViews::sidebarHeaderShown(SurfaceId surfaceId) const {
+  for (const auto &[tag, s] : splits_) {
+    if (s.surfaceId == surfaceId && s.window && s.sidebarHeader && !s.folding.showing().stacked) {
+      return s.sidebarHeader;
+    }
+  }
+  return nullptr;
 }
 
 void SplitViews::setCompact(Tag split, bool compact) {
@@ -379,10 +413,14 @@ bool SplitViews::toggle(SurfaceId surfaceId) {
     return false;
   }
   auto &s = splits_[*split];
-  if (auto collapsed = s.folding.toggle(); collapsed && s.collapse.toolkitChanged(*collapsed)) {
+  auto collapsed = s.folding.toggle();
+  if (collapsed && s.collapse.toolkitChanged(*collapsed)) {
     send(backend_.data(s.sidebar), "sidebarCollapse", folly::dynamic::object("collapsed", *collapsed));
   }
   show(s);
+  if (collapsed) {
+    autosave(s);
+  }
   return true;
 }
 

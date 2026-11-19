@@ -309,6 +309,9 @@ void runMenuItem(const ngn::MenuItem &item, GtkWindow *window) {
         gtk_window_is_fullscreen(window) ? gtk_window_unfullscreen(window) : gtk_window_fullscreen(window);
       }
       return;
+    case ngn::MenuCommand::KeyboardShortcuts:
+      gtk_window_present(GTK_WINDOW(ngn::gtk::keyboardShortcutsWindow(gHost.menus->keyboardShortcuts(gHost.gtkMenus->bar()), window)));
+      return;
     case ngn::MenuCommand::About: {
       GtkWidget *about = adw_about_window_new();
       adw_about_window_set_application_name(ADW_ABOUT_WINDOW(about), gHost.menus->options().appName.c_str());
@@ -596,6 +599,11 @@ int main(int argc, char *argv[]) {
       gHost.state->clipboardChangeCount.set(count);
     }
   });
+  // A sidebar's collapsed state autosaves among the app's preferences, as window frames do.
+  gHost.backend->splitViews().readPreference = [system](const std::string &key) { return system->preference(key); };
+  gHost.backend->splitViews().writePreference = [system](const std::string &key, const folly::dynamic &value) {
+    system->setPreference(key, value);
+  };
   gHost.state = std::make_shared<ngn::HostState>();
   gHost.state->metrics.set(windowMetrics(width, height));
   if (!settings.initialUrl.empty()) {

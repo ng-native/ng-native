@@ -180,6 +180,20 @@ TEST_CASE("a hidden title bar runs the content under the bar as a transparent on
   auto insets = ngn::gtk::chromeInsets(w.surface);
   CHECK(insets.insets.top == adw_toolbar_view_get_top_bar_height(toolbar));
   CHECK(insets.titlebarLeading + insets.titlebarTrailing > 20);
+  // The window drags by its top: the flat bar over the content is a window handle, with no title
+  // in its middle, and the content below it is not one, so a secondary click there is the app's.
+  graphene_point_t middle{static_cast<float>(gtk_widget_get_width(w.chrome->headerBar)) / 2,
+                          static_cast<float>(gtk_widget_get_height(w.chrome->headerBar)) / 2};
+  graphene_point_t at{};
+  REQUIRE(gtk_widget_compute_point(w.chrome->headerBar, w.window, &middle, &at));
+  GtkWidget *top = gtk_widget_pick(w.window, at.x, at.y, GTK_PICK_DEFAULT);
+  REQUIRE(top);
+  CHECK(gtk_widget_get_ancestor(top, GTK_TYPE_WINDOW_HANDLE));
+  graphene_point_t inside{200, static_cast<float>(insets.insets.top) + 40};
+  REQUIRE(gtk_widget_compute_point(w.surface, w.window, &inside, &at));
+  GtkWidget *below = gtk_widget_pick(w.window, at.x, at.y, GTK_PICK_DEFAULT);
+  REQUIRE(below);
+  CHECK_FALSE(gtk_widget_get_ancestor(below, GTK_TYPE_WINDOW_HANDLE));
 }
 
 TEST_CASE("the menus have a hidden menu bar under the header bar on KDE, and a hidden primary menu in it elsewhere") {

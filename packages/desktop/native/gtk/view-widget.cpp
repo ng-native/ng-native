@@ -47,6 +47,16 @@ GskTransform *childTransform(const ViewData &child) {
   GskTransform *transform = gsk_transform_translate(nullptr, &point);
   if (auto props = std::dynamic_pointer_cast<const ViewProps>(child.props)) {
     if (auto layer = ngn::layerTransform(*props, child.layout)) {
+      // In 2D steps where it has no perspective: GSK's cairo renderer, which a machine with no GL
+      // and the host's screenshots draw with, draws a 3D matrix as a pink box.
+      if (auto steps = ngn::planeSteps(*layer)) {
+        graphene_point_t by;
+        graphene_point_init(&by, static_cast<float>(steps->translateX), static_cast<float>(steps->translateY));
+        transform = gsk_transform_translate(transform, &by);
+        transform = gsk_transform_rotate(transform, static_cast<float>(steps->rotate));
+        transform = gsk_transform_skew(transform, static_cast<float>(steps->skewX), 0);
+        return gsk_transform_scale(transform, static_cast<float>(steps->scaleX), static_cast<float>(steps->scaleY));
+      }
       float values[16];
       for (int i = 0; i < 16; ++i) {
         values[i] = static_cast<float>(layer->matrix[i]);
