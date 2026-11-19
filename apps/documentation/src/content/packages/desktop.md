@@ -117,19 +117,19 @@ code of its own. Otherwise it builds the GTK host from source, React Native, Her
 included, into `$XDG_CACHE_HOME/ng-native/desktop/rn-<version>` (`~/.cache` when that is not set),
 and later runs reuse it. Building needs clang and lld, CMake 3.25 or later, Ninja 1.10 or later,
 Git, curl, unzip, xz, Perl with `shasum`, Python 3, pkg-config, and the development packages of GTK
-4.10 or later, libadwaita 1.4 or later, Pango, GLib, X11, OpenSSL 3, nghttp2, zlib and SQLite. The
-command checks them first and names the package for each problem, for apt or dnf by
-`/etc/os-release`:
+4.10 or later, libadwaita 1.4 or later, libsecret 0.20 or later, Pango, Fontconfig, GLib, X11,
+OpenSSL 3, nghttp2, zlib and SQLite. The command checks them first and names the package for each
+problem, for apt or dnf by `/etc/os-release`:
 
 ```sh
 # Debian and Ubuntu
 sudo apt install clang lld cmake ninja-build git curl unzip xz-utils perl python3 pkg-config \
-  libgtk-4-dev libadwaita-1-dev libpango1.0-dev libglib2.0-dev libx11-dev libssl-dev \
-  libnghttp2-dev zlib1g-dev libsqlite3-dev
+  libgtk-4-dev libadwaita-1-dev libsecret-1-dev libpango1.0-dev libfontconfig-dev libglib2.0-dev \
+  libx11-dev libssl-dev libnghttp2-dev zlib1g-dev libsqlite3-dev
 # Fedora, and RHEL 9 and its rebuilds with CRB enabled
 sudo dnf install clang lld cmake ninja-build git curl unzip xz perl perl-Digest-SHA python3 \
-  pkgconf-pkg-config gtk4-devel libadwaita-devel pango-devel glib2-devel libX11-devel \
-  openssl-devel libnghttp2-devel zlib-devel sqlite-devel
+  pkgconf-pkg-config gtk4-devel libadwaita-devel libsecret-devel pango-devel fontconfig-devel \
+  glib2-devel libX11-devel openssl-devel libnghttp2-devel zlib-devel sqlite-devel
 ```
 
 The GTK host runs on Linux only for now: on a Mac, `npm run linux` stops and says so. A Mac makes

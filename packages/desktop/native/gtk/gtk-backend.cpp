@@ -44,6 +44,9 @@ GtkBackend::~GtkBackend() {
   // Each gives back the views it hosts before the views go.
   modals_.reset();
   headers_.reset();
+  for (auto &[surfaceId, surface] : surfaces_) {
+    g_object_weak_unref(G_OBJECT(surface), surfaceGone, this);
+  }
   for (auto &[tag, entry] : searchEntries_) {
     g_object_unref(entry);
   }
@@ -63,11 +66,28 @@ GtkBackend::~GtkBackend() {
 }
 
 void GtkBackend::addSurface(SurfaceId surfaceId, GtkWidget *surface) {
+  removeSurface(surfaceId);
   surfaces_[surfaceId] = surface;
+  // A surface finalized with its window (the window closed) is forgotten then, so that nothing
+  // reads it after: a header or modal let go of later finds no window.
+  g_object_weak_ref(G_OBJECT(surface), surfaceGone, this);
 }
 
 void GtkBackend::removeSurface(SurfaceId surfaceId) {
-  surfaces_.erase(surfaceId);
+  if (auto it = surfaces_.find(surfaceId); it != surfaces_.end()) {
+    g_object_weak_unref(G_OBJECT(it->second), surfaceGone, this);
+    surfaces_.erase(it);
+  }
+}
+
+void GtkBackend::surfaceGone(gpointer self, GObject *surface) {
+  auto &surfaces = static_cast<GtkBackend *>(self)->surfaces_;
+  for (auto it = surfaces.begin(); it != surfaces.end(); ++it) {
+    if (G_OBJECT(it->second) == surface) {
+      surfaces.erase(it);
+      return;
+    }
+  }
 }
 
 GtkWidget *GtkBackend::view(Tag tag) const {
@@ -367,10 +387,6 @@ void GtkBackend::followRole(const ShadowView &view) {
   swapViewData(old, next);
   // A state update replaces a Paragraph's widget with no props update to follow.
   applyViewProps(next, *viewData(next));
-  // An Image hears a new scale through its widget: the new one listens too, and keeps the load.
-  if (viewData(next)->image) {
-    makeImageView(next, *viewData(next));
-  }
   // A focused field's GtkText loses the focus as it moves and takes it back after: the app hears
   // neither.
   TextField *field = focus ? textFieldOf(focus) : nullptr;
@@ -389,6 +405,11 @@ void GtkBackend::followRole(const ShadowView &view) {
     gtk_widget_set_child_visible(child, childVisible);
     g_object_unref(child);
   }
+  // An Image hears a new scale through its widget: the new one listens too, and keeps the load.
+  // Once parented, so it picks by its window's scale rather than the first monitor's.
+  if (viewData(next)->image) {
+    makeImageView(next, *viewData(next));
+  }
   it->second = next;
   if (field && GTK_IS_TEXT(focus)) {
     // Focusing a GtkText selects all of it: the caret stays where the user left it.
@@ -405,8 +426,13 @@ void GtkBackend::followRole(const ShadowView &view) {
 void GtkBackend::updateLayout(const ShadowView &view) {
   if (auto it = views_.find(view.tag); it != views_.end()) {
     ViewData *d = viewData(it->second);
+    bool resized = d->layout.frame.size != view.layoutMetrics.frame.size;
     d->layout = view.layoutMetrics;
     forgetText(*d);
+    // A slot is measured from the view it hosts, and GTK keeps a measurement until a resize.
+    if (auto hosted = hosted_.find(view.tag); resized && hosted != hosted_.end()) {
+      gtk_widget_queue_resize(hosted->second.slot);
+    }
     // A field's natural alignment follows the layout's direction, and a scroll view's scroll bars
     // the content's size against its own.
     applyTextFieldProps(*d);

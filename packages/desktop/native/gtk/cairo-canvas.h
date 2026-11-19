@@ -31,10 +31,13 @@ class SvgImageHold {
   std::set<std::string> held_, next_;
 };
 
+// How many images the svgs' shared cache keeps loaded now, for tests.
+size_t svgImagesKept();
+
 // A canvas over `cr`, whose user space is the view's: top left, y down, in points, `width` by
 // `height`, drawn at `scale` pixels a point. `imageLoaded` runs on the UI thread when an image it
-// was asked for has loaded or failed to. The images it draws are noted in `hold`, when given. A
-// foreignObject's views are not drawn.
+// was asked for has loaded or failed to. The images it draws are noted in `hold`, when given, and
+// the canvases with one hold are told once for each image. A foreignObject's views are not drawn.
 std::unique_ptr<SvgCanvas> makeCairoCanvas(
     cairo_t *cr,
     double width,

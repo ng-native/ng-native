@@ -6,6 +6,7 @@
 #include <react/renderer/core/ConcreteState.h>
 
 #include <algorithm>
+#include <optional>
 #include <set>
 #include <utility>
 
@@ -56,8 +57,14 @@ void syncState(const ScrollBox &box, bool relayout) {
     box.relayoutOwed->store(true);
   }
   Point offset = offsetOf(box);
-  state->updateState([offset, owed = box.relayoutOwed](const ScrollViewState &old) -> StateData::Shared {
-    if (!owed->exchange(false) && old.contentOffset == offset) {
+  // React Native runs an update's callback again when its commit is retried: the update takes the
+  // owed relayout once, and each run after answers as the first did.
+  auto takes = std::make_shared<std::optional<bool>>();
+  state->updateState([offset, owed = box.relayoutOwed, takes](const ScrollViewState &old) -> StateData::Shared {
+    if (!takes->has_value()) {
+      *takes = owed->exchange(false);
+    }
+    if (!**takes && old.contentOffset == offset) {
       return nullptr;
     }
     auto data = std::make_shared<ScrollViewState>(old);
@@ -373,6 +380,8 @@ void scrollViewCommand(ViewData &view, const std::string &name, const folly::dyn
     return;
   }
   if (name == "scrollTo" && args.isArray() && args.size() >= 2 && args[0].isNumber() && args[1].isNumber()) {
+    // A starting offset still waiting would move the content back after the command.
+    box->pendingOffset.reset();
     moveTo(*box, {static_cast<Float>(args[0].asDouble()), static_cast<Float>(args[1].asDouble())});
   } else if (name == "scrollToEnd") {
     Size page = viewportOf(*box);
@@ -383,6 +392,7 @@ void scrollViewCommand(ViewData &view, const std::string &name, const folly::dyn
     } else {
       target.x = std::max<Float>(0, box->content.width - page.width);
     }
+    box->pendingOffset.reset();
     moveTo(*box, target);
   }
 }

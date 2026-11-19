@@ -392,14 +392,30 @@ DragItems dragItems(const std::vector<std::string> &urls, std::optional<std::str
     auto last = slash == std::string_view::npos ? path : path.substr(slash + 1);
     items.files.push_back({.uri = url, .name = percentDecoded(last)});
   }
-  // The toolkit offers a dragged url as text too, and a file as its path.
+  // The toolkit offers a dragged url as text too, and a file as its path: several of them a line
+  // each (a file manager's drag of more than one file).
   if (items.text) {
-    for (const auto &url : urls) {
-      bool path = url.rfind("file://", 0) == 0 && percentDecoded(std::string_view(url).substr(7)) == *items.text;
-      if (url == *items.text || path) {
-        items.text.reset();
-        break;
+    auto repeats = [&urls](std::string_view line) {
+      for (const auto &url : urls) {
+        if (url == line || (url.rfind("file://", 0) == 0 && percentDecoded(std::string_view(url).substr(7)) == line)) {
+          return true;
+        }
       }
+      return false;
+    };
+    bool onlyUrls = !urls.empty();
+    std::string_view rest = *items.text;
+    while (onlyUrls && !rest.empty()) {
+      auto end = rest.find('\n');
+      auto line = rest.substr(0, end);
+      if (!line.empty() && line.back() == '\r') {
+        line.remove_suffix(1);
+      }
+      onlyUrls = line.empty() || repeats(line);
+      rest = end == std::string_view::npos ? std::string_view() : rest.substr(end + 1);
+    }
+    if (onlyUrls) {
+      items.text.reset();
     }
   }
   return items;

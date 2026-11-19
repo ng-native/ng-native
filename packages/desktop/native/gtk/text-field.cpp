@@ -362,6 +362,61 @@ PangoAttrList *textAttributes(const DesktopTextInputProps &props, bool placehold
   return list;
 }
 
+// -1 when the first letter of `text` is of a right-to-left script, 1 when of any other, 0 with none.
+int firstStrongDirection(const char *text) {
+  for (const char *p = text; *p; p = g_utf8_next_char(p)) {
+    gunichar c = g_utf8_get_char(p);
+    if (!g_unichar_isalpha(c)) {
+      continue;
+    }
+    switch (g_unichar_get_script(c)) {
+      case G_UNICODE_SCRIPT_HEBREW:
+      case G_UNICODE_SCRIPT_ARABIC:
+      case G_UNICODE_SCRIPT_SYRIAC:
+      case G_UNICODE_SCRIPT_THAANA:
+      case G_UNICODE_SCRIPT_NKO:
+      case G_UNICODE_SCRIPT_SAMARITAN:
+      case G_UNICODE_SCRIPT_MANDAIC:
+        return -1;
+      default: return 1;
+    }
+  }
+  return 0;
+}
+
+// GTK resolves a left or right justification against each paragraph's own direction, but an
+// explicit left or right is physical. A paragraph whose strong direction differs from the field's
+// takes the opposite justification, on a tag over it.
+void alignParagraphs(TextField &field) {
+  GtkTextBuffer *buffer = bufferOf(field);
+  GtkTextTag *tag = gtk_text_tag_table_lookup(gtk_text_buffer_get_tag_table(buffer), "ngn-flip");
+  if (!tag) {
+    tag = gtk_text_buffer_create_tag(buffer, "ngn-flip", nullptr);
+  }
+  GtkTextIter start, end;
+  gtk_text_buffer_get_bounds(buffer, &start, &end);
+  gtk_text_buffer_remove_tag(buffer, tag, &start, &end);
+  GtkJustification justification = gtk_text_view_get_justification(GTK_TEXT_VIEW(field.text));
+  if (justification != GTK_JUSTIFY_LEFT && justification != GTK_JUSTIFY_RIGHT) {
+    return;
+  }
+  g_object_set(tag, "justification", justification == GTK_JUSTIFY_LEFT ? GTK_JUSTIFY_RIGHT : GTK_JUSTIFY_LEFT, nullptr);
+  bool fieldRtl = gtk_widget_get_direction(field.text) == GTK_TEXT_DIR_RTL;
+  GtkTextIter line = start;
+  do {
+    GtkTextIter lineEnd = line;
+    if (!gtk_text_iter_ends_line(&lineEnd)) {
+      gtk_text_iter_forward_to_line_end(&lineEnd);
+    }
+    gchar *text = gtk_text_iter_get_slice(&line, &lineEnd);
+    int direction = firstStrongDirection(text);
+    g_free(text);
+    if (direction != 0 && (direction < 0) != fieldRtl) {
+      gtk_text_buffer_apply_tag(buffer, tag, &line, &lineEnd);
+    }
+  } while (gtk_text_iter_forward_line(&line));
+}
+
 // A multiline field's font and colour, on a tag over all of its text.
 void styleTextView(TextField &field, const DesktopTextInputProps &props) {
   GtkTextBuffer *buffer = bufferOf(field);
@@ -381,6 +436,7 @@ void styleTextView(TextField &field, const DesktopTextInputProps &props) {
   GtkTextIter start, end;
   gtk_text_buffer_get_bounds(buffer, &start, &end);
   gtk_text_buffer_apply_tag(buffer, tag, &start, &end);
+  alignParagraphs(field);
 }
 
 void restyle(GtkTextBuffer *, gpointer user) {
@@ -408,6 +464,11 @@ void plainTextViews() {
 void watch(TextField *field, GtkWidget *editor) {
   g_object_set_data(G_OBJECT(editor), "ngn-text-field", field);
   g_signal_connect(editor, "preedit-changed", G_CALLBACK(preeditChanged), field);
+  // Backspace over a mark Pango lets go of alone deletes its whole character and puts the base
+  // back (GtkText and GtkTextBuffer alike): text the field had, not fitted again.
+  g_signal_connect_swapped(editor, "backspace", G_CALLBACK(+[](TextField *f) { f->replaying = true; }), field);
+  g_signal_connect_data(editor, "backspace", G_CALLBACK(+[](TextField *f) { f->replaying = false; }), field, nullptr,
+                        static_cast<GConnectFlags>(G_CONNECT_SWAPPED | G_CONNECT_AFTER));
   GtkEventController *focus = gtk_event_controller_focus_new();
   g_signal_connect(focus, "enter", G_CALLBACK(focused), field);
   g_signal_connect(focus, "leave", G_CALLBACK(unfocused), field);
@@ -553,13 +614,13 @@ void applyTextFieldProps(ViewData &view) {
   gtk_widget_set_direction(field.text, rightToLeft ? GTK_TEXT_DIR_RTL : GTK_TEXT_DIR_LTR);
   if (multiline(field)) {
     GtkTextView *text = GTK_TEXT_VIEW(field.text);
+    // Left in a right-to-left field is its start, so the natural alignment is GTK's left.
+    gtk_text_view_set_justification(
+        text, xalign == 0.5f ? GTK_JUSTIFY_CENTER : (xalign == 1) != rightToLeft ? GTK_JUSTIFY_RIGHT : GTK_JUSTIFY_LEFT);
     styleTextView(field, *props);
     gtk_text_view_set_editable(text, editable);
     gtk_text_view_set_input_hints(text, capitalizeHints(textInputOptions(*props).capitalize));
     gtk_text_view_set_cursor_visible(text, editable);
-    // Left in a right-to-left field is its start, so the natural alignment is GTK's left.
-    gtk_text_view_set_justification(
-        text, xalign == 0.5f ? GTK_JUSTIFY_CENTER : (xalign == 1) != rightToLeft ? GTK_JUSTIFY_RIGHT : GTK_JUSTIFY_LEFT);
   } else {
     GtkText *text = GTK_TEXT(field.text);
     gtk_text_set_placeholder_text(text, props->placeholder.c_str());
@@ -586,18 +647,29 @@ void applyTextFieldProps(ViewData &view) {
     // Stale props, which cannot supersede a held value, leave it alone.
     if (controlledTextIsCurrent(props->mostRecentEventCount, field.eventCount, false) &&
         (!props->text.empty() || props->defaultValue.empty() || field.eventCount > 0)) {
-      field.pendingText.reset();
-      cancelPendingApply(field);
-      if (field.composing) {
+      auto previous = std::dynamic_pointer_cast<const DesktopTextInputProps>(field.applied);
+      if (field.pendingText && previous && previous->text == props->text) {
+        // The text is the same as the props before it: a held setTextAndSelection stays.
+      } else if (field.composing) {
+        cancelPendingApply(field);
         field.pendingText.emplace(TextField::Pending{props->text, props->mostRecentEventCount, std::nullopt});
-      } else if (props->text != fieldText(field)) {
-        setText(field, props->text);
+      } else {
+        field.pendingText.reset();
+        cancelPendingApply(field);
+        if (props->text != fieldText(field)) {
+          setText(field, props->text);
+        }
       }
     }
   }
   auto before = std::dynamic_pointer_cast<const DesktopTextInputProps>(field.applied);
   if (auto range = newSelection(before.get(), *props)) {
-    selectUnits(field, range->first, range->second);
+    // Against the text it accompanies: a held text takes it when it is applied.
+    if (field.pendingText) {
+      field.pendingText->selection = *range;
+    } else {
+      selectUnits(field, range->first, range->second);
+    }
   }
   field.applied = view.props;
   redrawPlaceholder(field);
@@ -636,6 +708,12 @@ void snapshotPlaceholder(const ViewData &view, GtkSnapshot *snapshot) {
   const auto &insets = view.layout.contentInsets;
   pango_layout_set_width(layout, static_cast<int>(std::max<Float>(0, view.layout.frame.size.width - insets.left - insets.right) * PANGO_SCALE));
   pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
+  // Aligned as the typed text is.
+  switch (gtk_text_view_get_justification(GTK_TEXT_VIEW(field->text))) {
+    case GTK_JUSTIFY_CENTER: pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER); break;
+    case GTK_JUSTIFY_RIGHT: pango_layout_set_alignment(layout, PANGO_ALIGN_RIGHT); break;
+    default: pango_layout_set_alignment(layout, PANGO_ALIGN_LEFT); break;
+  }
   // The placeholder colour, or GTK's own dimmed text.
   GdkRGBA color{0, 0, 0, 0.5f};
   if (props->placeholderTextColor) {
@@ -691,7 +769,14 @@ void textFieldCommand(ViewData &view, const std::string &name, const folly::dyna
       setText(field, args[1].getString());
     }
     if (args[2].isNumber() && args[3].isNumber()) {
-      selectUnits(field, static_cast<int>(args[2].asDouble()), static_cast<int>(args[3].asDouble()));
+      int start = static_cast<int>(args[2].asDouble());
+      int end = static_cast<int>(args[3].asDouble());
+      if (field.pendingText) {
+        // Newer than a range held with the text, which it is applied to.
+        field.pendingText->selection.emplace(start, end);
+      } else {
+        selectUnits(field, start, end);
+      }
     }
   }
 }
