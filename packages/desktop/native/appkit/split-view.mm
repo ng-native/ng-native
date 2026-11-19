@@ -169,8 +169,6 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   CGFloat _plainWidth;
   ngn::SidebarCollapse _collapse;
   std::string _autosave;
-  // A screen in front covers the one holding it: the window's surface is the window's content.
-  BOOL _screenCovered;
 }
 
 + (ngn::InputSink *)input {
@@ -296,7 +294,7 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 
 - (void)viewDidMoveToWindow {
   [super viewDidMoveToWindow];
-  if (_decided && _windows && _controller == nil && self.window != nil && !_screenCovered) {
+  if (_decided && _windows && _controller == nil && self.window != nil && ![self underCoveredScreen]) {
     [self build];
   }
 }
@@ -306,7 +304,7 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
     return;
   }
   if (_windows) {
-    if (!_screenCovered) {
+    if (![self underCoveredScreen]) {
       [self installInWindow];
     }
   } else {
@@ -373,6 +371,11 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
     _controller.splitView.autosaveName = autosaveKey(_autosave);
   }
   BOOL restoring = [self hasAutosavedFrames];
+  // Installed again after a screen covered it: the app's collapsed sidebar stays collapsed, unless
+  // the autosave restores the user's.
+  if (!restoring && p != nullptr && p->collapsed) {
+    _sidebarItem.collapsed = YES;
+  }
   [_controller addSplitViewItem:_sidebarItem];
   [_controller addSplitViewItem:contentItem];
   window.contentViewController = _controller;
@@ -433,14 +436,26 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   _ownWindow = nil;
 }
 
+// Whether a screen above the one holding this split view covers it, however long ago.
+- (BOOL)underCoveredScreen {
+  for (NSView *view = self.superview; view != nil; view = view.superview) {
+    if ([view isKindOfClass:NGNView.class] && ((NGNView *)view).covered) {
+      return YES;
+    }
+  }
+  return NO;
+}
+
 - (void)setScreenCovered:(BOOL)covered {
-  if (covered == _screenCovered) {
+  // Only a window's split view holds the window; a plain one stays in its screen.
+  if (!_windows) {
     return;
   }
-  _screenCovered = covered;
   if (covered) {
-    [self uninstall];
-  } else if (_decided && _windows) {
+    if (_controller != nil) {
+      [self uninstall];
+    }
+  } else if (_decided && _controller == nil) {
     [self build];
   }
 }

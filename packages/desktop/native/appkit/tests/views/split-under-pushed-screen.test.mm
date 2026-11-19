@@ -41,3 +41,28 @@ TEST_CASE("A split view gives the window back while its screen is covered, and t
   CHECK((mounted.window.contentViewController != nil));
   [split uninstall];
 }
+
+TEST_CASE("A split view mounted under a screen that is already covered waits for the screen to show") {
+  MountedViews mounted;
+  struct Restore {
+    ngn::InputSink *split = NGNSplitView.input;
+    ~Restore() {
+      NGNSplitView.input = split;
+    }
+  } restore;
+  NGNSplitView.input = &mounted.input;
+  mounted.add(MountedViews::shadow(4, "View", viewProps(folly::dynamic::object())));
+  mounted.backend->setCovered(MountedViews::kSurface, 4, true);
+  mounted.add(MountedViews::shadow(5, ngn::SplitViewComponentName, viewProps(folly::dynamic::object())), 4);
+  mounted.add(MountedViews::shadow(6, ngn::SidebarComponentName, viewProps(folly::dynamic::object())), 5);
+  mounted.add(MountedViews::shadow(7, ngn::SplitContentComponentName, viewProps(folly::dynamic::object())), 5);
+  auto *split = (NGNSplitView *)mounted.view(5);
+  [split placeAsWindows:YES];
+  CHECK((split.ownWindow == nil));
+  CHECK((mounted.window.contentView == mounted.surface));
+
+  mounted.backend->setCovered(MountedViews::kSurface, 4, false);
+  CHECK((split.ownWindow == mounted.window));
+  [split uninstall];
+}
+
