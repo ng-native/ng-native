@@ -4,6 +4,25 @@
 
 namespace ngn {
 
+AlertLayout gnomeAlertLayout(const AlertRequest &request) {
+  AlertLayout layout;
+  int count = static_cast<int>(request.buttons.size());
+  bool cancel = request.cancelIndex >= 0 && request.cancelIndex < count;
+  if (cancel) {
+    layout.order.push_back(request.cancelIndex);
+    layout.escapeIndex = request.cancelIndex;
+  }
+  for (int i = count - 1; i >= 0; i--) {
+    if (!cancel || i != request.cancelIndex) {
+      layout.order.push_back(i);
+    }
+  }
+  if (count > 0 && request.buttons[0].role != AlertButtonRole::Destructive && (!cancel || request.cancelIndex != 0)) {
+    layout.returnIndex = 0;
+  }
+  return layout;
+}
+
 ColorSchemeOverride::ColorSchemeOverride(std::string systemScheme) : system_(std::move(systemScheme)) {}
 
 std::string ColorSchemeOverride::current() const {

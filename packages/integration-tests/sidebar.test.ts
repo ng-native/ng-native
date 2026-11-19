@@ -160,6 +160,28 @@ describe('on macOS', () => {
   });
 });
 
+describe('on Linux', () => {
+  before(() => registerPlatformComponents('linux'));
+  after(() => registerPlatformComponents('ios'));
+
+  it('commits sections and items as the source list the GTK host draws, with no drawn rows', async () => {
+    const { getByTestId } = await render(Fixture);
+    assert.equal(getByTestId('split').viewName, 'NgNativeSplitView');
+    const mail = getByTestId('mail');
+    assert.equal(mail.viewName, 'NgNativeSidebarSection');
+    assert.equal(mail.props['title'], 'Mailboxes');
+    assert.equal(mail.props['collapsible'], true);
+    const inbox = getByTestId('inbox');
+    assert.equal(inbox.viewName, 'NgNativeSidebarItem');
+    assert.equal(inbox.props['label'], 'Inbox');
+    assert.equal(inbox.props['badge'], '3');
+    assert.equal(inbox.props['selected'], true);
+    assert.equal(inbox.children.length, 0, 'a default row is drawn by the host');
+    assert.equal(getByTestId('sent').props['selected'], false);
+    assert.equal(mail.children.length, 2, 'no drawn title row');
+  });
+});
+
 describe('drawn, beside the content', () => {
   for (const os of ['ios', 'android'] as const) {
     it(`is two columns of views on ${os}`, async () => {

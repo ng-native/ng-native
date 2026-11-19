@@ -114,6 +114,9 @@ TEST_CASE("the front screen's header is the window's header bar: its title, its 
   mountAll(views, {{second, 2}, {secondConfig, 7}});
   CHECK(std::string(titleOf(bar)) == "Detail");
   CHECK(views.backend->headers().backButton(MountedViews::kSurface) != nullptr);
+  // With no history from the app, the pair pops the stack: forward has nowhere to go.
+  REQUIRE(views.backend->headers().forwardButton(MountedViews::kSurface) != nullptr);
+  CHECK_FALSE(gtk_widget_get_sensitive(views.backend->headers().forwardButton(MountedViews::kSurface)));
   CHECK(gtk_widget_get_parent(views.view(5)) == views.view(4));
 
   // Popped: the first's header again, and no back button.
@@ -161,6 +164,92 @@ TEST_CASE("a header's item changing side moves in the header bar, and a hidden h
   CHECK(adw_header_bar_get_title_widget(ADW_HEADER_BAR(bar)) == nullptr);
 }
 
+TEST_CASE("the window's history is the header bar's back and forward pair, each listing its entries") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 400, 300);
+  auto &headers = views.backend->headers();
+  std::vector<std::pair<ngn::NavigationDirection, int>> asked;
+  headers.navigate = [&asked](SurfaceId, ngn::NavigationDirection direction, int steps) { asked.emplace_back(direction, steps); };
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {400, 300}});
+  auto screen = shadow(3, "RNSScreen", nullptr, {{0, 0}, {400, 300}});
+  auto config = shadow(4, "RNSScreenStackHeaderConfig", header("Notes"), {{0, 0}, {400, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {screen, 2}, {config, 3}});
+  // Nothing to go back to, and no history: no pair.
+  CHECK(headers.backButton(MountedViews::kSurface) == nullptr);
+
+  using enum ngn::NavigationDirection;
+  headers.setHistory(MountedViews::kSurface, ngn::WindowHistory{.back = {"Inbox", "Home"}, .forward = {"Sent"}});
+  GtkWidget *back = headers.backButton(MountedViews::kSurface);
+  GtkWidget *forward = headers.forwardButton(MountedViews::kSurface);
+  REQUIRE(back);
+  REQUIRE(forward);
+  CHECK(gtk_widget_get_parent(back) == gtk_widget_get_parent(forward));
+  CHECK(gtk_widget_get_next_sibling(back) == forward);
+  CHECK(gtk_widget_is_ancestor(back, ngn::gtk::chromeOf(views.surface)->headerBar));
+  CHECK(gtk_widget_get_sensitive(back));
+  CHECK(gtk_widget_get_sensitive(forward));
+  // A press goes one step through the history.
+  g_signal_emit_by_name(back, "clicked");
+  g_signal_emit_by_name(forward, "clicked");
+  CHECK(asked == std::vector<std::pair<ngn::NavigationDirection, int>>{{Back, 1}, {Forward, 1}});
+
+  // The list behind the back chevron: the entries that way, nearest first, each its steps away.
+  asked.clear();
+  REQUIRE(headers.showHistoryMenu(MountedViews::kSurface, Back));
+  GtkWidget *popover = nullptr;
+  for (GtkWidget *c = gtk_widget_get_first_child(back); c; c = gtk_widget_get_next_sibling(c)) {
+    popover = GTK_IS_POPOVER_MENU(c) ? c : popover;
+  }
+  REQUIRE(popover);
+  GMenuModel *menu = gtk_popover_menu_get_menu_model(GTK_POPOVER_MENU(popover));
+  REQUIRE(g_menu_model_get_n_items(menu) == 1);
+  GMenuModel *model = g_menu_model_get_item_link(menu, 0, G_MENU_LINK_SECTION);
+  REQUIRE(model);
+  REQUIRE(g_menu_model_get_n_items(model) == 2);
+  auto attribute = [model](int index, const char *name) {
+    char *value = nullptr;
+    REQUIRE(g_menu_model_get_item_attribute(model, index, name, "s", &value));
+    std::string text = value;
+    g_free(value);
+    return text;
+  };
+  CHECK(attribute(0, G_MENU_ATTRIBUTE_LABEL) == "Inbox");
+  CHECK(attribute(1, G_MENU_ATTRIBUTE_LABEL) == "Home");
+  CHECK(gtk_widget_activate_action(popover, attribute(1, G_MENU_ATTRIBUTE_ACTION).c_str(), nullptr));
+  CHECK(asked == std::vector<std::pair<ngn::NavigationDirection, int>>{{Back, 2}});
+  g_object_unref(model);
+
+  // Nothing behind: the back chevron is off, and has no list.
+  headers.setHistory(MountedViews::kSurface, ngn::WindowHistory{.back = {}, .forward = {"Sent"}});
+  REQUIRE(headers.backButton(MountedViews::kSurface));
+  CHECK_FALSE(gtk_widget_get_sensitive(headers.backButton(MountedViews::kSurface)));
+  CHECK(gtk_widget_get_sensitive(headers.forwardButton(MountedViews::kSurface)));
+  CHECK_FALSE(headers.showHistoryMenu(MountedViews::kSurface, Back));
+
+  // The header's hideBackButton hides the pair.
+  auto hiding = std::make_shared<HeaderProps>();
+  hiding->bar.title = "Notes";
+  hiding->bar.hideBackButton = true;
+  views.update(config, hiding);
+  CHECK(headers.backButton(MountedViews::kSurface) == nullptr);
+  views.update(config, header("Notes"));
+  CHECK(headers.forwardButton(MountedViews::kSurface) != nullptr);
+
+  // An empty history, as the router reports once the window has none: no pair.
+  headers.setHistory(MountedViews::kSurface, ngn::WindowHistory{});
+  CHECK(headers.backButton(MountedViews::kSurface) == nullptr);
+
+  // The surface gone, its history goes with it: a header shown again has no pair.
+  headers.setHistory(MountedViews::kSurface, ngn::WindowHistory{.back = {"Inbox"}});
+  REQUIRE(headers.backButton(MountedViews::kSurface));
+  headers.removeSurface(MountedViews::kSurface);
+  CHECK(headers.backButton(MountedViews::kSurface) == nullptr);
+  headers.show(MountedViews::kSurface, ngn::ScreenStacks::FrontHeader{.config = 4, .screen = 3, .canGoBack = false});
+  CHECK(headers.backButton(MountedViews::kSurface) == nullptr);
+  CHECK(std::string(titleOf(ngn::gtk::chromeOf(views.surface)->headerBar)) == "Notes");
+}
+
 TEST_CASE("a modal is presented over the window as a sheet at its content's size, and dismissed as it goes") {
   REQUIRE(ngn::testing::gtkReady());
   MountedViews views(true, 800, 600);
@@ -205,6 +294,33 @@ TEST_CASE("a modal is presented over the window as a sheet at its content's size
   CHECK(children == 1);
   CHECK(gtk_widget_get_prev_sibling(views.view(5)) == views.view(2));
   views.mount({ShadowViewMutation::DeleteMutation(modal)});
+}
+
+TEST_CASE("the presentation in front of a window is the one shown last, which Ctrl+W closes before the window") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views(true, 800, 600);
+  auto *window = GTK_WINDOW(gtk_widget_get_root(views.surface));
+  auto &modals = views.backend->modals();
+  CHECK_FALSE(modals.front(window));
+  // Presented in the other order from their tags.
+  auto first = shadow(6, "ModalHostView", nullptr, {{0, 0}, {800, 600}});
+  mountAll(views, {{first, MountedViews::kSurface}});
+  modals.settle();
+  CHECK(modals.front(window) == 6);
+  auto second = shadow(3, "ModalHostView", nullptr, {{0, 0}, {800, 600}});
+  mountAll(views, {{second, MountedViews::kSurface}});
+  modals.settle();
+  CHECK(modals.front(window) == 3);
+  // Another window has none in front of it.
+  GtkWidget *other = gtk_window_new();
+  CHECK_FALSE(modals.front(GTK_WINDOW(other)));
+  gtk_window_destroy(GTK_WINDOW(other));
+
+  views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, second, 1)});
+  CHECK(modals.front(window) == 6);
+  views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, first, 0)});
+  CHECK_FALSE(modals.front(window));
+  views.mount({ShadowViewMutation::DeleteMutation(first), ShadowViewMutation::DeleteMutation(second)});
 }
 
 namespace {

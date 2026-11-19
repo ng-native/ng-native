@@ -19,8 +19,15 @@ using ngn::SurfaceId;
 using ngn::WindowFrame;
 using ngn::WindowHost;
 
+// An application id of its own for each: on a session bus, an application left exported by the
+// test before keeps its object path, and another with the same id could not register.
+std::string nextAppId() {
+  static int made = 0;
+  return "dev.ngnative.WindowsTest" + std::to_string(++made);
+}
+
 struct Windows {
-  GtkApplication *app = ngn::gtk::startApplication("dev.ngnative.WindowsTest");
+  GtkApplication *app = ngn::gtk::startApplication(nextAppId());
   std::shared_ptr<ngn::testing::FakeSystem> system = std::make_shared<ngn::testing::FakeSystem>();
   int quits = 0;
   int lastClosed = 0;

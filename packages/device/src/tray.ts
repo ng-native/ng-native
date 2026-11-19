@@ -1,6 +1,7 @@
 /**
- * Icons in the macOS menu bar's status area, each with a menu or a press of its own. `<tray-icon>`
- * in `@ng-native/components` registers here. Absent on iOS and Android, where nothing is drawn.
+ * Icons in the macOS menu bar's status area, or a Linux panel's as StatusNotifierItems, each with
+ * a menu or a press of its own. `<tray-icon>` in `@ng-native/components` registers here. Absent on
+ * iOS and Android, and on a Linux desktop with no StatusNotifierWatcher, where nothing is drawn.
  *
  * The host contract, on the `NgNativeTray` module: `setIcons(icons)` takes every icon each time one
  * changes, as `{ id, title, sfSymbol, image, tooltip, menu }`, `menu` as `serializeMenu` makes it
@@ -85,7 +86,7 @@ export class Tray {
   private readonly icons = signal<readonly { id: string; model: Signal<TrayIconModel> }[]>([]);
   private next = 0;
 
-  /** Whether the OS has a status area for the app: macOS. */
+  /** Whether the OS has a status area for the app: macOS, and Linux with a StatusNotifierWatcher. */
   readonly available: Signal<boolean> = signal(this.native !== null).asReadonly();
 
   private readonly sent = computed(() =>

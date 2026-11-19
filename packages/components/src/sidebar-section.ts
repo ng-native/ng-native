@@ -1,6 +1,7 @@
 import { Component, computed, input, signal } from '@angular/core';
-import { nativePlatform, registerViewName } from '@ng-native/fabric';
+import { registerViewName } from '@ng-native/fabric';
 import { Pressable } from './pressable.ts';
+import { hostDraws } from './split-view.ts';
 import { optionalBoolean } from './transforms.ts';
 import { Text } from './text.ts';
 import { ViewBase } from './view-base.ts';
@@ -51,7 +52,7 @@ registerViewName('sidebar-section', {
 })
 export class SidebarSection extends ViewBase {
   /** Whether this section is drawn here rather than by the desktop host. */
-  protected readonly drawn = nativePlatform() !== 'macos';
+  protected readonly drawn = !hostDraws('sidebar-section');
   /** Drawn, whether the items show: a collapsible section's title toggles it. */
   protected readonly expanded = signal(true);
 

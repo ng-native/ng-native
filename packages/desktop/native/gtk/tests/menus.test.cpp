@@ -3,6 +3,7 @@
 // played through the X server under X11 (input-replay.h) so they take GTK's own path.
 #include "mounted-views.h"
 
+#include "../host-sources.h"
 #include "../input-replay.h"
 #include "../menus.h"
 #include "../screens.h"
@@ -14,6 +15,7 @@
 #include <memory>
 #include <new>
 #include <string>
+#include <thread>
 #include <vector>
 
 #ifdef GDK_WINDOWING_X11
@@ -354,4 +356,46 @@ TEST_CASE("a context menu shows its items at the click, and goes once closed, ev
   settle();
   g_log_remove_handler("Gtk", handler);
   CHECK(criticals == 0);
+}
+
+TEST_CASE("the app's undo history runs its actions on the UI thread, whichever thread registers them") {
+  REQUIRE(ngn::testing::gtkReady());
+  auto undo = ngn::gtk::makeUndoManager();
+  GThread *ui = g_thread_self();
+  std::vector<std::string> ran;
+  bool onUi = true;
+  std::thread js([&] {
+    undo->registerAction("Add a Star", [&] {
+      onUi = onUi && g_thread_self() == ui;
+      ran.push_back(undo->undoing() ? "undo" : "redo");
+    });
+  });
+  js.join();
+  settle();
+  undo->undo();
+  settle();
+  CHECK(ran == std::vector<std::string>{"undo"});
+  CHECK(onUi);
+  // The action registered no inverse, so there is nothing to redo.
+  undo->redo();
+  settle();
+  CHECK(ran.size() == 1);
+}
+
+TEST_CASE("an undo's own registration is the redo, so Redo is there after one Undo") {
+  REQUIRE(ngn::testing::gtkReady());
+  auto undo = ngn::gtk::makeUndoManager();
+  std::vector<std::string> ran;
+  std::function<void()> step = [&] {
+    ran.push_back(undo->undoing() ? "undo" : "redo");
+    // As an app's handler does: the inverse of what it just ran.
+    undo->registerAction("Add a Star", step);
+  };
+  undo->registerAction("Add a Star", step);
+  settle();
+  undo->undo();
+  settle();
+  undo->redo();
+  settle();
+  CHECK(ran == std::vector<std::string>{"undo", "redo"});
 }

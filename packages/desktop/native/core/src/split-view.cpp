@@ -325,6 +325,73 @@ bool SidebarCollapse::toolkitChanged(bool collapsed) {
   return collapsed != prop_;
 }
 
+Float sidebarCompactWidth(const SidebarWidths &widths) {
+  return widths.minimum + kSplitContentMinWidth;
+}
+
+FoldingSplit::Showing FoldingSplit::showing() const {
+  if (compact_) {
+    return {.stacked = true, .content = !sidebarInFront_};
+  }
+  return {.stacked = collapsed_, .content = true};
+}
+
+void FoldingSplit::setCompact(bool compact) {
+  if (compact != compact_) {
+    compact_ = compact;
+    sidebarInFront_ = false;
+  }
+}
+
+void FoldingSplit::setCollapsed(bool collapsed) {
+  collapsed_ = collapsed;
+}
+
+void FoldingSplit::chose() {
+  sidebarInFront_ = false;
+}
+
+std::optional<bool> FoldingSplit::toggle() {
+  if (compact_) {
+    sidebarInFront_ = !sidebarInFront_;
+    return std::nullopt;
+  }
+  collapsed_ = !collapsed_;
+  return collapsed_;
+}
+
+void SourceListFolds::setList(const SourceList &list) {
+  std::unordered_set<Tag> live;
+  for (const auto &group : list.groups) {
+    live.insert(group.tag);
+  }
+  std::erase_if(folded_, [&live](Tag tag) { return !live.contains(tag); });
+}
+
+void SourceListFolds::fold(Tag section, bool folded) {
+  if (folded) {
+    folded_.insert(section);
+  } else {
+    folded_.erase(section);
+  }
+}
+
+bool SourceListFolds::folded(Tag section) const {
+  return folded_.contains(section);
+}
+
+std::optional<Tag> selectedRow(const SourceList &list) {
+  std::optional<Tag> selected;
+  for (const auto &group : list.groups) {
+    for (const auto &row : group.rows) {
+      if (row.selected) {
+        selected = row.tag;
+      }
+    }
+  }
+  return selected;
+}
+
 bool FrameSizes::report(Tag tag, Size size) {
   bool first = pending_.empty();
   pending_[tag] = size;

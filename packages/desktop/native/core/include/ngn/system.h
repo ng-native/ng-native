@@ -45,6 +45,18 @@ struct AlertRequest {
   std::string defaultValue;
 };
 
+// An alert's buttons as GNOME lays them out: in reading order, Cancel first and the affirmative (the
+// request's first button) last, the rest between them as AppKit has them. Return presses the
+// affirmative unless it is destructive or the cancel button, and Escape presses Cancel. Indices are
+// the request's; -1 for no button.
+struct AlertLayout {
+  std::vector<int> order;
+  int returnIndex{-1};
+  int escapeIndex{-1};
+  bool operator==(const AlertLayout &) const = default;
+};
+AlertLayout gnomeAlertLayout(const AlertRequest &request);
+
 // How an announcement takes its turn with what a screen reader is saying: low and medium wait for
 // it, high interrupts.
 enum class AnnouncementPriority { Low, Medium, High };

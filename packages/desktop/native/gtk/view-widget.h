@@ -58,6 +58,8 @@ struct ViewData {
   ScrollBox *scroll{nullptr};
   // A scroll view's document: as large as the content it scrolls, which GTK reads from its measure.
   ScrollBox *documentOf{nullptr};
+  // A placed split view's AdwBreakpointBin (split-view.h), which fills the view.
+  GtkWidget *split{nullptr};
   // An svg's document, which the core builds from the elements under it.
   std::shared_ptr<const SvgDocument> svg;
   // The images its last draw asked for, kept for it in the shared cache.

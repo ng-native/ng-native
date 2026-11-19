@@ -6,7 +6,9 @@ summary: A menu and a bounce on the app's Dock icon, and icons in the macOS menu
 # Dock and tray
 
 On macOS an app has a Dock icon, and can put icons in the status area at the right of the menu bar.
-On iOS and Android neither exists: `Dock.available()` and `Tray.available()` are `false`, and every
+On Linux tray icons go in the panel's status area, as StatusNotifierItems, where the desktop runs a
+StatusNotifierWatcher (KDE Plasma, and GNOME with the AppIndicator extension), and there is no Dock.
+On iOS and Android neither exists. Where one is missing its `available()` is `false`, and every
 call does nothing.
 
 <!-- platforms: Dock, Tray -->
@@ -40,8 +42,9 @@ click opens; with none, a click fires `(press)`.
 ```
 
 `sfSymbol` draws a symbol that follows the menu bar's light or dark appearance; `image` names an
-image asset of the app's own. A menu-bar-only app pairs it with `provideMainWindow({ autoOpen: false
-})`; see [Windows](/packages/device/app-windows).
+image asset of the app's own. On Linux `image` names an icon in the icon theme, the app's own icon
+stands in without one, and `sfSymbol` is not drawn. A menu-bar-only app pairs it with
+`provideMainWindow({ autoOpen: false })`; see [Windows](/packages/device/app-windows).
 
 ## Reference
 

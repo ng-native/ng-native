@@ -7,8 +7,10 @@
 // bar; `transparent` runs it under a flat one, which the safe area's top inset clears; `hidden` does
 // the same and hides the title, keeping the window controls, as AppKit does. The front screen's
 // header goes into the header bar as the AppKit host puts it into the window's toolbar: the back
-// button, the header's subviews moved into slots of their own, its bar buttons and its search
-// fields, with the title between.
+// and forward pair, the header's subviews moved into slots of their own, its bar buttons and its
+// search fields, with the title between. The pair follows the window's history as the app's router
+// reports it (app-menus.h's historyButtons), and a secondary click or a long press on either lists
+// the entries that way (historyMenu).
 //
 // Where the app's menus go (default-menu.h's MenuPlacement) is set up with the chrome: an empty
 // GtkPopoverMenuBar under the header bar, or a primary GtkMenuButton at its end, each hidden until
@@ -28,6 +30,7 @@
 // `dismissed` for a screen, which the router follows. A click outside a popover asks the same.
 #pragma once
 
+#include "ngn/app-menus.h"
 #include "ngn/app-windows.h"
 #include "ngn/default-menu.h"
 #include "ngn/desktop-modal.h"
@@ -38,6 +41,8 @@
 #include "ngn/screen-stacks.h"
 
 #include <gtk/gtk.h>
+
+#include <dlfcn.h>
 
 #include <functional>
 #include <map>
@@ -90,6 +95,13 @@ GtkWidget *makeSearchEntry(GtkBackend &backend, Tag tag);
 void applySearchBar(GtkWidget *entry, const facebook::react::Props &props);
 void runSearchBarCommand(GtkWidget *entry, const std::string &name, const folly::dynamic &args);
 
+// A libadwaita function newer than the 1.4 API the build targets, found at run time; null on an
+// older libadwaita.
+template <typename Fn>
+Fn adwFunction(const char *name) {
+  return reinterpret_cast<Fn>(dlsym(RTLD_DEFAULT, name));
+}
+
 // Whether AdwDialog is there to present a sheet with: libadwaita 1.5 or later at run time.
 bool haveAdwDialog();
 
@@ -110,8 +122,26 @@ class Headers {
   void refresh();
   // A view went: a header showing it lets it go.
   void forget(Tag tag);
-  // The window's header bar's back button, for tests; null when none shows.
+  // The window's split view came or went: its sidebar button with it (split-view.h).
+  void refreshChrome(SurfaceId surfaceId);
+  // Show Sidebar, from the sidebar button.
+  void toggleSidebar(SurfaceId surfaceId);
+  // The sidebar button, for tests; null when the window has no split view of its own.
+  GtkWidget *sidebarButton(SurfaceId surfaceId) const;
+  // A surface went: its header, history and pair with it.
+  void removeSurface(SurfaceId surfaceId);
+  // The window's history, as the app's router reports it (MenuHost::history), for the pair.
+  void setHistory(SurfaceId surfaceId, const std::optional<WindowHistory> &history);
+  // What a press of the pair, or an entry chosen from its list, asks of the window's history.
+  std::function<void(SurfaceId, NavigationDirection, int steps)> navigate;
+  // A chevron pressed: through the history, or, for an app that reports none, the stack's back.
+  void pressChevron(SurfaceId surfaceId, NavigationDirection direction);
+  // The list of the entries `direction` way, at the chevron, as a secondary click shows it. Whether
+  // there was one to show.
+  bool showHistoryMenu(SurfaceId surfaceId, NavigationDirection direction);
+  // The window's header bar's back and forward chevrons, for tests; null when the pair is not shown.
   GtkWidget *backButton(SurfaceId surfaceId) const;
+  GtkWidget *forwardButton(SurfaceId surfaceId) const;
 
  private:
   struct Shown {
@@ -122,9 +152,14 @@ class Headers {
     // The widgets it put in the header bar, and the views moved into slots.
     std::vector<GtkWidget *> packed;
     std::vector<Tag> hosted;
+    // The window's history, and the pair it shows.
+    std::optional<WindowHistory> history;
+    HistoryButtons buttons;
     // The search fields packed at the end, kept across a layout that keeps them.
     std::vector<GtkWidget *> searches;
     GtkWidget *back{nullptr};
+    GtkWidget *forward{nullptr};
+    GtkWidget *sidebarButton{nullptr};
     // The bar's background colour class.
     std::string background;
   };
@@ -166,6 +201,9 @@ class Modals {
   GtkWidget *sheetHeaderOf(Tag tag) const;
   // What Escape does: presses a sheet's Cancel, or asks the app to close the presentation.
   void requestClose(Tag tag);
+  // The presentation shown last over `window`'s surfaces, which Ctrl+W closes before the window, as
+  // Cmd-W does on macOS.
+  std::optional<Tag> front(GtkWindow *window) const;
   // What Return does: presses a sheet's default button. Whether there was one to press.
   bool pressDefault(Tag tag);
   // Escape over a surface's modals: asks to close the one presented last.
@@ -182,7 +220,7 @@ class Modals {
     // A presented RNSScreen, not a <modal>.
     bool screen{false};
     // When it was presented among the others: the latest is in front.
-    int order{0};
+    uint64_t order{0};
     GtkWidget *slot{nullptr};
     // The AdwDialog, the overlay's backdrop or cover, or the popover.
     GtkWidget *dialog{nullptr};
@@ -210,7 +248,7 @@ class Modals {
   SheetNodes sheetNodes_;
   std::set<std::pair<SurfaceId, Tag>> pending_;
   std::map<Tag, Presented> presented_;
-  int presentations_{0};
+  uint64_t presentations_{0};
 };
 
 } // namespace ngn::gtk

@@ -91,6 +91,7 @@ add_library(ngn_core STATIC
     core/src/crash-report.cpp
     core/src/desktop-modal.cpp
     core/src/desktop-view-props.cpp
+    core/src/dbus-menu.cpp
     core/src/default-menu.cpp
     core/src/dev-server.cpp
     core/src/dom-web-view.cpp

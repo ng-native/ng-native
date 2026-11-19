@@ -7,17 +7,20 @@
 //   ngn-linux             (a packaged app: what the metadata.json beside it names; argv and env
 //                          are ignored)
 //
-// NGN_CAPTURE=<file.png> saves the first window's content a second after its first frame, drawn
-// in-process (capture.h).
+// NGN_CAPTURE=<file.png> saves the first window's content, drawn in-process (capture.h), a second
+// after its first frame, or with an input script (NGN_INPUT_SCRIPT) a second after the script has
+// played.
 #include "app-windows.h"
 #include "capture.h"
 #include "gtk-backend.h"
 #include "host-sources.h"
 #include "image-view.h"
 #include "input-replay.h"
+#include "launcher-badge.h"
 #include "menus.h"
 #include "pango-text.h"
 #include "scroll-view.h"
+#include "status-notifier.h"
 #include "surface-input.h"
 #include "view-widget.h"
 
@@ -65,6 +68,8 @@ struct Host {
   std::shared_ptr<ngn::gtk::GtkWindows> windows;
   std::shared_ptr<ngn::MenuHost> menus;
   std::shared_ptr<ngn::gtk::GtkMenus> gtkMenus;
+  // The app's undo history, which Edit > Undo and Redo run while no text input has the focus.
+  std::shared_ptr<ngn::UndoManager> undo = ngn::gtk::makeUndoManager();
   ngn::HostOs os;
   std::string bundle;
   // The app's own surface and the window it gets once the app renders into it.
@@ -143,19 +148,48 @@ ngn::WindowMetrics windowMetrics(int width, int height) {
 // A dev or test run's input script (NGN_INPUT_SCRIPT), played into the first window once it shows.
 std::string gInputScript;
 
-void playInputScript(GtkWidget *window) {
+// Whether it plays; `done` runs once it has.
+bool playInputScript(GtkWidget *window, std::function<void()> done) {
   gchar *text = nullptr;
   if (!g_file_get_contents(gInputScript.c_str(), &text, nullptr, nullptr)) {
     fprintf(stderr, "[ngn] input script %s: cannot be read\n", gInputScript.c_str());
-    return;
+    return false;
   }
   auto script = ngn::parseInputScript(text);
   g_free(text);
-  ngn::gtk::replayInputScript(window, std::move(script));
+  return ngn::gtk::replayInputScript(window, std::move(script), std::move(done));
 }
 
-// The first window's first frame, once drawn: logged, captured when asked, and given the run's
-// input script.
+// NGN_CAPTURE's screenshot of `surface`, a second from now, unless its window has gone.
+void captureSoon(GtkWidget *surface, std::string file) {
+  auto *alive = new GtkWidget *(surface);
+  g_object_add_weak_pointer(G_OBJECT(surface), reinterpret_cast<gpointer *>(alive));
+  ngn::gtk::runAfter(1, [file, alive] {
+    if (*alive) {
+      bool saved = ngn::gtk::captureWidget(*alive, file);
+      fprintf(stderr, saved ? "[ngn] captured %s\n" : "[ngn] could not capture %s\n", file.c_str());
+      g_object_remove_weak_pointer(G_OBJECT(*alive), reinterpret_cast<gpointer *>(alive));
+    }
+    delete alive;
+  });
+}
+
+// The first window's first frame, once drawn: logged, given the run's input script, and captured
+// when asked, a second after the script has played (or after the frame, without one).
+void firstFrameDrawn(GtkWidget *surface) {
+  fprintf(stderr, "[ngn] first frame %.0f ms after launch\n", (g_get_monotonic_time() - gHost.launched) / 1000.0);
+  const char *path = getenv("NGN_CAPTURE");
+  std::string file = path ? path : "";
+  std::function<void()> capture;
+  if (!file.empty()) {
+    capture = [surface, file] { captureSoon(surface, file); };
+  }
+  bool playing = !gInputScript.empty() && playInputScript(GTK_WIDGET(gtk_widget_get_root(surface)), capture);
+  if (capture && !playing) {
+    capture();
+  }
+}
+
 void watchFirstFrame(GtkWidget *window, GtkWidget *surface) {
   GdkFrameClock *clock = gtk_widget_get_frame_clock(window);
   if (!clock || gHost.firstFrame) {
@@ -168,17 +202,7 @@ void watchFirstFrame(GtkWidget *window, GtkWidget *surface) {
       return;
     }
     logged = true;
-    fprintf(stderr, "[ngn] first frame %.0f ms after launch\n", (g_get_monotonic_time() - gHost.launched) / 1000.0);
-    if (!gInputScript.empty()) {
-      playInputScript(GTK_WIDGET(gtk_widget_get_root(static_cast<GtkWidget *>(surface))));
-    }
-    if (const char *path = getenv("NGN_CAPTURE"); path && *path) {
-      std::string file = path;
-      ngn::gtk::runAfter(1, [file, surface] {
-        bool saved = ngn::gtk::captureWidget(static_cast<GtkWidget *>(surface), file);
-        fprintf(stderr, saved ? "[ngn] captured %s\n" : "[ngn] could not capture %s\n", file.c_str());
-      });
-    }
+    firstFrameDrawn(static_cast<GtkWidget *>(surface));
   }), surface);
 }
 
@@ -245,9 +269,18 @@ void runMenuItem(const ngn::MenuItem &item, GtkWindow *window) {
     case ngn::MenuCommand::Quit:
       gHost.windows->beginQuit();
       return;
+    case ngn::MenuCommand::ToggleSidebar:
+      // The window's split view (split-view.h); a window without one leaves it to the app.
+      if (auto surface = window ? surfaceOfWindow(window) : std::nullopt; surface && gHost.backend->splitViews().toggle(*surface)) {
+        return;
+      }
+      break;
     case ngn::MenuCommand::CloseWindow:
-      // As the close button does: the app decides (close-request).
-      if (window) {
+      // The sheet, cover or popover in front first, as Escape asks it to close; then the window, as
+      // the close button does: the app decides (close-request).
+      if (auto front = window ? gHost.backend->modals().front(window) : std::nullopt) {
+        gHost.backend->modals().requestClose(*front);
+      } else if (window) {
         gtk_window_close(window);
       }
       return;
@@ -270,6 +303,12 @@ void runMenuItem(const ngn::MenuItem &item, GtkWindow *window) {
     }
     default:
       break;
+  }
+  // Undo and Redo are a focused text input's own, else the app's, as on macOS.
+  bool history = item.command == ngn::MenuCommand::Undo || item.command == ngn::MenuCommand::Redo;
+  if (history && !(window && ngn::gtk::textInputFocused(window))) {
+    item.command == ngn::MenuCommand::Undo ? gHost.undo->undo() : gHost.undo->redo();
+    return;
   }
   if (const char *action = textAction(item.command)) {
     if (GtkWidget *focus = window ? gtk_root_get_focus(GTK_ROOT(window)) : nullptr) {
@@ -597,6 +636,9 @@ int main(int argc, char *argv[]) {
           },
       .stopSurface =
           [](SurfaceId surface) {
+            if (gHost.menus) {
+              gHost.menus->forgetHistory(surface);
+            }
             gHost.runtime->stopSurface(surface);
             gHost.mounting->removeContainerInsets(surface);
             gHost.reported.erase(surface);
@@ -631,6 +673,18 @@ int main(int argc, char *argv[]) {
   auto menus = std::make_shared<ngn::MenuHost>(
       gHost.gtkMenus, ngn::DefaultMenuOptions{.appName = settings.title, .developer = ngn::DevServer::fromBundleUrl(bundle).has_value(), .os = os});
   gHost.menus = menus;
+  // Each window's history, as the app's router reports it, for its header bar's back and forward
+  // pair, which goes through it.
+  menus->historyChanged = [](SurfaceId surface) {
+    gHost.backend->runOnUiThread([surface] {
+      if (gHost.menus) {
+        gHost.backend->headers().setHistory(surface, gHost.menus->history(surface));
+      }
+    });
+  };
+  gHost.backend->headers().navigate = [](SurfaceId surface, ngn::NavigationDirection direction, int steps) {
+    gHost.menus->navigate(direction, surface, steps);
+  };
   routeWindow(gHost.appSurface);
   // A view's context menu (its `contextMenu` prop), drawn where the secondary click was.
   ngn::gtk::setContextMenuShower([](GtkWidget *widget, const ngn::PointerInput &input) {
@@ -648,8 +702,25 @@ int main(int argc, char *argv[]) {
       }
     });
   });
-  auto tray = std::make_shared<ngn::TrayHost>(ngn::gtk::makeNoTray());
-  auto dock = std::make_shared<ngn::DockHost>(ngn::gtk::makeNoDock());
+  // The tray only while a StatusNotifierWatcher runs, as the launch finds it; Linux has no Dock.
+  std::shared_ptr<ngn::TrayHost> tray;
+  if (ngn::gtk::statusNotifierWatcherRunning()) {
+    auto host = std::make_shared<std::weak_ptr<ngn::TrayHost>>();
+    tray = std::make_shared<ngn::TrayHost>(ngn::gtk::makeStatusNotifierTray(appId, {
+        .press = [host](const std::string &icon) {
+          if (auto tray = host->lock()) {
+            tray->press(icon);
+          }
+        },
+        .menuSelect = [host](const std::string &icon, const std::string &id) {
+          if (auto tray = host->lock()) {
+            tray->menuSelect(icon, id);
+          }
+        },
+        .command = [](ngn::MenuCommand command) { runMenuItem({.command = command}, nullptr); },
+    }));
+    *host = tray;
+  }
   // The Expo Updates client, off: this backend has no crypto yet, which a fetched update needs
   // to be checked, so it never fetches one. The bundle runs as given.
   auto updatesConfig = ngn::updatesConfigFrom(settings, os, appData, bundle);
@@ -671,9 +742,9 @@ int main(int argc, char *argv[]) {
        .windows = windowHost,
        .menus = menus,
        .tray = tray,
-       .dock = dock,
        .processes = processes,
-       .notifications = [](std::shared_ptr<ngn::NotificationEvents>) { return std::shared_ptr<ngn::NotificationCenter>(); },
+       .notifications = [appId](std::shared_ptr<ngn::NotificationEvents>) { return ngn::gtk::makeLauncherBadgeNotifications(appId); },
+       .undo = gHost.undo,
        .pathMonitor = ngn::gtk::makePathMonitor(),
        .regionCode = [system] {
          auto locale = system->facts().locale;

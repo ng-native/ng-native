@@ -1,5 +1,6 @@
 #include "host-sources.h"
 
+#include "alerts.h"
 #include "app-windows.h"
 #include "native-controls.h"
 
@@ -193,8 +194,7 @@ class GtkSystem final : public System {
     });
   }
   void showAlert(const AlertRequest &request, std::function<void(int, std::string, std::string)> done) override {
-    fprintf(stderr, "[ngn] alert (no dialogs yet): %s: %s\n", request.title.c_str(), request.message.c_str());
-    done(request.cancelIndex, "", "");
+    onMainContext([request, done = std::move(done)]() mutable { ngn::gtk::showAlert(request, std::move(done), activeWindow()); });
   }
   std::optional<std::string> clipboardText() override {
     std::lock_guard lock(mutex_);
@@ -243,16 +243,33 @@ class NoMenus final : public MenuBackend {
   void setMenuBar(std::vector<MenuItem>) override {}
 };
 
-class NoTray final : public TrayBackend {
+class GtkUndo final : public UndoManager {
  public:
-  void setIcons(std::vector<TrayIcon>) override {}
-};
+  void registerAction(const std::string &label, std::function<void()> action) override {
+    auto record = [stacks = stacks_, label, action = std::move(action)]() mutable { stacks->registerAction(label, std::move(action)); };
+    // Inline on the UI thread (the loop's dispatch owns the main context there): an undo registers
+    // its redo while it runs, and a queued registration would find undoing() false by then.
+    if (g_main_context_is_owner(g_main_context_default())) {
+      record();
+      return;
+    }
+    onMainContext(std::move(record));
+  }
+  bool undoing() const override {
+    return stacks_->undoing();
+  }
+  void undo() override {
+    onMainContext([stacks = stacks_] { stacks->undo(); });
+  }
+  void redo() override {
+    onMainContext([stacks = stacks_] { stacks->redo(); });
+  }
+  void clear() override {
+    onMainContext([stacks = stacks_] { stacks->clear(); });
+  }
 
-class NoDock final : public DockBackend {
- public:
-  void setMenu(std::optional<std::vector<MenuItem>>) override {}
-  void bounce(int, bool) override {}
-  void cancelBounce(int) override {}
+ private:
+  std::shared_ptr<UndoStacks> stacks_ = std::make_shared<UndoStacks>();
 };
 
 // GLib's network monitor: whether a route exists, its interface types unknown (`other`).
@@ -301,12 +318,8 @@ std::shared_ptr<MenuBackend> makeNoMenus() {
   return std::make_shared<NoMenus>();
 }
 
-std::shared_ptr<TrayBackend> makeNoTray() {
-  return std::make_shared<NoTray>();
-}
-
-std::shared_ptr<DockBackend> makeNoDock() {
-  return std::make_shared<NoDock>();
+std::shared_ptr<UndoManager> makeUndoManager() {
+  return std::make_shared<GtkUndo>();
 }
 
 std::shared_ptr<PathMonitor> makePathMonitor() {

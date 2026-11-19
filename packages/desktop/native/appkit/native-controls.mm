@@ -46,10 +46,9 @@ void configureButton(NSButton *button, const NativeControlProps &p) {
   button.bezelStyle = NSBezelStylePush;
   button.image = p.sfSymbol.empty() ? nil : [NSImage imageWithSystemSymbolName:nsString(p.sfSymbol) accessibilityDescription:nil];
   button.imagePosition = button.image == nil ? NSNoImage : (p.title.empty() ? NSImageOnly : NSImageLeading);
-  // Return presses the default button of its window, and Escape the cancel one. A button with no
-  // kind takes Return as a default one does.
-  bool takesReturn = p.kind == "default" || p.kind.empty();
-  button.keyEquivalent = takesReturn ? @"\r" : p.kind == "cancel" ? @"\x1b" : @"";
+  // Return presses the default button of its window, and Escape the cancel one. Only a `default`
+  // button takes Return, on every desktop OS; one with no kind takes neither key.
+  button.keyEquivalent = p.kind == "default" ? @"\r" : p.kind == "cancel" ? @"\x1b" : @"";
   button.hasDestructiveAction = p.kind == "destructive";
   button.contentTintColor = p.kind == "destructive" ? NSColor.systemRedColor : nil;
   button.enabled = p.enabled;

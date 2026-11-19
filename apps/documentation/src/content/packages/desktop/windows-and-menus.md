@@ -58,8 +58,9 @@ press chooses it. A key press goes to the app's `[shortcut]` first, then the bac
 (Alt+Left and Alt+Right, a keyboard's Back and Forward keys, and mouse buttons 8 and 9), then the
 menus' keys, and a focused text input keeps Ctrl+Z, X, C, V and A. A press nothing in the window
 used then reaches its buttons: Return presses a `default` `<native-button>` and Escape a `cancel`
-one, while a focused text input or button keeps Return for itself. A view's `[contextMenu]` shows as
-a GTK popover menu at the secondary click.
+one, while a focused text input or button keeps Return for itself. Close Window (Ctrl+W) closes the
+sheet, cover or popover in front first, as Escape asks it to, and the window after. A view's
+`[contextMenu]` shows as a GTK popover menu at the secondary click.
 
 ## The tray and the Dock
 
@@ -69,3 +70,13 @@ service's menu sits above the Dock menu's own items, and its bounce is
 `requestUserAttention`, cancelled by the function it answers. A reload clears the tray icons and
 the Dock menu until the reloaded app sets its own. The Dock badge is the count of
 `NgNativeNotifications` (see [Notifications](/packages/expo/notifications#on-macos)).
+
+On Linux each `<tray-icon>` is a StatusNotifierItem, with its menu over `com.canonical.dbusmenu`,
+which KDE Plasma and GNOME's AppIndicator extension draw. Its picture is `image` as the name of an
+icon in the icon theme, or else the app's own icon; an SF Symbol is not drawn. `title` and `tooltip`
+are the item's title and tooltip, which the panel shows on hover, as it draws no text beside the
+icon. An icon with a menu opens it on a click, and one without fires `(press)`. The tray is there
+only when a StatusNotifierWatcher runs as the app starts, which stock GNOME and Fedora without the
+extension have none of: then `Tray.available()` is `false`. Linux has no Dock, so `Dock.available()`
+is `false`. The badge count goes out as the Unity launcher entry's count for the app's desktop
+entry, which KDE Plasma and Ubuntu's dock show and stock GNOME does not.
