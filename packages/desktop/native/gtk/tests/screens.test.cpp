@@ -3,11 +3,15 @@
 // installs over props of its own, as the core's tests do.
 #include "mounted-views.h"
 
+#include "../app-windows.h"
 #include "../screens.h"
 
+#include "ngn/library-components.h"
 #include "ngn/library-glue.h"
+#include "ngn/screen-presentation.h"
 
 #include <adwaita.h>
+#include <clocale>
 #include <doctest/doctest.h>
 
 #include <react/renderer/components/FBReactNativeSpec/EventEmitters.h>
@@ -27,7 +31,9 @@ struct ItemProps final : ViewProps {
 };
 
 struct Glue {
-  ngn::LibraryGlue saved = ngn::libraryGlue();
+  // The libraries' own glue is installed the first time their components are asked for, which
+  // would replace this one in the first test to mount: it goes in first, and is what is restored.
+  ngn::LibraryGlue saved = (ngn::libraryComponents(), ngn::libraryGlue());
   Glue() {
     ngn::libraryGlue().headerBar = [](const Props &props) -> std::optional<ngn::HeaderBar> {
       const auto *p = dynamic_cast<const HeaderProps *>(&props);
@@ -201,6 +207,274 @@ TEST_CASE("a modal is presented over the window as a sheet at its content's size
   views.mount({ShadowViewMutation::DeleteMutation(modal)});
 }
 
+namespace {
+
+Props::Shared presented(const std::string &how, Tag anchor = 0) {
+  auto props = std::make_shared<ngn::ScreenProps>();
+  props->stackPresentation = how;
+  props->anchor = static_cast<int>(anchor);
+  return props;
+}
+
+ngn::BarButton barButton(const std::string &id, const std::string &title) {
+  ngn::BarButton b;
+  b.id = id;
+  b.title = title;
+  return b;
+}
+
+// The widgets under `root` that `match`, in order.
+std::vector<GtkWidget *> findAll(GtkWidget *root, bool (*match)(GtkWidget *)) {
+  std::vector<GtkWidget *> found;
+  for (GtkWidget *c = gtk_widget_get_first_child(root); c; c = gtk_widget_get_next_sibling(c)) {
+    if (match(c)) {
+      found.push_back(c);
+    }
+    auto deeper = findAll(c, match);
+    found.insert(found.end(), deeper.begin(), deeper.end());
+  }
+  return found;
+}
+
+bool isButton(GtkWidget *w) {
+  return GTK_IS_BUTTON(w) && gtk_button_get_label(GTK_BUTTON(w)) != nullptr;
+}
+
+// What names a sheet: its AdwDialog, or libadwaita 1.4's backdrop.
+GtkWidget *sheetOf(GtkWidget *slot) {
+  for (GtkWidget *w = slot; w; w = gtk_widget_get_parent(w)) {
+    if (gtk_widget_has_css_class(w, "ngn-backdrop") || std::string(G_OBJECT_TYPE_NAME(w)) == "AdwDialog") {
+      return w;
+    }
+  }
+  return nullptr;
+}
+
+bool named(GtkWidget *widget, const char *label) {
+  char *error = gtk_test_accessible_check_property(GTK_ACCESSIBLE(widget), GTK_ACCESSIBLE_PROPERTY_LABEL, label);
+  if (error) {
+    MESSAGE(std::string(error));
+    g_free(error);
+  }
+  return error == nullptr;
+}
+
+std::string labelOf(GtkWidget *button) {
+  const char *label = gtk_button_get_label(GTK_BUTTON(button));
+  return label ? label : "";
+}
+
+} // namespace
+
+TEST_CASE("a screen presented with present() is a sheet over the window, its header the sheet's header bar") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto firstConfig = shadow(4, "RNSScreenStackHeaderConfig", header("Notes"), {{0, 0}, {800, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {firstConfig, 3}});
+
+  auto editHeader = std::make_shared<HeaderProps>();
+  editHeader->bar.title = "Edit";
+  editHeader->bar.left = {barButton("cancel", "Cancel")};
+  editHeader->bar.right = {barButton("save", "Save")};
+  auto sheet = shadow(7, "RNSScreen", presented("formSheet"), {{0, 0}, {800, 600}});
+  auto sheetConfig = shadow(8, "RNSScreenStackHeaderConfig", editHeader, {{0, 0}, {800, 44}});
+  auto content = shadow(9, "View", nullptr, {{0, 0}, {480, 200}});
+  mountAll(views, {{sheet, 2}, {sheetConfig, 7}, {content, 7}});
+  views.backend->modals().settle();
+  views.settle();
+
+  // Out of the stack and into a presentation of its own.
+  GtkWidget *slot = views.backend->modals().slotOf(7);
+  REQUIRE(slot);
+  CHECK(gtk_widget_get_parent(views.view(7)) == slot);
+  CHECK_FALSE(gtk_widget_is_ancestor(views.view(7), views.view(2)));
+  CHECK(views.backend->modals().popoverOf(7) == nullptr);
+  // The header, drawn by the sheet: the title, Cancel at the start and Save, the default, at the end.
+  GtkWidget *sheetHeader = views.backend->modals().sheetHeaderOf(7);
+  REQUIRE(sheetHeader);
+  CHECK(std::string(titleOf(sheetHeader)) == "Edit");
+  auto buttons = findAll(sheetHeader, isButton);
+  REQUIRE(buttons.size() == 2);
+  CHECK(labelOf(buttons[0]) == "Cancel");
+  CHECK(labelOf(buttons[1]) == "Save");
+  CHECK_FALSE(gtk_widget_has_css_class(buttons[0], "suggested-action"));
+  CHECK(gtk_widget_has_css_class(buttons[1], "suggested-action"));
+  graphene_point_t origin{}, cancel{}, save{};
+  REQUIRE(gtk_widget_compute_point(buttons[0], sheetHeader, &origin, &cancel));
+  REQUIRE(gtk_widget_compute_point(buttons[1], sheetHeader, &origin, &save));
+  CHECK(cancel.x < save.x);
+  // Named by its title.
+  GtkWidget *presentation = sheetOf(slot);
+  REQUIRE(presentation);
+  CHECK(named(presentation, "Edit"));
+
+  // The header changing redraws the sheet's.
+  auto renamed = std::make_shared<HeaderProps>(*editHeader);
+  renamed->bar.title = "Rename";
+  renamed->bar.left.clear();
+  views.update(sheetConfig, renamed);
+  views.backend->modals().settle();
+  sheetHeader = views.backend->modals().sheetHeaderOf(7);
+  REQUIRE(sheetHeader);
+  CHECK(std::string(titleOf(sheetHeader)) == "Rename");
+  CHECK(findAll(sheetHeader, isButton).size() == 1);
+  CHECK(named(presentation, "Rename"));
+
+  // Taken away: no presentation left.
+  views.mount({ShadowViewMutation::RemoveMutation(2, sheet, 1), ShadowViewMutation::DeleteMutation(sheet)});
+  CHECK(views.backend->modals().slotOf(7) == nullptr);
+  CHECK(views.backend->modals().sheetHeaderOf(7) == nullptr);
+}
+
+TEST_CASE("a presentation with an anchor is a popover pointing at the anchor, and goes with the screen") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto anchor = shadow(5, "View", nullptr, {{20, 20}, {80, 30}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {anchor, 3}});
+
+  auto popover = shadow(7, "RNSScreen", presented("formSheet", 5), {{0, 0}, {800, 600}});
+  auto content = shadow(9, "View", nullptr, {{0, 0}, {200, 100}});
+  mountAll(views, {{popover, 2}, {content, 7}});
+  views.backend->modals().settle();
+  views.settle();
+
+  GtkWidget *shown = views.backend->modals().popoverOf(7);
+  REQUIRE(shown);
+  CHECK(gtk_widget_get_parent(shown) == views.view(5));
+  CHECK(gtk_popover_get_child(GTK_POPOVER(shown)) == views.backend->modals().slotOf(7));
+  CHECK(gtk_widget_get_visible(shown));
+  CHECK(views.backend->modals().sheetHeaderOf(7) == nullptr);
+
+  views.mount({ShadowViewMutation::RemoveMutation(2, popover, 1), ShadowViewMutation::DeleteMutation(popover)});
+  CHECK(views.backend->modals().popoverOf(7) == nullptr);
+  CHECK(gtk_widget_get_first_child(views.view(5)) == nullptr);
+
+  // A <modal> with an anchor is a popover too.
+  auto anchored = std::make_shared<ngn::DesktopModalProps>();
+  anchored->anchor = 5;
+  auto modal = shadow(11, "ModalHostView", anchored, {{0, 0}, {800, 600}});
+  mountAll(views, {{modal, 3}});
+  views.backend->modals().settle();
+  REQUIRE(views.backend->modals().popoverOf(11));
+  CHECK(gtk_widget_get_parent(views.backend->modals().popoverOf(11)) == views.view(5));
+  views.mount({ShadowViewMutation::RemoveMutation(3, modal, 1), ShadowViewMutation::DeleteMutation(modal)});
+  CHECK(views.backend->modals().popoverOf(11) == nullptr);
+
+  // An anchor that is not mounted leaves it a sheet.
+  auto lost = shadow(10, "RNSScreen", presented("formSheet", 99), {{0, 0}, {800, 600}});
+  mountAll(views, {{lost, 2}});
+  views.backend->modals().settle();
+  CHECK(views.backend->modals().popoverOf(10) == nullptr);
+  CHECK(views.backend->modals().slotOf(10) != nullptr);
+}
+
+TEST_CASE("a bar button's menu is a menu button, and the header's colours reach its bar, title and buttons") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 400, 300);
+  GtkWidget *bar = ngn::gtk::chromeOf(views.surface)->headerBar;
+  auto props = std::make_shared<HeaderProps>();
+  props->bar.title = "Notes";
+  props->bar.color = colorFromRGBA(255, 0, 0, 255);
+  props->bar.titleColor = colorFromRGBA(0, 0, 255, 255);
+  props->bar.backgroundColor = colorFromRGBA(0, 255, 0, 255);
+  ngn::BarButton sort = barButton("sort", "Sort");
+  ngn::HeaderMenuItem menu;
+  ngn::HeaderMenuItem byName;
+  byName.title = "By name";
+  byName.menuId = "name";
+  byName.on = true;
+  ngn::HeaderMenuItem byDate;
+  byDate.title = "By date";
+  byDate.menuId = "date";
+  byDate.disabled = true;
+  menu.items = {byName, byDate};
+  sort.menu = menu;
+  ngn::BarButton plain = barButton("add", "Add");
+  plain.tint = colorFromRGBA(0, 0, 0, 255);
+  props->bar.right = {sort, plain};
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {400, 300}});
+  auto screen = shadow(3, "RNSScreen", nullptr, {{0, 0}, {400, 300}});
+  auto config = shadow(4, "RNSScreenStackHeaderConfig", props, {{0, 0}, {400, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {screen, 2}, {config, 3}});
+
+  auto menus = findAll(bar, [](GtkWidget *w) -> bool { return GTK_IS_MENU_BUTTON(w); });
+  REQUIRE(menus.size() == 1);
+  GMenuModel *model = gtk_menu_button_get_menu_model(GTK_MENU_BUTTON(menus[0]));
+  REQUIRE(model);
+  REQUIRE(g_menu_model_get_n_items(model) == 2);
+  // The disabled entry's action is off; the checked one's carries its state.
+  GActionGroup *group = G_ACTION_GROUP(g_object_get_data(G_OBJECT(menus[0]), "ngn-menu-actions"));
+  REQUIRE(group);
+  auto actionOf = [model](int index) {
+    char *action = nullptr;
+    REQUIRE(g_menu_model_get_item_attribute(model, index, G_MENU_ATTRIBUTE_ACTION, "s", &action));
+    std::string name = std::string(action).substr(4);
+    g_free(action);
+    return name;
+  };
+  CHECK_FALSE(g_action_group_get_action_enabled(group, actionOf(1).c_str()));
+  CHECK(g_action_group_get_action_enabled(group, actionOf(0).c_str()));
+  GVariant *state = g_action_group_get_action_state(group, actionOf(0).c_str());
+  REQUIRE(state);
+  CHECK(g_variant_get_boolean(state));
+  g_variant_unref(state);
+
+  auto red = ngn::gtk::colorClass("color", props->bar.color);
+  auto green = ngn::gtk::colorClass("background-color", props->bar.backgroundColor);
+  CHECK(gtk_widget_has_css_class(menus[0], red.c_str()));
+  auto add = findAll(bar, [](GtkWidget *w) { return isButton(w) && labelOf(w) == "Add"; });
+  REQUIRE(add.size() == 1);
+  CHECK(gtk_widget_has_css_class(add[0], ngn::gtk::colorClass("color", plain.tint).c_str()));
+  CHECK_FALSE(gtk_widget_has_css_class(add[0], red.c_str()));
+  CHECK(gtk_widget_has_css_class(
+      adw_header_bar_get_title_widget(ADW_HEADER_BAR(bar)), ngn::gtk::colorClass("color", props->bar.titleColor).c_str()));
+  CHECK(gtk_widget_has_css_class(bar, green.c_str()));
+
+  // The colour gone, its class goes from the bar.
+  auto plainProps = std::make_shared<HeaderProps>();
+  plainProps->bar.title = "Notes";
+  views.update(config, plainProps);
+  CHECK_FALSE(gtk_widget_has_css_class(bar, green.c_str()));
+}
+
+TEST_CASE("a window shows with no widget focused, unless one was focused before") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool focusFirst : {false, true}) {
+    CAPTURE(focusFirst);
+    GtkWidget *window = gtk_window_new();
+    GtkWidget *bar = adw_header_bar_new();
+    GtkWidget *search = gtk_search_entry_new();
+    adw_header_bar_pack_end(ADW_HEADER_BAR(bar), search);
+    gtk_window_set_child(GTK_WINDOW(window), bar);
+    bool entered = false;
+    GtkEventController *focus = gtk_event_controller_focus_new();
+    g_signal_connect(
+        focus, "enter", G_CALLBACK(+[](GtkEventControllerFocus *, gpointer data) { *static_cast<bool *>(data) = true; }),
+        &entered);
+    gtk_widget_add_controller(search, focus);
+    if (focusFirst) {
+      gtk_window_set_focus(GTK_WINDOW(window), search);
+    }
+    ngn::gtk::presentWithoutInitialFocus(GTK_WINDOW(window));
+    for (int i = 0; i < 50; ++i) {
+      g_main_context_iteration(nullptr, FALSE);
+    }
+    GtkWidget *focused = gtk_root_get_focus(GTK_ROOT(window));
+    CHECK(((focused == search) || (focused && gtk_widget_is_ancestor(focused, search))) == focusFirst);
+    if (!focusFirst) {
+      CHECK_FALSE(entered);
+    }
+    gtk_window_destroy(GTK_WINDOW(window));
+  }
+}
+
 TEST_CASE("a header item that changes size changes its slot's") {
   REQUIRE(ngn::testing::gtkReady());
   Glue glue;
@@ -315,7 +589,13 @@ TEST_CASE("Escape asks the modal in front to close, whichever layer's shortcut r
   GtkWidget *slot = views.backend->modals().slotOf(3);
   REQUIRE(slot);
   REQUIRE_FALSE(views.backend->modals().inDialog(3));
-  GtkWidget *layer = gtk_widget_get_parent(slot) == ngn::gtk::chromeOf(views.surface)->overlay ? slot : gtk_widget_get_parent(slot);
+  // The layer is the overlay's child that holds the slot: the cover itself, or a sheet's backdrop.
+  GtkWidget *overlay = ngn::gtk::chromeOf(views.surface)->overlay;
+  GtkWidget *layer = slot;
+  while (layer && gtk_widget_get_parent(layer) != overlay) {
+    layer = gtk_widget_get_parent(layer);
+  }
+  REQUIRE(layer);
   GListModel *controllers = gtk_widget_observe_controllers(layer);
   bool ran = false;
   for (guint i = 0; i < g_list_model_get_n_items(controllers) && !ran; ++i) {
@@ -333,6 +613,280 @@ TEST_CASE("Escape asks the modal in front to close, whichever layer's shortcut r
   CHECK(backSent.count("topRequestClose") == 0);
   views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, front, 1), ShadowViewMutation::DeleteMutation(front),
                ShadowViewMutation::RemoveMutation(MountedViews::kSurface, back, 0), ShadowViewMutation::DeleteMutation(back)});
+}
+
+TEST_CASE("Return presses the default button of the modal in front, whichever layer's shortcut runs") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  // Not resizable: the sheets are drawn over the window, not AdwDialogs.
+  gtk_window_set_resizable(GTK_WINDOW(views.window), FALSE);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto firstConfig = shadow(4, "RNSScreenStackHeaderConfig", header("Notes"), {{0, 0}, {800, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {firstConfig, 3}});
+
+  auto withDefault = [](const std::string &id) {
+    auto props = std::make_shared<HeaderProps>();
+    props->bar.title = id;
+    props->bar.right = {barButton(id, "Save")};
+    return props;
+  };
+  auto back = shadow(7, "RNSScreen", presented("formSheet"), {{0, 0}, {800, 600}});
+  auto backConfig = shadow(8, "RNSScreenStackHeaderConfig", withDefault("back-save"), {{0, 0}, {800, 44}});
+  mountAll(views, {{back, 2}, {backConfig, 7}});
+  views.backend->modals().settle();
+  auto front = shadow(9, "RNSScreen", presented("formSheet"), {{0, 0}, {800, 600}});
+  auto frontConfig = shadow(10, "RNSScreenStackHeaderConfig", withDefault("front-save"), {{0, 0}, {800, 44}});
+  mountAll(views, {{front, 2}, {frontConfig, 9}});
+  views.backend->modals().settle();
+  REQUIRE_FALSE(views.backend->modals().inDialog(7));
+  REQUIRE_FALSE(views.backend->modals().inDialog(9));
+  SentEvents<> backSent(*ngn::gtk::viewData(views.view(8)));
+  SentEvents<> frontSent(*ngn::gtk::viewData(views.view(10)));
+
+  // The back sheet's layer registered its Return first, so GTK runs it first.
+  GtkWidget *slot = views.backend->modals().slotOf(7);
+  REQUIRE(slot);
+  GtkWidget *overlay = ngn::gtk::chromeOf(views.surface)->overlay;
+  GtkWidget *layer = slot;
+  while (layer && gtk_widget_get_parent(layer) != overlay) {
+    layer = gtk_widget_get_parent(layer);
+  }
+  REQUIRE(layer);
+  GListModel *controllers = gtk_widget_observe_controllers(layer);
+  bool ran = false;
+  for (guint i = 0; i < g_list_model_get_n_items(controllers); ++i) {
+    auto *controller = g_list_model_get_item(controllers, i);
+    if (GTK_IS_SHORTCUT_CONTROLLER(controller)) {
+      auto *shortcut = GTK_SHORTCUT(g_list_model_get_item(G_LIST_MODEL(controller), 0));
+      char *label = gtk_shortcut_trigger_to_string(gtk_shortcut_get_trigger(shortcut));
+      if (std::string(label).find("Return") != std::string::npos) {
+        ran = gtk_shortcut_action_activate(gtk_shortcut_get_action(shortcut), GtkShortcutActionFlags(0), layer, nullptr);
+      }
+      g_free(label);
+      g_object_unref(shortcut);
+    }
+    g_object_unref(controller);
+  }
+  g_object_unref(controllers);
+  CHECK(ran);
+  CHECK(frontSent.count("topPressHeaderBarButtonItem") == 1);
+  CHECK(backSent.count("topPressHeaderBarButtonItem") == 0);
+  views.mount({ShadowViewMutation::RemoveMutation(2, front, 2), ShadowViewMutation::DeleteMutation(front),
+               ShadowViewMutation::RemoveMutation(2, back, 1), ShadowViewMutation::DeleteMutation(back)});
+}
+
+TEST_CASE("a colour's CSS rule writes its alpha with a point in a locale that writes a comma") {
+  std::string saved = setlocale(LC_NUMERIC, nullptr);
+  struct Restore {
+    std::string locale;
+    ~Restore() { setlocale(LC_NUMERIC, locale.c_str()); }
+  } restore{saved};
+  if (!setlocale(LC_NUMERIC, "de_DE.UTF-8")) {
+    MESSAGE("de_DE.UTF-8 is not installed");
+    return;
+  }
+  std::string rule = ngn::gtk::colorRule("ngn-x", "color", 1.0f, 0.0f, 0.0f, 0.5f);
+  CHECK(rule == ".ngn-x { color: rgba(255, 0, 0, 0.500); }");
+}
+
+TEST_CASE("a disabled submenu leaves none of its entries to choose") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 400, 300);
+  GtkWidget *bar = ngn::gtk::chromeOf(views.surface)->headerBar;
+  auto props = std::make_shared<HeaderProps>();
+  props->bar.title = "Notes";
+  ngn::BarButton more = barButton("more", "More");
+  ngn::HeaderMenuItem leaf;
+  leaf.title = "Rename";
+  leaf.menuId = "rename";
+  ngn::HeaderMenuItem nested;
+  nested.title = "Nested";
+  nested.items = {leaf};
+  ngn::HeaderMenuItem sub;
+  sub.title = "Edit";
+  sub.disabled = true;
+  sub.items = {leaf, nested};
+  ngn::HeaderMenuItem open;
+  open.title = "Open";
+  open.items = {leaf};
+  more.menu = ngn::HeaderMenuItem{};
+  more.menu->items = {sub, open};
+  props->bar.right = {more};
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {400, 300}});
+  auto screen = shadow(3, "RNSScreen", nullptr, {{0, 0}, {400, 300}});
+  auto config = shadow(4, "RNSScreenStackHeaderConfig", props, {{0, 0}, {400, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {screen, 2}, {config, 3}});
+
+  auto menus = findAll(bar, [](GtkWidget *w) -> bool { return GTK_IS_MENU_BUTTON(w) && gtk_widget_get_visible(w); });
+  REQUIRE(menus.size() == 1);
+  GMenuModel *model = gtk_menu_button_get_menu_model(GTK_MENU_BUTTON(menus[0]));
+  auto *group = G_ACTION_GROUP(g_object_get_data(G_OBJECT(menus[0]), "ngn-menu-actions"));
+  REQUIRE((model && group));
+  auto enabled = [&](GMenuModel *menu, int index) {
+    char *action = nullptr;
+    REQUIRE(g_menu_model_get_item_attribute(menu, index, G_MENU_ATTRIBUTE_ACTION, "s", &action));
+    bool on = g_action_group_get_action_enabled(group, std::string(action).substr(4).c_str());
+    g_free(action);
+    return on;
+  };
+  GMenuModel *disabled = g_menu_model_get_item_link(model, 0, G_MENU_LINK_SUBMENU);
+  GMenuModel *deeper = g_menu_model_get_item_link(disabled, 1, G_MENU_LINK_SUBMENU);
+  GMenuModel *enabledSub = g_menu_model_get_item_link(model, 1, G_MENU_LINK_SUBMENU);
+  REQUIRE((disabled && deeper && enabledSub));
+  CHECK_FALSE(enabled(disabled, 0));
+  CHECK_FALSE(enabled(deeper, 0));
+  CHECK(enabled(enabledSub, 0));
+  g_object_unref(disabled);
+  g_object_unref(deeper);
+  g_object_unref(enabledSub);
+}
+
+TEST_CASE("an anchor the stack has covered leaves a presentation a sheet, not a popover nobody sees") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto anchor = shadow(5, "View", nullptr, {{20, 20}, {80, 30}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {anchor, 3}});
+  views.backend->setCovered(MountedViews::kSurface, 3, true);
+
+  auto sheet = shadow(7, "RNSScreen", presented("formSheet", 5), {{0, 0}, {800, 600}});
+  mountAll(views, {{sheet, 2}});
+  views.backend->modals().settle();
+  CHECK(views.backend->modals().popoverOf(7) == nullptr);
+  CHECK(views.backend->modals().slotOf(7) != nullptr);
+  views.mount({ShadowViewMutation::RemoveMutation(2, sheet, 1), ShadowViewMutation::DeleteMutation(sheet)});
+}
+
+TEST_CASE("a popover presented before its window is shown stays a popover, and shows with the window") {
+  REQUIRE(ngn::testing::gtkReady());
+  int criticals = 0;
+  // Removed on every exit path: runUntil throws on a timeout, and the handler holds &criticals.
+  struct Handler {
+    guint id;
+    ~Handler() {
+      g_log_remove_handler("Gtk", id);
+    }
+  } handler{g_log_set_handler("Gtk", G_LOG_LEVEL_CRITICAL, [](const gchar *, GLogLevelFlags, const gchar *, gpointer count) {
+    ++*static_cast<int *>(count);
+  }, &criticals)};
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto anchor = shadow(5, "View", nullptr, {{20, 20}, {80, 30}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {anchor, 3}});
+  // As at launch: the first mount settles the modals before GtkWindows::didMount shows the window.
+  gtk_widget_set_visible(views.window, FALSE);
+  REQUIRE_FALSE(gtk_widget_get_mapped(views.surface));
+
+  auto popover = shadow(7, "RNSScreen", presented("formSheet", 5), {{0, 0}, {800, 600}});
+  auto content = shadow(9, "View", nullptr, {{0, 0}, {200, 100}});
+  mountAll(views, {{popover, 2}, {content, 7}});
+  views.backend->modals().settle();
+  GtkWidget *shown = views.backend->modals().popoverOf(7);
+  REQUIRE(shown);
+
+  gtk_window_present(GTK_WINDOW(views.window));
+  ngn::testing::runUntil([shown] { return gtk_widget_get_mapped(shown); });
+  CHECK(criticals == 0);
+  views.mount({ShadowViewMutation::RemoveMutation(2, popover, 1), ShadowViewMutation::DeleteMutation(popover)});
+  CHECK(views.backend->modals().popoverOf(7) == nullptr);
+}
+
+TEST_CASE("a popover GTK closed stays up while the app has not unmounted its modal") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto anchor = shadow(5, "View", nullptr, {{20, 20}, {80, 30}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {anchor, 3}});
+  auto popover = shadow(7, "RNSScreen", presented("formSheet", 5), {{0, 0}, {800, 600}});
+  auto content = shadow(9, "View", nullptr, {{0, 0}, {200, 100}});
+  mountAll(views, {{popover, 2}, {content, 7}});
+  views.backend->modals().settle();
+  views.settle();
+  GtkWidget *shown = views.backend->modals().popoverOf(7);
+  REQUIRE(shown);
+  REQUIRE(gtk_widget_get_visible(shown));
+
+  // A click outside hides it, and asks the app; the app has not answered.
+  gtk_popover_popdown(GTK_POPOVER(shown));
+  ngn::testing::runUntil([shown] { return gtk_widget_get_visible(shown); });
+  CHECK(gtk_widget_get_visible(shown));
+
+  // The app accepts: it goes.
+  views.mount({ShadowViewMutation::RemoveMutation(2, popover, 1), ShadowViewMutation::DeleteMutation(popover)});
+  CHECK(views.backend->modals().popoverOf(7) == nullptr);
+}
+
+TEST_CASE("a popover opens over a window with nothing focused without a GTK critical, and a field in it takes the focus") {
+  REQUIRE(ngn::testing::gtkReady());
+  int criticals = 0;
+  // Removed on every exit path: runUntil throws on a timeout, and the handler holds &criticals.
+  struct Handler {
+    guint id;
+    ~Handler() {
+      g_log_remove_handler("Gtk", id);
+    }
+  } handler{g_log_set_handler("Gtk", G_LOG_LEVEL_CRITICAL, [](const gchar *, GLogLevelFlags, const gchar *, gpointer count) {
+    ++*static_cast<int *>(count);
+  }, &criticals)};
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto anchor = shadow(5, "View", nullptr, {{20, 20}, {80, 30}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {anchor, 3}});
+  GtkRoot *root = gtk_widget_get_root(views.view(5));
+  REQUIRE(root);
+  REQUIRE(gtk_root_get_focus(root) == nullptr);
+
+  // Nothing in it takes the focus: it holds the focus itself, as it opens and as it opens again.
+  auto popover = shadow(7, "RNSScreen", presented("formSheet", 5), {{0, 0}, {800, 600}});
+  auto content = shadow(9, "View", nullptr, {{0, 0}, {200, 100}});
+  mountAll(views, {{popover, 2}, {content, 7}});
+  views.backend->modals().settle();
+  views.settle();
+  GtkWidget *shown = views.backend->modals().popoverOf(7);
+  REQUIRE(shown);
+  REQUIRE(gtk_widget_get_visible(shown));
+  CHECK(gtk_root_get_focus(root) == shown);
+  gtk_popover_popdown(GTK_POPOVER(shown));
+  ngn::testing::runUntil([shown] { return gtk_widget_get_visible(shown); });
+  CHECK(gtk_root_get_focus(root) == shown);
+  CHECK(criticals == 0);
+  views.mount({ShadowViewMutation::RemoveMutation(2, popover, 1), ShadowViewMutation::DeleteMutation(popover)});
+  CHECK(gtk_root_get_focus(root) == nullptr);
+
+  // A field in it still takes the focus as it opens.
+  auto withField = shadow(11, "RNSScreen", presented("formSheet", 5), {{0, 0}, {800, 600}});
+  auto field = shadow(13, "TextInput", ngn::testing::textInputProps(folly::dynamic::object()), {{10, 10}, {150, 40}});
+  mountAll(views, {{withField, 2}, {field, 11}});
+  views.backend->modals().settle();
+  views.settle();
+  REQUIRE(views.backend->modals().popoverOf(11));
+  GtkWidget *focus = gtk_root_get_focus(root);
+  REQUIRE(focus);
+  CHECK((focus == views.view(13) || gtk_widget_is_ancestor(focus, views.view(13))));
+  views.mount({ShadowViewMutation::RemoveMutation(2, withField, 1), ShadowViewMutation::DeleteMutation(withField)});
+
+  // Focus elsewhere in the window stays there while one with nothing to focus is up, as GTK leaves it.
+  gtk_widget_set_focusable(views.view(5), TRUE);
+  REQUIRE(gtk_widget_grab_focus(views.view(5)));
+  auto empty = shadow(15, "RNSScreen", presented("formSheet", 5), {{0, 0}, {800, 600}});
+  mountAll(views, {{empty, 2}});
+  views.backend->modals().settle();
+  views.settle();
+  REQUIRE(views.backend->modals().popoverOf(15));
+  CHECK(gtk_root_get_focus(root) == views.view(5));
+  views.mount({ShadowViewMutation::RemoveMutation(2, empty, 1), ShadowViewMutation::DeleteMutation(empty)});
+  CHECK(criticals == 0);
 }
 
 TEST_CASE("a surface finalized with its window is the backend's no more, for a header or modal let go of later") {

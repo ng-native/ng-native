@@ -3,6 +3,9 @@
 #include "gtk-backend.h"
 #include "view-widget.h"
 
+#include "ngn/screen-presentation.h"
+#include "ngn/split-view.h"
+
 #include <react/renderer/components/FBReactNativeSpec/EventEmitters.h>
 #include <react/renderer/components/modal/ModalHostViewState.h>
 #include <react/renderer/core/ConcreteState.h>
@@ -13,6 +16,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <set>
 
 using namespace facebook::react;
 
@@ -98,25 +103,55 @@ void installSheetStyle() {
   g_object_unref(css);
 }
 
+} // namespace
+
+namespace ngn::gtk {
+
+std::string colorRule(const char *name, const char *property, float red, float green, float blue, float alpha) {
+  auto byte = [](float v) { return static_cast<unsigned>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255)); };
+  // CSS wants a point, whatever the user's locale writes a decimal as.
+  char opacity[G_ASCII_DTOSTR_BUF_SIZE];
+  g_ascii_formatd(opacity, sizeof opacity, "%.3f", static_cast<double>(alpha));
+  char rule[200];
+  std::snprintf(rule, sizeof rule, ".%s { %s: rgba(%u, %u, %u, %s); }", name, property, byte(red), byte(green), byte(blue), opacity);
+  return rule;
+}
+
+std::string colorClass(const char *property, const SharedColor &color) {
+  if (!color || !gdk_display_get_default()) {
+    return {};
+  }
+  auto c = colorComponentsFromColor(color);
+  auto byte = [](float v) { return static_cast<unsigned>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255)); };
+  char name[48];
+  std::snprintf(
+      name, sizeof name, "ngn-%s-%02x%02x%02x%02x", std::string_view(property) == "color" ? "fg" : "bg", byte(c.red),
+      byte(c.green), byte(c.blue), byte(c.alpha));
+  static std::set<std::string> added;
+  if (added.insert(name).second) {
+    std::string rule = colorRule(name, property, c.red, c.green, c.blue, c.alpha);
+    GtkCssProvider *css = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(css, rule.c_str(), -1);
+    gtk_style_context_add_provider_for_display(
+        gdk_display_get_default(), GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_object_unref(css);
+  }
+  return name;
+}
+
+} // namespace ngn::gtk
+
+namespace {
+
+void addClass(GtkWidget *widget, const std::string &name) {
+  if (!name.empty()) {
+    gtk_widget_add_css_class(widget, name.c_str());
+  }
+}
+
 template <typename Fn>
 Fn adwFunction(const char *name) {
   return reinterpret_cast<Fn>(dlsym(RTLD_DEFAULT, name));
-}
-
-// Escape on `widget`, anywhere in its window, calls `fn`.
-void onEscape(GtkWidget *widget, std::function<void()> fn) {
-  GtkEventController *controller = gtk_shortcut_controller_new();
-  gtk_shortcut_controller_set_scope(GTK_SHORTCUT_CONTROLLER(controller), GTK_SHORTCUT_SCOPE_GLOBAL);
-  auto *heap = new std::function<void()>(std::move(fn));
-  GtkShortcutAction *action = gtk_callback_action_new(
-      [](GtkWidget *, GVariant *, gpointer data) -> gboolean {
-        (*static_cast<std::function<void()> *>(data))();
-        return TRUE;
-      },
-      heap, [](gpointer data) { delete static_cast<std::function<void()> *>(data); });
-  gtk_shortcut_controller_add_shortcut(
-      GTK_SHORTCUT_CONTROLLER(controller), gtk_shortcut_new(gtk_shortcut_trigger_parse_string("Escape"), action));
-  gtk_widget_add_controller(widget, controller);
 }
 
 } // namespace
@@ -178,6 +213,68 @@ namespace {
 using PressTarget = std::pair<GtkBackend *, std::pair<Tag, std::string>>;
 using BackTarget = std::pair<GtkBackend *, Tag>;
 using CloseTarget = std::pair<Modals *, Tag>;
+
+// The menu entries of a bar button's menu, as a GMenu whose actions are `group`'s: choosing one
+// sends its menu id, as AppKit's menu does. An `on` entry is a stateful action, which GTK draws
+// with a check.
+void fillMenu(
+    GMenu *menu, const HeaderMenuItem &entry, GSimpleActionGroup *group, int &next, GtkBackend &backend, Tag config,
+    bool disabled = false) {
+  for (const auto &child : entry.items) {
+    if (child.inlineSection) {
+      GMenu *section = g_menu_new();
+      for (const auto &inner : child.items) {
+        HeaderMenuItem one;
+        one.items.push_back(inner);
+        fillMenu(section, one, group, next, backend, config, disabled);
+      }
+      g_menu_append_section(menu, nullptr, G_MENU_MODEL(section));
+      g_object_unref(section);
+    } else if (!child.items.empty() || child.menuId.empty()) {
+      GMenu *submenu = g_menu_new();
+      // A disabled submenu has no entry that can be chosen.
+      fillMenu(submenu, child, group, next, backend, config, disabled || child.disabled);
+      g_menu_append_submenu(menu, child.title.c_str(), G_MENU_MODEL(submenu));
+      g_object_unref(submenu);
+    } else {
+      std::string name = "item" + std::to_string(next++);
+      GSimpleAction *action = child.on ? g_simple_action_new_stateful(name.c_str(), nullptr, g_variant_new_boolean(TRUE))
+                                       : g_simple_action_new(name.c_str(), nullptr);
+      g_simple_action_set_enabled(action, !disabled && !child.disabled);
+      g_signal_connect_data(
+          action, "activate", G_CALLBACK(+[](GSimpleAction *, GVariant *, gpointer data) {
+            auto *p = static_cast<PressTarget *>(data);
+            if (const ViewData *d = p->first->data(p->second.first); d && d->emitter) {
+              d->emitter->dispatchEvent(
+                  "pressHeaderBarButtonMenuItem", folly::dynamic::object("menuId", p->second.second),
+                  RawEvent::Category::Discrete);
+            }
+          }),
+          new PressTarget(&backend, {config, child.menuId}),
+          [](gpointer data, GClosure *) { delete static_cast<PressTarget *>(data); }, GConnectFlags(0));
+      g_action_map_add_action(G_ACTION_MAP(group), G_ACTION(action));
+      g_object_unref(action);
+      g_menu_append(menu, child.title.c_str(), ("ngn." + name).c_str());
+    }
+  }
+}
+
+// A bar button with a menu: a GtkMenuButton opening it.
+GtkWidget *menuButton(GtkBackend &backend, Tag config, const BarButton &button) {
+  GtkWidget *widget = gtk_menu_button_new();
+  gtk_menu_button_set_label(GTK_MENU_BUTTON(widget), (button.title.empty() ? button.accessibilityLabel : button.title).c_str());
+  GMenu *menu = g_menu_new();
+  GSimpleActionGroup *group = g_simple_action_group_new();
+  int next = 0;
+  fillMenu(menu, *button.menu, group, next, backend, config);
+  gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(widget), G_MENU_MODEL(menu));
+  gtk_widget_insert_action_group(widget, "ngn", G_ACTION_GROUP(group));
+  // GTK 4.10 cannot read an inserted group back; tests read it here.
+  g_object_set_data_full(G_OBJECT(widget), "ngn-menu-actions", g_object_ref(group), g_object_unref);
+  g_object_unref(menu);
+  g_object_unref(group);
+  return widget;
+}
 
 struct SearchField {
   GtkBackend *backend;
@@ -369,6 +466,10 @@ void Headers::clear(SurfaceId surfaceId, Shown &shown, bool keepSearches) {
   }
   shown.packed.clear();
   shown.back = nullptr;
+  if (bar && !shown.background.empty()) {
+    gtk_widget_remove_css_class(bar, shown.background.c_str());
+  }
+  shown.background.clear();
 }
 
 void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
@@ -410,16 +511,29 @@ void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
   };
   auto slotFor = [&](Tag tag) {
     GtkWidget *slot = makeHostSlot();
+    // Centred in the bar's height, as a toolbar item is.
+    gtk_widget_set_valign(slot, GTK_ALIGN_CENTER);
     backend_.hostView(tag, slot);
     backend_.hooks.containerRoot(tag, true);
     backend_.hooks.attachInput(slot, surfaceId, tag);
     shown.hosted.push_back(tag);
     return keep(slot);
   };
+  // The header's tint on its buttons, the back button's included, unless a button has its own; its
+  // title colour on the title; its background colour on the bar.
+  std::string tint = colorClass("color", shown.bar->color);
+  shown.background = colorClass("background-color", shown.bar->backgroundColor);
+  addClass(bar, shown.background);
   auto button = [&](const BarButton &b) {
-    GtkWidget *widget = b.spacing ? gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0) : gtk_button_new_with_label(b.title.c_str());
     if (b.spacing) {
+      GtkWidget *widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
       gtk_widget_set_size_request(widget, static_cast<int>(*b.spacing), -1);
+      return keep(widget);
+    }
+    GtkWidget *widget = b.menu ? menuButton(backend_, shown.header->config, b) : gtk_button_new_with_label(b.title.c_str());
+    addClass(widget, b.tint ? colorClass("color", b.tint) : tint);
+    if (b.menu) {
+      gtk_widget_set_sensitive(widget, !b.disabled);
       return keep(widget);
     }
     gtk_widget_set_sensitive(widget, !b.disabled);
@@ -439,6 +553,7 @@ void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
 
   if (layout.back) {
     GtkWidget *back = keep(gtk_button_new_from_icon_name("go-previous-symbolic"));
+    addClass(back, tint);
     gtk_widget_set_tooltip_text(back, "Back");
     gtk_accessible_update_property(GTK_ACCESSIBLE(back), GTK_ACCESSIBLE_PROPERTY_LABEL, "Back", -1);
     auto *where = new BackTarget(&backend_, shown.header->screen);
@@ -464,7 +579,9 @@ void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
     }
     adw_header_bar_set_title_widget(ADW_HEADER_BAR(bar), center);
   } else {
-    adw_header_bar_set_title_widget(ADW_HEADER_BAR(bar), keep(adw_window_title_new(shown.bar->title.c_str(), "")));
+    GtkWidget *title = keep(adw_window_title_new(shown.bar->title.c_str(), ""));
+    addClass(title, colorClass("color", shown.bar->titleColor));
+    adw_header_bar_set_title_widget(ADW_HEADER_BAR(bar), title);
   }
   // Inward of the search fields, the last piece in reading order first.
   for (auto it = layout.right.rbegin(); it != layout.right.rend(); ++it) {
@@ -477,6 +594,40 @@ void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
 
 // --- Modals -----------------------------------------------------------------------------------
 
+namespace {
+
+// The header config under a presented screen, whose header the sheet draws.
+const ViewData *headerConfigOf(const GtkBackend &backend, Tag screen) {
+  const ViewData *d = backend.data(screen);
+  for (GtkWidget *c = d ? gtk_widget_get_first_child(d->widget) : nullptr; c; c = gtk_widget_get_next_sibling(c)) {
+    if (const ViewData *child = viewData(c); child && child->component == "RNSScreenStackHeaderConfig") {
+      return child;
+    }
+  }
+  return nullptr;
+}
+
+// A shortcut on `widget`, anywhere in its window: `fn` says whether it acted.
+void onKey(GtkWidget *widget, const char *keys, std::function<bool()> fn) {
+  GtkEventController *controller = gtk_shortcut_controller_new();
+  gtk_shortcut_controller_set_scope(GTK_SHORTCUT_CONTROLLER(controller), GTK_SHORTCUT_SCOPE_GLOBAL);
+  auto *heap = new std::function<bool()>(std::move(fn));
+  GtkShortcutAction *action = gtk_callback_action_new(
+      [](GtkWidget *, GVariant *, gpointer data) -> gboolean { return (*static_cast<std::function<bool()> *>(data))(); },
+      heap, [](gpointer data) { delete static_cast<std::function<bool()> *>(data); });
+  gtk_shortcut_controller_add_shortcut(
+      GTK_SHORTCUT_CONTROLLER(controller), gtk_shortcut_new(gtk_shortcut_trigger_parse_string(keys), action));
+  gtk_widget_add_controller(widget, controller);
+}
+
+int naturalHeight(GtkWidget *widget) {
+  int minimum = 0, natural = 0;
+  gtk_widget_measure(widget, GTK_ORIENTATION_VERTICAL, -1, &minimum, &natural, nullptr, nullptr);
+  return natural;
+}
+
+} // namespace
+
 Modals::~Modals() {
   while (!presented_.empty()) {
     dismiss(presented_.begin()->first);
@@ -486,6 +637,14 @@ Modals::~Modals() {
 void Modals::mounted(SurfaceId surfaceId, Tag tag) {
   if (!presented_.count(tag)) {
     pending_.insert({surfaceId, tag});
+  }
+}
+
+void Modals::setPresented(SurfaceId surfaceId, Tag screen, bool presented) {
+  if (presented) {
+    mounted(surfaceId, screen);
+  } else {
+    unmounted(screen);
   }
 }
 
@@ -503,6 +662,7 @@ void Modals::settle() {
     present(surfaceId, tag);
   }
   for (auto &[tag, presented] : presented_) {
+    dress(tag, presented);
     fit(tag, presented);
   }
 }
@@ -517,7 +677,39 @@ bool Modals::inDialog(Tag tag) const {
   return it != presented_.end() && it->second.dialog != nullptr;
 }
 
+GtkWidget *Modals::popoverOf(Tag tag) const {
+  auto it = presented_.find(tag);
+  return it == presented_.end() ? nullptr : it->second.popover;
+}
+
+GtkWidget *Modals::sheetHeaderOf(Tag tag) const {
+  auto it = presented_.find(tag);
+  return it == presented_.end() ? nullptr : it->second.header;
+}
+
+void Modals::press(Tag tag, const std::string &buttonId) {
+  if (const ViewData *config = headerConfigOf(backend_, tag); config && config->emitter) {
+    config->emitter->dispatchEvent(
+        "pressHeaderBarButtonItem", folly::dynamic::object("buttonId", buttonId), RawEvent::Category::Discrete);
+  }
+}
+
 void Modals::requestClose(Tag tag) {
+  auto it = presented_.find(tag);
+  if (it != presented_.end() && it->second.screen) {
+    // A sheet's Cancel takes Escape, as its key equivalent does on macOS; otherwise the screen is
+    // dismissed natively, and the router follows.
+    for (const auto &button : it->second.chrome.buttons) {
+      if (button.cancel && !button.disabled) {
+        press(tag, button.id);
+        return;
+      }
+    }
+    if (const ViewData *d = backend_.data(tag); d && d->emitter) {
+      d->emitter->dispatchEvent("dismissed", folly::dynamic::object("dismissCount", 1), RawEvent::Category::Discrete);
+    }
+    return;
+  }
   if (const ViewData *d = backend_.data(tag)) {
     if (auto emitter = std::dynamic_pointer_cast<const ModalHostViewEventEmitter>(d->emitter)) {
       emitter->onRequestClose({});
@@ -525,29 +717,83 @@ void Modals::requestClose(Tag tag) {
   }
 }
 
-void Modals::requestCloseFront(SurfaceId surfaceId) {
+// Whether a popover on `anchor` would show: it is in a window, and nothing between it and the
+// window is hidden, as a screen the stack covers is (setCovered). Not whether it is mapped yet, nor
+// whether the window is shown: the first mount presents before the window is (GtkWindows::didMount).
+static bool anchorOnScreen(GtkWidget *anchor) {
+  GtkWidget *root = GTK_WIDGET(gtk_widget_get_root(anchor));
+  if (!root) {
+    return false;
+  }
+  for (GtkWidget *w = anchor; w != root; w = gtk_widget_get_parent(w)) {
+    if (!gtk_widget_get_visible(w) || !gtk_widget_get_child_visible(w)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool Modals::pressDefault(Tag tag) {
+  auto it = presented_.find(tag);
+  if (it == presented_.end()) {
+    return false;
+  }
+  for (const auto &button : it->second.chrome.buttons) {
+    if (button.isDefault && !button.disabled) {
+      press(tag, button.id);
+      return true;
+    }
+  }
+  return false;
+}
+
+Tag Modals::frontOf(SurfaceId surfaceId) const {
   const std::pair<const Tag, Presented> *front = nullptr;
   for (const auto &entry : presented_) {
     if (entry.second.surfaceId == surfaceId && (!front || entry.second.order > front->second.order)) {
       front = &entry;
     }
   }
-  if (front) {
-    requestClose(front->first);
+  return front ? front->first : 0;
+}
+
+void Modals::requestCloseFront(SurfaceId surfaceId) {
+  if (Tag front = frontOf(surfaceId)) {
+    requestClose(front);
   }
+}
+
+bool Modals::pressDefaultFront(SurfaceId surfaceId) {
+  Tag front = frontOf(surfaceId);
+  return front && pressDefault(front);
 }
 
 void Modals::present(SurfaceId surfaceId, Tag tag) {
   const ViewData *d = backend_.data(tag);
   GtkWidget *surface = backend_.surfaceWidget(surfaceId);
   const WindowChrome *chrome = chromeOf(surface);
-  if (!d || !chrome || presented_.count(tag)) {
+  if (!d || !d->props || !chrome || presented_.count(tag)) {
     return;
   }
   installSheetStyle();
-  Presented p{.surfaceId = surfaceId, .presentation = d->desktop.presentation, .order = ++presentations_};
-  // A popover is a sheet until the GTK host has popovers.
-  bool sheet = p.presentation != ModalPresentation::Cover;
+  Presented p{.surfaceId = surfaceId, .presentation = d->desktop.presentation, .screen = d->component == "RNSScreen", .order = ++presentations_};
+  std::optional<Tag> anchor = d->desktop.anchor;
+  if (p.screen) {
+    p.presentation = screenPresentation(*d->props).value_or(ModalPresentation::Sheet);
+    if (const auto *props = dynamic_cast<const ScreenProps *>(d->props.get()); props && props->anchor != 0) {
+      anchor = props->anchor;
+    }
+  }
+  // A popover points at its anchor; an anchor that is not on screen leaves it a sheet, as on macOS.
+  GtkWidget *anchorWidget = anchor ? backend_.view(*anchor) : nullptr;
+  if (anchorWidget && !anchorOnScreen(anchorWidget)) {
+    anchorWidget = nullptr;
+  }
+  if (p.presentation == ModalPresentation::Popover && !anchorWidget) {
+    p.presentation = ModalPresentation::Sheet;
+  } else if (anchorWidget) {
+    p.presentation = ModalPresentation::Popover;
+  }
   GtkRoot *root = gtk_widget_get_root(surface);
   if (GtkWidget *focus = root ? gtk_root_get_focus(root) : nullptr) {
     p.opener = GTK_WIDGET(g_object_ref(focus));
@@ -557,10 +803,54 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
   // libadwaita presents a dialog in a window of its own outside an AdwWindow, or over one that is
   // not resizable: the sheet is drawn over the window there instead.
   bool inWindow = root && (ADW_IS_WINDOW(root) || ADW_IS_APPLICATION_WINDOW(root)) && gtk_window_get_resizable(GTK_WINDOW(root));
-  if (sheet && inWindow && haveAdwDialog()) {
+  if (p.presentation == ModalPresentation::Sheet) {
+    // What a sheet shows: the screen's header, when it has one (dress), over the content.
+    p.card = GTK_WIDGET(g_object_ref_sink(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0)));
+    gtk_box_append(GTK_BOX(p.card), p.slot);
+  }
+  if (p.presentation == ModalPresentation::Popover) {
+    GtkWidget *popover = gtk_popover_new();
+    gtk_popover_set_child(GTK_POPOVER(popover), p.slot);
+    gtk_popover_set_autohide(GTK_POPOVER(popover), TRUE);
+    gtk_widget_set_parent(popover, anchorWidget);
+    // GTK moves the focus into an autohide popover as it shows. With nothing in it to take the
+    // focus and nothing focused in the window, as at launch, GTK passes the window's null focus to
+    // gtk_widget_is_ancestor, a critical: the popover takes the focus itself first then, and a
+    // field in it still takes it from there.
+    gtk_widget_set_focusable(popover, TRUE);
+    g_signal_connect(popover, "map", G_CALLBACK(+[](GtkWidget *shown, gpointer) {
+      if (GtkRoot *root = gtk_widget_get_root(shown); root && !gtk_root_get_focus(root)) {
+        gtk_widget_grab_focus(shown);
+      }
+    }), nullptr);
+    GdkRectangle rect{0, 0, std::max(1, gtk_widget_get_width(anchorWidget)), std::max(1, gtk_widget_get_height(anchorWidget))};
+    gtk_popover_set_pointing_to(GTK_POPOVER(popover), &rect);
+    // Closed by GTK (a click outside, or Escape): the app decides, as for Escape on a sheet.
+    g_signal_connect_data(
+        popover, "closed", G_CALLBACK(+[](GtkPopover *, gpointer data) {
+          auto *self = static_cast<CloseTarget *>(data);
+          if (self->first->presented_.count(self->second)) {
+            self->first->requestClose(self->second);
+            // GTK hid it to emit this. Until the app unmounts the modal, it is still presented.
+            g_idle_add_full(
+                G_PRIORITY_DEFAULT_IDLE, +[](gpointer data) -> gboolean {
+                  auto *again = static_cast<CloseTarget *>(data);
+                  auto it = again->first->presented_.find(again->second);
+                  if (it != again->first->presented_.end() && it->second.popover) {
+                    gtk_popover_popup(GTK_POPOVER(it->second.popover));
+                  }
+                  return G_SOURCE_REMOVE;
+                },
+                new CloseTarget(*self), [](gpointer data) { delete static_cast<CloseTarget *>(data); });
+          }
+        }),
+        new CloseTarget(this, tag), [](gpointer data, GClosure *) { delete static_cast<CloseTarget *>(data); },
+        GConnectFlags(0));
+    p.popover = GTK_WIDGET(g_object_ref(popover));
+  } else if (p.presentation == ModalPresentation::Sheet && inWindow && haveAdwDialog()) {
     // AdwDialog by its type and properties, which 1.4's headers do not declare. It asks before it
     // closes, and the app decides, as Escape on macOS asks.
-    GtkWidget *dialog = GTK_WIDGET(g_object_new(g_type_from_name("AdwDialog"), "can-close", FALSE, "child", p.slot, nullptr));
+    GtkWidget *dialog = GTK_WIDGET(g_object_new(g_type_from_name("AdwDialog"), "can-close", FALSE, "child", p.card, nullptr));
     // Floating, never libadwaita's bottom sheet.
     if (g_object_class_find_property(G_OBJECT_GET_CLASS(dialog), "presentation-mode")) {
       g_object_set(dialog, "presentation-mode", 1, nullptr);
@@ -573,35 +863,117 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
         new CloseTarget(this, tag), [](gpointer data, GClosure *) { delete static_cast<CloseTarget *>(data); },
         GConnectFlags(0));
     p.dialog = GTK_WIDGET(g_object_ref(dialog));
-  } else if (sheet) {
+  } else if (p.presentation == ModalPresentation::Sheet) {
+    // libadwaita 1.4: a dimmed backdrop over the window's content with the card in its middle.
     GtkWidget *backdrop = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_add_css_class(backdrop, "ngn-backdrop");
-    gtk_widget_set_halign(p.slot, GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(p.slot, GTK_ALIGN_CENTER);
-    gtk_widget_set_vexpand(p.slot, TRUE);
-    gtk_widget_add_css_class(p.slot, "ngn-sheet");
-    gtk_widget_set_overflow(p.slot, GTK_OVERFLOW_HIDDEN);
-    gtk_box_append(GTK_BOX(backdrop), p.slot);
+    gtk_widget_set_halign(p.card, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(p.card, GTK_ALIGN_CENTER);
+    gtk_widget_set_vexpand(p.card, TRUE);
+    gtk_widget_add_css_class(p.card, "ngn-sheet");
+    gtk_widget_set_overflow(p.card, GTK_OVERFLOW_HIDDEN);
+    gtk_box_append(GTK_BOX(backdrop), p.card);
     p.layer = backdrop;
   } else {
     p.layer = p.slot;
   }
   if (p.layer) {
-    // Each layer's Escape reaches the modal in front: GTK runs the first one registered.
-    onEscape(p.layer, [this, surfaceId] { requestCloseFront(surfaceId); });
+    // Each layer's Escape reaches the presentation in front: GTK runs the first one registered.
+    onKey(p.layer, "Escape", [this, surfaceId] {
+      requestCloseFront(surfaceId);
+      return true;
+    });
     gtk_overlay_add_overlay(GTK_OVERLAY(chrome->overlay), p.layer);
+  }
+  if (GtkWidget *keys = p.dialog ? p.dialog : p.layer) {
+    // As for Escape, whichever layer's shortcut runs first, the presentation in front takes Return.
+    onKey(keys, "Return|KP_Enter", [this, surfaceId] { return pressDefaultFront(surfaceId); });
   }
   backend_.hooks.containerRoot(tag, true);
   backend_.hooks.attachInput(p.slot, surfaceId, tag);
   auto &presented = presented_[tag] = p;
+  dress(tag, presented);
   fit(tag, presented);
   if (presented.dialog) {
     adwFunction<void (*)(GtkWidget *, GtkWidget *)>("adw_dialog_present")(presented.dialog, surface);
+  }
+  if (presented.popover) {
+    gtk_popover_popup(GTK_POPOVER(presented.popover));
   }
   gtk_widget_child_focus(presented.slot, GTK_DIR_TAB_FORWARD);
   if (auto emitter = std::dynamic_pointer_cast<const ModalHostViewEventEmitter>(d->emitter)) {
     emitter->onShow({});
   }
+}
+
+void Modals::dress(Tag tag, Presented &p) {
+  const ViewData *d = backend_.data(tag);
+  const ViewData *config = p.screen ? headerConfigOf(backend_, tag) : nullptr;
+  auto bar = config && config->props ? headerBar(*config->props) : std::nullopt;
+  SheetChrome chrome = bar ? sheetChrome(*bar, p.presentation) : SheetChrome{};
+  // Named by the view's own accessibility label, or the screen's title.
+  std::string label;
+  if (auto props = d ? std::dynamic_pointer_cast<const ViewProps>(d->props) : nullptr) {
+    label = presentationLabel(props->accessibilityLabel, chrome.label);
+  }
+  GtkWidget *named = p.popover ? p.popover : p.dialog ? p.dialog : p.layer;
+  if (named && (label != p.label || !p.labelled)) {
+    p.label = label;
+    p.labelled = true;
+    gtk_accessible_update_property(GTK_ACCESSIBLE(named), GTK_ACCESSIBLE_PROPERTY_LABEL, label.c_str(), -1);
+  }
+  if (chrome == p.chrome && (p.header || (chrome.heading.empty() && chrome.buttons.empty()))) {
+    return;
+  }
+  p.chrome = chrome;
+  if (p.header) {
+    gtk_box_remove(GTK_BOX(p.card), p.header);
+    g_object_unref(p.header);
+    p.header = nullptr;
+  }
+  if (!p.card || (chrome.heading.empty() && chrome.buttons.empty())) {
+    return;
+  }
+  // A sheet's header is the dialog's own header bar, as GNOME's dialogs have it: the title in the
+  // middle, the left items (Cancel) at the start, the right ones at the end, the last of them the
+  // default on Return. Escape presses Cancel (requestClose).
+  GtkWidget *header = adw_header_bar_new();
+  adw_header_bar_set_show_start_title_buttons(ADW_HEADER_BAR(header), FALSE);
+  adw_header_bar_set_show_end_title_buttons(ADW_HEADER_BAR(header), FALSE);
+  adw_header_bar_set_title_widget(ADW_HEADER_BAR(header), adw_window_title_new(chrome.heading.c_str(), ""));
+  // sheetChrome keeps the left items first: those of the bar's left items that became buttons.
+  size_t left = static_cast<size_t>(std::count_if(bar->left.begin(), bar->left.end(), [](const BarButton &b) {
+    return !b.spacing && !(b.title.empty() && b.accessibilityLabel.empty());
+  }));
+  std::vector<GtkWidget *> end;
+  for (size_t i = 0; i < chrome.buttons.size(); ++i) {
+    const SheetButton &b = chrome.buttons[i];
+    GtkWidget *button = gtk_button_new_with_label(b.title.c_str());
+    gtk_widget_set_sensitive(button, !b.disabled);
+    if (b.isDefault) {
+      gtk_widget_add_css_class(button, "suggested-action");
+    }
+    auto *target = new PressTarget(nullptr, {tag, b.id});
+    g_object_set_data(G_OBJECT(button), "ngn-modals", this);
+    g_signal_connect_data(
+        button, "clicked", G_CALLBACK(+[](GtkButton *button, gpointer data) {
+          auto *self = static_cast<Modals *>(g_object_get_data(G_OBJECT(button), "ngn-modals"));
+          auto *p = static_cast<PressTarget *>(data);
+          self->press(p->second.first, p->second.second);
+        }),
+        target, [](gpointer data, GClosure *) { delete static_cast<PressTarget *>(data); }, GConnectFlags(0));
+    if (i < left) {
+      adw_header_bar_pack_start(ADW_HEADER_BAR(header), button);
+    } else {
+      end.push_back(button);
+    }
+  }
+  for (auto it = end.rbegin(); it != end.rend(); ++it) {
+    adw_header_bar_pack_end(ADW_HEADER_BAR(header), *it);
+  }
+  p.header = GTK_WIDGET(g_object_ref_sink(header));
+  gtk_box_prepend(GTK_BOX(p.card), p.header);
+  p.size = {0, 0};
 }
 
 void Modals::fit(Tag tag, Presented &p) {
@@ -612,9 +984,18 @@ void Modals::fit(Tag tag, Presented &p) {
   }
   Size window{static_cast<Float>(gtk_widget_get_width(surface)), static_cast<Float>(gtk_widget_get_height(surface))};
   Size size = window;
-  if (p.presentation != ModalPresentation::Cover) {
-    auto node = sheetNodes_ ? sheetNodes_(p.surfaceId, tag) : std::nullopt;
+  auto node = sheetNodes_ ? sheetNodes_(p.surfaceId, tag) : std::nullopt;
+  if (p.presentation == ModalPresentation::Sheet) {
+    // The content at the core's size, below the header, which the sheet stays within the window with.
+    Float header = p.header ? static_cast<Float>(naturalHeight(p.header)) : 0;
     size = sheetSize(node.value_or(SheetNode{}), window);
+    size.height = std::max<Float>(0, std::min(size.height + header, window.height) - header);
+  } else if (p.presentation == ModalPresentation::Popover) {
+    // Its content's size once that has laid out; until then as much as a popover takes.
+    Size measured = node ? popoverSize(*node, window) : Size{0, 0};
+    size = measured.width >= 1 && measured.height >= 1
+        ? measured
+        : Size{std::min(window.width, kPopoverMax), std::min(window.height, kPopoverMax)};
   }
   std::pair<int, int> pixels{static_cast<int>(std::lround(size.width)), static_cast<int>(std::lround(size.height))};
   if (pixels == p.size) {
@@ -628,10 +1009,15 @@ void Modals::fit(Tag tag, Presented &p) {
     setSlotSize(p.slot, pixels);
   }
   if (p.dialog) {
-    g_object_set(p.dialog, "content-width", pixels.first, "content-height", pixels.second, nullptr);
+    int header = p.header ? naturalHeight(p.header) : 0;
+    g_object_set(p.dialog, "content-width", pixels.first, "content-height", pixels.second + header, nullptr);
   }
   if (auto state = std::dynamic_pointer_cast<const ConcreteState<ModalHostViewState>>(d->state)) {
     state->updateState(ModalHostViewState(size));
+  } else if (auto pane = std::dynamic_pointer_cast<const ConcreteState<SplitPaneState>>(d->state)) {
+    if (pane->getData().size != size) {
+      pane->updateState(SplitPaneState{.size = size});
+    }
   }
 }
 
@@ -649,10 +1035,23 @@ void Modals::dismiss(Tag tag) {
     adwFunction<void (*)(GtkWidget *)>("adw_dialog_force_close")(p.dialog);
     g_object_unref(p.dialog);
   }
+  if (p.popover) {
+    gtk_popover_popdown(GTK_POPOVER(p.popover));
+    if (gtk_widget_get_parent(p.popover)) {
+      gtk_widget_unparent(p.popover);
+    }
+    g_object_unref(p.popover);
+  }
   if (p.layer) {
     if (const WindowChrome *chrome = chromeOf(backend_.surfaceWidget(p.surfaceId)); chrome && gtk_widget_get_parent(p.layer)) {
       gtk_overlay_remove_overlay(GTK_OVERLAY(chrome->overlay), p.layer);
     }
+  }
+  if (p.header) {
+    g_object_unref(p.header);
+  }
+  if (p.card) {
+    g_object_unref(p.card);
   }
   g_object_unref(p.slot);
   if (p.opener) {

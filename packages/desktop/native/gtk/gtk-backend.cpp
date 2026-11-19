@@ -462,6 +462,10 @@ void GtkBackend::setCovered(SurfaceId, Tag tag, bool covered) {
   }
 }
 
+void GtkBackend::setPresented(SurfaceId surfaceId, Tag screen, bool presented) {
+  modals_->setPresented(surfaceId, screen, presented);
+}
+
 void GtkBackend::setFrontHeader(SurfaceId surfaceId, const std::optional<ScreenStacks::FrontHeader> &header) {
   headers_->show(surfaceId, header);
 }
