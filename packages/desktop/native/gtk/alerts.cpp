@@ -5,6 +5,7 @@
 #include <adwaita.h>
 
 #include <memory>
+#include <vector>
 
 namespace ngn::gtk {
 
@@ -79,6 +80,35 @@ GtkWidget *fieldsFor(const AlertRequest &request, Pending &pending) {
     }
   }
   return nullptr;
+}
+
+void responseButtons(GtkWidget *root, GtkWidget *skip, std::vector<GtkWidget *> &out) {
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child; child = gtk_widget_get_next_sibling(child)) {
+    if (child == skip) {
+      continue;
+    }
+    if (GTK_IS_BUTTON(child)) {
+      out.push_back(child);
+    } else {
+      responseButtons(child, skip, out);
+    }
+  }
+}
+
+// More than three buttons stack, one above another, as libadwaita stacks them when they do not fit
+// side by side: each asks for a width that four never fit in, even in a wide dialog. The responses
+// are the dialog's buttons outside `extra`; with any other count found, libadwaita's own layout
+// stands.
+void stackResponses(GtkWidget *dialog, GtkWidget *extra, size_t count) {
+  constexpr int kStackedWidth = 200;
+  std::vector<GtkWidget *> buttons;
+  responseButtons(dialog, extra, buttons);
+  if (count <= 3 || buttons.size() != count) {
+    return;
+  }
+  for (GtkWidget *button : buttons) {
+    gtk_widget_set_size_request(button, kStackedWidth, -1);
+  }
 }
 
 std::string textOf(GtkWidget *field) {
@@ -157,6 +187,7 @@ void showAlert(const AlertRequest &request, std::function<void(int, std::string,
     }
     gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
   }
+  stackResponses(dialog, extra, layout.order.size());
   g_object_set_data_full(G_OBJECT(dialog), "ngn-alert", pending, [](gpointer p) { delete static_cast<Pending *>(p); });
   g_signal_connect(dialog, "response", G_CALLBACK(+[](GtkWidget *d, const char *response, gpointer) { answer(d, response); }), nullptr);
   // The answer arrives however it goes, even closed with no response.
