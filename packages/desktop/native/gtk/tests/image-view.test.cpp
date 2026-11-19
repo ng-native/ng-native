@@ -103,6 +103,22 @@ TEST_CASE("an Image is cut to its view's rounded shape") {
   CHECK(views.pixel(96, 96).a < 40);
 }
 
+TEST_CASE("an Image's tintColor fills the image's shape with the tint, and leaves the rest clear") {
+  REQUIRE(ngn::testing::gtkReady());
+  ImageLoading loading;
+  MountedViews views;
+  auto image = MountedViews::shadow(2, "Image", imageProps(dynamic::object("source", source(kWideRed))("resizeMode", "contain")("tintColor", kGreen)), {{0, 0}, {100, 100}});
+  views.add(image);
+  waitForLoad(views, 2);
+  CHECK(greenish(views.pixel(50, 50)));
+  // Contained: nothing above the band the image fills.
+  CHECK(views.pixel(50, 10).a == 0);
+
+  // Without the tint, the image's own colour.
+  views.update(image, imageProps(dynamic::object("source", source(kWideRed))("resizeMode", "contain")));
+  CHECK(reddish(views.pixel(50, 50)));
+}
+
 TEST_CASE("an Image's border is drawn over its image, as a layer's border is") {
   REQUIRE(ngn::testing::gtkReady());
   ImageLoading loading;

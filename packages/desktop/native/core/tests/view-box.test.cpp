@@ -555,3 +555,56 @@ TEST_CASE("describeBox keeps the shadows in CSS's order, a uniform border style,
   CHECK(box.clips);
   CHECK_FALSE(box.background);
 }
+
+TEST_CASE("describeBox gives each background image as a gradient and its tiles, the last listed first") {
+  auto image = [](int64_t color) {
+    auto stops = dynamic::array(dynamic(dynamic::object("color", color)("position", nullptr)), dynamic(dynamic::object("color", kBlue)("position", nullptr)));
+    return dynamic::object("type", "linear-gradient")("direction", dynamic::object("type", "angle")("value", 90))("colorStops", stops);
+  };
+  Box b(
+      dynamic::object("borderWidth", 2)("experimental_backgroundImage", dynamic::array(image(kRed), image(kGreen)))(
+          "experimental_backgroundSize", dynamic::array(dynamic(dynamic::object("x", 20)("y", 20)), dynamic(dynamic::object("x", "100%")("y", "100%")))),
+      100,
+      44);
+  auto box = ngn::describeBox(b.view(), b.layout);
+  REQUIRE(box.backgroundImages.size() == 2);
+  // The second image, listed last, at the bottom: the padding box's size, placed at its corner
+  // and repeated out over the border.
+  const auto &bottom = box.backgroundImages[0];
+  REQUIRE(bottom.tiles.size() == 3 * 3);
+  CHECK(bottom.tiles[4] == SvgRect{2, 2, 96, 40});
+  CHECK(bottom.gradient.stops.front().second == 0xff00ff00u);
+  // To the right across a tile: from its left edge to its right.
+  CHECK(bottom.gradient.x1 == doctest::Approx(0));
+  CHECK(bottom.gradient.x2 == doctest::Approx(96));
+  // The first, on top, in 20 by 20 tiles from the padding box's corner over the border box.
+  const auto &top = box.backgroundImages[1];
+  CHECK(top.gradient.stops.front().second == 0xffff0000u);
+  REQUIRE(top.tiles.size() == 6 * 4);
+  CHECK(top.tiles[0] == SvgRect{-18, -18, 20, 20});
+  CHECK(top.gradient.x2 == doctest::Approx(20));
+}
+
+TEST_CASE("describeBox leaves out a background image with nothing to draw") {
+  dynamic empty = dynamic::object("type", "linear-gradient")("direction", dynamic::object("type", "angle")("value", 90))("colorStops", dynamic::array());
+  Box b(dynamic::object("experimental_backgroundImage", dynamic::array(empty)), 100, 50);
+  CHECK(ngn::describeBox(b.view(), b.layout).backgroundImages.empty());
+}
+
+TEST_CASE("drawBorder draws a described box's border as drawViewBox does, dashed and dotted ones included") {
+  for (std::string style : {"dashed", "dotted"}) {
+    CAPTURE(style);
+    Box b(dynamic::object("borderWidth", 2)("borderColor", kRed)("borderStyle", style)("borderRadius", 6), 100, 50);
+    Recorder canvas;
+    ngn::drawBorder(ngn::describeBox(b.view(), b.layout), canvas);
+    auto drawn = fills(canvas.calls);
+    REQUIRE(drawn.size() == 1);
+    CHECK(drawn == fills(b.drawn()));
+    CHECK(drawn[0].find(style == "dashed" ? " dash 6 6 " : " dash 2 2 ") != std::string::npos);
+  }
+  Box solid(dynamic::object("borderWidth", 2)("borderColor", kRed)("borderTopLeftRadius", 6), 100, 50);
+  Recorder canvas;
+  ngn::drawBorder(ngn::describeBox(solid.view(), solid.layout), canvas);
+  REQUIRE_FALSE(fills(canvas.calls).empty());
+  CHECK(fills(canvas.calls) == fills(solid.drawn()));
+}

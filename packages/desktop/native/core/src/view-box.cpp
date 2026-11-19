@@ -150,10 +150,9 @@ void drawSides(const SvgRect &box, const EdgeWidths &w, const CornerRadii &radii
   }
 }
 
-void drawBorder(const SvgRect &box, const BorderMetrics &metrics, const CornerRadii &radii, SvgCanvas &canvas) {
-  auto w = widthsOf(metrics.borderWidths);
-  const auto &c = metrics.borderColors;
-  std::optional<uint32_t> colors[4] = {argbOf(c.top), argbOf(c.right), argbOf(c.bottom), argbOf(c.left)};
+// The border of `box`, its sides' colours from the top clockwise, in `style`.
+void drawBorderOf(
+    const SvgRect &box, const EdgeWidths &w, const std::optional<uint32_t> colors[4], const CornerRadii &radii, BorderStyle style, SvgCanvas &canvas) {
   double widths[4] = {w.top, w.right, w.bottom, w.left};
   std::optional<uint32_t> only;
   bool oneColor = true, any = false, hidden = false;
@@ -175,7 +174,6 @@ void drawBorder(const SvgRect &box, const BorderMetrics &metrics, const CornerRa
     return;
   }
 
-  auto style = metrics.borderStyles.left;
   if (style == BorderStyle::Dashed || style == BorderStyle::Dotted) {
     // One colour, stroked along the middle of the widest side, as React Native iOS draws it.
     if (!oneColor) {
@@ -183,7 +181,7 @@ void drawBorder(const SvgRect &box, const BorderMetrics &metrics, const CornerRa
     }
     double line = *std::max_element(std::begin(widths), std::end(widths));
     SvgRect middle{box.x + line / 2, box.y + line / 2, box.width - line, box.height - line};
-    bool uniform = metrics.borderWidths.isUniform();
+    bool uniform = w.top == w.right && w.top == w.bottom && w.top == w.left;
     if (!uniform) {
       canvas.save();
       auto ring = rectPath(box);
@@ -669,12 +667,47 @@ std::vector<SvgRect> backgroundTiles(
   return tiles;
 }
 
+namespace {
+
+// background-origin: padding-box; background-clip: border-box. The first image is on top, so it
+// comes last.
+std::vector<BackgroundLayer> backgroundLayers(const ViewProps &props, const SvgRect &bounds, const EdgeWidths &widths) {
+  std::vector<BackgroundLayer> layers;
+  auto area = inset(bounds, widths);
+  for (size_t i = props.backgroundImage.size(); i-- > 0;) {
+    auto pick = [i](const auto &list, auto fallback) { return list.empty() ? fallback : list[i % list.size()]; };
+    auto tiles = backgroundTiles(
+        area,
+        bounds,
+        pick(props.backgroundSize, BackgroundSize{BackgroundSizeLengthPercentage{}}),
+        pick(props.backgroundPosition, BackgroundPosition{}),
+        pick(props.backgroundRepeat, BackgroundRepeat{}));
+    if (tiles.empty()) {
+      continue;
+    }
+    const auto &image = props.backgroundImage[i];
+    double w = tiles[0].width, h = tiles[0].height;
+    std::optional<SvgGradient> gradient = std::holds_alternative<LinearGradient>(image)
+        ? std::optional{linearGradient(std::get<LinearGradient>(image), w, h)}
+        : radialGradient(std::get<RadialGradient>(image), w, h);
+    if (!gradient || gradient->stops.empty()) {
+      continue;
+    }
+    layers.push_back({.gradient = std::move(*gradient), .tiles = std::move(tiles)});
+  }
+  return layers;
+}
+
+} // namespace
+
 BoxDescription describeBox(const ViewProps &props, const LayoutMetrics &layout) {
   auto metrics = props.resolveBorderMetrics(layout);
   const auto &colors = metrics.borderColors;
+  SvgRect bounds{0, 0, layout.frame.size.width, layout.frame.size.height};
   return {
-      .bounds = {0, 0, layout.frame.size.width, layout.frame.size.height},
+      .bounds = bounds,
       .background = argbOf(props.backgroundColor),
+      .backgroundImages = backgroundLayers(props, bounds, widthsOf(metrics.borderWidths)),
       .radii = cornerRadiiOf(metrics.borderRadii),
       .borderWidths = widthsOf(metrics.borderWidths),
       .borderColors = {.top = argbOf(colors.top), .right = argbOf(colors.right), .bottom = argbOf(colors.bottom), .left = argbOf(colors.left)},
@@ -744,52 +777,34 @@ ViewBox viewBox(const ViewProps &props, const LayoutMetrics &layout) {
   return box;
 }
 
+void drawBorder(const BoxDescription &box, SvgCanvas &canvas) {
+  const auto &c = box.borderColors;
+  std::optional<uint32_t> colors[4] = {c.top, c.right, c.bottom, c.left};
+  drawBorderOf(box.bounds, box.borderWidths, colors, box.radii, box.borderStyle, canvas);
+}
+
 void drawViewBox(const ViewProps &props, const LayoutMetrics &layout, SvgCanvas &canvas) {
   auto box = viewBox(props, layout);
   if (!box.drawn) {
     return;
   }
-  auto metrics = props.resolveBorderMetrics(layout);
-  auto radii = cornerRadiiOf(metrics.borderRadii);
-  auto widths = widthsOf(metrics.borderWidths);
-  SvgRect bounds{0, 0, layout.frame.size.width, layout.frame.size.height};
-  auto outer = roundedRect(bounds, radii);
+  auto described = describeBox(props, layout);
+  auto outer = roundedRect(described.bounds, described.radii);
 
   if (!box.layerDrawn) {
-    auto background = argbOf(props.backgroundColor);
-    if (visible(background)) {
-      canvas.fill(outer, false, SvgPaint{.argb = *background});
+    if (visible(described.background)) {
+      canvas.fill(outer, false, SvgPaint{.argb = *described.background});
     }
   }
 
-  if (!props.backgroundImage.empty()) {
-    // background-origin: padding-box; background-clip: border-box. The first image is on top.
-    auto area = inset(bounds, widths);
+  if (!described.backgroundImages.empty()) {
     canvas.save();
     canvas.clip(outer, false);
-    for (size_t i = props.backgroundImage.size(); i-- > 0;) {
-      auto pick = [i](const auto &list, auto fallback) { return list.empty() ? fallback : list[i % list.size()]; };
-      auto tiles = backgroundTiles(
-          area,
-          bounds,
-          pick(props.backgroundSize, BackgroundSize{BackgroundSizeLengthPercentage{}}),
-          pick(props.backgroundPosition, BackgroundPosition{}),
-          pick(props.backgroundRepeat, BackgroundRepeat{}));
-      if (tiles.empty()) {
-        continue;
-      }
-      const auto &image = props.backgroundImage[i];
-      double w = tiles[0].width, h = tiles[0].height;
-      std::optional<SvgGradient> gradient = std::holds_alternative<LinearGradient>(image)
-          ? std::optional{linearGradient(std::get<LinearGradient>(image), w, h)}
-          : radialGradient(std::get<RadialGradient>(image), w, h);
-      if (!gradient || gradient->stops.empty()) {
-        continue;
-      }
-      for (const auto &tile : tiles) {
+    for (const auto &layer : described.backgroundImages) {
+      for (const auto &tile : layer.tiles) {
         SvgPaint paint;
-        paint.gradient = *gradient;
-        paint.gradient->transform = SvgMatrix::translate(tile.x, tile.y) * gradient->transform;
+        paint.gradient = layer.gradient;
+        paint.gradient->transform = SvgMatrix::translate(tile.x, tile.y) * layer.gradient.transform;
         canvas.fill(rectPath(tile), false, paint);
       }
     }
@@ -797,7 +812,11 @@ void drawViewBox(const ViewProps &props, const LayoutMetrics &layout, SvgCanvas 
   }
 
   if (!box.layerDrawn) {
-    drawBorder(bounds, metrics, radii, canvas);
+    // React Native iOS draws every side in the left side's style.
+    auto style = props.resolveBorderMetrics(layout).borderStyles.left;
+    const auto &c = described.borderColors;
+    std::optional<uint32_t> colors[4] = {c.top, c.right, c.bottom, c.left};
+    drawBorderOf(described.bounds, described.borderWidths, colors, described.radii, style, canvas);
   }
 }
 

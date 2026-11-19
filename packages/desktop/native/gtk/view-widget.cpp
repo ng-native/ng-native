@@ -8,6 +8,7 @@
 #include "text-field.h"
 
 #include "ngn/view-box.h"
+#include "ngn/view-filter.h"
 #include "ngn/view-transform.h"
 
 #include <react/renderer/components/text/ParagraphState.h>
@@ -15,7 +16,9 @@
 #include <react/renderer/core/ConcreteState.h>
 
 #include <cmath>
+#include <optional>
 #include <utility>
+#include <vector>
 
 using namespace facebook::react;
 
@@ -157,28 +160,144 @@ void snapshotSvg(GtkWidget *widget, ViewData *d, GtkSnapshot *snapshot) {
   cairo_destroy(cr);
 }
 
+// The view's filter as GSK nodes over all it draws, its children included, the function listed
+// first innermost so that it applies first. How many it pushed, which the caller pops.
+int pushFilter(GtkSnapshot *snapshot, const ViewProps &props) {
+  auto steps = ngn::filterSteps(props.filter);
+  for (auto it = steps.rbegin(); it != steps.rend(); ++it) {
+    // GSK blurs by a radius twice the Gaussian's standard deviation.
+    float radius = static_cast<float>(2 * it->standardDeviation);
+    switch (it->type) {
+      case ngn::FilterStep::Type::ColorMatrix: {
+        // graphene's rows are the input channels and its columns the output ones: SVG's matrix
+        // turned over.
+        const auto &m = it->matrix;
+        float values[16];
+        for (int in = 0; in < 4; ++in) {
+          for (int out = 0; out < 4; ++out) {
+            values[in * 4 + out] = static_cast<float>(m[out * 5 + in]);
+          }
+        }
+        graphene_matrix_t matrix;
+        graphene_matrix_init_from_float(&matrix, values);
+        graphene_vec4_t offset;
+        graphene_vec4_init(&offset, static_cast<float>(m[4]), static_cast<float>(m[9]), static_cast<float>(m[14]), static_cast<float>(m[19]));
+        gtk_snapshot_push_color_matrix(snapshot, &matrix, &offset);
+        break;
+      }
+      case ngn::FilterStep::Type::Blur:
+        gtk_snapshot_push_blur(snapshot, radius);
+        break;
+      case ngn::FilterStep::Type::DropShadow: {
+        GskShadow shadow{ngn::gtk::rgbaOf(it->argb), static_cast<float>(it->offsetX), static_cast<float>(it->offsetY), radius};
+        gtk_snapshot_push_shadow(snapshot, &shadow, 1);
+        break;
+      }
+    }
+  }
+  return static_cast<int>(steps.size());
+}
+
+// How a child view blends with what its parent drew under it, when it does. GSK has no
+// plus-lighter: that child draws normally.
+std::optional<GskBlendMode> blendOf(GtkWidget *child) {
+  ViewData *c = ngn::gtk::viewData(child);
+  auto props = c ? std::dynamic_pointer_cast<const ViewProps>(c->props) : nullptr;
+  if (!props) {
+    return std::nullopt;
+  }
+  switch (props->mixBlendMode) {
+    case BlendMode::Multiply:
+      return GSK_BLEND_MODE_MULTIPLY;
+    case BlendMode::Screen:
+      return GSK_BLEND_MODE_SCREEN;
+    case BlendMode::Overlay:
+      return GSK_BLEND_MODE_OVERLAY;
+    case BlendMode::Darken:
+      return GSK_BLEND_MODE_DARKEN;
+    case BlendMode::Lighten:
+      return GSK_BLEND_MODE_LIGHTEN;
+    case BlendMode::ColorDodge:
+      return GSK_BLEND_MODE_COLOR_DODGE;
+    case BlendMode::ColorBurn:
+      return GSK_BLEND_MODE_COLOR_BURN;
+    case BlendMode::HardLight:
+      return GSK_BLEND_MODE_HARD_LIGHT;
+    case BlendMode::SoftLight:
+      return GSK_BLEND_MODE_SOFT_LIGHT;
+    case BlendMode::Difference:
+      return GSK_BLEND_MODE_DIFFERENCE;
+    case BlendMode::Exclusion:
+      return GSK_BLEND_MODE_EXCLUSION;
+    case BlendMode::Hue:
+      return GSK_BLEND_MODE_HUE;
+    case BlendMode::Saturation:
+      return GSK_BLEND_MODE_SATURATION;
+    case BlendMode::Color:
+      return GSK_BLEND_MODE_COLOR;
+    case BlendMode::Luminosity:
+      return GSK_BLEND_MODE_LUMINOSITY;
+    default:
+      return std::nullopt;
+  }
+}
+
+// A view draws its box, then its children in Fabric's order. A child with a mix-blend-mode blends
+// with what the view drew before it: its box and the children under it. Each such child is a blend
+// node whose bottom is everything drawn before it, so the nodes are pushed up front, the last
+// blending child's outermost, and each one's bottom ends where its child comes.
 void viewSnapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
   ViewData *d = NGN_VIEW(widget)->data;
-  bool clipped = false;
-  if (auto props = std::dynamic_pointer_cast<const ViewProps>(d->props)) {
-    auto box = ngn::describeBox(*props, d->layout);
+  auto props = std::dynamic_pointer_cast<const ViewProps>(d->props);
+  int filters = props ? pushFilter(snapshot, *props) : 0;
+  std::vector<GskBlendMode> blends;
+  for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
+    if (auto mode = GTK_IS_NATIVE(child) ? std::nullopt : blendOf(child)) {
+      blends.push_back(*mode);
+    }
+  }
+  for (auto it = blends.rbegin(); it != blends.rend(); ++it) {
+    gtk_snapshot_push_blend(snapshot, *it);
+  }
+  std::optional<ngn::BoxDescription> box;
+  if (props) {
+    box = ngn::describeBox(*props, d->layout);
     // An Image's picture fills its bounds under its border, as a layer's contents do on macOS.
-    ngn::gtk::appendBox(snapshot, box, d->image ? std::function<void()>([&] { ngn::gtk::snapshotImage(*d, snapshot, box); }) : nullptr);
+    ngn::gtk::appendBox(snapshot, *box, d->image ? std::function<void()>([&] { ngn::gtk::snapshotImage(*d, snapshot, *box); }) : nullptr);
     if (d->component == "Paragraph" && d->state) {
       snapshotText(d, snapshot);
     }
     snapshotSvg(widget, d, snapshot);
     ngn::gtk::snapshotPlaceholder(*d, snapshot);
-    clipped = ngn::gtk::pushOverflowClip(snapshot, box);
   }
+  auto clip = [&] { return box && ngn::gtk::pushOverflowClip(snapshot, *box); };
+  bool clipped = clip();
   for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
     if (GTK_IS_NATIVE(child)) {
       // A popover is a surface of its own.
       continue;
     }
+    if (!blendOf(child)) {
+      gtk_widget_snapshot_child(widget, child, snapshot);
+      continue;
+    }
+    // The clip is pushed inside each part, so that the blend node's two parts close in turn.
+    if (clipped) {
+      gtk_snapshot_pop(snapshot);
+    }
+    gtk_snapshot_pop(snapshot);
+    clipped = clip();
     gtk_widget_snapshot_child(widget, child, snapshot);
+    if (clipped) {
+      gtk_snapshot_pop(snapshot);
+    }
+    gtk_snapshot_pop(snapshot);
+    clipped = clip();
   }
   if (clipped) {
+    gtk_snapshot_pop(snapshot);
+  }
+  for (int i = 0; i < filters; ++i) {
     gtk_snapshot_pop(snapshot);
   }
 }

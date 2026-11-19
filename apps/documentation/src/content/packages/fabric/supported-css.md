@@ -176,6 +176,10 @@ platforms too, so `grayscale` there is dropped with a warning, while `android:gr
 A filter inside `@keyframes` is checked against the platform alone, since a keyframe has no
 selector to scope it.
 
+On the desktop, a macOS build is checked as an iOS one is (its host draws no `filter` yet). The GTK
+host on Linux draws every function, `blur()` and `drop-shadow()` included, so the Linux build keeps
+an unscoped filter, and so does a rule scoped with `.platform-linux` (Tailwind's `linux:` variant).
+
 A `filter` can also be a list of tokens, each holding one function or nothing: `filter:
 var(--blur,) var(--grayscale,)` draws whichever of them are set on the element, from whichever
 rules set them. Each token is checked against the platforms of the rule that sets it, so
