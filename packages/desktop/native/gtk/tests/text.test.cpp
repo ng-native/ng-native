@@ -565,6 +565,37 @@ TEST_CASE("a props update that repeats the shown text leaves a held setTextAndSe
   }
 }
 
+TEST_CASE("props that answer an edit made after a held setTextAndSelection replace it, though their text repeats") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    auto props = [multiline](dynamic extra) {
+      extra["multiline"] = multiline;
+      extra["text"] = "a";
+      return textInputProps(std::move(extra));
+    };
+    auto input = MountedViews::shadow(2, "TextInput", props(dynamic::object()), {{10, 10}, {150, 80}});
+    views.add(input);
+    auto *field = ngn::gtk::viewData(views.view(2))->field;
+    g_signal_emit_by_name(field->text, "preedit-changed", "ka");
+    views.backend->dispatchCommand(2, "setTextAndSelection", dynamic::array(0, "b", 0, 0));
+    // The input method commits part of what is composed and goes on composing.
+    if (multiline) {
+      gtk_text_buffer_insert_at_cursor(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), "!", -1);
+    } else {
+      int position = 1;
+      gtk_editable_insert_text(GTK_EDITABLE(field->text), "!", -1, &position);
+    }
+    REQUIRE(field->eventCount == 1);
+    // JavaScript answers that edit by keeping its value.
+    views.update(input, props(dynamic::object("mostRecentEventCount", 1)));
+    g_signal_emit_by_name(field->text, "preedit-changed", "");
+    settle();
+    CHECK(ngn::gtk::fieldText(*field) == "a");
+  }
+}
+
 TEST_CASE("a new selection prop applies to the text held with it") {
   REQUIRE(ngn::testing::gtkReady());
   for (bool multiline : {false, true}) {
