@@ -174,6 +174,19 @@ void GtkBackend::serviceUiThread() {
   g_main_context_iteration(nullptr, FALSE);
 }
 
+namespace {
+
+// react-native-svg's elements draw nothing of their own: the svg draws them. A foreignObject's
+// views stay hidden with them.
+void hideSvgElement(GtkWidget *widget) {
+  const std::string &component = viewData(widget)->component;
+  if (component.starts_with("RNSVG") && component != "RNSVGSvgView") {
+    gtk_widget_set_child_visible(widget, FALSE);
+  }
+}
+
+} // namespace
+
 void GtkBackend::createView(const ShadowView &view) {
   auto accessibility = accessibilityOf(view);
   GtkWidget *widget = makeViewWidget(accessibleRole(view));
@@ -194,11 +207,7 @@ void GtkBackend::createView(const ShadowView &view) {
     makeScrollView(widget, *d);
     applyScrollViewState(*d);
   } else if (d->component == "Image") {
-    applyImageProps(*d, gtk_widget_get_scale_factor(widget));
-  } else if (d->component.starts_with("RNSVG") && d->component != "RNSVGSvgView") {
-    // react-native-svg's elements draw nothing of their own: the svg draws them. A foreignObject's
-    // views stay hidden with them.
-    gtk_widget_set_child_visible(widget, FALSE);
+    makeImageView(widget, *d);
   } else if (d->component == "RNSScreenStackHeaderConfig") {
     // What of a header shows is in the window's header bar: its subtree is neither drawn nor hit
     // in the content.
@@ -214,6 +223,7 @@ void GtkBackend::createView(const ShadowView &view) {
       applySearchBar(entry, *view.props);
     }
   }
+  hideSvgElement(widget);
   makeControl(widget, *d);
   applyViewProps(widget, *d);
   views_[view.tag] = widget;
@@ -269,6 +279,12 @@ void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int ind
     }
   }
   gtk_widget_insert_before(c->second, parentWidget, sibling);
+  // Unparenting, here or in removeChild, made it visible again.
+  hideSvgElement(c->second);
+  // An Image's source was picked before it had a window, at the first monitor's scale.
+  if (ViewData *d = viewData(c->second); d && d->image) {
+    applyImageProps(*d, gtk_widget_get_scale_factor(c->second));
+  }
   if (viewData(c->second)->component == "ModalHostView") {
     modals_->mounted(surfaceId, child);
   }
