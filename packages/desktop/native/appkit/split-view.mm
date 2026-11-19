@@ -1,4 +1,6 @@
 #import "split-view.h"
+
+#include <optional>
 #import "test-launch.h"
 
 #import "surface-view.h"
@@ -171,8 +173,8 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   std::string _autosave;
   // The sidebar's width as a screen in front covered it, for when it takes the window again.
   CGFloat _widthBeforeCover;
-  // Whether the user had the sidebar collapsed then, unless the app has said otherwise since.
-  BOOL _collapsedBeforeCover;
+  // What the app's `collapsed` asked for while no controller was there to take it.
+  std::optional<bool> _collapseWhileCovered;
 }
 
 + (ngn::InputSink *)input {
@@ -377,8 +379,15 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   BOOL restoring = [self hasAutosavedFrames];
   // Installed again after a screen covered it: the sidebar stays collapsed if the app or the user
   // had it so, unless the autosave restores the user's. After the divider is placed, which opens it.
-  BOOL collapse = !restoring && ((p != nullptr && p->collapsed) || _collapsedBeforeCover);
-  _collapsedBeforeCover = NO;
+  std::optional<bool> collapse;
+  if (!restoring && p != nullptr && p->collapsed) {
+    collapse = true;
+  }
+  // The app asked while covered: that wins, autosave or not.
+  if (_collapseWhileCovered) {
+    collapse = *_collapseWhileCovered;
+  }
+  _collapseWhileCovered.reset();
   [_controller addSplitViewItem:_sidebarItem];
   [_controller addSplitViewItem:contentItem];
   window.contentViewController = _controller;
@@ -387,8 +396,8 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
     CGFloat width = _widthBeforeCover > 0 ? _widthBeforeCover : [self startingWidth];
     [_controller.splitView setPosition:width ofDividerAtIndex:0];
   }
-  if (collapse) {
-    _sidebarItem.collapsed = YES;
+  if (collapse && *collapse != _sidebarItem.collapsed) {
+    _sidebarItem.collapsed = *collapse;
   }
   _widthBeforeCover = 0;
   [_sidebarItem addObserver:self forKeyPath:@"collapsed" options:NSKeyValueObservingOptionNew context:nil];
@@ -464,7 +473,6 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
       // The divider's position: the sidebar pane's edge, whatever inset its view has in it.
       NSArray<NSView *> *panes = _controller.splitView.arrangedSubviews;
       _widthBeforeCover = _sidebarItem.collapsed || panes.count == 0 ? 0 : NSMaxX(panes[0].frame);
-      _collapsedBeforeCover = _sidebarItem.collapsed;
       [self uninstall];
     }
   } else if (_decided && _controller == nil) {
@@ -495,7 +503,9 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
     view.autosaveName = autosaveKey(_autosave);
   }
   if (auto collapsed = _collapse.propChanged(p->collapsed)) {
-    _collapsedBeforeCover = NO;
+    if (_windows && _controller == nil) {
+      _collapseWhileCovered = *collapsed;
+    }
     [self setToolkitCollapsed:*collapsed];
   }
 }

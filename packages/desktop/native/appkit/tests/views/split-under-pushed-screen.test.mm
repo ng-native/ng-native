@@ -9,7 +9,19 @@
 
 using namespace facebook::react;
 using ngn::testing::MountedViews;
+using ngn::testing::parsedProps;
 using ngn::testing::viewProps;
+
+namespace {
+// The sidebar's own props, as the app commits them: what the split view reads its collapse from.
+Props::Shared sidebarProps(folly::dynamic raw) {
+  return parsedProps<ngn::SidebarComponentDescriptor>(std::move(raw));
+}
+// Runs the main loop long enough for a sidebar's collapse animation to finish.
+void settle() {
+  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.6]];
+}
+} // namespace
 
 TEST_CASE("A split view gives the window back while its screen is covered, and takes it again after") {
   MountedViews mounted;
@@ -23,7 +35,7 @@ TEST_CASE("A split view gives the window back while its screen is covered, and t
   // A screen holding the split view.
   mounted.add(MountedViews::shadow(4, "View", viewProps(folly::dynamic::object())));
   mounted.add(MountedViews::shadow(5, ngn::SplitViewComponentName, viewProps(folly::dynamic::object())), 4);
-  mounted.add(MountedViews::shadow(6, ngn::SidebarComponentName, viewProps(folly::dynamic::object())), 5);
+  mounted.add(MountedViews::shadow(6, ngn::SidebarComponentName, sidebarProps(folly::dynamic::object())), 5);
   mounted.add(MountedViews::shadow(7, ngn::SplitContentComponentName, viewProps(folly::dynamic::object())), 5);
   auto *split = (NGNSplitView *)mounted.view(5);
   [split placeAsWindows:YES];
@@ -63,7 +75,7 @@ TEST_CASE("A split view mounted under a screen that is already covered waits for
   mounted.add(MountedViews::shadow(4, "View", viewProps(folly::dynamic::object())));
   mounted.backend->setCovered(MountedViews::kSurface, 4, true);
   mounted.add(MountedViews::shadow(5, ngn::SplitViewComponentName, viewProps(folly::dynamic::object())), 4);
-  mounted.add(MountedViews::shadow(6, ngn::SidebarComponentName, viewProps(folly::dynamic::object())), 5);
+  mounted.add(MountedViews::shadow(6, ngn::SidebarComponentName, sidebarProps(folly::dynamic::object())), 5);
   mounted.add(MountedViews::shadow(7, ngn::SplitContentComponentName, viewProps(folly::dynamic::object())), 5);
   auto *split = (NGNSplitView *)mounted.view(5);
   [split placeAsWindows:YES];
@@ -75,7 +87,7 @@ TEST_CASE("A split view mounted under a screen that is already covered waits for
   [split uninstall];
 }
 
-TEST_CASE("A sidebar the user collapsed is still collapsed after a screen in front goes") {
+TEST_CASE("A sidebar the user collapsed, which the app's binding follows, is still collapsed after a screen in front goes") {
   MountedViews mounted;
   struct Restore {
     ngn::InputSink *split = NGNSplitView.input;
@@ -86,19 +98,60 @@ TEST_CASE("A sidebar the user collapsed is still collapsed after a screen in fro
   NGNSplitView.input = &mounted.input;
   mounted.add(MountedViews::shadow(4, "View", viewProps(folly::dynamic::object())));
   mounted.add(MountedViews::shadow(5, ngn::SplitViewComponentName, viewProps(folly::dynamic::object())), 4);
-  mounted.add(MountedViews::shadow(6, ngn::SidebarComponentName, viewProps(folly::dynamic::object())), 5);
+  auto sidebar = MountedViews::shadow(6, ngn::SidebarComponentName, sidebarProps(folly::dynamic::object()));
+  mounted.add(sidebar, 5);
   mounted.add(MountedViews::shadow(7, ngn::SplitContentComponentName, viewProps(folly::dynamic::object())), 5);
   auto *split = (NGNSplitView *)mounted.view(5);
   [split placeAsWindows:YES];
   auto *controller = (NSSplitViewController *)mounted.window.contentViewController;
   REQUIRE((controller != nil));
   controller.splitViewItems[0].collapsed = YES;
+  // The sidebar is controlled: the app hears the collapse and its [(collapsed)] binding follows.
+  mounted.update(sidebar, sidebarProps(folly::dynamic::object("collapsed", true)));
 
   mounted.backend->setCovered(MountedViews::kSurface, 4, true);
   mounted.backend->setCovered(MountedViews::kSurface, 4, false);
+  settle();
   auto *again = (NSSplitViewController *)mounted.window.contentViewController;
   REQUIRE((again != nil));
   CHECK(again.splitViewItems[0].collapsed);
   [split uninstall];
 }
 
+TEST_CASE("A collapse the app asks for while a screen covers the split view is there when it shows") {
+  MountedViews mounted;
+  // An autosave that holds the divider's frames, which the split view restores on taking the window
+  // again: the app's collapse must still win over it.
+  NSString *key = @"NSSplitView Subview Frames ngn-test-covered-collapse";
+  struct Restore {
+    ngn::InputSink *split = NGNSplitView.input;
+    NSString *key;
+    ~Restore() {
+      NGNSplitView.input = split;
+      [NSUserDefaults.standardUserDefaults removeObjectForKey:key];
+    }
+  } restore{.key = key};
+  NGNSplitView.input = &mounted.input;
+  mounted.add(MountedViews::shadow(4, "View", viewProps(folly::dynamic::object())));
+  mounted.add(MountedViews::shadow(5, ngn::SplitViewComponentName, viewProps(folly::dynamic::object())), 4);
+  auto sidebar = MountedViews::shadow(
+      6, ngn::SidebarComponentName, sidebarProps(folly::dynamic::object("autosaveName", "ngn-test-covered-collapse")));
+  mounted.add(sidebar, 5);
+  mounted.add(MountedViews::shadow(7, ngn::SplitContentComponentName, viewProps(folly::dynamic::object())), 5);
+  auto *split = (NGNSplitView *)mounted.view(5);
+  [split placeAsWindows:YES];
+  auto *controller = (NSSplitViewController *)mounted.window.contentViewController;
+  REQUIRE((controller != nil));
+  [controller.splitView setPosition:280 ofDividerAtIndex:0];
+  [controller.splitView adjustSubviews];
+  settle();
+
+  mounted.backend->setCovered(MountedViews::kSurface, 4, true);
+  mounted.update(sidebar, sidebarProps(folly::dynamic::object("autosaveName", "ngn-test-covered-collapse")("collapsed", true)));
+  mounted.backend->setCovered(MountedViews::kSurface, 4, false);
+  settle();
+  auto *again = (NSSplitViewController *)mounted.window.contentViewController;
+  REQUIRE((again != nil));
+  CHECK(again.splitViewItems[0].collapsed);
+  [split uninstall];
+}
