@@ -14,12 +14,14 @@
 #include "gtk-backend.h"
 #include "host-sources.h"
 #include "image-view.h"
+#include "input-replay.h"
 #include "pango-text.h"
 #include "scroll-view.h"
 #include "surface-input.h"
 #include "view-widget.h"
 
 #include "ngn/core-modules.h"
+#include "ngn/crash-report.h"
 #include "ngn/curl-network.h"
 #include "ngn/desktop-modules.h"
 #include "ngn/dev-server.h"
@@ -133,7 +135,22 @@ ngn::WindowMetrics windowMetrics(int width, int height) {
   };
 }
 
-// The first window's first frame, once drawn: logged, and captured when asked.
+// A dev or test run's input script (NGN_INPUT_SCRIPT), played into the first window once it shows.
+std::string gInputScript;
+
+void playInputScript(GtkWidget *window) {
+  gchar *text = nullptr;
+  if (!g_file_get_contents(gInputScript.c_str(), &text, nullptr, nullptr)) {
+    fprintf(stderr, "[ngn] input script %s: cannot be read\n", gInputScript.c_str());
+    return;
+  }
+  auto script = ngn::parseInputScript(text);
+  g_free(text);
+  ngn::gtk::replayInputScript(window, std::move(script));
+}
+
+// The first window's first frame, once drawn: logged, captured when asked, and given the run's
+// input script.
 void watchFirstFrame(GtkWidget *window, GtkWidget *surface) {
   GdkFrameClock *clock = gtk_widget_get_frame_clock(window);
   if (!clock || gHost.firstFrame) {
@@ -147,6 +164,9 @@ void watchFirstFrame(GtkWidget *window, GtkWidget *surface) {
     }
     logged = true;
     fprintf(stderr, "[ngn] first frame %.0f ms after launch\n", (g_get_monotonic_time() - gHost.launched) / 1000.0);
+    if (!gInputScript.empty()) {
+      playInputScript(GTK_WIDGET(gtk_widget_get_root(static_cast<GtkWidget *>(surface))));
+    }
     if (const char *path = getenv("NGN_CAPTURE"); path && *path) {
       std::string file = path;
       ngn::gtk::runAfter(1, [file, surface] {
@@ -242,6 +262,19 @@ int main(int argc, char *argv[]) {
   static const auto settings = std::get<ngn::LaunchSettings>(launch);
   std::string bundle = settings.bundle;
   std::string appId = settings.appId.empty() ? settings.title : settings.appId;
+  ngn::installCrashReport(
+      ngn::crashReportPath(
+          appId, settings.test ? std::optional<std::string>(settings.test->stateDir) : std::nullopt,
+          [](const std::string &name) -> std::optional<std::string> {
+            const char *value = getenv(name.c_str());
+            return value ? std::optional<std::string>(value) : std::nullopt;
+          }),
+      os.program);
+  // As on macOS, only a run from a dev server plays one, and a test launch, which screens-check's
+  // Linux mode makes on an exported bundle.
+  if (!settings.inputScript.empty() && (settings.test || ngn::DevServer::fromBundleUrl(bundle))) {
+    gInputScript = settings.inputScript;
+  }
 
   gtk_init();
   adw_init();

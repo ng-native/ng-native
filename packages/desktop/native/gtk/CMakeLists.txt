@@ -7,6 +7,10 @@
 # Every source but main.cpp, compiled once into objects the binary and the GTK view tests both link.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(NGN_GTK REQUIRED IMPORTED_TARGET gtk4>=4.10 libadwaita-1>=1.4 pangocairo gio-unix-2.0)
+# Xlib, for an input script's steps posted to the X server (input-replay.h); a Mac's GTK has no X11.
+if(NOT APPLE)
+  pkg_check_modules(NGN_X11 REQUIRED IMPORTED_TARGET x11)
+endif()
 
 add_library(ngn_gtk OBJECT
     accessible.cpp
@@ -17,6 +21,7 @@ add_library(ngn_gtk OBJECT
     gtk-backend.cpp
     host-sources.cpp
     image-view.cpp
+    input-replay.cpp
     native-controls.cpp
     pango-text.cpp
     screens.cpp
@@ -25,6 +30,9 @@ add_library(ngn_gtk OBJECT
     text-field.cpp
     view-widget.cpp)
 target_link_libraries(ngn_gtk PUBLIC ngn_core_runtime ngn_curl ngn_libraries PkgConfig::NGN_GTK)
+if(NOT APPLE)
+  target_link_libraries(ngn_gtk PUBLIC PkgConfig::NGN_X11)
+endif()
 target_compile_options(ngn_gtk PUBLIC -Wall -Werror -Wno-unused-parameter -Wno-missing-field-initializers)
 target_compile_definitions(ngn_gtk PUBLIC
     GDK_VERSION_MIN_REQUIRED=GDK_VERSION_4_10 GDK_VERSION_MAX_ALLOWED=GDK_VERSION_4_10
@@ -45,7 +53,7 @@ add_custom_command(TARGET ngn-linux POST_BUILD
 # The GTK view tests: views mounted from Fabric mutations into a window GTK draws, through the
 # backend the binary uses. Built with the core tests, and run beside them.
 if(NGN_TESTS)
-  set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accessible.test.cpp tests/chrome.test.cpp tests/controls.test.cpp tests/image-view.test.cpp tests/input.test.cpp tests/linking.test.cpp
+  set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accessible.test.cpp tests/chrome.test.cpp tests/controls.test.cpp tests/image-view.test.cpp tests/input.test.cpp tests/input-replay.test.cpp tests/linking.test.cpp
       tests/screens.test.cpp tests/scroll-view.test.cpp tests/svg.test.cpp tests/text.test.cpp tests/views.test.cpp)
   add_executable(ngn_gtk_tests ${ngn_gtk_test_SRC} ../core/testing/fake-network.cpp)
   target_include_directories(ngn_gtk_tests PRIVATE ../core/tests ../core/testing)
