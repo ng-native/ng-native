@@ -269,3 +269,114 @@ TEST_CASE("Each paragraph's wrapped lines take that paragraph's direction") {
   CHECK_FALSE(layout.lines.front().rightToLeft);
   CHECK_FALSE(layout.lines.back().rightToLeft);
 }
+
+TEST_CASE("A line through crosses the text and the spaces in it, in the decoration's colour") {
+  auto plain = fragment("a      b", 20);
+  auto through = plain;
+  through.textAttributes.textDecorationLineType = TextDecorationLineType::Strikethrough;
+  ParagraphAttributes paragraph;
+  auto bare = inkedColumns(ngn::layoutText(stringOf({plain}), paragraph, 400), 400, 40);
+  auto crossed = inkedColumns(ngn::layoutText(stringOf({through}), paragraph, 400), 400, 40);
+  // The gap between a and b has ink only once it is struck through.
+  int gap = 0, struck = 0;
+  for (size_t x = 0; x < bare.size(); x++) {
+    if (!bare[x]) {
+      gap++;
+      struck += crossed[x] ? 1 : 0;
+    }
+  }
+  CHECK(gap > 300);
+  CHECK(struck > 20);
+
+  // Underlined and struck through, in a colour of its own.
+  auto both = plain;
+  both.textAttributes.textDecorationLineType = TextDecorationLineType::UnderlineStrikethrough;
+  both.textAttributes.textDecorationColor = colorFromRGBA(255, 0, 0, 255);
+  auto layout = ngn::layoutText(stringOf({both}), paragraph, 400);
+  CFDictionaryRef attributes = CFAttributedStringGetAttributes(layout.string, 0, nullptr);
+  CHECK(CFDictionaryGetValue(attributes, kCTUnderlineStyleAttributeName) != nullptr);
+  CHECK(CFDictionaryGetValue(attributes, kCTUnderlineColorAttributeName) != nullptr);
+
+  // Faded with the text: transparent text has a transparent decoration.
+  both.textAttributes.opacity = 0;
+  auto faded = ngn::layoutText(stringOf({both}), paragraph, 400);
+  auto color = (CGColorRef)CFDictionaryGetValue(CFAttributedStringGetAttributes(faded.string, 0, nullptr), kCTUnderlineColorAttributeName);
+  REQUIRE(color != nullptr);
+  CHECK(CGColorGetAlpha(color) == 0);
+}
+
+TEST_CASE("A line through a right-to-left run beside left-to-right text crosses that run and no more") {
+  // The Hebrew goes on past the struck run, so the run is one end of a right-to-left span.
+  auto make = [](bool struck) {
+    auto hebrew = fragment("אב", 20);
+    if (struck) {
+      hebrew.textAttributes.textDecorationLineType = TextDecorationLineType::Strikethrough;
+    }
+    return stringOf({fragment("abc ", 20), hebrew, fragment("גדה xyz", 20)});
+  };
+  ParagraphAttributes paragraph;
+  auto layout = ngn::layoutText(make(true), paragraph, 400);
+  // Where the struck letters are drawn: their run, found by its string range.
+  CFArrayRef runs = CTLineGetGlyphRuns(layout.lines[0].line);
+  CGFloat left = 0, width = 0;
+  for (CFIndex i = 0; i < CFArrayGetCount(runs); i++) {
+    auto run = (CTRunRef)CFArrayGetValueAtIndex(runs, i);
+    if (CTRunGetStringRange(run).location == 4) {
+      CGPoint first;
+      CTRunGetPositions(run, CFRangeMake(0, 1), &first);
+      left = first.x;
+      width = CTRunGetTypographicBounds(run, CFRangeMake(0, 0), nullptr, nullptr, nullptr);
+    }
+  }
+  REQUIRE(width > 0);
+  auto plain = inkedColumns(ngn::layoutText(make(false), paragraph, 400), 400, 40);
+  auto struck = inkedColumns(layout, 400, 40);
+  // The line adds ink, and every column it adds is over the struck run.
+  int inside = 0, outside = 0;
+  for (int x = 0; x < 400; x++) {
+    if (struck[static_cast<size_t>(x)] && !plain[static_cast<size_t>(x)]) {
+      (x < left - 1 || x > left + width + 1 ? outside : inside)++;
+    }
+  }
+  CHECK(inside > 0);
+  CHECK(outside == 0);
+}
+
+TEST_CASE("The measurer's lines give each line's box and the first baseline the drawing uses") {
+  ngn::CoreTextMeasurer measurer;
+  auto string = stringOf({fragment(kWords, 20)});
+  ParagraphAttributes paragraph;
+  auto layout = ngn::layoutText(string, paragraph, 200.5);
+  auto lines = measurer.lines(string, paragraph, 200);
+  REQUIRE(lines.size() == layout.lines.size());
+  REQUIRE(lines.size() > 1);
+  // The first baseline, from the top of the text, is where the drawing puts it.
+  CHECK(LineMeasurement::baseline(lines) == doctest::Approx(layout.lines[0].origin.y));
+  CHECK(LineMeasurement::baseline(lines) > 15);
+  CHECK(lines[0].frame.origin.y == 0);
+  CHECK(lines[1].frame.origin.y == doctest::Approx(lines[0].frame.size.height));
+  CHECK(lines[0].capHeight > lines[0].xHeight);
+  CHECK(lines[0].xHeight > 0);
+  CHECK(lines[0].descender > 0);
+  std::string joined;
+  for (const auto &line : lines) {
+    joined += line.text;
+  }
+  CHECK(joined == kWords);
+}
+
+TEST_CASE("A centred or right-aligned line reports where the drawing puts it") {
+  ngn::CoreTextMeasurer measurer;
+  ParagraphAttributes paragraph;
+  for (auto alignment : {TextAlignment::Center, TextAlignment::Right}) {
+    auto f = fragment("short", 16);
+    f.textAttributes.alignment = alignment;
+    auto lines = measurer.lines(stringOf({f}), paragraph, 300);
+    REQUIRE(lines.size() == 1);
+    // Ink starts where the line is reported to start, give or take the glyph's side bearing.
+    int ink = leftmostInk(ngn::layoutText(stringOf({f}), paragraph, 300.5), 300, 40);
+    CHECK(lines[0].frame.origin.x > 50);
+    CHECK(std::abs(ink - lines[0].frame.origin.x) < 3);
+  }
+}
+

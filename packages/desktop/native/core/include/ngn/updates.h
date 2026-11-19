@@ -56,6 +56,9 @@ class UpdateCrypto {
 struct UpdatesConfig {
   // The server's manifest URL (Expo's `updates.url`). Empty turns updates off.
   std::string url;
+  // Why the host keeps updates off for an app that has a URL, which a check is refused with. Empty
+  // when nothing does.
+  std::string off;
   std::string runtimeVersion;
   // The `expo-platform` header: the OS's id (HostOs) unless the app names another. EAS Update
   // refuses `macos`; a self-hosted server serves it.
@@ -148,8 +151,10 @@ class UpdatesClient {
   UpdatesClient(UpdatesConfig config, std::shared_ptr<Http> http, std::shared_ptr<UpdateCrypto> crypto);
 
   bool enabled() const {
-    return !config_.url.empty();
+    return !config_.url.empty() && config_.off.empty();
   }
+  // Why updates are off, for a check; empty when they are on.
+  std::string offReason() const;
   const UpdatesConfig &config() const {
     return config_;
   }
