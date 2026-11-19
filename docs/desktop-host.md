@@ -57,8 +57,8 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   which implement it themselves. Announcements go
   through `gtk_accessible_announce`, found at run time on GTK 4.14 and later, and say nothing
   below. `AccessibilityInfo`'s settings (`accessibility-settings.h`) come from the settings
-  portal, GTK's settings and libadwaita's high contrast, through the core's `linuxAccessibility`,
-  and the screen reader from AT-SPI's `org.a11y.Status`.
+  portal (its reduced-motion and contrast), GTK's settings and libadwaita's high contrast, through
+  the core's `linuxAccessibility`, and the screen reader from AT-SPI's `org.a11y.Status`.
   Orca's structural navigation finds no headings or landmarks in a GTK 4 app. It
   builds on Linux against GTK 4.10 or later, libadwaita 1.4 or later and libsecret 0.20 or later
   (SecureStore's, `secret-store.h`), and on a Mac against Homebrew's (`brew install gtk4

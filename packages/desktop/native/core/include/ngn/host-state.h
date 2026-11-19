@@ -207,12 +207,14 @@ struct AccessibilitySettings {
 struct LinuxAccessibilitySources {
   // The portal's org.freedesktop.appearance reduced-motion, set to reduce.
   bool portalReducedMotion{false};
+  // The portal's org.freedesktop.appearance contrast, set to higher.
+  bool portalContrast{false};
   // GTK 4.22's gtk-interface-reduced-motion, set to reduce.
   bool gtkReducedMotion{false};
   // gtk-enable-animations, which GNOME's Animations switch turns off.
   bool animations{true};
-  // High contrast: the portal's contrast (libadwaita's high-contrast), or GTK 4.20's
-  // gtk-interface-contrast set to more.
+  // High contrast as GTK has it: libadwaita's high-contrast, or GTK 4.20's gtk-interface-contrast
+  // set to more.
   bool highContrast{false};
   // org.a11y.Status ScreenReaderEnabled.
   bool screenReader{false};

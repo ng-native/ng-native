@@ -3,10 +3,37 @@
 #include "mounted-views.h"
 
 #include "../accessibility-settings.h"
+#include "fake-settings-portal.h"
 
 #include <doctest/doctest.h>
 
 #include <vector>
+
+TEST_CASE("the settings portal's contrast is increase contrast, read at start and followed as it changes") {
+  REQUIRE(ngn::testing::gtkReady());
+  ngn::testing::FakeSettingsPortal portal({
+      {{"org.freedesktop.appearance", "contrast"}, g_variant_new_uint32(1)},
+      {{"org.freedesktop.appearance", "reduced-motion"}, g_variant_new_uint32(0)},
+  });
+  if (!portal.owned()) {
+    REQUIRE_MESSAGE(getenv("CI") == nullptr, "the portal tests need a session bus: run them under dbus-run-session");
+    MESSAGE("skipped: no session bus");
+    return;
+  }
+  std::vector<ngn::AccessibilitySettings> heard;
+  ngn::gtk::AccessibilitySettingsWatcher watcher([&heard](const ngn::AccessibilitySettings &s) { heard.push_back(s); });
+  CHECK(portal.spinUntil([&watcher] { return watcher.sources().portalContrast; }));
+  CHECK(heard.back().increaseContrast);
+  CHECK_FALSE(watcher.sources().portalReducedMotion);
+
+  portal.set("org.freedesktop.appearance", "contrast", g_variant_new_uint32(0));
+  CHECK(portal.spinUntil([&watcher] { return !watcher.sources().portalContrast; }));
+  CHECK(heard.back().increaseContrast == watcher.sources().highContrast);
+  // The other key, through the same signal.
+  portal.set("org.freedesktop.appearance", "reduced-motion", g_variant_new_uint32(1));
+  CHECK(portal.spinUntil([&watcher] { return watcher.sources().portalReducedMotion; }));
+  CHECK(heard.back().reduceMotion);
+}
 
 TEST_CASE("GNOME's Animations switch off is reduce motion, heard as it changes") {
   REQUIRE(ngn::testing::gtkReady());

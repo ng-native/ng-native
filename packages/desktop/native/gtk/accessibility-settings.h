@@ -1,7 +1,7 @@
 // The desktop's accessibility settings on GTK, as AccessibilityInfo reads them (host-state.h's
 // linuxAccessibility): reduce motion from the settings portal's reduced-motion, GTK 4.22's
-// gtk-interface-reduced-motion and gtk-enable-animations; increase contrast from libadwaita's
-// high-contrast (the portal's contrast) and GTK 4.20's gtk-interface-contrast; a screen reader from
+// gtk-interface-reduced-motion and gtk-enable-animations; increase contrast from the portal's
+// contrast, libadwaita's high-contrast and GTK 4.20's gtk-interface-contrast; a screen reader from
 // AT-SPI's org.a11y.Status. Each is read at start and followed as it changes; a source that is not
 // there (an older GTK, no portal, no AT-SPI bus) counts as off.
 #pragma once
@@ -29,8 +29,8 @@ class AccessibilitySettingsWatcher {
 
  private:
   void readGtk();
-  void readPortalSetting(const char *method);
-  void readPortal(GVariant *value);
+  void readPortalSetting(const char *key, const char *method);
+  void readPortal(const char *key, GVariant *value);
   void readStatus();
   void report();
 
