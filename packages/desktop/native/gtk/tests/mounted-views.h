@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <ostream>
+#include <set>
 #include <string>
 #include <memory>
 #include <stdexcept>
@@ -246,6 +247,39 @@ inline bool bluish(const Pixel &p) {
 }
 inline bool greenish(const Pixel &p) {
   return mostly(p, &Pixel::g, "green");
+}
+
+// Whether two pages of a stack in `widget` share a name. A sliding popover menu puts each
+// submenu on a page named for its label and opens it by that name, so the second opens the first.
+inline bool sharedPageName(GtkWidget *widget) {
+  if (GTK_IS_STACK(widget)) {
+    std::set<std::string> names;
+    GListModel *pages = G_LIST_MODEL(gtk_stack_get_pages(GTK_STACK(widget)));
+    bool shared = false;
+    for (guint i = 0; i < g_list_model_get_n_items(pages); ++i) {
+      auto *page = GTK_STACK_PAGE(g_list_model_get_item(pages, i));
+      if (const char *name = gtk_stack_page_get_name(page)) {
+        shared = shared || !names.insert(name).second;
+      }
+      g_object_unref(page);
+    }
+    g_object_unref(pages);
+    if (shared) {
+      return true;
+    }
+  }
+  for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
+    if (sharedPageName(child)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// The model a menu button's popover menu draws.
+inline GMenuModel *menuButtonModel(GtkWidget *button) {
+  GtkPopover *popover = gtk_menu_button_get_popover(GTK_MENU_BUTTON(button));
+  return GTK_IS_POPOVER_MENU(popover) ? gtk_popover_menu_get_menu_model(GTK_POPOVER_MENU(popover)) : nullptr;
 }
 
 } // namespace ngn::testing

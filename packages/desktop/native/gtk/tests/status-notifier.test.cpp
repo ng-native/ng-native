@@ -96,25 +96,34 @@ struct Watcher {
 
   // Called as a host calls it, with the main loop turning: the item answers from it.
   GVariant *call(const Registered &at, const char *path, const char *interface, const char *method, GVariant *args) const {
+    // Shared with the callback, which a late reply can run after this returns.
     struct Answer {
       bool done{false};
       GVariant *reply{nullptr};
-    } answer;
+    };
+    auto answer = std::make_shared<Answer>();
     g_dbus_connection_call(
         bus, at.sender.c_str(), path, interface, method, args, nullptr, G_DBUS_CALL_FLAGS_NONE, 2000, nullptr,
         [](GObject *source, GAsyncResult *result, gpointer data) {
-          auto *a = static_cast<Answer *>(data);
+          auto *held = static_cast<std::shared_ptr<Answer> *>(data);
           GError *error = nullptr;
-          a->reply = g_dbus_connection_call_finish(G_DBUS_CONNECTION(source), result, &error);
+          GVariant *reply = g_dbus_connection_call_finish(G_DBUS_CONNECTION(source), result, &error);
           if (error) {
             MESSAGE(std::string(error->message));
             g_error_free(error);
           }
-          a->done = true;
+          if ((*held)->done) {
+            // The caller gave up, so nothing owns the reply.
+            drop(reply);
+          } else {
+            (*held)->reply = reply;
+          }
+          (*held)->done = true;
+          delete held;
         },
-        &answer);
-    spinUntil([&answer] { return answer.done; });
-    return answer.reply;
+        new std::shared_ptr<Answer>(answer));
+    spinUntil([&answer] { return answer->done; });
+    return answer->reply;
   }
   // A property of the item, as a string or a boolean.
   std::string text(const Registered &at, const char *property) const {
@@ -186,6 +195,27 @@ std::vector<std::string> menuLabels(const Watcher &watcher, const Watcher::Regis
   return labels;
 }
 
+// The ids GetGroupProperties answers for `ids`.
+std::vector<gint32> groupPropertyIds(const Watcher &watcher, const Watcher::Registered &at, const std::vector<gint32> &ids) {
+  GVariant *reply = watcher.call(at, "/MenuBar", "com.canonical.dbusmenu", "GetGroupProperties",
+                                 g_variant_new("(@ai@as)", g_variant_new_fixed_array(G_VARIANT_TYPE_INT32, ids.data(), ids.size(), sizeof(gint32)), g_variant_new_strv(nullptr, 0)));
+  std::vector<gint32> out;
+  if (!reply) {
+    return out;
+  }
+  GVariant *items = g_variant_get_child_value(reply, 0);
+  for (gsize i = 0; i < g_variant_n_children(items); ++i) {
+    GVariant *item = g_variant_get_child_value(items, i);
+    GVariant *id = g_variant_get_child_value(item, 0);
+    out.push_back(g_variant_get_int32(id));
+    g_variant_unref(id);
+    g_variant_unref(item);
+  }
+  g_variant_unref(items);
+  g_variant_unref(reply);
+  return out;
+}
+
 struct Heard {
   std::vector<std::string> events;
   ngn::gtk::TrayEvents sink() {
@@ -249,6 +279,9 @@ TEST_CASE("each tray icon registers as a StatusNotifierItem with its title, icon
   CHECK(watcher.text(*sync, "Title") == "dev.ngnative.TrayTest");
 
   CHECK(menuLabels(watcher, *timer) == std::vector<std::string>{"Pause", "-", "Stop (disabled)", "Quit"});
+  // No ids asks for every item: the root and its four, as with the four named.
+  CHECK(groupPropertyIds(watcher, *timer, {}) == std::vector<gint32>{0, 1, 2, 3, 4});
+  CHECK(groupPropertyIds(watcher, *timer, {2, 4}) == std::vector<gint32>{2, 4});
 
   // A click on the icon with no menu presses it; Activate on one with a menu does nothing, as the
   // host opens the menu.
@@ -316,6 +349,50 @@ TEST_CASE("an icon sent again keeps its item and shows its change, and one left 
   // None left: the last item goes too.
   tray->setIcons({});
   CHECK(spinUntil([&] { return !watcher.hasOwner(timer.sender); }));
+}
+
+TEST_CASE("an icon that gains or loses its menu tells the host to reread Menu and ItemIsMenu") {
+  if (!haveSessionBus()) {
+    return;
+  }
+  Watcher watcher;
+  Heard heard;
+  auto tray = ngn::gtk::makeStatusNotifierTray("dev.ngnative.TrayTest", heard.sink());
+  tray->setIcons(twoIcons());
+  REQUIRE(spinUntil([&] { return watcher.registered.size() == 2; }));
+  auto sync = *watcher.item("dev.ngnative.TrayTest-t1");
+  CHECK(watcher.text(sync, "ItemIsMenu") == "false");
+
+  int changes = 0;
+  auto count = [](GDBusConnection *, const gchar *, const gchar *, const gchar *, const gchar *, GVariant *params, gpointer data) {
+    const gchar *interface = nullptr;
+    GVariant *changed = nullptr;
+    g_variant_get(params, "(&s@a{sv}as)", &interface, &changed, nullptr);
+    if (g_str_equal(interface, "org.kde.StatusNotifierItem") && g_variant_lookup_value(changed, "Menu", nullptr) &&
+        g_variant_lookup_value(changed, "ItemIsMenu", nullptr)) {
+      ++*static_cast<int *>(data);
+    }
+    g_variant_unref(changed);
+  };
+  guint watch = g_dbus_connection_signal_subscribe(watcher.bus, sync.sender.c_str(), "org.freedesktop.DBus.Properties", "PropertiesChanged", nullptr,
+                                                   nullptr, G_DBUS_SIGNAL_FLAGS_NONE, count, &changes, nullptr);
+  auto gained = twoIcons();
+  gained[1].menu = std::vector<MenuItem>{{.title = "Sync now", .command = ngn::MenuCommand::AppItem, .id = "0"}};
+  tray->setIcons(gained);
+  REQUIRE(spinUntil([&] { return changes == 1; }));
+  CHECK(watcher.text(sync, "ItemIsMenu") == "true");
+  CHECK(watcher.text(sync, "Menu") == "/MenuBar");
+
+  // A change inside a menu it already has is the menu's own signal.
+  gained[1].menu = std::vector<MenuItem>{{.title = "Sync later", .command = ngn::MenuCommand::AppItem, .id = "0"}};
+  tray->setIcons(gained);
+  spin();
+  CHECK(changes == 1);
+
+  tray->setIcons(twoIcons());
+  REQUIRE(spinUntil([&] { return changes == 2; }));
+  CHECK(watcher.text(sync, "ItemIsMenu") == "false");
+  g_dbus_connection_signal_unsubscribe(watcher.bus, watch);
 }
 
 TEST_CASE("a watcher that starts again is given every icon again") {

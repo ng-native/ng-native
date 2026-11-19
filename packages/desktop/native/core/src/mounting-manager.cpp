@@ -134,6 +134,12 @@ void MountingManager::synchronouslyUpdateViewOnUIThread(Tag tag, const folly::dy
   view.props = descriptor->cloneProps(context, view.props, RawProps(changed));
   tree_.update(view);
   backend_->updateProps(view);
+  // A nativeID or a relation changed this way is as real as one a commit brought: tell the backend
+  // now, not whenever a later commit touches the surface.
+  relations_.update(view);
+  for (const auto &[related, relations] : relations_.didMount(view.surfaceId)) {
+    backend_->setAccessibilityRelations(view.surfaceId, related, relations);
+  }
 }
 
 void MountingManager::ensureRoot(SurfaceId surfaceId, Tag tag) {

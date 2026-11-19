@@ -187,6 +187,12 @@ RNSize AppKitControlMeasurer::measure(ControlKind kind, const NativeControlProps
   if (const auto *p = self.controlProps) {
     [self apply:*p];
   }
+  // The control's own title goes over what the views it is labelled by said: they say it again.
+  [self refreshControlRelations];
+}
+
+- (NSView *)accessibilityControl {
+  return self.control;
 }
 
 - (void)apply:(const NativeControlProps &)p {
@@ -385,6 +391,11 @@ RNSize AppKitControlMeasurer::measure(ControlKind kind, const NativeControlProps
   if (const auto *p = dynamic_cast<const NativeControlProps *>(props.get())) {
     [_search apply:*p];
   }
+  [self refreshControlRelations];
+}
+
+- (NSView *)accessibilityControl {
+  return _search.field;
 }
 
 - (void)handleCommand:(const std::string &)name args:(const folly::dynamic &)args {

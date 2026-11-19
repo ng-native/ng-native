@@ -95,7 +95,7 @@ std::vector<Tag> AccessibilityRelations::resolve(SurfaceId surfaceId, const std:
   }
   for (const auto &id : ids) {
     if (auto views = surface->second.find(id); views != surface->second.end() && !views->second.empty()) {
-      // Tags count up as views are made: the lowest is the one made first.
+      // The lowest tag wins. Fabric counts tags up as views are made, so that is the one made first.
       tags.push_back(*views->second.begin());
     }
   }

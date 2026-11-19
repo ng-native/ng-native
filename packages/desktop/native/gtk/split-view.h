@@ -54,6 +54,10 @@ class SplitViews {
   void setSourceLists(Tag parent, const std::vector<SourceList> &lists);
   // After a transaction: each source list over its sections' frames.
   void layOut();
+  // The window's header bar over the content of the window split view that is shown, else over the
+  // whole window: a split view whose screen is covered, or that has left the window, is not shown.
+  // Called as a screen is covered or uncovered, and after a transaction.
+  void placeHeaders();
 
   // The app's preferences, where a sidebar with an autosaveName keeps whether it is collapsed
   // (sidebarCollapsedKey): set once by the host. Without them nothing is kept.
@@ -73,6 +77,9 @@ class SplitViews {
   // For tests: the AdwNavigationSplitView and its breakpoint, the window crossing the compact
   // width as the breakpoint says, and a source list's GtkListBox.
   GtkWidget *splitWidget(Tag split) const;
+  // The window split view's button in the sidebar's header bar that brings the content back, shown
+  // while a compact window shows the sidebar alone.
+  GtkWidget *contentButton(Tag split) const;
   AdwBreakpoint *breakpoint(Tag split) const;
   void setCompact(Tag split, bool compact);
   std::vector<GtkWidget *> lists(Tag parent) const;
@@ -98,6 +105,7 @@ class SplitViews {
     // A window's split view, full height: the sidebar's own header bar, and the toolbar view over
     // the content that holds the window's header bar while the split view is there.
     GtkWidget *sidebarHeader{nullptr};
+    GtkWidget *contentButton{nullptr};
     GtkWidget *contentToolbar{nullptr};
     Tag sidebar{-1};
     Tag content{-1};
@@ -126,6 +134,7 @@ class SplitViews {
   void applySidebar(Split &s);
   // Moves the window's header bar over the content pane, or back over the whole window.
   void moveHeaderBar(Split &s, bool overContent);
+  void placeHeader(SurfaceId surfaceId);
   void tearDown(Split &s);
   void refill(Tag parent);
   void applyWidths(Split &s);

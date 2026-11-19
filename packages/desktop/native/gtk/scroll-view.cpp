@@ -167,7 +167,11 @@ void installThinScrollbars() {
   GtkCssProvider *css = gtk_css_provider_new();
   gtk_css_provider_load_from_data(
       css,
-      "scrolledwindow.ngn-thin-scrollbars > scrollbar slider { min-width: 3px; min-height: 3px; margin: 0; border-width: 1px; }"
+      "scrolledwindow.ngn-thin-scrollbars > scrollbar slider { margin: 0; border-width: 1px; }"
+      // Only the thickness narrows: the theme's minimum length along the scrolling axis stays, so
+      // the thumb of a long document remains big enough to grab.
+      "scrolledwindow.ngn-thin-scrollbars > scrollbar.vertical slider { min-width: 3px; }"
+      "scrolledwindow.ngn-thin-scrollbars > scrollbar.horizontal slider { min-height: 3px; }"
       "scrolledwindow.ngn-thin-scrollbars > scrollbar { padding: 0; }",
       -1);
   gtk_style_context_add_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
@@ -186,8 +190,17 @@ void remeasureAfterFrames(ScrollBox *box) {
   box->remeasureFrames = 120;
   box->steadyFrames = 0;
   box->measuredWidth = -1;
-  if (!clock || box->remeasure != 0) {
+  if (!clock) {
     return;
+  }
+  if (box->remeasure != 0) {
+    if (box->remeasureClock == clock) {
+      return;
+    }
+    // Moved to another window while measuring: the old clock may never paint again.
+    g_signal_handlers_disconnect_by_data(box->remeasureClock, box);
+    box->remeasure = 0;
+    g_clear_object(&box->remeasureClock);
   }
   box->remeasureClock = GDK_FRAME_CLOCK(g_object_ref(clock));
   box->remeasure = g_signal_connect(clock, "after-paint", G_CALLBACK(+[](GdkFrameClock *clock, gpointer data) {
@@ -287,7 +300,8 @@ void destroyScrollView(ViewData &view) {
   scrollBoxes().erase(box);
   g_signal_handlers_disconnect_by_data(box->scrolled, box);
   if (box->remeasure != 0) {
-    g_signal_handler_disconnect(box->remeasureClock, box->remeasure);
+    // A window destroyed meanwhile has already dropped its clock's handlers.
+    g_signal_handlers_disconnect_by_data(box->remeasureClock, box);
     g_clear_object(&box->remeasureClock);
   }
   if (gtk_widget_get_parent(box->scrolled)) {

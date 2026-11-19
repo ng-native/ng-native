@@ -42,6 +42,13 @@
 // The views it is labelled and described by (accessibility-relations.h), held weakly. Their text is
 // its label, ahead of its own, and its help, ahead of its hint, read each time VoiceOver asks.
 - (void)setLabelledBy:(NSArray<NGNView *> *)labelledBy describedBy:(NSArray<NGNView *> *)describedBy;
+// The AppKit control or field inside the view that is the accessibility element where the view is
+// not (isAccessibilityElement is NO): the relations' text is its label and help, which a view that
+// holds one sets there, and clears with the relations. Nil for a view that is its own element.
+- (NSView *)accessibilityControl;
+// Sets the relations' text on the accessibilityControl again: after the control's own props were
+// applied over it, or the text of a view named changed.
+- (void)refreshControlRelations;
 // Where Fabric children mount: the view itself, or a scroll view's document view.
 - (NSView *)contentContainer;
 // What takes the keyboard when Tab moves the focus here: the view itself, or the AppKit control
