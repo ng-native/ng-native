@@ -11,4 +11,8 @@ const config = withAngularNative(getDefaultConfig(__dirname), {
 
 // Runs the Tailwind CLI over `styles.css`, and leaves it watching: a class written in a template
 // appears in the generated sheet, which Metro then treats as a changed module.
-module.exports = withTailwind(config, { input: './src/styles.css' });
+const { withDeviceTests } = require('@ng-native/testing/device/metro');
+
+// `withDeviceTests` does nothing until Metro starts with EXPO_PUBLIC_DEVICE_TESTS set, for
+// `vitest --project linux` and `--project macos`.
+module.exports = withDeviceTests(withTailwind(config, { input: './src/styles.css' }));

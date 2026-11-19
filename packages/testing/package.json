@@ -40,6 +40,7 @@
     "./device/transformer": "./device/transformer.cjs",
     "./device/launcher": "./src/device/launcher.ts",
     "./device/macos-launcher": "./src/device/macos-launcher.ts",
+    "./device/linux-launcher": "./src/device/linux-launcher.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -101,6 +102,10 @@
       "./device/macos-launcher": {
         "types": "./dist/device/macos-launcher.d.ts",
         "default": "./dist/device/macos-launcher.js"
+      },
+      "./device/linux-launcher": {
+        "types": "./dist/device/linux-launcher.d.ts",
+        "default": "./dist/device/linux-launcher.js"
       },
       "./package.json": "./package.json"
     }
