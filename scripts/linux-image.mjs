@@ -102,3 +102,26 @@ export async function startXvfb() {
   process.env.GDK_BACKEND = 'x11';
   return () => xvfb.kill();
 }
+
+/**
+ * Stop a host this process launched, and resolve once it has exited: `SIGTERM`, then `SIGKILL` if
+ * it is still running `graceMs` later. A host that ignores `SIGTERM` would otherwise keep the caller
+ * waiting forever, or still be running when the next launch starts. A host that never started
+ * resolves at once.
+ *
+ * @param {import('node:child_process').ChildProcess} child
+ * @param {number} [graceMs]
+ */
+export function stopHost(child, graceMs = 5_000) {
+  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => child.kill('SIGKILL'), graceMs);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      resolve(undefined);
+    });
+    child.kill('SIGTERM');
+  });
+}

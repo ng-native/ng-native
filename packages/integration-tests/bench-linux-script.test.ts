@@ -14,13 +14,24 @@ const bench = (await import(new URL('../../scripts/bench-linux.mjs', import.meta
   cpuSeconds(stat: string, ticksPerSecond: number): number | null;
   contextSwitches(status: string): number | null;
   pssMb(rollup: string): number | null;
-  switchesBetween(before: Map<string, number>, after: Map<string, number>): number | null;
+  switchesOver(samples: (Map<string, number> | null)[]): number | null;
+  idleRates(
+    before: { cpu: number | null; at: number },
+    after: { cpu: number | null; at: number },
+    switches: number | null,
+  ): { idleCpu: number | null; idleWakeups: number | null };
   bytecode(host: string, bundle: string, dir: string): string;
   benchEnv(env: Record<string, string | undefined>): Record<string, string | undefined>;
   measure(
     host: string,
     bundle: string,
-    timing?: { settleMs?: number; idleMs?: number; ticksPerSecond?: number },
+    timing?: {
+      settleMs?: number;
+      idleMs?: number;
+      sampleMs?: number;
+      ticksPerSecond?: number;
+      stopGraceMs?: number;
+    },
   ): Promise<Record<string, number | null>>;
 };
 const image = (await import(new URL('../../scripts/linux-image.mjs', import.meta.url).href)) as {
@@ -70,15 +81,42 @@ describe('reading /proc', () => {
       ['1', 103],
       ['3', 2],
     ]);
-    assert.equal(bench.switchesBetween(before, after), 5);
+    assert.equal(bench.switchesOver([before, after]), 5);
   });
 
-  it('reads nothing when a thread ended in the window, rather than a total missing its switches', () => {
-    const before = new Map([
-      ['1', 100],
-      ['2', 50],
-    ]);
-    assert.equal(bench.switchesBetween(before, new Map([['1', 103]])), null);
+  it('keeps what a thread switched before it ended, as GLib ends an idle pool worker', () => {
+    const samples = [
+      new Map([
+        ['1', 100],
+        ['2', 50],
+      ]),
+      new Map([
+        ['1', 101],
+        ['2', 53],
+      ]),
+      new Map([['1', 104]]),
+    ];
+    assert.equal(bench.switchesOver(samples), 7);
+  });
+
+  it('counts a reused thread id whose count went down from zero, never negative', () => {
+    assert.equal(bench.switchesOver([new Map([['2', 50]]), new Map([['2', 4]])]), 4);
+  });
+
+  it('reads nothing when a sample could not list the threads, or there is one sample', () => {
+    assert.equal(bench.switchesOver([new Map([['1', 1]]), null, new Map([['1', 2]])]), null);
+    assert.equal(bench.switchesOver([new Map([['1', 1]])]), null);
+  });
+
+  it('divides by the time that passed between the samples, not the time asked for', () => {
+    // A 30 s window whose timer came back a second late.
+    const rates = bench.idleRates({ cpu: 1, at: 1_000 }, { cpu: 1.031, at: 32_000 }, 155);
+    assert.equal(rates.idleWakeups, 5);
+    assert.ok(Math.abs(rates.idleCpu! - 0.1) < 1e-9, String(rates.idleCpu));
+    assert.deepEqual(bench.idleRates({ cpu: 1, at: 0 }, { cpu: null, at: 0 }, 3), {
+      idleCpu: null,
+      idleWakeups: null,
+    });
   });
 
   it('reads the proportional set size, not the resident one', () => {
@@ -183,6 +221,42 @@ describe('a host that cannot start', () => {
   });
 });
 
+describe('a host that ignores SIGTERM', () => {
+  it('is killed, and gone before the measurement returns', { timeout: 20_000 }, async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'bench-linux-'));
+    const pidFile = path.join(dir, 'pid');
+    let pid: number | undefined;
+    try {
+      const host = path.join(dir, 'ngn-linux');
+      writeFileSync(
+        host,
+        [
+          '#!/usr/bin/env bash',
+          "trap '' TERM",
+          `echo $$ > '${pidFile}'`,
+          "echo '[ngn] first frame 10 ms after launch' >&2",
+          'exec sleep 600',
+        ].join('\n'),
+      );
+      chmodSync(host, 0o755);
+      await bench.measure(host, path.join(dir, 'main.js'), {
+        settleMs: 100,
+        idleMs: 100,
+        stopGraceMs: 300,
+      });
+      pid = Number(readFileSync(pidFile, 'utf8'));
+      assert.throws(() => process.kill(pid!, 0), { code: 'ESRCH' });
+    } finally {
+      try {
+        if (pid) process.kill(pid, 'SIGKILL');
+      } catch {
+        // Already gone.
+      }
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 // /proc is Linux's: the measurement runs against a stand-in host on Linux only.
 describe('measuring a host', { skip: process.platform !== 'linux' }, () => {
   it('reads the first frame, idle CPU and wakeups, and memory of a running host', async () => {
@@ -212,6 +286,38 @@ describe('measuring a host', { skip: process.platform !== 'linux' }, () => {
       );
       assert.ok(measured['idleWakeups'] !== null && measured['idleWakeups']! < 5);
       assert.ok(measured['memoryMb'] !== null && measured['memoryMb']! > 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('counts the wakeups of a thread that ends in the window', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'bench-linux-'));
+    try {
+      const host = path.join(dir, 'ngn-linux');
+      // A worker thread waking 20 times a second for the first half of the window, then ending.
+      writeFileSync(
+        host,
+        [
+          `#!${process.execPath}`,
+          "const { Worker } = require('node:worker_threads');",
+          "console.error('[ngn] first frame 10 ms after launch');",
+          'setTimeout(() => new Worker(',
+          '  "const t = setInterval(() => {}, 50); setTimeout(() => clearInterval(t), 1500);",',
+          '  { eval: true },',
+          '), 100);',
+          'setTimeout(() => {}, 600_000);',
+        ].join('\n'),
+      );
+      chmodSync(host, 0o755);
+      const measured = await bench.measure(host, path.join(dir, 'main.js'), {
+        settleMs: 0,
+        idleMs: 3000,
+      });
+      assert.ok(
+        measured['idleWakeups'] !== null && measured['idleWakeups']! > 5,
+        String(measured['idleWakeups']),
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
