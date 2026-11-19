@@ -1,5 +1,8 @@
 #include "ngn/scrollers.h"
 
+#include <algorithm>
+#include <cmath>
+
 using namespace facebook::react;
 namespace yoga = facebook::yoga;
 
@@ -18,6 +21,14 @@ ScrollerVisibility scrollerVisibility(
       .horizontal = !none && showsHorizontal && content.width > view.width + 0.5f,
       .autohides = !stable,
   };
+}
+
+float pagedOffset(float offset, float velocity, float page, float max) {
+  // ponytail: a flick is a fixed speed, as UIKit's paging roughly is; tune here if it feels off.
+  constexpr float flick = 0.3f;
+  float at = page > 0 ? offset / page : 0;
+  float index = velocity > flick ? std::floor(at) + 1 : velocity < -flick ? std::ceil(at) - 1 : std::round(at);
+  return std::clamp(index * page, 0.0f, std::max(0.0f, max));
 }
 
 ScrollerGutter scrollerGutter(ScrollerStyle style, float legacyWidth, const ScrollerVisibility &visibility) {

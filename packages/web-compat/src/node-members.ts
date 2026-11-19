@@ -102,6 +102,8 @@ const written = new WeakMap<EngineNode, Map<string, string>>();
 const placed = new WeakMap<EngineNode, Set<string>>();
 
 export function noteWritten(node: EngineNode, name: string, value: string | null): void {
+  // The `style` text is no prop, so the engine keeps it for a selector: `[style*=top]`.
+  if (name === 'style') engineOf(node).keepAttribute(node, name, value);
   let all = written.get(node);
   if (value === null) {
     placed.get(node)?.delete(name);
@@ -118,6 +120,7 @@ export function noteWritten(node: EngineNode, name: string, value: string | null
 export function copyWritten(from: EngineNode, to: EngineNode): void {
   const all = written.get(from);
   if (all) written.set(to, new Map(all));
+  if (all?.has('style')) engineOf(to).keepAttribute(to, 'style', all.get('style'));
   const placedThere = placed.get(from);
   if (placedThere) placed.set(to, new Set(placedThere));
   // A copy of an iframe is a frame of its own, which a copy is not made as: see `frame.ts`.

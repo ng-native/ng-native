@@ -37,6 +37,7 @@ import {
   defaultMenuBar,
   isSeparator,
   mergeMenuBar,
+  unmergedGroups,
   type MenuEntry,
   type MenuGroupModel,
 } from './menu-model.ts';
@@ -407,6 +408,24 @@ export class Menus {
   private readonly unsubscribe = this.native?.subscribe((event) => this.hostSaid(event)) ?? null;
 
   constructor() {
+    // Once a label: a `<menu-group label="File">` with no role that is still a group of its own
+    // once merged is drawn as a second File menu, on a host that draws a menu bar.
+    const warned = new Set<string>();
+    effect(() => {
+      if (!this.menuBarShown()) return;
+      const defaults = defaultMenuBar(this.native?.appName || 'App');
+      for (const label of unmergedGroups(defaults, this.menuBar())) {
+        if (warned.has(label)) continue;
+        warned.add(label);
+        const role = defaults.find(
+          (group) => group.label.toLowerCase() === label.toLowerCase(),
+        )?.menuRole;
+        console.warn(
+          `[angular-native] <menu-group label="${label}"> has no menuRole, so it shows as a second ` +
+            `${label} menu. Give it menuRole="${role}" to add its items to the ${label} menu.`,
+        );
+      }
+    });
     const native = this.native;
     if (!native) {
       // Read for nothing, so a shortcut the app gets wrong throws where there is no host too, and

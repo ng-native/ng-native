@@ -185,6 +185,11 @@ std::variant<LaunchSources::Lookup, std::string> packagedMetadata(const std::str
   if (!metadata.isObject()) {
     return path.string() + " is not a JSON object";
   }
+  // A package always names its bundle: without one the host would take argv's, as a dev run does.
+  if (auto bundle = metadata.find("NGNBundleFile"); bundle == metadata.items().end() || !bundle->second.isString() ||
+      bundle->second.getString().empty()) {
+    return path.string() + " names no NGNBundleFile";
+  }
   return LaunchSources::Lookup([metadata = std::move(metadata)](const std::string &key) -> std::optional<std::string> {
     auto it = metadata.find(key);
     if (it == metadata.items().end() || it->second.isNull()) {

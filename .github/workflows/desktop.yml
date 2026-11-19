@@ -442,9 +442,29 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-      - uses: ./.github/actions/desktop-prebuilt
+      - id: prebuilt
+        uses: ./.github/actions/desktop-prebuilt
         with:
           flavour: ${{ matrix.flavour }}
           version: 0.0.0-main
           base-url: https://github.com/${{ github.repository }}/releases/download/main
           out: ${{ runner.temp }}/prebuilt
+
+      # The host also goes up as an artifact named by its inputs key, which the release fetches when
+      # the Actions cache has evicted it (see the action). A tarball, since an artifact's zip follows
+      # Sparkle.framework's symbolic links and drops the executable bits.
+      - id: pack
+        if: steps.prebuilt.outputs.host-dir != ''
+        env:
+          DIR: ${{ steps.prebuilt.outputs.host-dir }}
+        run: |
+          tar -czf "$RUNNER_TEMP/host.tar.gz" -C "$(dirname "$DIR")" "$(basename "$DIR")"
+          echo "name=desktop-prebuilt-host-${{ matrix.flavour }}-$(jq -r .key "$DIR/host.json")" >> "$GITHUB_OUTPUT"
+      - if: steps.pack.outputs.name != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.pack.outputs.name }}
+          path: ${{ runner.temp }}/host.tar.gz
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
