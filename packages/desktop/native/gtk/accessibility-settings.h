@@ -11,9 +11,12 @@
 #include <gio/gio.h>
 
 #include <functional>
+#include <memory>
 #include <optional>
 
 namespace ngn::gtk {
+
+class SettingsPortal;
 
 class AccessibilitySettingsWatcher {
  public:
@@ -29,8 +32,7 @@ class AccessibilitySettingsWatcher {
 
  private:
   void readGtk();
-  void readPortalSetting(const char *key, const char *method);
-  void readPortal(const char *key, GVariant *value);
+  void readPortal(const std::string &key, GVariant *value);
   void readStatus();
   void report();
 
@@ -38,7 +40,7 @@ class AccessibilitySettingsWatcher {
   LinuxAccessibilitySources sources_;
   std::optional<AccessibilitySettings> reported_;
   GCancellable *cancellable_{nullptr};
-  GDBusProxy *portal_{nullptr};
+  std::unique_ptr<SettingsPortal> portal_;
   GDBusProxy *status_{nullptr};
 };
 

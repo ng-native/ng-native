@@ -13,6 +13,7 @@ if(NOT APPLE)
 endif()
 
 add_library(ngn_gtk OBJECT
+    accent-colour.cpp
     accessibility-settings.cpp
     accessible.cpp
     accessible-text.cpp
@@ -33,6 +34,7 @@ add_library(ngn_gtk OBJECT
     pango-text.cpp
     screens.cpp
     scroll-view.cpp
+    settings-portal.cpp
     split-view.cpp
     status-notifier.cpp
     surface-input.cpp
@@ -62,7 +64,7 @@ add_custom_command(TARGET ngn-linux POST_BUILD
 # The GTK view tests: views mounted from Fabric mutations into a window GTK draws, through the
 # backend the binary uses. Built with the core tests, and run beside them.
 if(NGN_TESTS)
-  set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accessibility-settings.test.cpp tests/accessible.test.cpp tests/alerts.test.cpp tests/animation-frames.test.cpp tests/app-windows.test.cpp tests/chrome.test.cpp tests/controls.test.cpp tests/focus.test.cpp tests/image-view.test.cpp tests/input.test.cpp tests/input-replay.test.cpp tests/linking.test.cpp tests/menus.test.cpp
+  set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accent-colour.test.cpp tests/accessibility-settings.test.cpp tests/accessible.test.cpp tests/alerts.test.cpp tests/animation-frames.test.cpp tests/app-windows.test.cpp tests/chrome.test.cpp tests/controls.test.cpp tests/focus.test.cpp tests/image-view.test.cpp tests/input.test.cpp tests/input-replay.test.cpp tests/linking.test.cpp tests/menus.test.cpp
       tests/screens.test.cpp tests/scroll-view.test.cpp tests/split-view.test.cpp tests/status-notifier.test.cpp tests/svg.test.cpp tests/text.test.cpp tests/views.test.cpp)
   add_executable(ngn_gtk_tests ${ngn_gtk_test_SRC} ../core/testing/fake-network.cpp ../core/testing/fake-system.cpp)
   target_include_directories(ngn_gtk_tests PRIVATE ../core/tests ../core/testing)

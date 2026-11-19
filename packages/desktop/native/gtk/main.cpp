@@ -34,6 +34,7 @@
 #include "ngn/dev-server.h"
 #include "ngn/file-system.h"
 #include "ngn/host-os.h"
+#include "accent-colour.h"
 #include "ngn/host-state.h"
 #include "ngn/host-views.h"
 #include "ngn/launch-settings.h"
@@ -76,6 +77,7 @@ struct Host {
   // The app's undo history, which Edit > Undo and Redo run while no text input has the focus.
   std::shared_ptr<ngn::UndoManager> undo = ngn::gtk::makeUndoManager();
   ngn::HostOs os;
+  std::unique_ptr<ngn::gtk::AccentFollower> accent;
   std::string bundle;
   // The app's own surface and the window it gets once the app renders into it.
   GtkWidget *appWindow{nullptr};
@@ -448,6 +450,8 @@ int main(int argc, char *argv[]) {
 
   gtk_init();
   adw_init();
+  // The desktop's accent, which libadwaita below 1.6 does not follow itself.
+  gHost.accent = std::make_unique<ngn::gtk::AccentFollower>();
   // Back and forward swap arrows in a right-to-left locale, which GTK knows once it is initialised.
   os = ngn::linuxOs(gtk_widget_get_default_direction() == GTK_TEXT_DIR_RTL);
   gHost.os = os;
@@ -819,5 +823,6 @@ int main(int argc, char *argv[]) {
   }
   gHost.runtime->shutdown();
   gHost.runtime.reset();
+  gHost.accent.reset();
   return 0;
 }

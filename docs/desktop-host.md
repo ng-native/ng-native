@@ -46,6 +46,10 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   AT-SPI's `GrabFocus` with NotSupported, so a screen reader cannot move the keyboard focus. `AccessibilityInfo`'s settings (`accessibility-settings.h`) come from the settings
   portal (its reduced-motion and contrast), GTK's settings and libadwaita's high contrast, through
   the core's `linuxAccessibility`, and the screen reader from AT-SPI's `org.a11y.Status`.
+  Below libadwaita 1.6, which draws its own blue, the portal's `accent-color` is applied over
+  libadwaita's stylesheet as its accent colours (`accent-colour.h`), worked out as libadwaita 1.6
+  does in the core's `accent-colors.h`; from 1.6 libadwaita follows the portal itself. Both read
+  the portal through `settings-portal.h`.
   Orca's structural navigation finds no headings or landmarks in a GTK 4 app. It
   builds on Linux against GTK 4.10 or later and libadwaita 1.4 or later, and on a Mac against
   Homebrew's (`brew install gtk4 libadwaita openssl@3 libnghttp2`) as a dev loop. Its HTTP and
