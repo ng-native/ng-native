@@ -30,6 +30,14 @@ gradients (`background-image`) are drawn with their size, position and repeat, a
 outer or inset, is a blurred layer under the children. A view that clips its overflow also clips
 its outer shadows.
 
+On Linux the GTK host paints the same box with GTK's render nodes: gradients and their tiles, each
+side's width and colour, and a dashed or dotted border stroked as on macOS. It also draws what the
+macOS host does not yet: `filter` (every function, `drop-shadow` and `blur` included, applied in
+order over the view and its children), `mix-blend-mode` (every mode but `plus-lighter`, which draws
+normally), and an `<image>`'s `tintColor`, which fills the image's shape with the tint. A child's
+blend mode blends it with its parent's own painting and the siblings drawn before it, as if every
+view set `isolation: isolate`: over a parent with no background it shows as it is.
+
 ## Modals
 
 A `<modal>` with `pageSheet`, `formSheet` or no presentation style is an NSWindow sheet on its

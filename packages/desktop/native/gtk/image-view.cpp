@@ -213,7 +213,19 @@ void snapshotImage(const ViewData &view, GtkSnapshot *snapshot, const BoxDescrip
   graphene_rect_init(
       &at, static_cast<float>(box.bounds.x + rect.x), static_cast<float>(box.bounds.y + rect.y), static_cast<float>(rect.width),
       static_cast<float>(rect.height));
-  gtk_snapshot_append_texture(snapshot, texture, &at);
+  if (props->tintColor && *props->tintColor) {
+    // The tint in the image's shape: its colour where the image has alpha, as React Native iOS
+    // draws a template image.
+    auto c = colorComponentsFromColor(*props->tintColor);
+    GdkRGBA tint{c.red, c.green, c.blue, c.alpha};
+    gtk_snapshot_push_mask(snapshot, GSK_MASK_MODE_ALPHA);
+    gtk_snapshot_append_texture(snapshot, texture, &at);
+    gtk_snapshot_pop(snapshot);
+    gtk_snapshot_append_color(snapshot, &tint, &at);
+    gtk_snapshot_pop(snapshot);
+  } else {
+    gtk_snapshot_append_texture(snapshot, texture, &at);
+  }
   gtk_snapshot_pop(snapshot);
 }
 

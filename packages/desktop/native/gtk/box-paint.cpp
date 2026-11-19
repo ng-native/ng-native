@@ -1,6 +1,10 @@
 #include "box-paint.h"
 
+#include "cairo-canvas.h"
+
 #include <algorithm>
+#include <cmath>
+#include <vector>
 
 namespace ngn::gtk {
 
@@ -18,6 +22,114 @@ SvgRect paddingBox(const BoxDescription &box) {
   const auto &w = box.borderWidths;
   const auto &b = box.bounds;
   return {b.x + w.left, b.y + w.top, std::max(0.0, b.width - w.left - w.right), std::max(0.0, b.height - w.top - w.bottom)};
+}
+
+graphene_rect_t grapheneRect(const SvgRect &r) {
+  graphene_rect_t out;
+  graphene_rect_init(&out, static_cast<float>(r.x), static_cast<float>(r.y), static_cast<float>(r.width), static_cast<float>(r.height));
+  return out;
+}
+
+// The stops as GSK takes them: offsets clamped to 0 to 1 and never smaller than the one before.
+std::vector<GskColorStop> colorStops(const SvgGradient &g) {
+  std::vector<GskColorStop> stops;
+  float last = 0;
+  for (const auto &[offset, argb] : g.stops) {
+    last = std::clamp(stops.empty() ? static_cast<float>(offset) : std::max(static_cast<float>(offset), last), 0.0f, 1.0f);
+    stops.push_back({last, rgbaOf(argb)});
+  }
+  if (stops.size() == 1) {
+    stops.push_back({1, stops[0].color});
+  }
+  return stops;
+}
+
+// The gradient filling `tile`, its own space's origin at the tile's top left (view-box.h). A linear
+// gradient's transform is the identity; a radial one's places its centre and squashes its circle
+// into the ellipse, which GSK takes as two radii.
+void appendGradient(GtkSnapshot *snapshot, const SvgGradient &g, const SvgRect &tile) {
+  auto stops = colorStops(g);
+  if (stops.empty()) {
+    return;
+  }
+  auto at = SvgMatrix::translate(tile.x, tile.y) * g.transform;
+  graphene_rect_t bounds = grapheneRect(tile);
+  if (g.radial) {
+    auto [cx, cy] = at.apply(g.x1, g.y1);
+    float rx = static_cast<float>(g.r * std::hypot(at.a, at.b)), ry = static_cast<float>(g.r * std::hypot(at.c, at.d));
+    if (!(rx > 0) || !(ry > 0)) {
+      return;
+    }
+    graphene_point_t centre;
+    graphene_point_init(&centre, static_cast<float>(cx), static_cast<float>(cy));
+    gtk_snapshot_append_radial_gradient(snapshot, &bounds, &centre, rx, ry, 0, 1, stops.data(), stops.size());
+    return;
+  }
+  auto [x1, y1] = at.apply(g.x1, g.y1);
+  auto [x2, y2] = at.apply(g.x2, g.y2);
+  graphene_point_t start, end;
+  graphene_point_init(&start, static_cast<float>(x1), static_cast<float>(y1));
+  graphene_point_init(&end, static_cast<float>(x2), static_cast<float>(y2));
+  if (graphene_point_equal(&start, &end)) {
+    // No line to run along: CSS paints the last colour.
+    GdkRGBA last = stops.back().color;
+    gtk_snapshot_append_color(snapshot, &last, &bounds);
+    return;
+  }
+  gtk_snapshot_append_linear_gradient(snapshot, &bounds, &start, &end, stops.data(), stops.size());
+}
+
+// The distinct starts of the tiles along one axis, and the step between them when it is the same
+// throughout.
+std::optional<double> step(std::vector<double> starts, double size) {
+  std::sort(starts.begin(), starts.end());
+  starts.erase(std::unique(starts.begin(), starts.end(), [](double a, double b) { return std::abs(a - b) < 1e-6; }), starts.end());
+  if (starts.size() < 2) {
+    return size;
+  }
+  double by = starts[1] - starts[0];
+  for (size_t i = 2; i < starts.size(); ++i) {
+    if (std::abs(starts[i] - starts[i - 1] - by) > 1e-3) {
+      return std::nullopt;
+    }
+  }
+  return by;
+}
+
+// One background image: its first tile drawn once and repeated by GSK over the others, the gap
+// between `space` tiles included.
+void appendBackgroundLayer(GtkSnapshot *snapshot, const BackgroundLayer &layer) {
+  const auto &tiles = layer.tiles;
+  if (tiles.empty()) {
+    return;
+  }
+  const SvgRect &first = tiles[0];
+  std::vector<double> xs, ys;
+  double left = first.x, top = first.y, right = first.x + first.width, bottom = first.y + first.height;
+  for (const auto &t : tiles) {
+    xs.push_back(t.x);
+    ys.push_back(t.y);
+    left = std::min(left, t.x);
+    top = std::min(top, t.y);
+    right = std::max(right, t.x + t.width);
+    bottom = std::max(bottom, t.y + t.height);
+  }
+  auto across = step(xs, first.width), down = step(ys, first.height);
+  if (tiles.size() == 1 || !across || !down) {
+    for (const auto &t : tiles) {
+      appendGradient(snapshot, layer.gradient, t);
+    }
+    return;
+  }
+  graphene_rect_t all = grapheneRect({left, top, right - left, bottom - top});
+  graphene_rect_t one = grapheneRect({left, top, *across, *down});
+  gtk_snapshot_push_repeat(snapshot, &all, &one);
+  appendGradient(snapshot, layer.gradient, {left, top, first.width, first.height});
+  gtk_snapshot_pop(snapshot);
+}
+
+bool dashed(const BoxDescription &box) {
+  return box.borderStyle == facebook::react::BorderStyle::Dashed || box.borderStyle == facebook::react::BorderStyle::Dotted;
 }
 
 } // namespace
@@ -67,15 +179,20 @@ void appendBox(GtkSnapshot *snapshot, const BoxDescription &box, const std::func
         static_cast<float>(it->spreadDistance), static_cast<float>(it->blurRadius));
   }
 
-  if (visible(box.background)) {
-    GdkRGBA color = rgbaOf(*box.background);
+  if (visible(box.background) || !box.backgroundImages.empty()) {
     if (rounded(box.radii)) {
       gtk_snapshot_push_rounded_clip(snapshot, &outline);
-      gtk_snapshot_append_color(snapshot, &color, &outline.bounds);
-      gtk_snapshot_pop(snapshot);
     } else {
+      gtk_snapshot_push_clip(snapshot, &outline.bounds);
+    }
+    if (visible(box.background)) {
+      GdkRGBA color = rgbaOf(*box.background);
       gtk_snapshot_append_color(snapshot, &color, &outline.bounds);
     }
+    for (const auto &layer : box.backgroundImages) {
+      appendBackgroundLayer(snapshot, layer);
+    }
+    gtk_snapshot_pop(snapshot);
   }
 
   GskRoundedRect padding = gskRoundedRect(paddingBox(box), innerRadii(box.radii, box.borderWidths));
@@ -98,7 +215,16 @@ void appendBox(GtkSnapshot *snapshot, const BoxDescription &box, const std::func
   }
 
   const auto &w = box.borderWidths;
-  if (w.top > 0 || w.right > 0 || w.bottom > 0 || w.left > 0) {
+  if (dashed(box) && (w.top > 0 || w.right > 0 || w.bottom > 0 || w.left > 0)) {
+    // GSK strokes paths only from GTK 4.14, and the host builds against 4.12: cairo strokes the
+    // dashes the core lays out, as on macOS.
+    graphene_rect_t bounds = grapheneRect(box.bounds);
+    cairo_t *cr = gtk_snapshot_append_cairo(snapshot, &bounds);
+    auto canvas = makeCairoCanvas(cr, box.bounds.width, box.bounds.height, 1);
+    drawBorder(box, *canvas);
+    canvas.reset();
+    cairo_destroy(cr);
+  } else if (w.top > 0 || w.right > 0 || w.bottom > 0 || w.left > 0) {
     // React Native's default border colour is black.
     const auto &c = box.borderColors;
     float widths[4] = {static_cast<float>(w.top), static_cast<float>(w.right), static_cast<float>(w.bottom), static_cast<float>(w.left)};
