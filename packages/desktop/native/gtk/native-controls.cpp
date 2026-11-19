@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 using facebook::react::RawEvent;
 
@@ -27,8 +28,10 @@ struct Control {
   std::string colorClass;
   // An activity indicator drawn by AdwSpinner, which has no stopped state.
   bool adwSpinner{false};
-  // A date picker's calendar.
+  // A date picker's calendar, and the app's date it last showed: the month the user browses to
+  // stays until the app's date changes.
   GtkWidget *calendar{nullptr};
+  std::optional<double> date;
 };
 
 namespace {
@@ -89,8 +92,26 @@ bool wantsAdwSpinner(const NativeControlProps &p) {
   return haveAdwSpinner() && p.hidesWhenStopped;
 }
 
+// Adwaita's stylesheet makes a stopped GtkSpinner transparent. Ours is shown stopped only when
+// asked to stay, so it draws its icon, still.
+void installStoppedSpinnerStyle() {
+  static bool installed = false;
+  if (installed || !gdk_display_get_default()) {
+    return;
+  }
+  installed = true;
+  GtkCssProvider *css = gtk_css_provider_new();
+  gtk_css_provider_load_from_data(css, "spinner.ngn-spinner:not(:checked) { opacity: 1; }", -1);
+  gtk_style_context_add_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref(css);
+}
+
 GtkWidget *makeSpinner(bool adw) {
   GtkWidget *spinner = adw ? adwFunction<GtkWidget *(*)()>("adw_spinner_new")() : gtk_spinner_new();
+  if (!adw) {
+    installStoppedSpinnerStyle();
+    gtk_widget_add_css_class(spinner, "ngn-spinner");
+  }
   gtk_widget_set_halign(spinner, GTK_ALIGN_CENTER);
   gtk_widget_set_valign(spinner, GTK_ALIGN_CENTER);
   return spinner;
@@ -206,7 +227,8 @@ bool picksDate(const NativeControlProps &p) {
   return p.mode == "date" || p.mode == "datetime";
 }
 
-// The day chosen in the calendar, at the time of day the picker held, kept within its bounds.
+// The day chosen in the calendar, at the time of day the picker held, kept within its bounds. A
+// held date GLib cannot represent (after the year 9999) has no time of day: the day's start.
 void dayChosen(Control *c) {
   const auto *p = controlProps(*c->view);
   if (!p || c->applying) {
@@ -215,15 +237,29 @@ void dayChosen(Control *c) {
   GDateTime *was = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(p->date.value_or(0) / 1000)));
   GDateTime *day = gtk_calendar_get_date(GTK_CALENDAR(c->calendar));
   GDateTime *at = g_date_time_new_local(
-      g_date_time_get_year(day), g_date_time_get_month(day), g_date_time_get_day_of_month(day), g_date_time_get_hour(was),
-      g_date_time_get_minute(was), g_date_time_get_seconds(was));
+      g_date_time_get_year(day), g_date_time_get_month(day), g_date_time_get_day_of_month(day), was ? g_date_time_get_hour(was) : 0,
+      was ? g_date_time_get_minute(was) : 0, was ? g_date_time_get_seconds(was) : 0);
   double ms = static_cast<double>(g_date_time_to_unix(at)) * 1000;
   ms = std::max(ms, p->minimumDate.value_or(ms));
   ms = std::min(ms, p->maximumDate.value_or(ms));
-  double offset = static_cast<double>(g_date_time_get_utc_offset(at)) / G_TIME_SPAN_MINUTE;
-  g_date_time_unref(was);
+  // The offset at the instant sent, which a bound can move across a daylight-saving change.
+  GDateTime *sent = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(ms / 1000)));
+  double offset = sent ? static_cast<double>(g_date_time_get_utc_offset(sent)) / G_TIME_SPAN_MINUTE : 0;
+  // The calendar shows the day sent: a bound's day, not the rejected one, when the app's date
+  // stays the same and so moves nothing.
+  if (sent) {
+    c->applying = true;
+    gtk_calendar_select_day(GTK_CALENDAR(c->calendar), sent);
+    c->applying = false;
+  }
+  if (was) {
+    g_date_time_unref(was);
+  }
   g_date_time_unref(day);
   g_date_time_unref(at);
+  if (sent) {
+    g_date_time_unref(sent);
+  }
   send(c, "change", folly::dynamic::object("timestamp", ms)("utcOffset", offset));
   if (GtkPopover *popover = gtk_menu_button_get_popover(GTK_MENU_BUTTON(c->widget))) {
     gtk_popover_popdown(popover);
@@ -248,15 +284,44 @@ void searchEvent(GtkWidget *entry, const char *name, bool withText) {
   send(c, name, std::move(payload));
 }
 
+// Empties the field and sends the cancel, as AppKit's clear button does.
+void cancelSearch(GtkWidget *entry) {
+  gtk_editable_set_text(GTK_EDITABLE(entry), "");
+  searchEvent(entry, "pressCancel", false);
+}
+
+// The click GtkSearchEntry clears the field on, from its clear icon: GTK sends no stop-search for it.
+GtkGesture *clearIconClick(GtkWidget *entry) {
+  for (GtkWidget *child = gtk_widget_get_first_child(entry); child; child = gtk_widget_get_next_sibling(child)) {
+    if (!GTK_IS_IMAGE(child) || g_strcmp0(gtk_image_get_icon_name(GTK_IMAGE(child)), "edit-clear-symbolic") != 0) {
+      continue;
+    }
+    GListModel *controllers = gtk_widget_observe_controllers(child);
+    GtkGesture *click = nullptr;
+    for (guint i = 0; !click && i < g_list_model_get_n_items(controllers); ++i) {
+      gpointer controller = g_list_model_get_item(controllers, i);
+      if (GTK_IS_GESTURE_CLICK(controller)) {
+        click = GTK_GESTURE(controller);
+      }
+      g_object_unref(controller);
+    }
+    g_object_unref(controllers);
+    return click;
+  }
+  return nullptr;
+}
+
 void wireSearch(GtkWidget *entry) {
   // Each change as it is made, as AppKit's field sends it: GTK's search-changed waits for a pause.
   g_signal_connect(entry, "changed", G_CALLBACK(+[](GtkEditable *e, gpointer) { searchEvent(GTK_WIDGET(e), "changeText", true); }), nullptr);
   g_signal_connect(entry, "activate", G_CALLBACK(+[](GtkSearchEntry *e, gpointer) { searchEvent(GTK_WIDGET(e), "submitSearch", true); }), nullptr);
-  // Escape empties the field, as the cancel button of AppKit's does.
-  g_signal_connect(entry, "stop-search", G_CALLBACK(+[](GtkSearchEntry *e, gpointer) {
-    gtk_editable_set_text(GTK_EDITABLE(e), "");
-    searchEvent(GTK_WIDGET(e), "pressCancel", false);
-  }), nullptr);
+  // Escape and the clear icon empty the field, as the cancel button of AppKit's does.
+  g_signal_connect(entry, "stop-search", G_CALLBACK(+[](GtkSearchEntry *e, gpointer) { cancelSearch(GTK_WIDGET(e)); }), nullptr);
+  if (GtkGesture *click = clearIconClick(entry)) {
+    g_signal_connect_after(click, "released", G_CALLBACK(+[](GtkGestureClick *, int, double, double, gpointer e) {
+      cancelSearch(GTK_WIDGET(e));
+    }), entry);
+  }
   GtkEventController *focus = gtk_event_controller_focus_new();
   g_signal_connect(focus, "enter", G_CALLBACK(+[](GtkEventControllerFocus *f, gpointer) {
     searchEvent(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(f)), "beginEditing", false);
@@ -424,14 +489,21 @@ void applyControlProps(ViewData &view) {
   configure(c, c->kind, w, *p);
   gtk_widget_set_sensitive(w, p->enabled);
   // The app's label for the control, which reads its own (a button's title) without one.
-  if (!p->accessibilityLabel.empty()) {
-    gtk_accessible_update_property(GTK_ACCESSIBLE(w), GTK_ACCESSIBLE_PROPERTY_LABEL, p->accessibilityLabel.c_str(), -1);
-  } else {
-    gtk_accessible_reset_property(GTK_ACCESSIBLE(w), GTK_ACCESSIBLE_PROPERTY_LABEL);
+  // And its hint, which the view around the control is no accessible element to carry.
+  for (auto [property, text] : {std::pair{GTK_ACCESSIBLE_PROPERTY_LABEL, &p->accessibilityLabel},
+                                std::pair{GTK_ACCESSIBLE_PROPERTY_DESCRIPTION, &p->accessibilityHint}}) {
+    if (!text->empty()) {
+      gtk_accessible_update_property(GTK_ACCESSIBLE(w), property, text->c_str(), -1);
+    } else {
+      gtk_accessible_reset_property(GTK_ACCESSIBLE(w), property);
+    }
   }
   switch (c->kind) {
     case ControlKind::Switch:
-      gtk_switch_set_active(GTK_SWITCH(w), p->value);
+      // Only a change: setting the same value ends the slide a click started, and the click with it.
+      if (static_cast<bool>(gtk_switch_get_active(GTK_SWITCH(w))) != p->value) {
+        gtk_switch_set_active(GTK_SWITCH(w), p->value);
+      }
       break;
     case ControlKind::ActivityIndicator: {
       gtk_widget_set_visible(w, p->animating || !p->hidesWhenStopped);
@@ -454,13 +526,15 @@ void applyControlProps(ViewData &view) {
       selectSegment(w, p->selectedIndex);
       break;
     case ControlKind::DatePicker: {
-      if (p->date) {
+      // Only a new date from the app moves the calendar, not another prop's update.
+      if (p->date != c->date && p->date) {
         GDateTime *at = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(*p->date / 1000)));
         if (at) {
           gtk_calendar_select_day(GTK_CALENDAR(c->calendar), at);
           g_date_time_unref(at);
         }
       }
+      c->date = p->date;
       // The time modes have nothing to pick from yet: the button shows the time alone.
       gtk_widget_set_sensitive(w, p->enabled && picksDate(*p));
       break;
@@ -491,7 +565,10 @@ void controlCommand(ViewData &view, const std::string &name, const folly::dynami
   } else if (c->kind == ControlKind::SearchField && name == "focus") {
     gtk_widget_grab_focus(c->widget);
   } else if (c->kind == ControlKind::SearchField && name == "blur") {
-    if (GtkRoot *root = gtk_widget_get_root(c->widget)) {
+    // Only this field's focus, which the text inside it holds: not another field's.
+    GtkRoot *root = gtk_widget_get_root(c->widget);
+    GtkWidget *focus = root ? gtk_root_get_focus(root) : nullptr;
+    if (focus && (focus == c->widget || gtk_widget_is_ancestor(focus, c->widget))) {
       gtk_root_set_focus(root, nullptr);
     }
   }

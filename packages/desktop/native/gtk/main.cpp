@@ -298,6 +298,7 @@ void routeWindow(GtkWidget *surfaceWidget) {
   ngn::gtk::routeKeys(window, std::make_shared<ngn::gtk::KeyRouting>(ngn::gtk::KeyRouting{
       .shortcut = [](const ngn::KeyChord &chord, bool text) { return gHost.menus->keyDown(chord, text); },
       .navigation = [](const ngn::KeyChord &chord) { return ngn::navigationFor(chord, gHost.os); },
+      .editingKey = [](const ngn::KeyChord &chord) { return ngn::editingChord(chord, gHost.os); },
       .navigate = navigate,
       .menuKey = [](const ngn::KeyChord &chord) { return ngn::findMenuItem(gHost.gtkMenus->bar(), chord); },
       .choose = runMenuItem,

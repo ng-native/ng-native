@@ -84,6 +84,24 @@ TEST_CASE("a window opens at its saved size, and a resize saves the size and no 
   CHECK(w.saved("main") == folly::dynamic::object("x", 0)("y", 0)("width", 700)("height", 520));
 }
 
+TEST_CASE("a window that outlives its owner no longer reports to it") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkWidget *kept = nullptr;
+  {
+    Windows w;
+    auto surface = w.open({.key = "main", .title = "Notes"});
+    kept = GTK_WIDGET(g_object_ref(w.windows->window(surface)));
+  }
+  // The owner is gone: nothing of it is left connected to the window someone else still holds.
+  guint notify = g_signal_lookup("notify", G_TYPE_OBJECT);
+  for (const char *property : {"default-width", "default-height", "maximized", "fullscreened", "is-active", "scale-factor"}) {
+    CAPTURE(property);
+    CHECK(g_signal_handler_find(kept, GSignalMatchType(G_SIGNAL_MATCH_ID | G_SIGNAL_MATCH_DETAIL), notify, g_quark_from_string(property),
+                                nullptr, nullptr, nullptr) == 0);
+  }
+  g_object_unref(kept);
+}
+
 TEST_CASE("a maximised window saves that with the size it goes back to, and opens maximised again") {
   REQUIRE(ngn::testing::gtkReady());
   {
@@ -112,6 +130,41 @@ TEST_CASE("a maximised window saves that with the size it goes back to, and open
   int width = 0, height = 0;
   gtk_window_get_default_size(window, &width, &height);
   CHECK(width == 600);
+}
+
+TEST_CASE("a window filling the screen reports the size GTK allocates after the state change, once") {
+  REQUIRE(ngn::testing::gtkReady());
+  Windows w;
+  // No window manager here maximises a window, so the window is said to fill the screen: its size
+  // is then the surface's, which GTK allocates after the notify that reports the change.
+  w.windows->windowFills = [](GtkWindow *) { return true; };
+  w.listen();
+  auto surface = w.open({.key = "main", .title = "Notes", .width = 600, .height = 400});
+  GtkWindow *window = GTK_WINDOW(w.windows->window(surface));
+  settle();
+  w.events.clear();
+  gtk_window_set_default_size(window, 800, 560);
+  settle();
+  GtkWidget *content = w.windows->surfaceWidget(surface);
+  REQUIRE(gtk_widget_get_width(content) > 0);
+  int resizes = 0;
+  double reportedWidth = 0, reportedHeight = 0;
+  for (const auto &event : w.events) {
+    if (event["type"] == "resize") {
+      ++resizes;
+      reportedWidth = event["width"].asDouble();
+      reportedHeight = event["height"].asDouble();
+    }
+  }
+  CHECK(reportedWidth == gtk_widget_get_width(content));
+  CHECK(reportedHeight == gtk_widget_get_height(content));
+  // The width and height notifies and one allocation, not a report per allocation.
+  CHECK(resizes <= 3);
+  // The same size allocated again says nothing.
+  w.events.clear();
+  gtk_widget_queue_resize(content);
+  settle();
+  CHECK(w.events.empty());
 }
 
 TEST_CASE("the user closing the last window is the host's to act on only when no app listens to decide") {

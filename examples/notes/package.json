@@ -9,7 +9,7 @@
     "android": "expo run:android",
     "macos": "ng-native-desktop run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --project node",
     "export": "expo export --platform ios --platform android --platform macos --platform linux --output-dir dist"
   },
   "dependencies": {
