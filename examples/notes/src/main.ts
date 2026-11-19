@@ -14,17 +14,26 @@ import tailwind from '../.angular-native/app.tailwind.js';
 
 registerPlatformComponents(Platform.OS);
 
-AppRegistry.registerRunnable('main', ({ rootTag }) => {
-  const app = mount(Number(rootTag), App, getFabricUIManager(), {
-    processColor,
-    globalStyles: tailwind,
-    conditions: currentConditions(),
-    tokens: deviceTokens(),
-    resolveAssetSource: (value) => Image.resolveAssetSource(value as never),
-    ...appConfig,
-  });
-
-  // A theme switch changes what `dark:` matches, and nothing in the app is dirty when it happens.
-  const stopWatching = watchConditions(app.engine);
-  app.applicationRef.onDestroy(stopWatching);
+const mountOptions = () => ({
+  processColor,
+  globalStyles: tailwind,
+  conditions: currentConditions(),
+  tokens: deviceTokens(),
+  resolveAssetSource: (value: unknown) => Image.resolveAssetSource(value as never),
+  ...appConfig,
 });
+
+if (process.env.EXPO_PUBLIC_DEVICE_TESTS) {
+  // Metro was started for `vitest --project linux` or `--project macos`: the test host, not the app.
+  const { startDeviceTests } =
+    require('@ng-native/testing/device/host') as typeof import('@ng-native/testing/device/host');
+  startDeviceTests({ mount: mountOptions() });
+} else {
+  AppRegistry.registerRunnable('main', ({ rootTag }) => {
+    const app = mount(Number(rootTag), App, getFabricUIManager(), mountOptions());
+
+    // A theme switch changes what `dark:` matches, and nothing in the app is dirty when it happens.
+    const stopWatching = watchConditions(app.engine);
+    app.applicationRef.onDestroy(stopWatching);
+  });
+}

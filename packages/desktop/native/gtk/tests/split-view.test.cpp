@@ -193,3 +193,46 @@ TEST_CASE("a sidebar's sections are a list box over their frames, its rows selec
   s.views.mount({ShadowViewMutation::RemoveMutation(3, s.section, 0)});
   CHECK(s.splits().lists(3).empty());
 }
+
+TEST_CASE("the window's header bar goes back over the window while its split view is covered, and over the content when it shows again") {
+  REQUIRE(ngn::testing::gtkReady());
+  Split s;
+  const auto *chrome = ngn::gtk::chromeOf(s.views.surface);
+  REQUIRE(chrome);
+  auto holder = [&] { return gtk_widget_get_ancestor(chrome->headerBar, ADW_TYPE_TOOLBAR_VIEW); };
+  CHECK(holder() != chrome->toolbarView);
+  CHECK(gtk_widget_is_ancestor(holder(), GTK_WIDGET(s.widget())));
+
+  // A screen pushed over the one that holds the split view hides it, and the header bar is the
+  // pushed screen's to show.
+  s.views.backend->setCovered(MountedViews::kSurface, 2, true);
+  CHECK(holder() == chrome->toolbarView);
+  s.views.backend->setCovered(MountedViews::kSurface, 2, false);
+  CHECK(holder() != chrome->toolbarView);
+  CHECK(gtk_widget_is_ancestor(holder(), GTK_WIDGET(s.widget())));
+  // The split view is deleted while covered: nothing to take it back.
+  s.views.backend->setCovered(MountedViews::kSurface, 2, true);
+  s.views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, s.split, 0), ShadowViewMutation::DeleteMutation(s.split)});
+  CHECK(holder() == chrome->toolbarView);
+}
+
+TEST_CASE("a compact window showing the sidebar alone has a button in its header bar that brings the content back") {
+  REQUIRE(ngn::testing::gtkReady());
+  Split s;
+  GtkWidget *button = s.splits().contentButton(2);
+  REQUIRE(button);
+  CHECK(gtk_widget_is_ancestor(button, GTK_WIDGET(s.widget())));
+  CHECK_FALSE(gtk_widget_get_visible(button));
+  // Compact with the content in front: the window's own header bar, with Show Sidebar, is in reach.
+  s.splits().setCompact(2, true);
+  CHECK_FALSE(gtk_widget_get_visible(button));
+  CHECK(s.splits().toggle(MountedViews::kSurface));
+  REQUIRE_FALSE(s.showsContent());
+  CHECK(gtk_widget_get_visible(button));
+  g_signal_emit_by_name(button, "clicked");
+  CHECK(s.showsContent());
+  CHECK_FALSE(gtk_widget_get_visible(button));
+  // Wide, the sidebar and the content are side by side: no need of it.
+  s.splits().setCompact(2, false);
+  CHECK_FALSE(gtk_widget_get_visible(button));
+}

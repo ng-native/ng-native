@@ -3,7 +3,7 @@
 // ids to the views mounted with them on the same surface, in the order written, and the backend
 // points its toolkit's relations at their views (labelled-by and described-by on GTK, the title
 // element and the help on AppKit). An id no view has is left out; one that several views have
-// names the one made first.
+// names the one with the lowest tag (Fabric counts tags up as views are made, so the one made first).
 //
 // A relation follows both of its ends: a view gaining or losing the props, and a view named by
 // them being made, deleted or given another id. Kept by the mounting manager, which tells the

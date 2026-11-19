@@ -409,6 +409,7 @@ void routeWindow(GtkWidget *surfaceWidget) {
         return ngn::gtk::moveFocusByKey(window, keyval, state, *gHost.backend, gHost.mounting->tree());
       },
       .navigation = [](const ngn::KeyChord &chord) { return ngn::navigationFor(chord, gHost.os); },
+      .editingKey = [](const ngn::KeyChord &chord) { return ngn::editingChord(chord, gHost.os); },
       .navigate = navigate,
       .menuKey = [](const ngn::KeyChord &chord) { return ngn::findMenuItem(gHost.gtkMenus->bar(), chord); },
       .choose = runMenuItem,
