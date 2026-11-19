@@ -1,6 +1,6 @@
 ---
 title: Portals on Linux
-summary: The desktop portals the GTK host asks for files, links, notifications, printing and keeping awake.
+summary: The desktop portals the GTK host asks for files, links, notifications and printing.
 ---
 
 # Portals on Linux

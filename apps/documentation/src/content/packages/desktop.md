@@ -1,6 +1,6 @@
 ---
 title: Desktop
-summary: The macOS and Linux hosts and the ng-native-desktop command that builds, runs and packages the app.
+summary: The macOS and Linux hosts and the command that builds, runs and packages the app.
 ---
 
 # Desktop
@@ -27,7 +27,8 @@ An app made from the desktop template has it already. To add macOS to an app:
 npx expo install @ng-native/desktop
 ```
 
-Then, in `app.json`, add `macos` (and `linux`, for Linux) to `expo.platforms`, set `expo.experiments.outOfTreePlatforms` to
+Then, in `app.json`, add `macos` (and `linux`, for Linux) to `expo.platforms`, set
+`expo.experiments.outOfTreePlatforms` to
 `true` (without it Expo drops `macos` from every bundle and export, and says nothing), add
 `@ng-native/desktop` to `expo.plugins`, and add two scripts to `package.json`:
 
