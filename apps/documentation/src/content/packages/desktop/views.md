@@ -34,7 +34,9 @@ On Linux the GTK host paints the same box with GTK's render nodes: gradients and
 side's width and colour, and a dashed or dotted border stroked as on macOS. It also draws what the
 macOS host does not yet: `filter` (every function, `drop-shadow` and `blur` included, applied in
 order over the view and its children), `mix-blend-mode` (every mode but `plus-lighter`, which draws
-normally), and an `<image>`'s `tintColor`, which fills the image's shape with the tint. A child's
+normally), an `<image>`'s `tintColor`, which fills the image's shape with the tint, and its
+`resizeMode: 'repeat'`, which tiles the image from the top left at its size in points as React
+Native iOS does, where the macOS host stretches it. A child's
 blend mode blends it with its parent's own painting and the siblings drawn before it, as if every
 view set `isolation: isolate`: over a parent with no background it shows as it is.
 
@@ -88,10 +90,13 @@ an `AdwToggleGroup` on libadwaita 1.7 and later and a linked row of toggle butto
 `<search-field>` a `GtkSearchEntry`, which sends each change as it is typed. `<date-time-picker>`
 is a button showing the date that opens a `GtkCalendar`, keeping the time of day and the picker's
 bounds. A `time` picker opens an hour and a minute in spin buttons, as GNOME Clocks and Calendar
-pick a time, on the picker's day and within its bounds; the hour runs 1 to 12 beside an AM and PM
-button where the locale's time format is a 12-hour clock. A `datetime` picker opens both, and a
-`countdown` one shows the time and picks nothing. `controlSize`, `sfSymbol` and the search field's
-font props do nothing there.
+pick a time, on the picker's day and within its bounds. The hour runs 1 to 12 beside an AM and PM
+button on a 12-hour clock: GNOME's own setting (`clock-format`, read through the settings portal or
+GSettings and followed as it changes), or the locale's time format where there is none. The minute
+steps by `minuteInterval` (1 to 30, dividing 60, else 1), and a time between two steps shows the
+step before it. A `datetime` picker opens both, and a `countdown` one picks hours and minutes on a
+24-hour clock, with no AM and PM. `controlSize`, `sfSymbol` and the search field's font props do
+nothing there.
 
 ## Text inputs
 

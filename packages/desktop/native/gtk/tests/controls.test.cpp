@@ -324,13 +324,13 @@ TEST_CASE("a date picker shows its date and picks a day in a calendar, keeping t
   gtk_calendar_select_day(GTK_CALENDAR(calendar), past);
   CHECK(events.sent.back().payload["timestamp"].asDouble() == doctest::Approx(max));
 
-  // The time mode shows the time and picks it; countdown has nothing to pick.
+  // The time mode shows the time and picks it, and so does a countdown.
   views.update(view, controlProps<Descriptor>(folly::dynamic::object("date", ms)("mode", "time")));
   gchar *time = g_date_time_format(noon, "%X");
   CHECK(std::string(gtk_menu_button_get_label(GTK_MENU_BUTTON(button))) == time);
   CHECK(gtk_widget_get_sensitive(button));
   views.update(view, controlProps<Descriptor>(folly::dynamic::object("date", ms)("mode", "countdown")));
-  CHECK_FALSE(gtk_widget_get_sensitive(button));
+  CHECK(gtk_widget_get_sensitive(button));
   g_free(time);
   for (GDateTime *d : {noon, bound, later, picked, past}) {
     g_date_time_unref(d);
@@ -415,6 +415,117 @@ TEST_CASE("on a locale's 12-hour clock a time picker's hour runs 1 to 12 beside 
   g_signal_emit_by_name(meridiem, "clicked");
   CHECK(events.sent.back().payload["timestamp"].asDouble() == doctest::Approx(localMs(2026, 3, 14, 3, 30)));
   CHECK(std::string(gtk_button_get_label(GTK_BUTTON(meridiem))) == "AM");
+}
+
+TEST_CASE("a time picker's minutes step by minuteInterval, and a time between two steps shows the one before") {
+  REQUIRE(ngn::testing::gtkReady());
+  using Descriptor = ngn::DatePickerComponentDescriptor;
+  TimeLocale locale("C");
+  Events events;
+  MountedViews views(false, 300, 100);
+  auto props = [](int interval) {
+    return controlProps<Descriptor>(folly::dynamic::object("date", localMs(2026, 3, 14, 12, 37))("mode", "time")("minuteInterval", interval));
+  };
+  auto view = control(7, "RNDateTimePicker", props(15));
+  views.add(view);
+  GtkWidget *minutes = pickerPart(controlOf(views, 7), GTK_TYPE_SPIN_BUTTON, 1);
+  REQUIRE(minutes);
+  double lowest = 0, highest = 0, step = 0, page = 0;
+  gtk_spin_button_get_range(GTK_SPIN_BUTTON(minutes), &lowest, &highest);
+  gtk_spin_button_get_increments(GTK_SPIN_BUTTON(minutes), &step, &page);
+  CHECK(lowest == 0);
+  CHECK(highest == 45);
+  CHECK(step == 15);
+  CHECK(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(minutes)) == 30);
+  CHECK(events.sent.empty());
+  gtk_spin_button_spin(GTK_SPIN_BUTTON(minutes), GTK_SPIN_STEP_FORWARD, 0);
+  REQUIRE_FALSE(events.sent.empty());
+  CHECK(events.sent.back().payload["timestamp"].asDouble() == doctest::Approx(localMs(2026, 3, 14, 12, 45)));
+  // A minute set between two steps snaps to one.
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(minutes), 20);
+  CHECK(events.sent.back().payload["timestamp"].asDouble() == doctest::Approx(localMs(2026, 3, 14, 12, 15)));
+  // The app's time shows at the step before it, not the nearest.
+  views.update(view, controlProps<Descriptor>(folly::dynamic::object("date", localMs(2026, 3, 14, 12, 44))("mode", "time")("minuteInterval", 15)));
+  CHECK(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(minutes)) == 30);
+
+  // One that does not divide the hour is 1, as UIDatePicker takes it.
+  views.update(view, props(7));
+  gtk_spin_button_get_range(GTK_SPIN_BUTTON(minutes), &lowest, &highest);
+  CHECK(highest == 59);
+  CHECK(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(minutes)) == 37);
+}
+
+TEST_CASE("a countdown picks hours and minutes on a 24-hour clock, with no AM and PM") {
+  REQUIRE(ngn::testing::gtkReady());
+  using Descriptor = ngn::DatePickerComponentDescriptor;
+  TimeLocale locale("en_US.UTF-8");
+  Events events;
+  MountedViews views(false, 300, 100);
+  auto view = control(7, "RNDateTimePicker", controlProps<Descriptor>(folly::dynamic::object("date", localMs(2026, 3, 14, 1, 30))("mode", "countdown")));
+  views.add(view);
+  GtkWidget *button = controlOf(views, 7);
+  GtkWidget *hours = pickerPart(button, GTK_TYPE_SPIN_BUTTON, 0);
+  REQUIRE(hours);
+  CHECK(gtk_widget_get_sensitive(button));
+  CHECK(gtk_widget_get_visible(gtk_widget_get_parent(hours)));
+  CHECK_FALSE(gtk_widget_get_visible(pickerPart(button, GTK_TYPE_CALENDAR)));
+  CHECK_FALSE(gtk_widget_get_visible(gtk_widget_get_last_child(gtk_widget_get_parent(hours))));
+  double lowest = 0, highest = 0;
+  gtk_spin_button_get_range(GTK_SPIN_BUTTON(hours), &lowest, &highest);
+  CHECK(lowest == 0);
+  CHECK(highest == 23);
+  CHECK(std::string(gtk_editable_get_text(GTK_EDITABLE(hours))) == "01");
+  CHECK(std::string(gtk_menu_button_get_label(GTK_MENU_BUTTON(button))) == "01:30");
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(hours), 2);
+  REQUIRE_FALSE(events.sent.empty());
+  CHECK(events.sent.back().payload["timestamp"].asDouble() == doctest::Approx(localMs(2026, 3, 14, 2, 30)));
+}
+
+TEST_CASE("a time picker follows the desktop's clock format over the locale's, as it changes, and the locale's again without one") {
+  REQUIRE(ngn::testing::gtkReady());
+  using Descriptor = ngn::DatePickerComponentDescriptor;
+  TimeLocale locale("C");
+  Events events;
+  MountedViews views(false, 300, 100);
+  auto view = control(7, "RNDateTimePicker", controlProps<Descriptor>(folly::dynamic::object("date", localMs(2026, 3, 14, 15, 30))("mode", "time")));
+  views.add(view);
+  GtkWidget *hours = pickerPart(controlOf(views, 7), GTK_TYPE_SPIN_BUTTON, 0);
+  REQUIRE(hours);
+  GtkWidget *meridiem = gtk_widget_get_last_child(gtk_widget_get_parent(hours));
+  auto highest = [hours] {
+    double lowest = 0, high = 0;
+    gtk_spin_button_get_range(GTK_SPIN_BUTTON(hours), &lowest, &high);
+    return high;
+  };
+  CHECK(highest() == 23);
+  CHECK(std::string(gtk_editable_get_text(GTK_EDITABLE(hours))) == "15");
+
+  // GNOME's clock-format says 12h, over C's 24-hour clock: the picker shown changes.
+  ngn::gtk::useClockFormat(true);
+  CHECK(highest() == 12);
+  CHECK(gtk_widget_get_visible(meridiem));
+  CHECK(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(hours)) == 3);
+  CHECK(std::string(gtk_editable_get_text(GTK_EDITABLE(hours))) == "3");
+  CHECK(std::string(gtk_menu_button_get_label(GTK_MENU_BUTTON(controlOf(views, 7)))) == "3:30:00 PM");
+  CHECK(events.sent.empty());
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(hours), 4);
+  CHECK(events.sent.back().payload["timestamp"].asDouble() == doctest::Approx(localMs(2026, 3, 14, 16, 30)));
+
+  ngn::gtk::useClockFormat(false);
+  CHECK(highest() == 23);
+  CHECK(std::string(gtk_menu_button_get_label(GTK_MENU_BUTTON(controlOf(views, 7)))) == "15:30:00");
+  CHECK_FALSE(gtk_widget_get_visible(meridiem));
+  ngn::gtk::useClockFormat(std::nullopt);
+  {
+    TimeLocale twelve("en_US.UTF-8");
+    // A picker made now reads the locale's 12-hour clock.
+    auto other = control(8, "RNDateTimePicker", controlProps<Descriptor>(folly::dynamic::object("date", localMs(2026, 3, 14, 15, 30))("mode", "time")));
+    views.add(other);
+    GtkWidget *otherHours = pickerPart(controlOf(views, 8), GTK_TYPE_SPIN_BUTTON, 0);
+    double lowest = 0, high = 0;
+    gtk_spin_button_get_range(GTK_SPIN_BUTTON(otherHours), &lowest, &high);
+    CHECK(high == 12);
+  }
 }
 
 TEST_CASE("the controls measure as GTK lays them out") {

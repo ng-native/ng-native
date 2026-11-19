@@ -17,6 +17,7 @@
 #include "auth-session.h"
 #include "battery.h"
 #include "capture.h"
+#include "clock-format.h"
 #include "crypto.h"
 #include "file-dialogs.h"
 #include "file-system.h"
@@ -31,6 +32,7 @@
 #include "locales.h"
 #include "location.h"
 #include "menus.h"
+#include "native-controls.h"
 #include "network-state.h"
 #include "notifications.h"
 #include "pango-text.h"
@@ -565,6 +567,8 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "[ngn] %s is already running: this launch went to it\n", appId.c_str());
     return 0;
   }
+  // GNOME's 12 or 24-hour clock, which the date pickers' time follows.
+  static ngn::gtk::ClockFormatWatcher clockFormat(ngn::gtk::useClockFormat);
   const char *desktop = getenv("XDG_CURRENT_DESKTOP");
   const auto menuPlacement = ngn::linuxMenuPlacement(desktop ? desktop : "");
 

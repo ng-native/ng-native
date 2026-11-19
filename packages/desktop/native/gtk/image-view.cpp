@@ -202,10 +202,16 @@ void snapshotImage(const ViewData &view, GtkSnapshot *snapshot, const BoxDescrip
     return;
   }
   GdkTexture *texture = view.image->texture;
-  auto rect = placeImage(
-      imageContentFit(props->resizeMode), nullptr,
-      {static_cast<double>(gdk_texture_get_width(texture)), static_cast<double>(gdk_texture_get_height(texture))},
-      {box.bounds.width, box.bounds.height});
+  std::pair<double, double> pixels{gdk_texture_get_width(texture), gdk_texture_get_height(texture)};
+  // `repeat` tiles the image from the top left at its size in points, as React Native iOS draws it.
+  bool tiled = props->resizeMode == facebook::react::ImageResizeMode::Repeat;
+  ImageRect rect;
+  if (tiled) {
+    double scale = view.image->source && view.image->source->scale > 0 ? view.image->source->scale : 1;
+    rect = {0, 0, pixels.first / scale, pixels.second / scale};
+  } else {
+    rect = placeImage(imageContentFit(props->resizeMode), nullptr, pixels, {box.bounds.width, box.bounds.height});
+  }
   // The image is cut to the view, in its rounded shape, as the macOS host's layer masks it.
   GskRoundedRect outline = gskRoundedRect(box.bounds, box.radii);
   gtk_snapshot_push_rounded_clip(snapshot, &outline);
@@ -213,6 +219,12 @@ void snapshotImage(const ViewData &view, GtkSnapshot *snapshot, const BoxDescrip
   graphene_rect_init(
       &at, static_cast<float>(box.bounds.x + rect.x), static_cast<float>(box.bounds.y + rect.y), static_cast<float>(rect.width),
       static_cast<float>(rect.height));
+  if (tiled) {
+    graphene_rect_t whole;
+    graphene_rect_init(&whole, static_cast<float>(box.bounds.x), static_cast<float>(box.bounds.y), static_cast<float>(box.bounds.width),
+                       static_cast<float>(box.bounds.height));
+    gtk_snapshot_push_repeat(snapshot, &whole, &at);
+  }
   if (props->tintColor && *props->tintColor) {
     // The tint in the image's shape: its colour where the image has alpha, as React Native iOS
     // draws a template image.
@@ -225,6 +237,9 @@ void snapshotImage(const ViewData &view, GtkSnapshot *snapshot, const BoxDescrip
     gtk_snapshot_pop(snapshot);
   } else {
     gtk_snapshot_append_texture(snapshot, texture, &at);
+  }
+  if (tiled) {
+    gtk_snapshot_pop(snapshot);
   }
   gtk_snapshot_pop(snapshot);
 }

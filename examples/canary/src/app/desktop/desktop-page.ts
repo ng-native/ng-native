@@ -104,10 +104,20 @@ const MENU_NOTES: Record<OsName, string> = {
           [date]="time()"
           [minimumDate]="opens"
           [maximumDate]="closes"
+          [minuteInterval]="15"
           (change)="time.set($event.nativeEvent.timestamp)"
         />
+        <date-time-picker
+          testID="countdown"
+          mode="countdown"
+          [date]="countdown()"
+          (change)="countdown.set($event.nativeEvent.timestamp)"
+        />
       </view>
-      <text class="hint">A time between 9:00 and 17:30, which the picker keeps it within.</text>
+      <text class="hint">
+        A time between 9:00 and 17:30 in quarter hours, which the picker keeps it within, and a
+        countdown in hours and minutes.
+      </text>
 
       <text class="heading">A choice of five</text>
       <view class="desktop-row">
@@ -206,6 +216,7 @@ export class DesktopPage {
   protected readonly opens = new Date(2026, 2, 14, 9, 0).getTime();
   protected readonly closes = new Date(2026, 2, 14, 17, 30).getTime();
   protected readonly time = signal(new Date(2026, 2, 14, 14, 45).getTime());
+  protected readonly countdown = signal(new Date(2026, 2, 14, 1, 30).getTime());
   protected readonly chosen = signal('Nothing chosen yet.');
   /** The card's own nativeID, renamed and taken away in turn: its menu follows each. */
   protected readonly cardName = signal<string | undefined>(undefined);

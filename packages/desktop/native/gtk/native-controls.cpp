@@ -9,6 +9,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
+#include <set>
 
 using facebook::react::RawEvent;
 
@@ -37,7 +39,31 @@ struct Control {
   GtkWidget *meridiem{nullptr};
   bool twelveHour{false};
   bool afterNoon{false};
+  // A countdown's duration, which has no AM and PM, and the minutes the time steps by.
+  bool countdown{false};
+  int minuteStep{1};
+  ~Control();
 };
+
+namespace {
+
+// The date pickers alive, which a change of the desktop's clock format reaches.
+std::set<Control *> &datePickers() {
+  static std::set<Control *> pickers;
+  return pickers;
+}
+
+// The desktop's clock format (useClockFormat), or nothing where the locale's decides.
+std::optional<bool> &desktopClock() {
+  static std::optional<bool> clock;
+  return clock;
+}
+
+} // namespace
+
+Control::~Control() {
+  datePickers().erase(this);
+}
 
 namespace {
 
@@ -191,15 +217,19 @@ void selectSegment(GtkWidget *segments, int index) {
 
 // --- Date picker ------------------------------------------------------------------------------
 
-// The picker's date as the locale writes it, in the local time zone.
+// The picker's date as the locale writes it, in the local time zone: its time on the desktop's
+// clock where it sets one (useClockFormat), and a countdown as hours and minutes.
 std::string dateLabel(const NativeControlProps &p) {
   GDateTime *at = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(p.date.value_or(0) / 1000)));
   if (!at) {
     return {};
   }
-  const char *format = p.mode == "time" || p.mode == "countdown" ? "%X" : p.mode == "datetime" ? "%x %X" : "%x";
-  gchar *text = g_date_time_format(at, format);
+  std::string time = !desktopClock() ? "%X" : *desktopClock() ? "%l:%M:%S %p" : "%H:%M:%S";
+  std::string format = p.mode == "countdown" ? "%H:%M" : p.mode == "time" ? time : p.mode == "datetime" ? "%x " + time : "%x";
+  gchar *text = g_date_time_format(at, format.c_str());
   std::string out = text ? text : "";
+  // %l pads a one-digit hour with a space.
+  out.erase(0, out.find_first_not_of(' '));
   g_free(text);
   g_date_time_unref(at);
   return out;
@@ -210,7 +240,7 @@ bool picksDate(const NativeControlProps &p) {
 }
 
 bool picksTime(const NativeControlProps &p) {
-  return p.mode == "time" || p.mode == "datetime";
+  return p.mode == "time" || p.mode == "datetime" || p.mode == "countdown";
 }
 
 GDateTime *pickerDate(const NativeControlProps &p) {
@@ -240,7 +270,7 @@ void showTime(Control *c, double ms) {
   int hour = g_date_time_get_hour(at);
   c->afterNoon = hour >= 12;
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(c->hours), c->twelveHour ? clockHour(hour) : hour);
-  gtk_spin_button_set_value(GTK_SPIN_BUTTON(c->minutes), g_date_time_get_minute(at));
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(c->minutes), minuteOnInterval(g_date_time_get_minute(at), c->minuteStep));
   gtk_button_set_label(GTK_BUTTON(c->meridiem), nl_langinfo(c->afterNoon ? PM_STR : AM_STR));
   c->applying = was;
   g_date_time_unref(at);
@@ -294,11 +324,47 @@ gboolean twoDigits(GtkSpinButton *b, gpointer) {
   return TRUE;
 }
 
-// An hour and a minute in spin buttons that wrap, as GNOME Clocks and Calendar pick a time, each
-// written with two digits; on a 12-hour clock (the locale's time format, twelveHourClock) the hour
-// runs 1 to 12 beside an AM and PM button.
+// The hour as the clock writes it: two digits on a 24-hour clock, as it is on a 12-hour one.
+gboolean hourText(GtkSpinButton *b, gpointer data) {
+  if (static_cast<Control *>(data)->twelveHour) {
+    return FALSE;
+  }
+  return twoDigits(b, nullptr);
+}
+
+// Whether times read on a 12-hour clock: GNOME's clock-format where the desktop gave one
+// (useClockFormat), else the locale's time format.
+bool twelveHourNow() {
+  return desktopClock().value_or(twelveHourClock(nl_langinfo(T_FMT)));
+}
+
+// The time row for the clock and the picker's minute step: the hour 1 to 12 beside AM and PM on a
+// 12-hour clock, or 0 to 23 on a 24-hour one and for a countdown, whose duration has no AM and PM;
+// the minute in steps of minuteInterval. Then the picker's time again.
+void configureClock(Control *c) {
+  const auto *p = controlProps(*c->view);
+  bool was = c->applying;
+  c->applying = true;
+  c->twelveHour = !c->countdown && twelveHourNow();
+  gtk_spin_button_set_range(GTK_SPIN_BUTTON(c->hours), c->twelveHour ? 1 : 0, c->twelveHour ? 12 : 23);
+  gtk_spin_button_set_increments(GTK_SPIN_BUTTON(c->minutes), c->minuteStep, c->minuteStep);
+  gtk_spin_button_set_range(GTK_SPIN_BUTTON(c->minutes), 0, 60 - c->minuteStep);
+  gtk_spin_button_set_snap_to_ticks(GTK_SPIN_BUTTON(c->minutes), c->minuteStep > 1);
+  gtk_widget_set_visible(c->meridiem, c->twelveHour);
+  c->applying = was;
+  showTime(c, p ? p->date.value_or(0) : 0);
+  if (p) {
+    gtk_menu_button_set_label(GTK_MENU_BUTTON(c->widget), dateLabel(*p).c_str());
+  }
+  // The hour's text follows the clock it is now on, though its value may not have changed.
+  gchar *text = g_strdup_printf(c->twelveHour ? "%d" : "%02d", gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(c->hours)));
+  gtk_editable_set_text(GTK_EDITABLE(c->hours), text);
+  g_free(text);
+}
+
+// An hour and a minute in spin buttons that wrap, as GNOME Clocks and Calendar pick a time, the
+// minute written with two digits; configureClock sets the hour's clock and the minute's step.
 GtkWidget *makeTimeRow(Control *c) {
-  c->twelveHour = twelveHourClock(nl_langinfo(T_FMT));
   auto spin = [c](int from, int to, const char *label) {
     GtkWidget *b = gtk_spin_button_new_with_range(from, to, 1);
     gtk_spin_button_set_wrap(GTK_SPIN_BUTTON(b), TRUE);
@@ -308,15 +374,13 @@ GtkWidget *makeTimeRow(Control *c) {
     g_signal_connect(b, "value-changed", G_CALLBACK(+[](GtkSpinButton *, gpointer data) { timeChosen(static_cast<Control *>(data)); }), c);
     return b;
   };
-  c->hours = c->twelveHour ? spin(1, 12, "Hour") : spin(0, 23, "Hour");
+  c->hours = spin(0, 23, "Hour");
   c->minutes = spin(0, 59, "Minute");
   g_signal_connect(c->minutes, "output", G_CALLBACK(twoDigits), nullptr);
-  if (!c->twelveHour) {
-    g_signal_connect(c->hours, "output", G_CALLBACK(twoDigits), nullptr);
-  }
+  g_signal_connect(c->hours, "output", G_CALLBACK(hourText), c);
   c->meridiem = gtk_button_new_with_label(nl_langinfo(AM_STR));
   gtk_widget_set_valign(c->meridiem, GTK_ALIGN_CENTER);
-  gtk_widget_set_visible(c->meridiem, c->twelveHour);
+  gtk_widget_set_visible(c->meridiem, false);
   g_signal_connect(c->meridiem, "clicked", G_CALLBACK(+[](GtkButton *, gpointer data) {
     auto *c = static_cast<Control *>(data);
     c->afterNoon = !c->afterNoon;
@@ -447,6 +511,7 @@ void wire(Control *c) {
     case ControlKind::DatePicker: {
       c->calendar = gtk_calendar_new();
       c->timeRow = makeTimeRow(c);
+      datePickers().insert(c);
       GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
       gtk_box_append(GTK_BOX(box), c->calendar);
       gtk_box_append(GTK_BOX(box), c->timeRow);
@@ -471,6 +536,16 @@ void attach(GtkWidget *view, Control *c) {
 }
 
 } // namespace
+
+void useClockFormat(std::optional<bool> twelveHour) {
+  if (desktopClock() == twelveHour) {
+    return;
+  }
+  desktopClock() = twelveHour;
+  for (Control *c : datePickers()) {
+    configureClock(c);
+  }
+}
 
 void setControlEventSink(ControlEventSink sink) {
   eventSink() = std::move(sink);
@@ -566,8 +641,10 @@ void applyControlProps(ViewData &view) {
           g_date_time_unref(at);
         }
       }
-      showTime(c, p->date.value_or(0));
-      // The calendar for a date, the hour and minute for a time; `countdown` has nothing to pick.
+      c->countdown = p->mode == "countdown";
+      c->minuteStep = pickerMinuteInterval(p->minuteInterval);
+      configureClock(c);
+      // The calendar for a date, the hour and minute for a time or a countdown.
       gtk_widget_set_visible(c->calendar, picksDate(*p));
       gtk_widget_set_visible(c->timeRow, picksTime(*p));
       gtk_widget_set_sensitive(w, p->enabled && (picksDate(*p) || picksTime(*p)));

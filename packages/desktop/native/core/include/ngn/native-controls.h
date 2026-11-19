@@ -71,6 +71,8 @@ class NativeControlProps final : public facebook::react::ViewProps, public HasDe
   std::optional<double> maximumDate;
   // `date`, `time`, `datetime` or `countdown`.
   std::string mode{"date"};
+  // The minutes a time is picked in steps of (iOS's minuteInterval): 1 to 30, dividing 60.
+  int minuteInterval{1};
   // `default`, `spinner`, `compact` or `inline`.
   std::string display{"default"};
 
@@ -158,6 +160,13 @@ bool twelveHourClock(std::string_view timeFormat);
 // noon; and the 12-hour clock's hour for an hour of the day.
 int dayHour(int clockHour, bool afterNoon);
 int clockHour(int dayHour);
+// GNOME's clock-format (org.gnome.desktop.interface, through the settings portal): true for
+// `12h`, false for `24h`, nothing for anything else, where the locale's format decides.
+std::optional<bool> clockFormatTwelveHour(std::string_view clockFormat);
+// A minuteInterval as UIDatePicker takes it: one that does not divide 60 evenly, or is outside 1
+// to 30, is 1. And a minute rounded down to it, as the picker shows a time between two steps.
+int pickerMinuteInterval(int minuteInterval);
+int minuteOnInterval(int minute, int minuteInterval);
 
 using NativeButtonComponentDescriptor = NativeControlComponentDescriptor<NativeButtonComponentName, ControlKind::Button>;
 using SwitchControlComponentDescriptor =
