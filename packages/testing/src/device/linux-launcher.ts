@@ -374,11 +374,7 @@ export function linuxLaunchCommand(
       },
     };
   }
-  const session = sessionScript(
-    display,
-    forwardedPorts(request.port, metroPort, bundle),
-    fakeSystemUi,
-  );
+  const session = sessionScript(display, [request.port, metroPort], fakeSystemUi);
   // The host's build folder, a bundle file's folder, and the fake portals' script's, at the same
   // paths.
   const mounts = [path.dirname(path.dirname(host))];
@@ -429,21 +425,6 @@ function containerUser(fakeSystemUi: boolean): { flags: string[]; env: Record<st
   const user = process.getuid && process.getgid ? `${process.getuid()}:${process.getgid()}` : '';
   if (fakeSystemUi) return { flags: [], env: { NGN_AS_USER: user } };
   return { flags: user ? ['--user', user] : [], env: {} };
-}
-
-/**
- * The ports the container forwards to the machine running Vitest: the pool's, Metro's, and a
- * bundle URL's own when it names a loopback port, each once.
- */
-function forwardedPorts(poolPort: number, metroPort: number, bundle: string): number[] {
-  const ports = [poolPort, metroPort];
-  if (/^https?:/.test(bundle)) {
-    const url = new URL(bundle);
-    if (url.port && ['127.0.0.1', 'localhost'].includes(url.hostname)) {
-      ports.push(Number(url.port));
-    }
-  }
-  return [...new Set(ports)];
 }
 
 function stringEnv(env: Environment): Record<string, string> {

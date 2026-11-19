@@ -22,6 +22,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
+  desktopCliHost,
   FAKE_PORTALS,
   imageNamed,
   linuxBundleUrl,
@@ -307,8 +308,8 @@ describe('the Linux launch from another OS', () => {
       {
         host: '/Users/me/cache/build/gtk/ngn-linux',
         container: 'ngn-el9',
-        metroPort: 8082,
         fakeSystemUi: false,
+        metroPort: 8082,
       },
       runRequest,
       {},
@@ -389,9 +390,13 @@ describe('the Linux launch from another OS', () => {
         assert.equal(args[args.indexOf('bash') - 1], expected);
       }
       // A launcher given a container ignores the variable.
-      const given = linuxLaunchCommand({ ...request, container: 'ngn-el9' }, runRequest, {
-        NGN_LINUX_IMAGE: 'ngn-fedora',
-      });
+      const given = linuxLaunchCommand(
+        { ...request, container: 'ngn-el9', fakeSystemUi: false },
+        runRequest,
+        {
+          NGN_LINUX_IMAGE: 'ngn-fedora',
+        },
+      );
       assert.equal(given.args[given.args.indexOf('bash') - 1], 'ngn-el9');
     } finally {
       Object.defineProperty(process, 'platform', platform);
@@ -403,8 +408,8 @@ describe('the Linux launch from another OS', () => {
       {
         host: '/h/b/gtk/ngn-linux',
         container: 'ngn-el9',
-        bundle: '/Users/me/out/main.js',
         fakeSystemUi: false,
+        bundle: '/Users/me/out/main.js',
       },
       runRequest,
       {},
@@ -418,7 +423,12 @@ describe('the Linux launch from another OS', () => {
     assert.throws(
       () =>
         linuxLaunchCommand(
-          { host: '/h/b/gtk/ngn-linux', container: 'ngn-el9', display: 'inherit' },
+          {
+            host: '/h/b/gtk/ngn-linux',
+            container: 'ngn-el9',
+            fakeSystemUi: false,
+            display: 'inherit',
+          },
           runRequest,
           {},
         ),
