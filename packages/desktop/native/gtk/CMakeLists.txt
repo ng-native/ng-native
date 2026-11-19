@@ -58,6 +58,7 @@ add_library(ngn_gtk OBJECT
     pango-text.cpp
     portal.cpp
     printing.cpp
+    proxy-resolver.cpp
     screens.cpp
     secret-store.cpp
     scroll-view.cpp
@@ -67,7 +68,7 @@ add_library(ngn_gtk OBJECT
     system-access.cpp
     text-field.cpp
     view-widget.cpp)
-target_link_libraries(ngn_gtk PUBLIC ngn_core_runtime ngn_curl ngn_libraries PkgConfig::NGN_GTK PkgConfig::NGN_FONTCONFIG)
+target_link_libraries(ngn_gtk PUBLIC ngn_core_runtime ngn_curl ngn_openssl ngn_libraries PkgConfig::NGN_GTK PkgConfig::NGN_FONTCONFIG)
 if(NOT APPLE)
   target_link_libraries(ngn_gtk PUBLIC PkgConfig::NGN_X11)
 endif()
@@ -99,7 +100,7 @@ add_custom_command(TARGET ngn-linux POST_BUILD
 # The GTK view tests: views mounted from Fabric mutations into a window GTK draws, through the
 # backend the binary uses. Built with the core tests, and run beside them.
 if(NGN_TESTS)
-  set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accessible.test.cpp tests/app-windows.test.cpp tests/chrome.test.cpp tests/controls.test.cpp tests/drag-and-drop.test.cpp tests/fonts.test.cpp tests/image-manipulator.test.cpp tests/image-view.test.cpp tests/input.test.cpp tests/input-replay.test.cpp tests/linking.test.cpp tests/locales.test.cpp tests/machine.test.cpp tests/menus.test.cpp tests/notifications.test.cpp tests/system-modules.test.cpp tests/system-services.test.cpp
+  set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accessible.test.cpp tests/app-windows.test.cpp tests/chrome.test.cpp tests/controls.test.cpp tests/drag-and-drop.test.cpp tests/fonts.test.cpp tests/image-manipulator.test.cpp tests/image-view.test.cpp tests/input.test.cpp tests/input-replay.test.cpp tests/linking.test.cpp tests/locales.test.cpp tests/machine.test.cpp tests/menus.test.cpp tests/notifications.test.cpp tests/proxy-resolver.test.cpp tests/system-modules.test.cpp tests/system-services.test.cpp
       tests/screens.test.cpp tests/scroll-view.test.cpp tests/secret-store.test.cpp tests/svg.test.cpp tests/system-access.test.cpp tests/text.test.cpp tests/views.test.cpp
   tests/accessibility-settings.test.cpp tests/alerts.test.cpp tests/animation-frames.test.cpp tests/focus.test.cpp tests/split-view.test.cpp tests/status-notifier.test.cpp)
   add_executable(ngn_gtk_tests ${ngn_gtk_test_SRC} ../core/testing/fake-network.cpp ../core/testing/fake-system.cpp)
