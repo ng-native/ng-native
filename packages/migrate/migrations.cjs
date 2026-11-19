@@ -23,6 +23,7 @@ const { engineNodeFields } = require('./engine-node-fields.cjs');
 const { engineNodeTag } = require('./engine-node-tag.cjs');
 const { libraryTypecheckDeclarationMap } = require('./library-typecheck-declaration-map.cjs');
 const { nativeTypecheckTarget } = require('./native-typecheck-target.cjs');
+const { osComparisonsOnLinux } = require('./os-comparisons-on-linux.cjs');
 const { osComparisonsOnMacos } = require('./os-comparisons-on-macos.cjs');
 const { splitStoreAndPlayer } = require('./split-store-and-player.cjs');
 const { stopWatchingConditions } = require('./stop-watching-conditions.cjs');
@@ -112,6 +113,13 @@ const migrations = [
     description:
       "Call each service's available, now a Signal<boolean> on every service, and stop awaiting it.",
     run: availableSignal,
+  },
+  {
+    name: 'os-comparisons-on-linux',
+    version: '0.24.0',
+    description:
+      "Note each comparison with 'ios', 'macos' or !== 'android', which answers differently now that Linux is reported as 'linux'.",
+    run: osComparisonsOnLinux,
   },
 ];
 

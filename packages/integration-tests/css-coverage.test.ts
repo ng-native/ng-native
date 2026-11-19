@@ -405,6 +405,27 @@ describe('skew, per platform', () => {
       assert.throws(() => compileCss(css, 'test', { platform: 'macos' }), /not drawn on iOS/);
     }
   });
+
+  // Linux runs the same desktop core, which hands the toolkit the whole matrix as macOS's does.
+  it('keeps a skew and refuses an iOS filter in a Linux build, unscoped and scoped to Linux', () => {
+    for (const css of [
+      '.a { transform: skewX(12deg) }',
+      '.platform-linux .a { transform: skewX(12deg) }',
+    ]) {
+      assert.deepEqual(compileCss(css, 'test', { platform: 'linux' }).rules[0].declarations, {
+        transform: [{ skewX: '12deg' }],
+      });
+    }
+    for (const css of ['.a { filter: blur(4px) }', '.platform-linux .a { filter: blur(4px) }']) {
+      assert.throws(() => compileCss(css, 'test', { platform: 'linux' }), /not drawn on iOS/);
+    }
+  });
+
+  it('checks a Linux build for Linux alone: a rule scoped to iOS is not refused there', () => {
+    const css = '.platform-ios .a { filter: blur(4px) }';
+    assert.throws(() => compileCss(css, 'test', { platform: 'ios' }), /not drawn on iOS/);
+    assert.doesNotThrow(() => compileCss(css, 'test', { platform: 'linux' }));
+  });
 });
 
 describe('background sizing', () => {

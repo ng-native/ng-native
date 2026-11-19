@@ -12,7 +12,7 @@
  */
 import { InjectionToken, Service, inject, type Signal } from '@angular/core';
 import { desktopFiles } from './desktop-file-system.ts';
-import { currentPlatform, expoModule, presence, present } from './native.ts';
+import { currentPlatform, expoModule, isDesktopPlatform, presence, present } from './native.ts';
 
 /**
  * A file. Structural on purpose: this is Expo's `File`, described in terms a test can satisfy, so
@@ -123,8 +123,8 @@ export class FileSystem {
         if (!expo) return null;
         // Missing from the build: the stand-in, to say so when it is used.
         if (!present(expo)) return expo as never;
-        // On macOS the loader has already built the slice, paths and all.
-        if (currentPlatform() === 'macos') return expo as unknown as NativeFiles;
+        // On a desktop OS the loader has already built the slice, paths and all.
+        if (isDesktopPlatform(currentPlatform())) return expo as unknown as NativeFiles;
         return {
           // Both are getters on Expo's side, handing back a fresh Directory each time.
           get cacheDirectory() {

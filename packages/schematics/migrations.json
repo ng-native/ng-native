@@ -2,7 +2,7 @@
   "$schema": "../../node_modules/@angular-devkit/schematics/collection-schema.json",
   "schematics": {
     "sync-app-versions": {
-      "version": "0.24.0",
+      "version": "0.25.0",
       "description": "Move the @ng-native packages each project's own package.json lists to the new version.",
       "factory": "./migrations/run.cjs#sync-app-versions"
     },
@@ -60,6 +60,11 @@
       "version": "0.23.0",
       "description": "Call each service's available, now a Signal<boolean> on every service, and stop awaiting it.",
       "factory": "./migrations/run.cjs#available-signal"
+    },
+    "os-comparisons-on-linux": {
+      "version": "0.24.0",
+      "description": "Note each comparison with 'ios', 'macos' or !== 'android', which answers differently now that Linux is reported as 'linux'.",
+      "factory": "./migrations/run.cjs#os-comparisons-on-linux"
     }
   }
 }

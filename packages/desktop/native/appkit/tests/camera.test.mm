@@ -289,6 +289,9 @@ TEST_CASE("A recording is made at the preset its request names, or High for anot
     }
     capture->stop();
     spinUntil([&] { return !capture->recording(); });
+    // The session stops on the capture's queue; removing an input reconfigures it, which may not
+    // overlap stopRunning.
+    REQUIRE(spinUntil([&] { return !session.running; }));
     [session removeInput:screen];
     [NSFileManager.defaultManager removeItemAtPath:path error:nil];
   }
@@ -362,6 +365,7 @@ TEST_CASE("A recording set up ahead starts on that setup, and a setup taken down
   REQUIRE(whole);
   CHECK(whole->duration > 900);
   capture->stop();
+  REQUIRE(spinUntil([&] { return !session.running; }));
   [session removeInput:screen];
   [NSFileManager.defaultManager removeItemAtPath:path error:nil];
 }

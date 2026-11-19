@@ -16,7 +16,7 @@
  */
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-const { existsSync, readdirSync, readFileSync, watch } = require('node:fs');
+const { existsSync, readdirSync, readFileSync, statSync, watch } = require('node:fs');
 const { iconSetVersions } = require('./inline-icons.cjs');
 const { checkingResources, rereadingResources } = require('./resource-cache.cjs');
 const {
@@ -24,8 +24,10 @@ const {
   expoConfig,
   macosOverride,
   macosRequest,
+  requestedPlatforms,
   runtimeContext,
 } = require('./macos.cjs');
+const { asksForLinux, registerLinux } = require('./linux.cjs');
 
 const SOURCE_EXTS = ['html', 'css', 'scss', 'md'];
 const WEB_FONT_EXTS = ['woff', 'woff2'];
@@ -317,6 +319,40 @@ function nativeAnimatedHelper(resolve, context, name, platform) {
 const WRAPPED = Symbol.for('ng-native.resolveRequest');
 
 /**
+ * Checks the app's config for a desktop OS Expo would leave out without its out-of-tree flag,
+ * which it does without a word, and registers `linux` where the app asks for it.
+ *
+ * @param {Parameters<typeof withLinux>[0]} config
+ */
+function withDesktopPlatforms(config) {
+  const expo = expoConfig(config.projectRoot);
+  checkOutOfTreePlatforms(expo);
+  if (config.projectRoot && asksForLinux(expo, requestedPlatforms(process.argv))) {
+    withLinux(config);
+  }
+}
+
+/**
+ * Registers `linux` with Expo's tooling (`linux.cjs`), and adds it to the lists Expo's
+ * `getDefaultConfig` built before it was there: the platforms Metro serves, and the conditions a
+ * `linux` bundle resolves packages with, React Native's own as on every other native platform,
+ * after any the app's config already names.
+ *
+ * @param {{ projectRoot: string, resolver: { platforms?: string[], unstable_conditionsByPlatform?: Record<string, string[]> } }} config
+ */
+function withLinux(config) {
+  registerLinux(config.projectRoot);
+  const resolver = config.resolver;
+  const platforms = resolver.platforms ?? [];
+  if (!platforms.includes('linux')) resolver.platforms = [...platforms, 'linux'];
+  const conditions = resolver.unstable_conditionsByPlatform?.linux ?? [];
+  resolver.unstable_conditionsByPlatform = {
+    ...resolver.unstable_conditionsByPlatform,
+    linux: conditions.includes('react-native') ? conditions : [...conditions, 'react-native'],
+  };
+}
+
+/**
  * A relative `./lib/ui.js` that names `./lib/ui.ts`, resolved as TypeScript resolves it.
  *
  * TypeScript's `NodeNext` resolution wants the extension the file will have once compiled, so a
@@ -331,7 +367,7 @@ const WRAPPED = Symbol.for('ng-native.resolveRequest');
  * pnpm those files find `node_modules/.pnpm/node_modules` before the project's copy, and an install
  * from before the app's pin can leave Babel 8's runtime there, which has no `regenerator`.
  *
- * In a `macos` bundle, Expo's packages and React Native's `Platform` resolve as `macos.cjs` says.
+ * In a desktop bundle, Expo's packages and React Native's `Platform` resolve as `macos.cjs` says.
  *
  * @param {Function | undefined} next
  * @param {string | undefined} projectRoot
@@ -562,7 +598,14 @@ function withChunksOutsideServerRoot(config) {
 
 /**
  * @param {object} config a Metro config, usually from `getDefaultConfig(__dirname)`
- * @param {{ workspaceRoot?: string, projectRoot?: string, libraryStyles?: string[] | false }} [options]
+ * @param {{
+ *   workspaceRoot?: string,
+ *   projectRoot?: string,
+ *   libraryStyles?: string[] | false,
+ *   compilation?: 'oxc' | 'ngp',
+ *   disableTypeChecking?: boolean,
+ *   tsconfig?: string,
+ * }} [options]
  *   `workspaceRoot` for a monorepo, where the framework packages live outside the app's own
  *   `node_modules` and Metro has to be told to watch them. An app installing from npm needs
  *   neither and should pass nothing. Every library's component CSS is compiled into native
@@ -738,6 +781,124 @@ function listWebFonts(config) {
   config.transformer.angularNativeAssetExts = config.resolver.assetExts;
 }
 
+/** Which NGP build compiles, for the cache key: the app's `@angular/ngp`, an override, or ours. */
+function ngpBuild(projectRoot) {
+  const override = process.env['ANGULAR_NATIVE_NGP_COMPILER'];
+  if (override) return `ngp-${createHash('sha1').update(override).digest('hex').slice(0, 8)}`;
+  try {
+    const manifest = require.resolve('@angular/ngp/package.json', {
+      paths: [projectRoot ?? process.cwd()],
+    });
+    return `ngp-${JSON.parse(readFileSync(manifest, 'utf8')).version}`;
+  } catch {
+    const { revision } = JSON.parse(
+      readFileSync(path.join(__dirname, 'ngp', 'build.json'), 'utf8'),
+    );
+    return `ngp-${String(revision).slice(0, 12)}`;
+  }
+}
+
+/** The tsconfig and every file it extends, in the order tsc reads them. */
+function typescriptFor(directory) {
+  try {
+    return require(require.resolve('typescript', { paths: [directory, __dirname] }));
+  } catch {
+    return null;
+  }
+}
+
+function typescriptConfig(file) {
+  if (!isFile(file)) return null;
+  const ts = typescriptFor(path.dirname(file));
+  if (!ts) return null;
+  const source = ts.readJsonConfigFile(file, ts.sys.readFile);
+  const host = { ...ts.sys, readDirectory: () => [] };
+  const parsed = ts.parseJsonSourceFileConfigFileContent(
+    source,
+    host,
+    path.dirname(file),
+    undefined,
+    file,
+  );
+  return { files: [file, ...(source.extendedSourceFiles ?? [])], options: parsed.options };
+}
+
+function isFile(file) {
+  try {
+    return statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function tsconfigChain(file) {
+  return typescriptConfig(file)?.files ?? (isFile(file) ? [file] : []);
+}
+
+function tsconfigHash(file) {
+  const hash = createHash('sha1');
+  for (const one of tsconfigChain(file)) hash.update(one).update(readFileSync(one));
+  return hash.digest('hex').slice(0, 12);
+}
+
+function checkCompilation({ compilation = 'oxc', disableTypeChecking, tsconfig }) {
+  if (compilation !== 'oxc' && compilation !== 'ngp') {
+    throw new Error(
+      `[angular-native] compilation must be 'oxc' or 'ngp'; got ${JSON.stringify(compilation)}.`,
+    );
+  }
+  if (disableTypeChecking !== undefined && typeof disableTypeChecking !== 'boolean') {
+    throw new Error(
+      `[angular-native] disableTypeChecking must be true or false; got ${JSON.stringify(disableTypeChecking)}.`,
+    );
+  }
+  if (tsconfig !== undefined && (typeof tsconfig !== 'string' || !tsconfig.trim())) {
+    throw new Error(
+      `[angular-native] tsconfig must be a path to a tsconfig file; got ${JSON.stringify(tsconfig)}.`,
+    );
+  }
+  return { compilation, disableTypeChecking, tsconfig };
+}
+
+function recordCompilation(config, options, projectRoot) {
+  const { compilation, disableTypeChecking, tsconfig } = checkCompilation(options);
+  delete config.transformer.angularNativeCompilation;
+  if (compilation === 'oxc') return;
+  if (config.transformerPath !== require.resolve('./transform-worker.cjs')) {
+    throw new Error(
+      "[angular-native] compilation: 'ngp' needs this preset in front of Expo's transform " +
+        `worker, and the config has transformerPath "${config.transformerPath}" instead. Start ` +
+        "from getDefaultConfig(__dirname) from 'expo/metro-config', or leave transformerPath to it.",
+    );
+  }
+  const typeCheck = disableTypeChecking !== true;
+  config.transformer.angularNativeCompilation = {
+    compilation,
+    typeCheck,
+    ...(tsconfig ? { tsconfig } : {}),
+  };
+  config.transformer.cacheVersion = [
+    config.transformer.cacheVersion,
+    ngpBuild(projectRoot),
+    typeCheck ? 'typecheck' : 'no-typecheck',
+    `tsconfig-${tsconfigHash(path.resolve(projectRoot ?? process.cwd(), tsconfig ?? 'tsconfig.json'))}`,
+  ]
+    .filter(Boolean)
+    .join('-');
+}
+
+function conditionsOf(config, options) {
+  const ngp =
+    options.compilation === 'ngp' &&
+    typescriptConfig(
+      path.resolve(config.projectRoot ?? process.cwd(), options.tsconfig ?? 'tsconfig.json'),
+    );
+  const conditions = ngp
+    ? (ngp.options.customConditions ?? [])
+    : tsconfigConditions(config.projectRoot);
+  return conditions.filter((c) => c !== 'react-native');
+}
+
 function withAngularNative(config, options = {}) {
   const { workspaceRoot, projectRoot = config.projectRoot } = options;
 
@@ -755,6 +916,7 @@ function withAngularNative(config, options = {}) {
   }
 
   recordLibraryStyles(config, options);
+  recordCompilation(config, options, projectRoot);
 
   // A component's cached transform is a miss once a template or stylesheet it read has changed:
   // see `resource-cache.cjs`. The stores the config has now; one set after this is not checked.
@@ -810,8 +972,7 @@ function withAngularNative(config, options = {}) {
 
   listWebFonts(config);
 
-  // Expo bundles macOS only with its out-of-tree flag, and leaves it out without a word otherwise.
-  checkOutOfTreePlatforms(expoConfig(config.projectRoot));
+  withDesktopPlatforms(config);
   config.resolver.resolveRequest = withTypeScriptJsImports(
     config.resolver.resolveRequest,
     projectRoot,
@@ -827,7 +988,7 @@ function withAngularNative(config, options = {}) {
   // The conditions the app's tsconfig resolves packages with, so Metro takes the same entry tsc
   // does. Nx's TypeScript preset exports a library's source only under one; without it Metro took
   // the `dist` entry, which is never built. `react-native` is Metro's own, per platform, already.
-  const conditions = tsconfigConditions(config.projectRoot).filter((c) => c !== 'react-native');
+  const conditions = conditionsOf(config, options);
   const named = config.resolver.unstable_conditionNames ?? [];
   config.resolver.unstable_conditionNames = [
     ...named,
@@ -853,4 +1014,12 @@ function withAngularNative(config, options = {}) {
 
 // An app reaches this file through `withAngularNative` alone. The other three are exported for the
 // integration tests, which pin what each does on its own.
-module.exports = { withAngularNative, compilerFingerprint, chunkOutsideServerRoot, watchCompiler };
+module.exports = {
+  withAngularNative,
+  compilerFingerprint,
+  chunkOutsideServerRoot,
+  watchCompiler,
+  tsconfigChain,
+  typescriptConfig,
+  typescriptFor,
+};

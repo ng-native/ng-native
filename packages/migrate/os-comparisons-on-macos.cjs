@@ -19,27 +19,34 @@ const EQUALITY = new Set(['===', '==', '!==', '!=']);
 const ORDER = new Set(['<', '<=', '>', '>=', '===', '==', '!==', '!=']);
 
 /**
- * Whether a file can hold a comparison worth a note at all, before it is parsed. A quote may be
- * escaped, as one in a single-quoted inline template is.
+ * Whether a file can hold a comparison worth a note at all, before it is parsed: a quoted OS of
+ * `oses`, or `OS_VERSION`. A quote may be escaped, as one in a single-quoted inline template is.
+ *
+ * @param {string} oses the OS names, as a regular expression alternation: `ios|android`
  */
-const mentions = (text) =>
-  text !== null && (/['"`](ios|android)\\?['"`]/.test(text) || text.includes('OS_VERSION'));
+const mentionsOf = (oses) => {
+  const quoted = new RegExp(/['"`](ios|android)\\?['"`]/.source.replace('ios|android', oses));
+  return (text) => text !== null && (quoted.test(text) || text.includes('OS_VERSION'));
+};
 
 /**
- * A comparison in a template binding: with a quoted OS on either side, or of `OS_VERSION` with a
- * number on either side.
+ * A comparison in a template binding: with a quoted OS of `oses` on either side, or of
+ * `OS_VERSION` with a number on either side.
+ *
+ * @param {string} oses
  */
-const COMPARISON = new RegExp(
-  [
-    /(?<os>[\w.$?!]+(?:\(\))?)\s*(?<osOperator>===|!==|==|!=)\s*(?<quote>['"`])(?<literal>ios|android)\k<quote>/,
-    /(?<firstQuote>['"`])(?<firstLiteral>ios|android)\k<firstQuote>\s*(?<firstOperator>===|!==|==|!=)\s*[\w$][\w.$?!]*(?:\(\))?/,
-    /\bOS_VERSION\b(?:\(\))?\s*(?<versionOperator><=|>=|<|>|===|!==|==|!=)\s*\d+/,
-    /\b\d+\s*(?<reversedOperator><=|>=|<|>|===|!==|==|!=)\s*OS_VERSION\b(?:\(\))?/,
-  ]
-    .map((pattern) => pattern.source)
-    .join('|'),
-  'g',
-);
+const comparisonOf = (oses) =>
+  new RegExp(
+    [
+      /(?<os>[\w.$?!]+(?:\(\))?)\s*(?<osOperator>===|!==|==|!=)\s*(?<quote>['"`])(?<literal>ios|android)\k<quote>/,
+      /(?<firstQuote>['"`])(?<firstLiteral>ios|android)\k<firstQuote>\s*(?<firstOperator>===|!==|==|!=)\s*[\w$][\w.$?!]*(?:\(\))?/,
+      /\bOS_VERSION\b(?:\(\))?\s*(?<versionOperator><=|>=|<|>|===|!==|==|!=)\s*\d+/,
+      /\b\d+\s*(?<reversedOperator><=|>=|<|>|===|!==|==|!=)\s*OS_VERSION\b(?:\(\))?/,
+    ]
+      .map((pattern) => pattern.source.replace('ios|android', oses))
+      .join('|'),
+    'g',
+  );
 
 /**
  * Why a comparison answers differently on a Mac, or null when it does not.
@@ -67,8 +74,13 @@ function why(operator, literal, version) {
   return null;
 }
 
-/** Notes for the comparisons in a TypeScript or JavaScript file. */
-function scriptNotes(ts, file, text) {
+/**
+ * Notes for the comparisons in a TypeScript or JavaScript file.
+ *
+ * @param {(operator: string, literal: string, version: boolean) => string | null} why
+ * @param {RegExp} comparison
+ */
+function scriptNotes(ts, file, text, why, comparison) {
   const source = ts.createSourceFile(
     file,
     text,
@@ -80,7 +92,7 @@ function scriptNotes(ts, file, text) {
   const visit = (node) => {
     if (isInlineTemplate(ts, node)) {
       const line = source.getLineAndCharacterOfPosition(node.initializer.getStart()).line + 1;
-      notes.push(...templateNotes(file, node.initializer.text, line));
+      notes.push(...templateNotes(file, node.initializer.text, why, comparison, line));
     }
     if (ts.isBinaryExpression(node)) {
       const operator = ts.tokenToString(node.operatorToken.kind) ?? '';
@@ -113,12 +125,14 @@ const isInlineTemplate = (ts, node) =>
  *
  * @param {string} file
  * @param {string} text
+ * @param {(operator: string, literal: string, version: boolean) => string | null} why
+ * @param {RegExp} comparison
  * @param {number} [first] the file's line the template starts on, past 1 for an inline one
  */
-function templateNotes(file, text, first = 1) {
+function templateNotes(file, text, why, comparison, first = 1) {
   const notes = [];
   // The whole template, since a comparison may break over lines; noted at the line it starts on.
-  for (const match of text.matchAll(COMPARISON)) {
+  for (const match of text.matchAll(comparison)) {
     const { osOperator, literal, firstOperator, firstLiteral, versionOperator, reversedOperator } =
       match.groups ?? {};
     const reason = osOperator
@@ -132,18 +146,34 @@ function templateNotes(file, text, first = 1) {
   return notes;
 }
 
-/** @param {import('./host.cjs').Host} host */
-function osComparisonsOnMacos(host) {
+/**
+ * A note, with its file and line, at each comparison in the app's TypeScript, JavaScript, templates
+ * and inline templates with a quoted OS of `oses`, or of `OS_VERSION`, that `why` has a reason for.
+ *
+ * @param {import('./host.cjs').Host} host
+ * @param {string} oses the OS names to look for, as a regular expression alternation
+ * @param {(operator: string, literal: string, version: boolean) => string | null} why
+ */
+function osComparisonNotes(host, oses, why) {
   const ts = typescript();
+  const mentions = mentionsOf(oses);
+  const comparison = comparisonOf(oses);
   const notes = [];
   for (const file of files(host)) {
     const script = SOURCE.test(file) && !file.endsWith('.d.ts');
     if (!script && !TEMPLATE.test(file)) continue;
     const text = host.read(file);
     if (!mentions(text)) continue;
-    notes.push(...(script ? scriptNotes(ts, file, text) : templateNotes(file, text)));
+    notes.push(
+      ...(script
+        ? scriptNotes(ts, file, text, why, comparison)
+        : templateNotes(file, text, why, comparison)),
+    );
   }
   return notes;
 }
 
-module.exports = { osComparisonsOnMacos };
+/** @param {import('./host.cjs').Host} host */
+const osComparisonsOnMacos = (host) => osComparisonNotes(host, 'ios|android', why);
+
+module.exports = { osComparisonsOnMacos, osComparisonNotes };
