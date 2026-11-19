@@ -1453,6 +1453,36 @@ function startWindowRoot(
 }
 
 /**
+ * The document Angular is given in place of a DOM.
+ *
+ * `getElementById` is what `TransferState` calls, and `TransferState` is what `resource()` reaches
+ * for the moment one is created. Without it every resource in an app throws
+ * `doc.getElementById is not a function` before its loader has run - which is a long way from
+ * anything a stylesheet does, and is why the stub is not as thin as it looks.
+ *
+ * `implementation` is what the i18n runtime parses the cases of a plural or select with. It asks
+ * Angular's own `getDocument()` rather than the injector, which answers the global `document`
+ * the Metro polyfills define for animations until it is told of this one.
+ *
+ * Made out here rather than in `mount`, and that is load-bearing: Angular keeps the document it is
+ * given in a variable of its own until the next mount replaces it, and a function made inside
+ * `mount` shares the scope of every other closure `mount` makes, `componentRef` and the engine
+ * among them. A stub made there kept the last app whole after it was destroyed.
+ */
+function createDocumentStub() {
+  return {
+    head: undefined,
+    body: undefined,
+    getElementById: findNoElement,
+    implementation: inertImplementation,
+  };
+}
+
+function findNoElement(): null {
+  return null;
+}
+
+/**
  * Mounts each window's root on its own surface, for `AppWindows`. A window has its own engine and
  * renderer factory, given to its root through an element injector rather than the app's
  * environment injector, so a page an outlet creates in the window finds them by walking up from
@@ -1631,20 +1661,7 @@ export function mount(
   installDateParse(engine.dev);
   const factory = new NativeRendererFactory(engine);
   engine.setOnDirty(factory.commitSoon);
-  // `getElementById` is what `TransferState` calls, and `TransferState` is what `resource()`
-  // reaches for the moment one is created. Without it every resource in an app throws
-  // `doc.getElementById is not a function` before its loader has run - which is a long way from
-  // anything a stylesheet does, and is why the stub is not as thin as it looks.
-  //
-  // `implementation` is what the i18n runtime parses the cases of a plural or select with. It asks
-  // Angular's own `getDocument()` rather than the injector, which answers the global `document`
-  // the Metro polyfills define for animations until it is told of this one.
-  const documentStub = {
-    head: undefined,
-    body: undefined,
-    getElementById: () => null,
-    implementation: inertImplementation,
-  };
+  const documentStub = createDocumentStub();
   setDocument(documentStub as unknown as Document);
 
   // Parent the app injector to the platform injector, exactly as `internalCreateApplication`

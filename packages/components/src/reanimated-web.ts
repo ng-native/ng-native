@@ -17,6 +17,7 @@ export {
   type WorkletScrollSpec,
   type WorkletStyleSpec,
 } from './worklets.ts';
+export { releaseOnDestroy } from './release-on-destroy.ts';
 
 /**
  * A shared value as a plain holder, with no second runtime to share it with. Every write reaches

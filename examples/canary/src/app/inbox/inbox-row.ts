@@ -4,7 +4,12 @@ import { cancelAnimation, withSpring, withTiming } from 'react-native-reanimated
 import { scheduleOnRN } from 'react-native-worklets';
 import { Pressable, Text, View } from '@ng-native/components';
 import { NativeGesture } from '@ng-native/components/gestures';
-import { WorkletStyle, sharedValue, workletStyle } from '@ng-native/components/reanimated';
+import {
+  WorkletStyle,
+  releaseOnDestroy,
+  sharedValue,
+  workletStyle,
+} from '@ng-native/components/reanimated';
 import type { Mail } from './inbox-model.ts';
 
 /** How far a swipe opens the row to show its actions. */
@@ -157,7 +162,9 @@ export class InboxRow {
     // Read through locals: a gesture callback is rewritten into a worklet, which has no `this`,
     // and so is a function handed to one directly, as `hold` is.
     const [x, removed, opened, held] = [this.x, this.removed, this.opened, this.held];
-    const remove = () => removed.emit();
+    // Handed to `scheduleOnRN` from the pan's worklet, which native code keeps for good: through
+    // `releaseOnDestroy`, so a row that has gone is not kept with it.
+    const remove = releaseOnDestroy(() => removed.emit());
     const open = () => opened.emit();
     const hold = () => held.emit();
 

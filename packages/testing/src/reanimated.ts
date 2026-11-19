@@ -23,6 +23,9 @@ import {
 } from '@angular/core';
 import { HostEngine, type HostNode } from '@ng-native/fabric';
 
+// The real one: it needs no second runtime, and a test of a component that uses it runs it as is.
+export { releaseOnDestroy } from '@ng-native/components';
+
 /** A value both runtimes can see; here there is one runtime, and it is a signal. */
 export interface SharedValue<T = number> {
   value: T;
