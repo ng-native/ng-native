@@ -6,6 +6,10 @@
 
 #include <react/renderer/components/scrollview/ScrollViewState.h>
 #include <react/renderer/core/ConcreteState.h>
+#include <react/renderer/core/EventBeat.h>
+#include <react/renderer/core/EventDispatcher.h>
+#include <react/renderer/core/EventQueueProcessor.h>
+#include <react/renderer/runtimescheduler/RuntimeScheduler.h>
 
 #include <doctest/doctest.h>
 
@@ -46,10 +50,58 @@ struct Offsets {
   Offsets &operator=(const Offsets &) = delete;
 };
 
+// The state React Native commits for a scroll view, updated as it applies updates: queued, a later
+// update of the same view replacing one not yet applied, each applied to the state committed then.
+struct CommittedState {
+  ScrollViewState data{Point{}, Rect{{0, 0}, {100, 300}}, 0};
+  State::Shared state;
+
+  CommittedState() {
+    auto processor = EventQueueProcessor(
+        [](auto &&...) {}, [](auto &&) {}, [this](const StateUpdate &update) { apply(update); }, {});
+    // A beat that never comes: updates wait in the queue until a synchronous one flushes it.
+    dispatcher_ = std::make_shared<EventDispatcher>(
+        processor, std::make_unique<EventBeat>(std::make_shared<EventBeat::OwnerBox>(), scheduler_), nullptr,
+        std::weak_ptr<EventLogger>());
+    family_ = descriptor().createFamily({.tag = 2, .surfaceId = MountedViews::kSurface, .instanceHandle = nullptr});
+    other_ = descriptor().createFamily({.tag = 99, .surfaceId = MountedViews::kSurface, .instanceHandle = nullptr});
+    state = std::make_shared<const ConcreteState<ScrollViewState>>(std::make_shared<const ScrollViewState>(data), family_);
+  }
+
+  // Applies what is queued, as the next beat would.
+  void flush() {
+    ConcreteState<ScrollViewState>(std::make_shared<const ScrollViewState>(), other_)
+        .updateState(ScrollViewState(), EventQueue::UpdateMode::unstable_Immediate);
+  }
+
+ private:
+  const ngn::DesktopScrollViewComponentDescriptor &descriptor() {
+    static auto context = std::make_shared<const ContextContainer>();
+    if (!descriptor_) {
+      descriptor_ = std::make_unique<ngn::DesktopScrollViewComponentDescriptor>(
+          ComponentDescriptorParameters{dispatcher_, context, nullptr});
+    }
+    return *descriptor_;
+  }
+  void apply(const StateUpdate &update) {
+    if (update.family != family_) {
+      return;
+    }
+    if (auto next = update.callback(std::make_shared<const ScrollViewState>(data))) {
+      data = *std::static_pointer_cast<const ScrollViewState>(next);
+    }
+  }
+  RuntimeScheduler scheduler_{[](auto &&) {}};
+  std::shared_ptr<EventDispatcher> dispatcher_;
+  std::unique_ptr<ngn::DesktopScrollViewComponentDescriptor> descriptor_;
+  ShadowNodeFamily::Shared family_;
+  ShadowNodeFamily::Shared other_;
+};
+
 // A 100 by 100 scroll view over content 300 high: red at the top, blue at the bottom.
-void mountScrollView(MountedViews &views, dynamic props = dynamic::object()) {
-  auto scroll = MountedViews::shadow(2, "ScrollView", scrollProps(std::move(props)), {{0, 0}, {100, 100}});
-  scroll.state = scrollState({100, 300});
+void mountScrollView(MountedViews &views, dynamic props = dynamic::object(), State::Shared state = nullptr, Size frame = {100, 100}) {
+  auto scroll = MountedViews::shadow(2, "ScrollView", scrollProps(std::move(props)), {{0, 0}, frame});
+  scroll.state = state ? std::move(state) : scrollState({100, 300});
   auto content = MountedViews::shadow(3, "View", desktopViewProps(dynamic::object()), {{0, 0}, {100, 300}});
   auto top = MountedViews::shadow(4, "View", desktopViewProps(dynamic::object("backgroundColor", kRed)), {{0, 0}, {100, 100}});
   auto bottom = MountedViews::shadow(5, "View", desktopViewProps(dynamic::object("backgroundColor", kBlue)), {{0, 200}, {100, 100}});
@@ -166,4 +218,68 @@ TEST_CASE("classic scroll bars take a gutter from the content, which overlay one
   }
   // A scroll view that goes takes its gutter with it.
   CHECK(ngn::ScrollerGutters::shared().get(2).right == 0);
+}
+
+TEST_CASE("a ScrollView's state ends at the offset GTK shows, however many moves wait to be applied") {
+  REQUIRE(ngn::testing::gtkReady());
+  CommittedState committed;
+  MountedViews views;
+  mountScrollView(views, dynamic::object(), committed.state);
+  // Both before React Native applies either: the second is still sent, though the state this view
+  // mounted already has its offset.
+  views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 100, false));
+  views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 0, false));
+  views.settle();
+  committed.flush();
+  CHECK(committed.data.contentOffset == Point{0, 0});
+
+  views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 200, false));
+  views.settle();
+  committed.flush();
+  CHECK(committed.data.contentOffset == Point{0, 200});
+}
+
+TEST_CASE("a ScrollView's new gutter keeps an offset React Native has not applied yet") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkSettings *settings = gtk_settings_get_default();
+  gboolean overlay = TRUE;
+  g_object_get(settings, "gtk-overlay-scrolling", &overlay, nullptr);
+  struct Restore {
+    GtkSettings *settings;
+    gboolean overlay;
+    ~Restore() {
+      g_object_set(settings, "gtk-overlay-scrolling", overlay, nullptr);
+    }
+  } restore{settings, overlay};
+  g_object_set(settings, "gtk-overlay-scrolling", FALSE, nullptr);
+
+  CommittedState committed;
+  MountedViews views;
+  mountScrollView(views, dynamic::object("showsVerticalScrollIndicator", false), committed.state);
+  committed.flush();
+  REQUIRE(ngn::ScrollerGutters::shared().get(2).right == 0);
+  views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 100, false));
+  // A classic scroll bar shown: its gutter lays the content out again, before the move is applied.
+  auto scroll = views.mounting->tree().find(2)->view;
+  views.update(scroll, scrollProps(dynamic::object("showsVerticalScrollIndicator", true)));
+  REQUIRE(ngn::ScrollerGutters::shared().get(2).right > 0);
+  committed.flush();
+  CHECK(committed.data.contentOffset == Point{0, 100});
+}
+
+TEST_CASE("a ScrollView's contentOffset waits for the view to have a size") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  mountScrollView(views, dynamic::object("contentOffset", dynamic::object("x", 0)("y", 200)), nullptr, {0, 0});
+  views.settle();
+  auto *box = ngn::gtk::viewData(views.view(2))->scroll;
+  REQUIRE(box->pendingOffset);
+
+  auto current = views.mounting->tree().find(2)->view;
+  auto next = current;
+  next.layoutMetrics.frame.size = {100, 100};
+  views.mount({ShadowViewMutation::UpdateMutation(current, next, MountedViews::kSurface)});
+  views.settle();
+  CHECK_FALSE(box->pendingOffset);
+  CHECK(bluish(views.pixel(50, 50)));
 }
