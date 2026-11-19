@@ -34,7 +34,7 @@ TEST_CASE("A split view gives the window back while its screen is covered, and t
   auto *controller = (NSSplitViewController *)mounted.window.contentViewController;
   [controller.splitView setPosition:300 ofDividerAtIndex:0];
   [controller.splitView layoutSubtreeIfNeeded];
-  CGFloat dragged = NSWidth(controller.splitViewItems[0].viewController.view.frame);
+  CGFloat dragged = NSMaxX(controller.splitView.arrangedSubviews[0].frame);
 
   mounted.backend->setCovered(MountedViews::kSurface, 4, true);
   CHECK((mounted.window.contentViewController == nil));
@@ -47,7 +47,7 @@ TEST_CASE("A split view gives the window back while its screen is covered, and t
   REQUIRE((mounted.window.contentViewController != nil));
   auto *again = (NSSplitViewController *)mounted.window.contentViewController;
   [again.splitView layoutSubtreeIfNeeded];
-  CHECK(NSWidth(again.splitViewItems[0].viewController.view.frame) == doctest::Approx(dragged).epsilon(0.02));
+  CHECK(NSMaxX(again.splitView.arrangedSubviews[0].frame) == doctest::Approx(dragged).epsilon(0.02));
   [split uninstall];
 }
 
@@ -72,6 +72,33 @@ TEST_CASE("A split view mounted under a screen that is already covered waits for
 
   mounted.backend->setCovered(MountedViews::kSurface, 4, false);
   CHECK((split.ownWindow == mounted.window));
+  [split uninstall];
+}
+
+TEST_CASE("A sidebar the user collapsed is still collapsed after a screen in front goes") {
+  MountedViews mounted;
+  struct Restore {
+    ngn::InputSink *split = NGNSplitView.input;
+    ~Restore() {
+      NGNSplitView.input = split;
+    }
+  } restore;
+  NGNSplitView.input = &mounted.input;
+  mounted.add(MountedViews::shadow(4, "View", viewProps(folly::dynamic::object())));
+  mounted.add(MountedViews::shadow(5, ngn::SplitViewComponentName, viewProps(folly::dynamic::object())), 4);
+  mounted.add(MountedViews::shadow(6, ngn::SidebarComponentName, viewProps(folly::dynamic::object())), 5);
+  mounted.add(MountedViews::shadow(7, ngn::SplitContentComponentName, viewProps(folly::dynamic::object())), 5);
+  auto *split = (NGNSplitView *)mounted.view(5);
+  [split placeAsWindows:YES];
+  auto *controller = (NSSplitViewController *)mounted.window.contentViewController;
+  REQUIRE((controller != nil));
+  controller.splitViewItems[0].collapsed = YES;
+
+  mounted.backend->setCovered(MountedViews::kSurface, 4, true);
+  mounted.backend->setCovered(MountedViews::kSurface, 4, false);
+  auto *again = (NSSplitViewController *)mounted.window.contentViewController;
+  REQUIRE((again != nil));
+  CHECK(again.splitViewItems[0].collapsed);
   [split uninstall];
 }
 
