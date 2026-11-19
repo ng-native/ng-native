@@ -1,7 +1,11 @@
 #include "host-sources.h"
 
 #include "app-windows.h"
+#include "locales.h"
 #include "native-controls.h"
+#include "system-access.h"
+
+#include "ngn/posix-locale.h"
 
 #include <adwaita.h>
 #if __has_include(<gio/gdesktopappinfo.h>)
@@ -78,39 +82,6 @@ bool sandboxed() {
   return g_file_test("/.flatpak-info", G_FILE_TEST_EXISTS) || g_getenv("SNAP") != nullptr;
 }
 
-// The window the app is in front with, which a launched app is placed against and takes its
-// activation token from.
-GtkWindow *frontWindow() {
-  GtkWindow *front = nullptr;
-  GListModel *windows = gtk_window_get_toplevels();
-  for (guint i = 0, n = g_list_model_get_n_items(windows); i < n; ++i) {
-    auto *window = GTK_WINDOW(g_list_model_get_item(windows, i));
-    g_object_unref(window);
-    if (gtk_widget_get_visible(GTK_WIDGET(window)) && (!front || gtk_window_is_active(window))) {
-      front = window;
-    }
-  }
-  return front;
-}
-
-// Opens `uri` in the app the desktop chose for it, through the OpenURI portal when the app is
-// sandboxed, answering once it has launched or failed.
-void launchUri(const std::string &uri, std::function<void(bool)> done) {
-  GtkUriLauncher *launcher = gtk_uri_launcher_new(uri.c_str());
-  auto *heap = new std::function<void(bool)>(std::move(done));
-  gtk_uri_launcher_launch(launcher, frontWindow(), nullptr, +[](GObject *source, GAsyncResult *result, gpointer data) {
-    std::unique_ptr<std::function<void(bool)>> done(static_cast<std::function<void(bool)> *>(data));
-    GError *error = nullptr;
-    bool launched = gtk_uri_launcher_launch_finish(GTK_URI_LAUNCHER(source), result, &error);
-    if (error) {
-      fprintf(stderr, "[ngn] could not open a url: %s\n", error->message);
-      g_error_free(error);
-    }
-    (*done)(launched);
-  }, heap);
-  g_object_unref(launcher);
-}
-
 // The desktop's own settings app, GNOME's or KDE Plasma's. None in the dev loop on a Mac, whose
 // GLib has no desktop files.
 bool launchSettingsApp() {
@@ -136,35 +107,41 @@ std::string systemScheme() {
 
 class GtkSystem final : public System {
  public:
-  GtkSystem(const std::string &appId, std::string appData)
+  GtkSystem(const std::string &appId, std::string appData, std::function<void(int64_t)> clipboardChanged)
       : appData_(std::move(appData)),
         preferences_(makeKeyFileStore(appData_ + "/preferences.ini"), appId, false),
-        scheme_(systemScheme()) {
+        scheme_(systemScheme()),
+        clipboardChanged_(std::move(clipboardChanged)) {
     g_signal_connect(adw_style_manager_get_default(), "notify::dark", G_CALLBACK(+[](GObject *, GParamSpec *, gpointer self) {
       static_cast<GtkSystem *>(self)->scheme_.systemChanged(systemScheme());
     }), this);
+    if (GdkDisplay *display = gdk_display_get_default()) {
+      clipboard_ = GDK_CLIPBOARD(g_object_ref(gdk_display_get_clipboard(display)));
+      g_signal_connect(clipboard_, "changed", G_CALLBACK(+[](GdkClipboard *, gpointer self) {
+        static_cast<GtkSystem *>(self)->readClipboard(true);
+      }), this);
+      readClipboard(false);
+    }
   }
   ~GtkSystem() override {
     g_signal_handlers_disconnect_by_data(adw_style_manager_get_default(), this);
+    if (clipboard_) {
+      g_signal_handlers_disconnect_by_data(clipboard_, this);
+      g_object_unref(clipboard_);
+    }
+    *alive_ = false;
   }
 
   DeviceFacts facts() override {
     struct utsname name {};
     uname(&name);
-    const char *const *languages = g_get_language_names();
-    std::string locale = languages && languages[0] ? languages[0] : "en";
-    // "en_GB.UTF-8" to "en-GB".
-    locale = locale.substr(0, locale.find_first_of(".@"));
-    for (auto &c : locale) {
-      c = c == '_' ? '-' : c;
-    }
-    if (locale == "C" || locale == "POSIX") {
-      locale = "en";
-    }
+    // The most preferred language, as Localization's first locale.
+    auto languages = preferredLanguageTags(getenv("LANGUAGE") ? getenv("LANGUAGE") : "", localeOf("LC_MESSAGES"));
+    std::string locale = languages.empty() ? "en" : languages.front();
     return {.osVersion = name.release, .systemName = "Linux", .locale = locale, .rightToLeft = gtk_widget_get_default_direction() == GTK_TEXT_DIR_RTL};
   }
   void openUrl(const std::string &url, std::function<void(bool)> done) override {
-    onMainContext([url, done = std::move(done)]() mutable { launchUri(url, std::move(done)); });
+    openUri(url, std::move(done));
   }
   bool canOpenUrl(const std::string &url) override {
     return canOpenUri(url, sandboxed(), [](const std::string &scheme) {
@@ -196,14 +173,23 @@ class GtkSystem final : public System {
     fprintf(stderr, "[ngn] alert (no dialogs yet): %s: %s\n", request.title.c_str(), request.message.c_str());
     done(request.cancelIndex, "", "");
   }
+  // What the clipboard held as it last changed: GDK reads it asynchronously, which System's
+  // callers do not, so another app's change counts once its text has been read.
   std::optional<std::string> clipboardText() override {
     std::lock_guard lock(mutex_);
-    return clipboard_;
+    return text_;
   }
   void setClipboardText(const std::string &text) override {
-    std::lock_guard lock(mutex_);
-    clipboard_ = text;
-    ++changes_;
+    {
+      std::lock_guard lock(mutex_);
+      text_ = text;
+      ++changes_;
+    }
+    onMainContext([this, alive = alive_, text] {
+      if (*alive && clipboard_) {
+        gdk_clipboard_set_text(clipboard_, text.c_str());
+      }
+    });
   }
   int64_t clipboardChangeCount() override {
     return changes_;
@@ -230,11 +216,51 @@ class GtkSystem final : public System {
   }
 
  private:
+  // Another app's text, read as the clipboard changes (`announce`), or at launch. Text the app set
+  // itself is already kept and counted. Only the latest read counts: one change can come as more
+  // than one signal, and reads can finish out of order.
+  void readClipboard(bool announce) {
+    if (gdk_clipboard_is_local(clipboard_)) {
+      return;
+    }
+    struct Read {
+      GtkSystem *self;
+      std::shared_ptr<bool> alive;
+      bool announce;
+      uint64_t number;
+    };
+    gdk_clipboard_read_text_async(clipboard_, nullptr, +[](GObject *source, GAsyncResult *result, gpointer data) {
+      std::unique_ptr<Read> read(static_cast<Read *>(data));
+      GError *error = nullptr;
+      gchar *text = gdk_clipboard_read_text_finish(GDK_CLIPBOARD(source), result, &error);
+      g_clear_error(&error);
+      if (!*read->alive || read->number != read->self->reads_) {
+        g_free(text);
+        return;
+      }
+      int64_t count = 0;
+      {
+        std::lock_guard lock(read->self->mutex_);
+        read->self->text_ = text ? std::optional<std::string>(text) : std::nullopt;
+        count = read->announce ? ++read->self->changes_ : read->self->changes_.load();
+      }
+      g_free(text);
+      if (read->announce && read->self->clipboardChanged_) {
+        read->self->clipboardChanged_(count);
+      }
+    }, new Read{this, alive_, announce, ++reads_});
+  }
+
   std::string appData_;
   JsonPreferences preferences_;
   ColorSchemeOverride scheme_;
+  std::function<void(int64_t)> clipboardChanged_;
+  GdkClipboard *clipboard_{nullptr};
+  std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
+  // Reads started, on the main context.
+  uint64_t reads_{0};
   std::mutex mutex_;
-  std::optional<std::string> clipboard_;
+  std::optional<std::string> text_;
   std::atomic<int64_t> changes_{1};
 };
 
@@ -255,28 +281,6 @@ class NoDock final : public DockBackend {
   void cancelBounce(int) override {}
 };
 
-// GLib's network monitor: whether a route exists, its interface types unknown (`other`).
-class GioPathMonitor final : public PathMonitor {
- public:
-  std::function<void()> watch(std::function<void(const NetworkPath &)> changed) override {
-    auto *heap = new std::function<void(const NetworkPath &)>(std::move(changed));
-    GNetworkMonitor *monitor = g_network_monitor_get_default();
-    (*heap)(pathOf(g_network_monitor_get_network_available(monitor)));
-    gulong handler = g_signal_connect_data(
-        monitor, "network-changed", G_CALLBACK(networkChanged), heap,
-        [](gpointer data, GClosure *) { delete static_cast<std::function<void(const NetworkPath &)> *>(data); }, GConnectFlags(0));
-    return [monitor, handler] { g_signal_handler_disconnect(monitor, handler); };
-  }
-
- private:
-  static NetworkPath pathOf(bool available) {
-    return {.satisfied = available, .other = available};
-  }
-  static void networkChanged(GNetworkMonitor *, gboolean available, gpointer data) {
-    (*static_cast<std::function<void(const NetworkPath &)> *>(data))(pathOf(available));
-  }
-};
-
 } // namespace
 
 bool canOpenUri(const std::string &uri, bool sandboxed, const std::function<bool(const std::string &scheme)> &hasHandler) {
@@ -289,8 +293,8 @@ bool canOpenUri(const std::string &uri, bool sandboxed, const std::function<bool
   return sandboxed || hasHandler(name);
 }
 
-std::shared_ptr<System> makeSystem(const std::string &appId, const std::string &appDataDirectory) {
-  return std::make_shared<GtkSystem>(appId, appDataDirectory);
+std::shared_ptr<System> makeSystem(const std::string &appId, const std::string &appDataDirectory, std::function<void(int64_t)> clipboardChanged) {
+  return std::make_shared<GtkSystem>(appId, appDataDirectory, std::move(clipboardChanged));
 }
 
 std::shared_ptr<StringStore> makeKeyFileStore(const std::string &path) {
@@ -307,10 +311,6 @@ std::shared_ptr<TrayBackend> makeNoTray() {
 
 std::shared_ptr<DockBackend> makeNoDock() {
   return std::make_shared<NoDock>();
-}
-
-std::shared_ptr<PathMonitor> makePathMonitor() {
-  return std::make_shared<GioPathMonitor>();
 }
 
 std::shared_ptr<ControlMeasurer> makeControlMeasurer() {

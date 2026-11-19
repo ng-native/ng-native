@@ -8,6 +8,7 @@ HostOs macOS() {
   return {
       .id = "macos",
       .name = "macOS",
+      .deviceMaker = "Apple",
       .program = "ngn-macos",
       .primaryModifier = Command,
       .back = {.key = "[", .modifiers = Command},

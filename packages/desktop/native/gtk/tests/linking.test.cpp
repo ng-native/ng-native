@@ -1,6 +1,7 @@
 // Linking on GTK: which uris it can open, and opening one with no app for it.
 #include "../host-sources.h"
 #include "mounted-views.h"
+#include "stand-in-portal.h"
 
 #include <adwaita.h>
 #include <doctest/doctest.h>
@@ -29,6 +30,9 @@ TEST_CASE("Linking answers false, without blocking, for a uri no app opens") {
     return;
   }
   adw_init();
+  // No OpenURI portal, so GTK's launcher answers; a real portal would offer to choose an app.
+  ngn::testing::StandInPortal portal;
+  portal.offersOpenUri = false;
   auto system = ngn::gtk::makeSystem("ngn.linking.test", g_get_tmp_dir());
   // Shared with the launch, which still answers into it after a wait that timed out.
   auto opened = std::make_shared<std::optional<bool>>();

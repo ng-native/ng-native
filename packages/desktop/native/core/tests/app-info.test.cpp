@@ -37,8 +37,9 @@ TEST_CASE("NgNativeDevice is a physical desktop Mac") {
       .deviceName = "Studio",
       .totalMemory = 17179869184ull,
       .architectures = {"arm64"},
-  }, ngn::macOS().name);
+  }, ngn::macOS());
   CHECK(module->property("brand") == dynamic("Apple"));
+  CHECK(module->property("manufacturer") == dynamic("Apple"));
   CHECK(module->property("modelName") == dynamic("MacBook Pro (14-inch, Nov 2023)"));
   CHECK(module->property("modelId") == dynamic("Mac15,3"));
   CHECK(module->property("osName") == dynamic("macOS"));
@@ -52,8 +53,59 @@ TEST_CASE("NgNativeDevice is a physical desktop Mac") {
 }
 
 TEST_CASE("NgNativeDevice names the model by its identifier when the Mac gives no marketing name") {
-  auto module = ngn::makeDeviceModule({.modelId = "Mac14,2", .osVersion = "15.0"}, "macOS");
+  auto module = ngn::makeDeviceModule({.modelId = "Mac14,2", .osVersion = "15.0"}, ngn::macOS());
   CHECK(module->property("modelName") == dynamic("Mac14,2"));
   CHECK(module->property("deviceName") == dynamic(nullptr));
   CHECK(module->property("totalMemory") == dynamic(nullptr));
+}
+
+TEST_CASE("NgNativeDevice on Linux is the machine's maker's, with the distribution's version") {
+  auto module = ngn::makeDeviceModule({
+      .manufacturer = "LENOVO",
+      .modelId = "20XW0055UK",
+      .osVersion = "9.4",
+      .osBuildId = "5.14.0-427.el9.x86_64",
+      .deviceName = "desk",
+      .totalMemory = 8ull << 30,
+      .architectures = {"x86_64"},
+  }, ngn::linuxOs());
+  CHECK(module->property("brand") == dynamic("LENOVO"));
+  CHECK(module->property("manufacturer") == dynamic("LENOVO"));
+  CHECK(module->property("modelName") == dynamic("20XW0055UK"));
+  CHECK(module->property("osName") == dynamic("Linux"));
+  CHECK(module->property("osVersion") == dynamic("9.4"));
+  CHECK(module->property("osBuildId") == dynamic("5.14.0-427.el9.x86_64"));
+  CHECK(module->property("deviceType") == dynamic(3));
+  // A virtual machine's firmware may name no maker: the brand is unknown, never Apple.
+  auto unnamed = ngn::makeDeviceModule({.modelId = "", .osVersion = "9.4"}, ngn::linuxOs());
+  CHECK(unnamed->property("brand") == dynamic(nullptr));
+  CHECK(unnamed->property("modelName") == dynamic(nullptr));
+}
+
+TEST_CASE("bundleFactsOf reads a Linux package's metadata.json keys") {
+  std::map<std::string, std::string> metadata{
+      {"CFBundleShortVersionString", "1.4.0"}, {"CFBundleVersion", "17"}, {"CFBundleIdentifier", "dev.example.notes"}, {"CFBundleName", "Notes"}};
+  auto facts = ngn::bundleFactsOf([&](const std::string &key) -> std::optional<std::string> {
+    auto it = metadata.find(key);
+    return it == metadata.end() ? std::nullopt : std::optional<std::string>(it->second);
+  });
+  auto module = ngn::makeApplicationModule(facts, "dev-id", "Dev");
+  CHECK(module->property("nativeApplicationVersion") == dynamic("1.4.0"));
+  CHECK(module->property("nativeBuildVersion") == dynamic("17"));
+  CHECK(module->property("applicationId") == dynamic("dev.example.notes"));
+  CHECK(module->property("applicationName") == dynamic("Notes"));
+  // A dev run has no metadata: the app's own id and name stand in.
+  auto dev = ngn::makeApplicationModule(ngn::bundleFactsOf({}), "dev-id", "Dev");
+  CHECK(dev->property("applicationId") == dynamic("dev-id"));
+  CHECK(dev->property("nativeApplicationVersion") == dynamic(nullptr));
+}
+
+TEST_CASE("osReleaseFields unquotes os-release's values") {
+  auto fields = ngn::osReleaseFields(
+      "NAME=\"AlmaLinux\"\n# a comment\nVERSION_ID='9.4'\nID=almalinux\nPRETTY_NAME=\"Alma \\\"Seafoam\\\" Ocelot\"\r\nnot a field\n=x\n");
+  CHECK(fields["NAME"] == "AlmaLinux");
+  CHECK(fields["VERSION_ID"] == "9.4");
+  CHECK(fields["ID"] == "almalinux");
+  CHECK(fields["PRETTY_NAME"] == "Alma \"Seafoam\" Ocelot");
+  CHECK(fields.size() == 4);
 }
