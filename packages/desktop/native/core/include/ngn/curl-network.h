@@ -6,9 +6,10 @@
 // NSURLSession does on macOS: redirects are followed, a request's timeout is the longest it may go
 // without a byte in either direction, compressed bodies arrive decoded, `file:` and `data:` urls
 // answer 200 with no headers, and requests with credentials share one cookie store. Unlike macOS's,
-// that store is kept in memory for the process only, and a proxy comes only from the environment
-// (`http_proxy`, `https_proxy`, `no_proxy`). TLS is the system's OpenSSL, verifying against the
-// certificates findCaCertificates() locates.
+// that store is kept in memory for the process only, and a proxy comes only from libcurl's
+// environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY`, `NO_PROXY` and the rest), not the
+// desktop's settings. A `file:` url that is not a regular file is refused. TLS is the system's
+// OpenSSL, verifying against the certificates findCaCertificates() locates.
 #pragma once
 
 #include "ngn/network.h"

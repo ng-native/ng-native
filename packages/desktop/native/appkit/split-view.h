@@ -38,6 +38,10 @@
 - (void)placeAsWindows:(BOOL)window;
 // The split view is leaving: the window gets its surface back.
 - (void)uninstall;
+// A screen above the one holding this split view covers it (`covered`), or it shows again: a
+// window's split view gives the window its surface back while covered, so the screen in front
+// shows, and takes the window again as its screen shows.
+- (void)setScreenCovered:(BOOL)covered;
 @end
 
 // NgNativeSidebar and NgNativeSplitContent: filled by their container, not placed by Yoga.

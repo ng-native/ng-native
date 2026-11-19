@@ -37,13 +37,13 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   a view whose role changes gets a new widget in its place, with its children and the focus.
   Orca's structural navigation finds no headings or landmarks in a GTK 4 app. It
   builds on Linux against GTK 4.10 or later and libadwaita 1.4 or later, and on a Mac against
-  Homebrew's (`brew install gtk4 libadwaita`) as a dev loop. Its HTTP and WebSocket client is the
+  Homebrew's (`brew install gtk4 libadwaita openssl@3 libnghttp2`) as a dev loop. Its HTTP and
+  WebSocket client is the
   core's libcurl one (`curl-network.h`), which the GTK build turns on (`NGN_CURL`): one thread
   drives every request through `curl_multi`, behaving as NSURLSession does on macOS for redirects,
   timeouts (the longest silence), decoded bodies and `file:` and `data:` urls, and opening a
   WebSocket's `http` or `https` url as `ws` or `wss`, as React Native's HMR client asks. Unlike
-  macOS, its cookies last only as long as the process, and it takes a proxy only from the `http_proxy`,
-  `https_proxy` and `no_proxy` environment variables, not the desktop's settings. Linux is not yet
+  macOS, its cookies last only as long as the process, and it takes a proxy only from libcurl's environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY`, `NO_PROXY` and the rest), not the desktop's settings. Linux is not yet
   an app target: the bundle it runs is exported for `macos`. A window is an
   `AdwWindow` holding an `AdwHeaderBar` over a `GtkOverlay` with the surface (`screens.h`): the
   front screen's header goes into the header bar as macOS puts it into the toolbar, in the core's
@@ -75,7 +75,8 @@ builds statically, with only English data (`icu-filter.json`). The GTK host link
 which `fetch.sh` also pins and `cmake/curl.cmake` builds statically with HTTP/1.1, HTTP/2,
 WebSockets and nothing else, over the system's OpenSSL 3, nghttp2 and zlib. The CA certificates
 are found when the host starts: `SSL_CERT_FILE` or `SSL_CERT_DIR` when set, else the bundle or
-directory the distribution keeps. On a Mac the GTK build takes Homebrew's OpenSSL through
+directory the distribution keeps. On a Mac the GTK build takes Homebrew's OpenSSL and nghttp2
+(`brew install openssl@3 libnghttp2`) through
 `PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig"`. The build runs in
 `native/docker/Dockerfile`, an AlmaLinux 9 image with clang and lld from `llvm-toolset`, GTK 4.12
 and libadwaita 1.4, and Xvfb and Weston for launching the host headless. Building against el9
