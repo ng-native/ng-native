@@ -153,6 +153,30 @@ TEST_CASE("a ScrollView's content mounts into its scrolled window, and scrollTo 
   CHECK(offsets.told.back().second == Point{0, 200});
 }
 
+TEST_CASE("a scroll command wins over a contentOffset still waiting to be applied") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool toEnd : {false, true}) {
+    CAPTURE(toEnd);
+    Offsets offsets;
+    MountedViews views;
+    mountScrollView(views);
+    views.settle();
+    // Straight to the backend, so no turn of the main loop runs the idle that applies it.
+    auto scroll = views.mounting->tree().find(2)->view;
+    scroll.props = scrollProps(dynamic::object("contentOffset", dynamic::object("x", 0)("y", 100)));
+    views.backend->updateProps(scroll);
+    REQUIRE(ngn::gtk::viewData(views.view(2))->scroll->pendingOffset);
+    // Before the idle applies the prop.
+    if (toEnd) {
+      views.backend->dispatchCommand(2, "scrollToEnd", dynamic::array(false));
+    } else {
+      views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 200, false));
+    }
+    views.settle();
+    CHECK(offsets.told.back().second == Point{0, 200});
+  }
+}
+
 TEST_CASE("a ScrollView starts at its contentOffset, and moves when the prop changes") {
   REQUIRE(ngn::testing::gtkReady());
   Offsets offsets;
