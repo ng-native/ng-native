@@ -304,3 +304,39 @@ TEST_CASE("A line through crosses the text and the spaces in it, in the decorati
   REQUIRE(color != nullptr);
   CHECK(CGColorGetAlpha(color) == 0);
 }
+
+TEST_CASE("A line through a right-to-left run beside left-to-right text crosses that run and no more") {
+  // The Hebrew goes on past the struck run, so the run is one end of a right-to-left span.
+  auto make = [](bool struck) {
+    auto hebrew = fragment("אב", 20);
+    if (struck) {
+      hebrew.textAttributes.textDecorationLineType = TextDecorationLineType::Strikethrough;
+    }
+    return stringOf({fragment("abc ", 20), hebrew, fragment("גדה xyz", 20)});
+  };
+  ParagraphAttributes paragraph;
+  auto layout = ngn::layoutText(make(true), paragraph, 400);
+  // Where the struck letters are drawn: their run, found by its string range.
+  CFArrayRef runs = CTLineGetGlyphRuns(layout.lines[0].line);
+  CGFloat left = 0, width = 0;
+  for (CFIndex i = 0; i < CFArrayGetCount(runs); i++) {
+    auto run = (CTRunRef)CFArrayGetValueAtIndex(runs, i);
+    if (CTRunGetStringRange(run).location == 4) {
+      CGPoint first;
+      CTRunGetPositions(run, CFRangeMake(0, 1), &first);
+      left = first.x;
+      width = CTRunGetTypographicBounds(run, CFRangeMake(0, 0), nullptr, nullptr, nullptr);
+    }
+  }
+  REQUIRE(width > 0);
+  auto plain = inkedColumns(ngn::layoutText(make(false), paragraph, 400), 400, 40);
+  auto struck = inkedColumns(layout, 400, 40);
+  // Every column the line adds is over the struck run.
+  int outside = 0;
+  for (int x = 0; x < 400; x++) {
+    if (struck[static_cast<size_t>(x)] && !plain[static_cast<size_t>(x)] && (x < left - 1 || x > left + width + 1)) {
+      outside++;
+    }
+  }
+  CHECK(outside == 0);
+}

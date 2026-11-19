@@ -487,10 +487,15 @@ static void drawStrikethroughs(CTLineRef line, CGContextRef context, CGPoint bas
     if (color == nullptr) {
       color = (CGColorRef)CFDictionaryGetValue(attributes, kCTForegroundColorAttributeName);
     }
-    CFRange range = CTRunGetStringRange(run);
-    CGFloat start = CTLineGetOffsetForStringIndex(line, range.location, nullptr);
-    CGFloat end = CTLineGetOffsetForStringIndex(line, range.location + range.length, nullptr);
-    CGFloat left = std::min(start, end), width = std::fabs(end - start);
+    // The run as drawn: its first glyph's position on the line and its advance, whatever direction
+    // the run or the line goes.
+    if (CTRunGetGlyphCount(run) == 0) {
+      continue;
+    }
+    CGPoint first = CGPointZero;
+    CTRunGetPositions(run, CFRangeMake(0, 1), &first);
+    CGFloat left = first.x;
+    CGFloat width = CTRunGetTypographicBounds(run, CFRangeMake(0, 0), nullptr, nullptr, nullptr);
     CGFloat thickness = std::max<CGFloat>(CTFontGetUnderlineThickness(font), 1);
     CGFloat middle = baseline.y - CTFontGetXHeight(font) / 2;
     bool twice = (style & 0xff) == kCTUnderlineStyleDouble;
