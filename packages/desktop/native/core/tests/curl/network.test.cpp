@@ -5,18 +5,25 @@
 #include <doctest/doctest.h>
 #include <folly/json.h>
 
+#include <fcntl.h>
 #include <signal.h>
 #include <spawn.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <netinet/in.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
+#include <map>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <thread>
@@ -33,12 +40,44 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 
+// Requests to this machine bypass any proxy the environment names, for as long as this lives, so a
+// developer's proxy never answers for the local server or a closed port.
+class LoopbackBypassesProxy {
+ public:
+  LoopbackBypassesProxy() {
+    for (const char *name : {"no_proxy", "NO_PROXY"}) {
+      const char *value = std::getenv(name);
+      saved_[name] = value ? std::optional<std::string>(value) : std::nullopt;
+      setenv(name, "127.0.0.1,localhost", 1);
+    }
+  }
+  ~LoopbackBypassesProxy() {
+    for (const auto &[name, value] : saved_) {
+      if (value) {
+        setenv(name.c_str(), value->c_str(), 1);
+      } else {
+        unsetenv(name.c_str());
+      }
+    }
+  }
+  LoopbackBypassesProxy(const LoopbackBypassesProxy &) = delete;
+  LoopbackBypassesProxy &operator=(const LoopbackBypassesProxy &) = delete;
+
+ private:
+  std::map<std::string, std::optional<std::string>> saved_;
+};
+
 // test-server.py, for as long as this lives.
 class TestServer {
  public:
   TestServer() {
     int in[2], out[2];
-    if (pipe(in) != 0 || pipe(out) != 0) {
+    if (pipe(in) != 0) {
+      throw std::runtime_error("pipe failed");
+    }
+    if (pipe(out) != 0) {
+      close(in[0]);
+      close(in[1]);
       throw std::runtime_error("pipe failed");
     }
     posix_spawn_file_actions_t actions;
@@ -54,26 +93,31 @@ class TestServer {
     posix_spawn_file_actions_destroy(&actions);
     close(in[0]);
     close(out[1]);
-    stdin_ = in[1];
     if (spawned != 0) {
+      close(in[1]);
       close(out[0]);
       throw std::runtime_error("could not start python3");
     }
+    stdin_ = in[1];
     std::string line;
     char c;
     while (read(out[0], &c, 1) == 1 && c != '\n') {
       line += c;
     }
     close(out[0]);
-    port_ = std::stoi(line);
+    try {
+      port_ = std::stoi(line);
+    } catch (...) {
+      stop();
+      throw;
+    }
   }
 
   ~TestServer() {
-    // Its stdin closing ends it.
-    close(stdin_);
-    int status;
-    waitpid(pid_, &status, 0);
+    stop();
   }
+  TestServer(const TestServer &) = delete;
+  TestServer &operator=(const TestServer &) = delete;
 
   std::string url(const std::string &path) const {
     return "http://127.0.0.1:" + std::to_string(port_) + path;
@@ -84,6 +128,14 @@ class TestServer {
   }
 
  private:
+  // Its stdin closing ends it.
+  void stop() {
+    close(stdin_);
+    int status;
+    waitpid(pid_, &status, 0);
+  }
+
+  LoopbackBypassesProxy bypass_;
   pid_t pid_{0};
   int stdin_{-1};
   int port_{0};
@@ -136,6 +188,18 @@ struct Recorder {
               complete = true;
               changed.notify_all();
             },
+    };
+  }
+
+  // The callbacks, holding `self` until the last of them is gone, for a recorder that may go out
+  // of scope before the network does.
+  static ngn::HttpCallbacks owned(const std::shared_ptr<Recorder> &self) {
+    auto c = self->callbacks();
+    return {
+        .onUploadProgress = [self, f = c.onUploadProgress](int64_t sent, int64_t total) { f(sent, total); },
+        .onResponse = [self, f = c.onResponse](const ngn::HttpResponse &r) { f(r); },
+        .onData = [self, f = c.onData](std::string chunk, int64_t e) { f(std::move(chunk), e); },
+        .onComplete = [self, f = c.onComplete](const std::string &e, bool t) { f(e, t); },
     };
   }
 
@@ -211,6 +275,65 @@ std::string echoedHeader(const folly::dynamic &echo, const std::string &name) {
   return "<none>";
 }
 
+// Holds the network's thread inside a request's callback until released, so what a test does
+// meanwhile waits behind it. Released when it goes, whatever happened.
+class WorkerGate {
+ public:
+  WorkerGate(ngn::Http &http, const std::string &url) {
+    task_ = http.send(
+        {.url = url},
+        {.onResponse = [s = state_](const ngn::HttpResponse &) {
+          std::unique_lock lock(s->mutex);
+          s->held = true;
+          s->changed.notify_all();
+          s->changed.wait(lock, [&] { return s->released; });
+        }});
+  }
+  ~WorkerGate() {
+    release();
+  }
+  WorkerGate(const WorkerGate &) = delete;
+  WorkerGate &operator=(const WorkerGate &) = delete;
+
+  bool waitUntilHeld() {
+    std::unique_lock lock(state_->mutex);
+    return state_->changed.wait_for(lock, 10s, [&] { return state_->held; });
+  }
+
+  void release() {
+    std::lock_guard lock(state_->mutex);
+    state_->released = true;
+    state_->changed.notify_all();
+  }
+
+ private:
+  struct State {
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool held{false};
+    bool released{false};
+  };
+  std::shared_ptr<State> state_ = std::make_shared<State>();
+  std::unique_ptr<ngn::HttpTask> task_;
+};
+
+// What test-server.py has logged of the WebSockets it served, once it has logged anything.
+std::string serverLog(const TestServer &server, ngn::Http &http) {
+  auto deadline = Clock::now() + 10s;
+  for (;;) {
+    auto r = std::make_shared<Recorder>();
+    http.send({.url = server.url("/ws-log")}, Recorder::owned(r));
+    if (!r->waitForComplete()) {
+      return "<no answer>";
+    }
+    std::lock_guard lock(r->mutex);
+    if (r->body != "[]" || Clock::now() > deadline) {
+      return r->body;
+    }
+    std::this_thread::sleep_for(20ms);
+  }
+}
+
 // A port nothing listens on.
 int closedPort() {
   int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -247,9 +370,10 @@ TEST_CASE("a GET over libcurl answers its status, headers and body, once each, o
 
 TEST_CASE("a POST over libcurl sends its body and headers, reports the upload, and adds no headers of curl's own") {
   TestServer server;
+  // Before the network, so they outlive its thread when a REQUIRE fails.
+  Recorder r, named, big, del;
   auto network = ngn::makeCurlNetwork();
 
-  Recorder r;
   network.http->send(
       {.method = "POST", .url = server.url("/echo"), .headers = {{"X-Custom", "yes"}, {"X-Empty", ""}}, .body = "a=1&b=2"},
       r.callbacks());
@@ -265,13 +389,11 @@ TEST_CASE("a POST over libcurl sends its body and headers, reports the upload, a
   CHECK(r.uploads.back() == std::pair<int64_t, int64_t>{7, 7});
   // A User-Agent, as NSURLSession always sends one, unless the request names its own.
   CHECK(echoedHeader(echo, "user-agent").starts_with("ng-native libcurl/"));
-  Recorder named;
   network.http->send({.url = server.url("/echo"), .headers = {{"User-Agent", "notes/1.0"}}}, named.callbacks());
   REQUIRE(named.waitForComplete());
   CHECK(echoedHeader(echoed(named), "user-agent") == "notes/1.0");
 
   // A body over curl's 1 MB threshold goes without its Expect: 100-continue wait.
-  Recorder big;
   std::string body(2 * 1024 * 1024, 'x');
   network.http->send(
       {.method = "PUT", .url = server.url("/echo"), .headers = {{"Content-Type", "application/octet-stream"}}, .body = body},
@@ -282,10 +404,10 @@ TEST_CASE("a POST over libcurl sends its body and headers, reports the upload, a
   CHECK(bigEcho["bodyLength"] == static_cast<int64_t>(body.size()));
   CHECK(echoedHeader(bigEcho, "expect") == "<none>");
   CHECK(echoedHeader(bigEcho, "content-type") == "application/octet-stream");
+  REQUIRE_FALSE(big.uploads.empty());
   CHECK(big.uploads.back() == std::pair<int64_t, int64_t>{static_cast<int64_t>(body.size()), static_cast<int64_t>(body.size())});
 
   // A method with no body sends none.
-  Recorder del;
   network.http->send({.method = "DELETE", .url = server.url("/echo")}, del.callbacks());
   REQUIRE(del.waitForComplete());
   auto delEcho = echoed(del);
@@ -295,9 +417,9 @@ TEST_CASE("a POST over libcurl sends its body and headers, reports the upload, a
 
 TEST_CASE("a request over libcurl that goes quiet for its timeout fails as timed out, and one that keeps sending does not") {
   TestServer server;
+  Recorder quiet, drip;
   auto network = ngn::makeCurlNetwork();
 
-  Recorder quiet;
   auto start = Clock::now();
   network.http->send({.url = server.url("/slow?ms=4000"), .timeoutMs = 300}, quiet.callbacks());
   REQUIRE(quiet.waitForComplete());
@@ -307,7 +429,6 @@ TEST_CASE("a request over libcurl that goes quiet for its timeout fails as timed
   CHECK(quiet.events == std::vector<std::string>{"complete"});
 
   // As NSURLSession's, the timeout is the longest silence, not the whole request.
-  Recorder drip;
   // Ten bytes 150 ms apart: 1.5 s in all, three times the timeout, with no gap near it.
   network.http->send({.url = server.url("/drip?n=10&ms=150"), .timeoutMs = 500}, drip.callbacks());
   REQUIRE(drip.waitForComplete());
@@ -318,9 +439,11 @@ TEST_CASE("a request over libcurl that goes quiet for its timeout fails as timed
 
 TEST_CASE("a cancelled request over libcurl calls back nothing after cancel returns") {
   TestServer server;
+  Recorder stalled, early, self, after;
+  std::unique_ptr<ngn::HttpTask> selfTask;
+  std::mutex selfMutex;
   auto network = ngn::makeCurlNetwork();
 
-  Recorder stalled;
   auto task = network.http->send({.url = server.url("/stall")}, stalled.callbacks());
   REQUIRE(stalled.waitForResponse());
   task->cancel();
@@ -336,13 +459,13 @@ TEST_CASE("a cancelled request over libcurl calls back nothing after cancel retu
     CHECK_FALSE(stalled.complete);
   }
 
-  // Cancelled before it starts, it never calls back at all.
-  Recorder early;
-  network.http->send({.url = server.url("/text")}, early.callbacks())->cancel();
+  // Cancelled before it starts, it never calls back at all: the thread is held until it is.
+  {
+    WorkerGate gate(*network.http, server.url("/text"));
+    REQUIRE(gate.waitUntilHeld());
+    network.http->send({.url = server.url("/text")}, early.callbacks())->cancel();
+  }
   // Cancelled from its own callback.
-  Recorder self;
-  std::unique_ptr<ngn::HttpTask> selfTask;
-  std::mutex selfMutex;
   auto callbacks = self.callbacks();
   auto onResponse = callbacks.onResponse;
   callbacks.onResponse = [&, onResponse](const ngn::HttpResponse &response) {
@@ -356,7 +479,6 @@ TEST_CASE("a cancelled request over libcurl calls back nothing after cancel retu
   }
   REQUIRE(self.waitForResponse());
   // A request after both completes, so the thread has run past them.
-  Recorder after;
   network.http->send({.url = server.url("/text")}, after.callbacks());
   REQUIRE(after.waitForComplete());
   std::this_thread::sleep_for(100ms);
@@ -368,9 +490,9 @@ TEST_CASE("a cancelled request over libcurl calls back nothing after cancel retu
 
 TEST_CASE("redirects over libcurl are followed to the last response, changing a POST to a GET where NSURLSession does") {
   TestServer server;
+  Recorder found, seeOther, put, temporary, loop, emptyLocation, multipleChoices;
   auto network = ngn::makeCurlNetwork();
 
-  Recorder found;
   network.http->send({.url = server.url("/redirect")}, found.callbacks());
   REQUIRE(found.waitForComplete());
   CHECK(found.events == std::vector<std::string>{"response", "data", "complete"});
@@ -378,52 +500,66 @@ TEST_CASE("redirects over libcurl are followed to the last response, changing a 
   CHECK(found.response.url == server.url("/text"));
   CHECK(found.body == "hello");
 
-  Recorder seeOther;
   network.http->send({.method = "POST", .url = server.url("/see-other"), .body = "gone"}, seeOther.callbacks());
   REQUIRE(seeOther.waitForComplete());
   CHECK(echoed(seeOther)["method"] == "GET");
   CHECK(echoed(seeOther)["body"] == "");
 
   // A 303 makes any method a GET, a custom one too.
-  Recorder put;
   network.http->send({.method = "PUT", .url = server.url("/see-other"), .body = "gone"}, put.callbacks());
   REQUIRE(put.waitForComplete());
   CHECK(echoed(put)["method"] == "GET");
 
-  Recorder temporary;
   network.http->send({.method = "POST", .url = server.url("/temporary"), .body = "kept"}, temporary.callbacks());
   REQUIRE(temporary.waitForComplete());
   CHECK(echoed(temporary)["method"] == "POST");
   CHECK(echoed(temporary)["body"] == "kept");
 
-  Recorder loop;
   network.http->send({.url = server.url("/loop")}, loop.callbacks());
   REQUIRE(loop.waitForComplete());
   CHECK(loop.events == std::vector<std::string>{"complete"});
   CHECK(loop.error == "too many HTTP redirects");
+
+  // curl follows any 3xx with a Location, and no other: a 302 whose Location is empty is the
+  // response, body and all, and a 300 with one is followed.
+  network.http->send({.url = server.url("/empty-location")}, emptyLocation.callbacks());
+  REQUIRE(emptyLocation.waitForComplete());
+  CHECK(emptyLocation.events == std::vector<std::string>{"response", "data", "complete"});
+  CHECK(emptyLocation.response.status == 302);
+  CHECK(emptyLocation.body == "stay");
+  network.http->send({.url = server.url("/multiple-choices")}, multipleChoices.callbacks());
+  REQUIRE(multipleChoices.waitForComplete());
+  CHECK(multipleChoices.events == std::vector<std::string>{"response", "data", "complete"});
+  CHECK(multipleChoices.response.status == 200);
+  CHECK(multipleChoices.response.url == server.url("/text"));
+  CHECK(multipleChoices.body == "hello");
 }
 
 TEST_CASE("requests over libcurl with credentials share cookies until they are cleared, and one without sends none") {
   TestServer server;
   auto network = ngn::makeCurlNetwork();
   auto get = [&](const std::string &path, bool credentials) {
-    auto r = std::make_unique<Recorder>();
-    network.http->send({.url = server.url(path), .withCredentials = credentials}, r->callbacks());
+    auto r = std::make_shared<Recorder>();
+    network.http->send({.url = server.url(path), .withCredentials = credentials}, Recorder::owned(r));
     REQUIRE(r->waitForComplete());
     return r;
   };
+  // The answer's state is shared with the callback, which may come after the wait gives up.
+  struct Answer {
+    std::mutex mutex;
+    std::condition_variable changed;
+    std::optional<bool> cleared;
+  };
   auto cleared = [&] {
-    std::mutex m;
-    std::condition_variable cv;
-    std::optional<bool> answer;
-    network.http->clearCookies([&](bool c) {
-      std::lock_guard lock(m);
-      answer = c;
-      cv.notify_all();
+    auto a = std::make_shared<Answer>();
+    network.http->clearCookies([a](bool c) {
+      std::lock_guard lock(a->mutex);
+      a->cleared = c;
+      a->changed.notify_all();
     });
-    std::unique_lock lock(m);
-    cv.wait_for(lock, 10s, [&] { return answer.has_value(); });
-    return answer;
+    std::unique_lock lock(a->mutex);
+    a->changed.wait_for(lock, 10s, [&] { return a->cleared.has_value(); });
+    return a->cleared;
   };
 
   get("/set-cookie", true);
@@ -486,14 +622,44 @@ TEST_CASE("data and file urls over libcurl answer 200 with no headers, as on mac
   unlink(path);
 }
 
-TEST_CASE("a url libcurl cannot parse fails at once, and an unreachable server fails as NSURLSession says") {
+TEST_CASE("a file url over libcurl that is not a regular file fails at once, and holds up nothing") {
+  Recorder fifo, after;
   auto network = ngn::makeCurlNetwork();
-  Recorder bad;
+  char dir[] = "/tmp/ngn-curl-fifo-XXXXXX";
+  REQUIRE(mkdtemp(dir) != nullptr);
+  std::string path = std::string(dir) + "/pipe";
+  REQUIRE(mkfifo(path.c_str(), 0600) == 0);
+  // A FIFO with no writer blocks a read's open. Opening its write end lets one go, so the thread
+  // can stop even when the test fails.
+  struct Release {
+    std::string path, dir;
+    ~Release() {
+      int fd = open(path.c_str(), O_WRONLY | O_NONBLOCK);
+      if (fd >= 0) {
+        close(fd);
+      }
+      unlink(path.c_str());
+      rmdir(dir.c_str());
+    }
+  } release{path, dir};
+
+  network.http->send({.url = "file://" + path}, fifo.callbacks());
+  REQUIRE(fifo.waitForComplete(3s));
+  CHECK(fifo.events == std::vector<std::string>{"complete"});
+  CHECK(fifo.error == "The requested URL was not found on this server.");
+  network.http->send({.url = "data:,next"}, after.callbacks());
+  REQUIRE(after.waitForComplete(3s));
+  CHECK(after.body == "next");
+}
+
+TEST_CASE("a url libcurl cannot parse fails at once, and an unreachable server fails as NSURLSession says") {
+  LoopbackBypassesProxy bypass;
+  Recorder bad, refused;
+  auto network = ngn::makeCurlNetwork();
   CHECK_FALSE(network.http->send({.url = "http://[bad"}, bad.callbacks()));
   CHECK(bad.complete);
   CHECK(bad.error == "Invalid URL: http://[bad");
 
-  Recorder refused;
   network.http->send({.url = "http://127.0.0.1:" + std::to_string(closedPort()) + "/"}, refused.callbacks());
   REQUIRE(refused.waitForComplete());
   CHECK(refused.error == "Could not connect to the server.");
@@ -543,21 +709,25 @@ TEST_CASE("a WebSocket over libcurl opens an http url as ws, as NSURLSession doe
 
 TEST_CASE("a WebSocket over libcurl reports the server's close, and fails when it cannot open") {
   TestServer server;
+  SocketRecorder closedByServer, refused, unoffered, unreachable, early;
   auto network = ngn::makeCurlNetwork();
 
-  SocketRecorder closedByServer;
   auto c = network.webSockets->connect(server.ws("/ws"), {}, {}, closedByServer.callbacks());
   c->sendText("close-me");
   REQUIRE(closedByServer.waitFor(2));
   CHECK(closedByServer.seen() == std::vector<std::string>{"open ", "close 4000 bye"});
 
-  SocketRecorder refused;
   auto r = network.webSockets->connect(server.ws("/ws"), {"refuse"}, {}, refused.callbacks());
   REQUIRE(refused.waitFor(1));
   REQUIRE(refused.seen().size() == 1);
   CHECK(refused.seen()[0].starts_with("error "));
 
-  SocketRecorder unreachable;
+  // A subprotocol the client did not offer fails it, as a browser's does.
+  auto o = network.webSockets->connect(server.ws("/ws"), {"pick-other"}, {}, unoffered.callbacks());
+  REQUIRE(unoffered.waitFor(1));
+  std::this_thread::sleep_for(100ms);
+  CHECK(unoffered.seen() == std::vector<std::string>{"error There was a bad response from the server."});
+
   auto u = network.webSockets->connect(
       "ws://127.0.0.1:" + std::to_string(closedPort()) + "/ws", {}, {}, unreachable.callbacks());
   REQUIRE(unreachable.waitFor(1));
@@ -578,13 +748,99 @@ TEST_CASE("a WebSocket over libcurl reports the server's close, and fails when i
   REQUIRE(ftp.seen().size() == 1);
   CHECK(ftp.seen()[0].starts_with("error "));
 
-  // Closed before it opens, as NSURLSession cancels it.
-  SocketRecorder early;
-  auto e = network.webSockets->connect(server.ws("/ws"), {}, {}, early.callbacks());
-  e->close(1000, "");
+  // Closed before it opens, as NSURLSession cancels it: the thread is held until both are queued.
+  std::unique_ptr<ngn::WebSocketConnection> e;
+  {
+    WorkerGate gate(*network.http, server.url("/text"));
+    REQUIRE(gate.waitUntilHeld());
+    e = network.webSockets->connect(server.ws("/ws"), {}, {}, early.callbacks());
+    e->close(1000, "");
+  }
   REQUIRE(early.waitFor(1));
   std::this_thread::sleep_for(100ms);
   CHECK(early.seen() == std::vector<std::string>{"error cancelled"});
+}
+
+TEST_CASE("a WebSocket over libcurl cuts a long close reason before a character, not inside one") {
+  TestServer server;
+  SocketRecorder r;
+  auto network = ngn::makeCurlNetwork();
+  auto c = network.webSockets->connect(server.ws("/ws"), {}, {}, r.callbacks());
+  REQUIRE(r.waitFor(1));
+  // 122 bytes and a two-byte character: 124, one over the 123 a close frame has room for.
+  c->close(1000, std::string(122, 'a') + "\xc3\xa9");
+  REQUIRE(r.waitFor(2));
+  // The server echoes the close frame it got.
+  CHECK(r.seen() == std::vector<std::string>{"open ", "close 1000 " + std::string(122, 'a')});
+}
+
+TEST_CASE("a WebSocket over libcurl whose close the server never answers closes with 1006, not its own code") {
+  TestServer server;
+  SocketRecorder dropped, ignored;
+  auto network = ngn::makeCurlNetwork();
+  // "mute" drops the connection on a close frame, "silent" reads on without answering it.
+  auto d = network.webSockets->connect(server.ws("/ws"), {"mute"}, {}, dropped.callbacks());
+  auto i = network.webSockets->connect(server.ws("/ws"), {"silent"}, {}, ignored.callbacks());
+  REQUIRE(dropped.waitFor(1));
+  REQUIRE(ignored.waitFor(1));
+  d->close(1000, "");
+  i->close(1000, "");
+  REQUIRE(dropped.waitFor(2));
+  // After the five seconds a close waits for its answer.
+  REQUIRE(ignored.waitFor(2, 10s));
+  CHECK(dropped.seen() == std::vector<std::string>{"open ", "close 1006 "});
+  CHECK(ignored.seen() == std::vector<std::string>{"open ", "close 1006 "});
+}
+
+TEST_CASE("a WebSocket over libcurl answers the server's close after the frame it is sending, and closes with the server's code") {
+  TestServer server;
+  SocketRecorder r;
+  auto network = ngn::makeCurlNetwork();
+  auto c = network.webSockets->connect(server.ws("/ws"), {}, {}, r.callbacks());
+  REQUIRE(r.waitFor(1));
+  // The server reads nothing for a moment, then closes and reads on until this side's close frame.
+  // The 16 MB message is still going when the server's close comes, and this side's close is
+  // queued behind it.
+  c->sendText("close-later");
+  c->sendBinary(std::string(16 * 1024 * 1024, 'x'));
+  c->close(1000, "");
+  REQUIRE(r.waitFor(2));
+  CHECK(r.seen() == std::vector<std::string>{"open ", "close 4000 bye"});
+  CHECK(serverLog(server, *network.http) == "[\"close 1000\"]");
+}
+
+TEST_CASE("a WebSocket over libcurl that keeps receiving leaves the thread to other requests") {
+  TestServer server;
+  Recorder text;
+  auto received = std::make_shared<std::atomic<int>>(0);
+  auto atComplete = std::make_shared<std::atomic<int>>(-1);
+  auto slow = std::make_shared<std::atomic<bool>>(true);
+  auto network = ngn::makeCurlNetwork();
+  // A millisecond a message, so the 2000 the server sends at once take two seconds to take in.
+  auto c = network.webSockets->connect(
+      server.ws("/ws"), {}, {}, {.onText = [received, slow](const std::string &) {
+        if (*slow) {
+          std::this_thread::sleep_for(1ms);
+        }
+        ++*received;
+      }});
+  c->sendText("flood");
+  auto deadline = Clock::now() + 10s;
+  while (*received == 0 && Clock::now() < deadline) {
+    std::this_thread::sleep_for(1ms);
+  }
+  REQUIRE(received->load() > 0);
+  auto callbacks = text.callbacks();
+  callbacks.onComplete = [atComplete, received, done = callbacks.onComplete](const std::string &e, bool t) {
+    *atComplete = received->load();
+    done(e, t);
+  };
+  network.http->send({.url = server.url("/text")}, std::move(callbacks));
+  REQUIRE(text.waitForComplete());
+  *slow = false;
+  CHECK(text.body == "hello");
+  // Done while messages were still coming in.
+  CHECK(atComplete->load() < 2000);
 }
 
 TEST_CASE("the CA certificates are OpenSSL's variables when set, else the first bundle or directory a distribution keeps") {

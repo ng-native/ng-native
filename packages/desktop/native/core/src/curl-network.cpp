@@ -37,6 +37,9 @@ constexpr milliseconds kCloseWait = std::chrono::seconds(5);
 constexpr size_t kMaxMessage = 64 * 1024 * 1024;
 // The redirects followed before giving up, as browsers count them.
 constexpr long kMaxRedirects = 20;
+// The reads one WebSocket gets in one pass of the thread (up to 4 MB), so a server that keeps
+// sending cannot hold up every other request and connection.
+constexpr int kReceiveBudget = 64;
 
 void initCurl() {
   static std::once_flag once;
@@ -132,6 +135,32 @@ std::string webSocketUrl(const std::string &url) {
   return url;
 }
 
+// Whether a `file:` url names a regular file. Anything else (a FIFO with no writer, a device)
+// can block the open that curl makes on the thread every request shares, so it is refused first.
+bool regularFile(const std::string &url) {
+  CURLU *u = curl_url();
+  char *path = nullptr;
+  bool ok = curl_url_set(u, CURLUPART_URL, url.c_str(), 0) == CURLUE_OK &&
+      curl_url_get(u, CURLUPART_PATH, &path, CURLU_URLDECODE) == CURLUE_OK;
+  struct stat st {};
+  ok = ok && stat(path, &st) == 0 && S_ISREG(st.st_mode);
+  curl_free(path);
+  curl_url_cleanup(u);
+  return ok;
+}
+
+// At most `limit` bytes of UTF-8 `text`, cut before a character rather than inside one.
+std::string utf8Prefix(const std::string &text, size_t limit) {
+  if (text.size() <= limit) {
+    return text;
+  }
+  size_t n = limit;
+  while (n > 0 && (static_cast<unsigned char>(text[n]) & 0xC0) == 0x80) {
+    --n;
+  }
+  return text.substr(0, n);
+}
+
 // A `data:` url's bytes: `data:[<type>][;base64],<data>`, its data percent-decoded.
 std::optional<std::string> dataUriBytes(const std::string &uri) {
   auto comma = uri.find(',');
@@ -222,6 +251,8 @@ struct Socket {
     unsigned flags;
     std::string bytes;
     size_t offset{0};
+    // Handed to curl at least once, after which curl takes nothing else until it is all sent.
+    bool started{false};
   };
 
   ~Socket() {
@@ -234,6 +265,8 @@ struct Socket {
   std::shared_ptr<SocketState> state;
   Phase phase{Phase::Connecting};
   Clock::time_point started{Clock::now()};
+  // The subprotocols offered, and the one the server chose.
+  std::vector<std::string> offered;
   std::string protocol;
   curl_socket_t fd{CURL_SOCKET_BAD};
   // What is still to send, oldest first; held until the socket opens.
@@ -242,11 +275,15 @@ struct Socket {
   std::string message;
   unsigned messageFlags{0};
   std::string closePayload;
-  // A close this side sent, and when to stop waiting for the server's.
+  // This side's close frame, queued and then sent, and when to stop waiting for the closing
+  // handshake to finish.
+  bool closeQueued{false};
   bool closeSent{false};
-  int closeCode{1000};
-  std::string closeReason;
   Clock::time_point closeDeadline;
+  // The server's close frame, once it has come.
+  bool peerClosed{false};
+  int peerCode{1005};
+  std::string peerReason;
 };
 
 class Engine {
@@ -315,11 +352,14 @@ class Engine {
       std::vector<curl_waitfd> fds;
       for (auto &[_, s] : sockets_) {
         if (s->phase == Socket::Phase::Open && s->fd != CURL_SOCKET_BAD) {
-          short events = CURL_WAIT_POLLIN;
+          // Nothing is read past the server's close frame, so its socket is not waited on to read.
+          short events = s->peerClosed ? 0 : CURL_WAIT_POLLIN;
           if (!s->outgoing.empty()) {
             events |= CURL_WAIT_POLLOUT;
           }
-          fds.push_back({.fd = s->fd, .events = events, .revents = 0});
+          if (events != 0) {
+            fds.push_back({.fd = s->fd, .events = events, .revents = 0});
+          }
         }
       }
       curl_multi_poll(multi_, fds.data(), static_cast<unsigned>(fds.size()), nextWaitMs(), nullptr);
@@ -337,6 +377,16 @@ class Engine {
     }
     if (startsWithNoCase(request.url, "data:")) {
       answerDataUri(request.url, *state);
+      return;
+    }
+    if (startsWithNoCase(request.url, "file:") && !regularFile(request.url)) {
+      std::lock_guard lock(state->mutex);
+      if (!state->done) {
+        state->done = true;
+        if (state->callbacks.onComplete) {
+          state->callbacks.onComplete(errorText(CURLE_FILE_COULDNT_READ_FILE), false);
+        }
+      }
       return;
     }
     auto t = std::make_unique<Transfer>();
@@ -443,6 +493,7 @@ class Engine {
     }
     auto s = std::make_unique<Socket>();
     s->state = std::move(state);
+    s->offered = protocols;
     CURL *e = s->easy;
     common(e);
     curl_easy_setopt(e, CURLOPT_URL, webSocketUrl(url).c_str());
@@ -472,7 +523,7 @@ class Engine {
 
   void send(uint64_t id, unsigned flags, std::string bytes) {
     auto it = sockets_.find(id);
-    if (it == sockets_.end() || it->second->closeSent) {
+    if (it == sockets_.end() || it->second->closeQueued || it->second->peerClosed) {
       return;
     }
     it->second->outgoing.push_back({.flags = flags, .bytes = std::move(bytes)});
@@ -489,15 +540,12 @@ class Engine {
       fail(id, "cancelled");
       return;
     }
-    if (s.closeSent) {
+    if (s.closeQueued || s.peerClosed) {
       return;
     }
-    s.closeSent = true;
-    s.closeCode = code;
-    // A close frame's payload is at most 125 bytes: the code's two and 123 of reason.
-    s.closeReason = reason.substr(0, 123);
-    s.closeDeadline = Clock::now() + kCloseWait;
-    s.outgoing.push_back({.flags = CURLWS_CLOSE, .bytes = closePayload(code, s.closeReason)});
+    // A close frame's payload is at most 125 bytes: the code's two and 123 of reason, which stays
+    // valid UTF-8.
+    queueClose(s, closePayload(code, utf8Prefix(reason, 123)));
   }
 
  private:
@@ -520,6 +568,13 @@ class Engine {
     curl_easy_setopt(e, CURLOPT_SHARE, share_);
     // An empty name turns the cookie engine on without reading a file.
     curl_easy_setopt(e, CURLOPT_COOKIEFILE, "");
+  }
+
+  // Sends a close frame after what is already queued, and waits kCloseWait for the handshake.
+  static void queueClose(Socket &s, std::string payload) {
+    s.closeQueued = true;
+    s.closeDeadline = Clock::now() + kCloseWait;
+    s.outgoing.push_back({.flags = CURLWS_CLOSE, .bytes = std::move(payload)});
   }
 
   static std::string closePayload(int code, const std::string &reason) {
@@ -574,8 +629,10 @@ class Engine {
       long status = 0;
       curl_easy_getinfo(t->easy, CURLINFO_RESPONSE_CODE, &status);
       bool interim = status >= 100 && status < 200;
-      bool redirect = (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) &&
-          std::any_of(t->headerLines.begin(), t->headerLines.end(), [](const auto &h) { return sameName(h.first, "location"); });
+      // What curl follows: any 3xx with a Location that is not empty.
+      bool redirect = status >= 300 && status < 400 &&
+          std::any_of(t->headerLines.begin(), t->headerLines.end(),
+                      [](const auto &h) { return sameName(h.first, "location") && !h.second.empty(); });
       if (interim || redirect) {
         // curl goes on to the next response.
         t->headerLines.clear();
@@ -710,6 +767,11 @@ class Engine {
   void opened(uint64_t id, Socket &s) {
     // The handle stays in the multi handle, whose connection pool keeps the connection
     // curl_ws_recv and curl_ws_send find.
+    if (!s.protocol.empty() && std::find(s.offered.begin(), s.offered.end(), s.protocol) == s.offered.end()) {
+      // A subprotocol the client never offered fails the connection, as a browser's does.
+      fail(id, errorText(CURLE_WEIRD_SERVER_REPLY));
+      return;
+    }
     curl_easy_getinfo(s.easy, CURLINFO_ACTIVESOCKET, &s.fd);
     s.phase = Socket::Phase::Open;
     std::lock_guard lock(s.state->mutex);
@@ -754,6 +816,7 @@ class Engine {
   }
 
   void serviceSockets() {
+    more_ = false;
     std::vector<uint64_t> open;
     for (auto &[id, s] : sockets_) {
       if (s->phase == Socket::Phase::Open) {
@@ -762,8 +825,14 @@ class Engine {
     }
     // A callback may close or drop any socket, so each is found again by its id.
     for (uint64_t id : open) {
-      if (flush(id)) {
-        receive(id);
+      if (!flush(id)) {
+        continue;
+      }
+      auto it = sockets_.find(id);
+      // Past the server's close frame there is nothing to read.
+      if (it != sockets_.end() && !it->second->peerClosed && receive(id)) {
+        // curl may hold the rest already, which no poll would wake for.
+        more_ = true;
       }
     }
   }
@@ -781,50 +850,66 @@ class Engine {
       CURLcode rc = curl_ws_send(
           s.easy, frame.bytes.data() + frame.offset, frame.bytes.size() - frame.offset, &sent, 0, frame.flags);
       if (rc == CURLE_AGAIN) {
+        frame.started = true;
         return true;
       }
       if (rc != CURLE_OK) {
-        fail(id, errorText(rc));
+        if (s.peerClosed) {
+          // The server closed, and went before this side's answer did.
+          closed(id, s.peerCode, s.peerReason);
+        } else {
+          fail(id, errorText(rc));
+        }
         return false;
       }
+      frame.started = true;
       frame.offset += sent;
       if (frame.offset < frame.bytes.size()) {
         // The rest of this frame when the socket can take it.
         return true;
       }
+      bool close = (frame.flags & CURLWS_CLOSE) != 0;
       s.outgoing.pop_front();
+      if (close) {
+        s.closeSent = true;
+        if (s.peerClosed) {
+          closed(id, s.peerCode, s.peerReason);
+          return false;
+        }
+      }
     }
     return true;
   }
 
-  void receive(uint64_t id) {
+  // Reads what has come, up to kReceiveBudget reads; true when the budget ran out first.
+  bool receive(uint64_t id) {
     char buffer[64 * 1024];
-    for (;;) {
+    for (int reads = 0; reads < kReceiveBudget; ++reads) {
       auto it = sockets_.find(id);
       if (it == sockets_.end()) {
-        return;
+        return false;
       }
       Socket &s = *it->second;
       size_t n = 0;
       const curl_ws_frame *meta = nullptr;
       CURLcode rc = curl_ws_recv(s.easy, buffer, sizeof buffer, &n, &meta);
       if (rc == CURLE_AGAIN) {
-        return;
+        return false;
       }
       if (rc != CURLE_OK || meta == nullptr) {
-        if (s.closeSent) {
-          // The server closed the connection without its close frame.
-          closed(id, s.closeCode, s.closeReason);
+        if (s.closeQueued) {
+          // The server went without its close frame: 1006, an abnormal closure.
+          closed(id, 1006, "");
         } else {
           fail(id, rc == CURLE_GOT_NOTHING || rc == CURLE_OK ? "The network connection was lost." : errorText(rc));
         }
-        return;
+        return false;
       }
       if (meta->flags & CURLWS_CLOSE) {
         s.closePayload.append(buffer, n);
         if (meta->bytesleft == 0) {
           serverClosed(id, s);
-          return;
+          return false;
         }
         continue;
       }
@@ -838,12 +923,13 @@ class Engine {
       s.message.append(buffer, n);
       if (s.message.size() > kMaxMessage) {
         fail(id, "Message too long");
-        return;
+        return false;
       }
       if (meta->bytesleft == 0 && !(meta->flags & CURLWS_CONT)) {
         deliver(s);
       }
     }
+    return true;
   }
 
   void deliver(Socket &s) {
@@ -862,21 +948,26 @@ class Engine {
     }
   }
 
+  // The server's close frame. The socket closes with its code once this side's close frame has
+  // gone, or kCloseWait after.
   void serverClosed(uint64_t id, Socket &s) {
+    s.peerClosed = true;
     // 1005: the frame named no code.
-    int code = 1005;
-    std::string reason;
     if (s.closePayload.size() >= 2) {
-      code = (static_cast<unsigned char>(s.closePayload[0]) << 8) | static_cast<unsigned char>(s.closePayload[1]);
-      reason = s.closePayload.substr(2);
+      s.peerCode = (static_cast<unsigned char>(s.closePayload[0]) << 8) | static_cast<unsigned char>(s.closePayload[1]);
+      s.peerReason = s.closePayload.substr(2);
     }
-    if (!s.closeSent) {
-      // The closing handshake's answer, echoing the server's code.
-      size_t sent = 0;
-      std::string payload = code == 1005 ? "" : closePayload(code, "");
-      curl_ws_send(s.easy, payload.data(), payload.size(), &sent, 0, CURLWS_CLOSE);
+    if (s.closeSent) {
+      closed(id, s.peerCode, s.peerReason);
+      return;
     }
-    closed(id, code, reason);
+    // Only a frame curl has begun still goes, then this side's close frame: the one queued, else
+    // the closing handshake's answer, echoing the server's code.
+    std::erase_if(s.outgoing, [](const Socket::Frame &f) { return !f.started && !(f.flags & CURLWS_CLOSE); });
+    if (!s.closeQueued) {
+      queueClose(s, s.peerCode == 1005 ? "" : closePayload(s.peerCode, ""));
+    }
+    flush(id);
   }
 
   void expire() {
@@ -898,7 +989,7 @@ class Engine {
     for (auto &[id, s] : sockets_) {
       if (s->phase == Socket::Phase::Connecting && now - s->started >= kHandshakeTimeout) {
         unopened.push_back(id);
-      } else if (s->closeSent && now >= s->closeDeadline) {
+      } else if (s->closeQueued && now >= s->closeDeadline) {
         unanswered.push_back(id);
       }
     }
@@ -907,11 +998,19 @@ class Engine {
     }
     for (uint64_t id : unanswered) {
       auto &s = *sockets_.at(id);
-      closed(id, s.closeCode, s.closeReason);
+      if (s.peerClosed) {
+        closed(id, s.peerCode, s.peerReason);
+      } else {
+        // No close frame from the server: 1006, an abnormal closure.
+        closed(id, 1006, "");
+      }
     }
   }
 
   int nextWaitMs() const {
+    if (more_) {
+      return 0;
+    }
     auto now = Clock::now();
     auto next = now + std::chrono::seconds(60);
     for (auto &[_, t] : transfers_) {
@@ -920,7 +1019,7 @@ class Engine {
     for (auto &[_, s] : sockets_) {
       if (s->phase == Socket::Phase::Connecting) {
         next = std::min(next, s->started + kHandshakeTimeout);
-      } else if (s->closeSent) {
+      } else if (s->closeQueued) {
         next = std::min(next, s->closeDeadline);
       }
     }
@@ -934,6 +1033,8 @@ class Engine {
   std::mutex mutex_;
   std::vector<std::function<void()>> queue_;
   bool stopping_{false};
+  // A socket's receive budget ran out with more to read, so the next poll does not wait.
+  bool more_{false};
   std::atomic<uint64_t> ids_{0};
   std::map<uint64_t, std::unique_ptr<Transfer>> transfers_;
   std::map<uint64_t, std::unique_ptr<Socket>> sockets_;
