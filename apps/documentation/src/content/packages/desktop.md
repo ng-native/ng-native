@@ -122,8 +122,8 @@ included, into `$XDG_CACHE_HOME/ng-native/desktop/rn-<version>` (`~/.cache` when
 and later runs reuse it. Building needs clang and lld, CMake 3.25 or later, Ninja 1.10 or later,
 Git, curl, unzip, xz, Perl with `shasum`, Python 3, pkg-config, and the development packages of GTK
 4.10 or later, libadwaita 1.4 or later, libsecret 0.20 or later, Pango, Fontconfig, GLib, X11,
-OpenSSL 3, nghttp2, zlib and SQLite. The command checks them first and names the package for each problem, for apt or dnf by
-`/etc/os-release`:
+OpenSSL 3, nghttp2, zlib and SQLite. The command checks them first and names the package for each
+problem, for apt or dnf by `/etc/os-release`:
 
 ```sh
 # Debian and Ubuntu
