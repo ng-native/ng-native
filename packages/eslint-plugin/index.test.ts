@@ -455,7 +455,7 @@ test('a mouse event is an error in a project that builds for no desktop OS', asy
       JSON.stringify({ expo: { platforms: ['ios', 'android'] } }),
     );
     assert.deepEqual(await lint('<view (mouseenter)="go()"></view>', join(dir, 'a.html'), dir), [
-      '1:7 @ng-native/no-dom-events: (mouseenter) fires only on macOS, and expo.platforms in ' +
+      '1:7 @ng-native/no-dom-events: (mouseenter) fires only on a desktop OS, and expo.platforms in ' +
         'app.json lists no desktop OS, so it never fires here. Use a [gesture] from ' +
         '@ng-native/components.',
     ]);
@@ -480,8 +480,25 @@ test('a desktop event is a warning that it fires only there, in a project that b
       ['1:7', '1:27', '1:45', '1:60', '1:94'],
     );
     assert.equal(messages.filter((m) => m.includes('desktop-only-events')).length, 4);
-    assert.match(messages[0]!, /\(mouseenter\) fires only on macOS: iOS and Android never send it/);
+    assert.match(
+      messages[0]!,
+      /\(mouseenter\) fires only on a desktop OS: iOS and Android never send it/,
+    );
     assert.match(messages[4]!, /no-dom-events: \(click\) is a DOM event/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a desktop event is a warning that it fires only there, in a project that builds for Linux', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ng-native-eslint-'));
+  try {
+    writeFileSync(join(dir, 'app.json'), JSON.stringify({ expo: { platforms: ['ios', 'linux'] } }));
+    const messages = await lint('<view (mouseenter)="go()"></view>', join(dir, 'a.html'), dir);
+    assert.deepEqual(
+      messages.map((m) => m.split(' ')[1]),
+      ['@ng-native/desktop-only-events:'],
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

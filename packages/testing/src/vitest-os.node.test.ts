@@ -21,6 +21,7 @@ describe('the platform extensions', () => {
       ios: ['ios', 'native'],
       android: ['android', 'native'],
       macos: ['macos', 'ios', 'native'],
+      linux: ['linux', 'ios', 'native'],
       web: ['web'],
     });
   });
@@ -42,7 +43,10 @@ describe('an os the preset does not know', () => {
   it('fails the config, naming it, rather than testing as iOS', () => {
     const plugin = ngNative({ os: 'windows' as never });
     const config = plugin.config as (config: object) => unknown;
-    assert.throws(() => config({ root: tmpdir() }), /os: 'windows'.*ios, android, macos, web/);
+    assert.throws(
+      () => config({ root: tmpdir() }),
+      /os: 'windows'.*ios, android, macos, linux, web/,
+    );
   });
 });
 
@@ -58,6 +62,8 @@ describe('the default OS', () => {
 
   it('follows expo.platforms', () => {
     assert.equal(withPlatforms(['macos']), 'macos');
+    assert.equal(withPlatforms(['linux']), 'linux');
+    assert.equal(withPlatforms(['macos', 'linux']), 'macos');
     assert.equal(withPlatforms(['android']), 'android');
     assert.equal(withPlatforms(['ios', 'android', 'macos']), 'ios');
     assert.equal(withPlatforms(undefined), 'ios');
@@ -77,6 +83,7 @@ describe('a Vitest run with an os', () => {
     writeFileSync(path.join(root, 'storage.native.ts'), "export const from = 'native';\n");
     writeFileSync(path.join(root, 'storage.ios.ts'), "export const from = 'ios';\n");
     writeFileSync(path.join(root, 'storage.macos.ts'), "export const from = 'macos';\n");
+    writeFileSync(path.join(root, 'storage.linux.ts'), "export const from = 'linux';\n");
   });
   after(() => rmSync(root, { recursive: true, force: true }));
 
@@ -118,6 +125,16 @@ describe('a Vitest run with an os', () => {
       assert.equal(await run('ios', 'macos', { os: 'macos' }), 0);
     } finally {
       writeFileSync(path.join(root, 'storage.macos.ts'), "export const from = 'macos';\n");
+    }
+  });
+
+  it('resolves the .linux file, then the .ios one, and renders as Linux, on Linux', async () => {
+    assert.equal(await run('linux', 'linux', { os: 'linux' }), 0);
+    rmSync(path.join(root, 'storage.linux.ts'));
+    try {
+      assert.equal(await run('ios', 'linux', { os: 'linux' }), 0);
+    } finally {
+      writeFileSync(path.join(root, 'storage.linux.ts'), "export const from = 'linux';\n");
     }
   });
 

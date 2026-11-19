@@ -331,7 +331,8 @@ function rootOf(config) {
 
 /**
  * The file extensions each OS resolves ahead of the plain ones, in order, as Metro and Expo SDK 58
- * do: a Mac takes a `.macos` file, then an `.ios` one, then a `.native` one. One entry for each of
+ * do: a Mac takes a `.macos` file, then an `.ios` one, then a `.native` one, and Linux the same with
+ * `.linux` first. One entry for each of
  * `OS_NAMES` in `@ng-native/device`, so its keys are the OSes a project can test as.
  *
  * @type {Readonly<Record<import('@ng-native/device').OsName, readonly string[]>>}
@@ -340,6 +341,7 @@ export const PLATFORM_EXTENSIONS = {
   ios: ['ios', 'native'],
   android: ['android', 'native'],
   macos: ['macos', 'ios', 'native'],
+  linux: ['linux', 'ios', 'native'],
   web: ['web'],
 };
 
@@ -393,7 +395,7 @@ export function defaultOs(root) {
     return 'ios';
   }
   if (!Array.isArray(platforms) || platforms.includes('ios')) return 'ios';
-  for (const os of /** @type {const} */ (['macos', 'android', 'web'])) {
+  for (const os of /** @type {const} */ (['macos', 'linux', 'android', 'web'])) {
     if (platforms.includes(os)) return os;
   }
   return 'ios';

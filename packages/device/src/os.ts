@@ -7,7 +7,7 @@ import { reactNative } from './react-native.ts';
  * OS types and checks derive from (`OS`, `ShortcutOs`, `TestOs`, `ModulePlatform`), so a new OS is
  * one entry here.
  */
-export const OS_NAMES = ['ios', 'android', 'macos', 'web'] as const;
+export const OS_NAMES = ['ios', 'android', 'macos', 'linux', 'web'] as const;
 
 /** One of `OS_NAMES`: what the `OS` token answers. */
 export type OsName = (typeof OS_NAMES)[number];
@@ -52,12 +52,15 @@ export const injectOs = (): OsName => inject(OS, { optional: true }) ?? platform
 /** Whether `os` is a phone and tablet OS, with a status bar and a software keyboard. */
 export const isPhoneOs = (os: string): boolean => os === 'ios' || os === 'android';
 
+/** Whether `os` is a desktop OS, served by the desktop host: macOS or Linux. */
+export const isDesktopOs = (os: string): boolean => os === 'macos' || os === 'linux';
+
 /**
- * Whether the app runs on a desktop OS: macOS today. Worked out from `OS`, so the two cannot
+ * Whether the app runs on a desktop OS: macOS or Linux. Worked out from `OS`, so the two cannot
  * disagree, and a test that provides `OS` gets the answer that goes with it.
  */
 export const DESKTOP = new InjectionToken<boolean>('angular-native.desktop', {
-  factory: () => inject(OS) === 'macos',
+  factory: () => isDesktopOs(inject(OS)),
 });
 
 /**

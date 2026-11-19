@@ -207,7 +207,7 @@ const noDomEvents = {
         'routerLink listens for a DOM click and never navigates on a device. Use nativeRouterLink from @ng-native/router, on a <pressable>.',
       event: '({{name}}) is a DOM event and never fires on a device. Use {{instead}}.',
       desktop:
-        '({{name}}) fires only on macOS, and expo.platforms in app.json lists no desktop OS, so it never fires here. Use {{instead}}.',
+        '({{name}}) fires only on a desktop OS, and expo.platforms in app.json lists no desktop OS, so it never fires here. Use {{instead}}.',
       global:
         '({{target}}:{{name}}) never fires: there is no {{target}} on a device. Use @ng-native/device for app-wide events.',
     },
@@ -277,7 +277,7 @@ const desktopOnlyEvents = {
     },
     messages: {
       event:
-        '({{name}}) fires only on macOS: iOS and Android never send it. Where it has to work there too, use {{instead}} as well.',
+        '({{name}}) fires only on a desktop OS: iOS and Android never send it. Where it has to work there too, use {{instead}} as well.',
     },
     schema: [],
   },

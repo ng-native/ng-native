@@ -116,12 +116,12 @@ function osOptions(
   conditions: Conditions | undefined,
 ): { providers: Provider[]; conditions: Conditions | undefined } {
   const providers: Provider[] = [];
-  if (os === 'macos') providers.push(...provideDesktopFakes({ windows: fakeWindows() }));
+  const desktop = os === 'macos' || os === 'linux';
+  if (desktop) providers.push(...provideDesktopFakes({ windows: fakeWindows() }));
   if (os) providers.push({ provide: OS, useValue: os });
   if (os || osVersion !== undefined) {
     providers.push({ provide: OS_VERSION, useValue: osVersion ?? null });
   }
-  const desktop = os === 'macos';
   return {
     providers,
     conditions: desktop ? { ...DESKTOP_WINDOW, ...DESKTOP_POINTER, ...conditions } : conditions,

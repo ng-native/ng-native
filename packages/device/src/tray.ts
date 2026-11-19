@@ -18,6 +18,7 @@ import {
 } from '@angular/core';
 import type { MenuEntry } from './menu-model.ts';
 import { serializeMenu, type NativeMenuEntry } from './menus.ts';
+import { injectOs } from './os.ts';
 import { reactNative } from './react-native.ts';
 
 /** One icon as an app describes it. */
@@ -79,6 +80,8 @@ export class Tray {
   });
 
   private readonly native = inject(Tray.SOURCE);
+  /** The desktop OS whose shortcuts the menus show: Linux's own, else a Mac's. */
+  private readonly menuOs = injectOs() === 'linux' ? 'linux' : 'macos';
   private readonly icons = signal<readonly { id: string; model: Signal<TrayIconModel> }[]>([]);
   private next = 0;
 
@@ -88,7 +91,7 @@ export class Tray {
   private readonly sent = computed(() =>
     this.icons().map(({ id, model }) => {
       const { menu, press, ...icon } = model();
-      const serialized = serializeMenu(menu, 'macos');
+      const serialized = serializeMenu(menu, this.menuOs);
       return {
         icon: { id, ...icon, menu: serialized.entries.length ? serialized.entries : null },
         actions: serialized.actions,
