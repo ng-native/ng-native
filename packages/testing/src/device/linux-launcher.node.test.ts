@@ -4,7 +4,15 @@
  */
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -90,17 +98,40 @@ function readFileIfAny(file: string): string {
   return existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
 }
 
-/** Whether process `pid` (a group, when negative) is gone within two seconds. */
+/**
+ * Whether process `pid` (a group, when negative) is gone within two seconds. On Linux a zombie
+ * counts as gone: as PID 1 without an init, the runner never reaps what the host leaves, and
+ * `kill(pid, 0)` still finds it.
+ */
 async function gone(pid: number): Promise<boolean> {
   for (let i = 0; i < 100; i++) {
-    try {
-      process.kill(pid, 0);
-    } catch {
-      return true;
-    }
+    if (!running(pid)) return true;
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   return false;
+}
+
+/** Whether `pid` (a group, when negative) has a member that is not a zombie. */
+function running(pid: number): boolean {
+  if (process.platform !== 'linux') {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return readdirSync('/proc').some((name) => {
+    if (!/^\d+$/.test(name)) return false;
+    try {
+      const stat = readFileSync(`/proc/${name}/stat`, 'utf8');
+      // `pid (comm) state ppid pgrp ...`, where comm may hold spaces and parentheses.
+      const [state, , pgrp] = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+      return state !== 'Z' && (pid > 0 ? Number(name) === pid : Number(pgrp) === -pid);
+    } catch {
+      return false; // Gone since the listing.
+    }
+  });
 }
 
 describe('linuxLauncher stop', () => {
@@ -130,7 +161,7 @@ describe('linuxLauncher stop', () => {
       pids = readFileSync(pidFile, 'utf8').trim().split(' ').map(Number);
       assert.equal(pids.length, 2);
       await app.stop();
-      // Orphaned by the session's end, each is reaped by init a moment after it dies.
+      // Orphaned by the session's end, each is reaped by init a moment after it dies, or lingers as a zombie.
       for (const pid of pids) assert.equal(await gone(pid), true, `process ${pid} outlived stop`);
       assert.equal(existsSync(stateDir), false);
     } finally {
