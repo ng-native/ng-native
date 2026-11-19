@@ -716,7 +716,11 @@ export async function packageApp(options, sys) {
     ]),
     'expo export:embed did not bundle the app for macos; the output above says why.',
   );
-  compileBytecode(sys, hermesc, javascript, path.join(resources, 'main.jsbundle'));
+  // Compiled beside the bundle, then copied in: hermesc makes no folder, and an app with no assets
+  // has no Resources yet.
+  const bytecode = path.join(staging, 'main.jsbundle');
+  compileBytecode(sys, hermesc, javascript, bytecode);
+  sys.copy(bytecode, path.join(resources, 'main.jsbundle'));
   const executable = path.join(contents, 'MacOS', config.name);
   sys.copy(path.join(buildDir, 'appkit', 'ngn-macos'), executable);
   // Local symbols only, which nothing resolves at run time; the exported ones stay.

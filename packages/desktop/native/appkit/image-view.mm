@@ -1,6 +1,8 @@
 #import "image-view.h"
 #import "image-request.h"
 
+#import <QuartzCore/QuartzCore.h>
+
 #include "ngn/file-system.h"
 #include "ngn/image-source.h"
 
@@ -15,6 +17,10 @@ using namespace facebook::react;
   std::optional<ImageSource> _source;
   NSURLSessionDataTask *_task;
   NSImage *_image;
+  // Holds the image under the view's children. The view's own layer is no place for it: NGNView
+  // draws its box in drawRect:, and each redraw (every layout asks for one) replaces the layer's
+  // contents, so an image that loaded before the redraw was wiped.
+  CALayer *_imageLayer;
   // Moved on by each load: a completion already queued for an earlier one, even of the same uri,
   // is ignored.
   uint64_t _load;
@@ -22,6 +28,24 @@ using namespace facebook::react;
 
 - (void)dealloc {
   [_task cancel];
+}
+
+- (CALayer *)imageLayer {
+  if (_imageLayer == nil) {
+    _imageLayer = [CALayer layer];
+    _imageLayer.contentsGravity = self.layer.contentsGravity;
+    _imageLayer.frame = self.layer.bounds;
+    [self.layer insertSublayer:_imageLayer atIndex:0];
+  }
+  return _imageLayer;
+}
+
+- (void)updateLayout:(const LayoutMetrics &)metrics {
+  [super updateLayout:metrics];
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  _imageLayer.frame = self.layer.bounds;
+  [CATransaction commit];
 }
 
 - (std::shared_ptr<const ImageEventEmitter>)imageEmitter {
@@ -49,6 +73,7 @@ using namespace facebook::react;
       break;
   }
   self.layer.masksToBounds = YES;
+  _imageLayer.contentsGravity = self.layer.contentsGravity;
   // The source whose scale is nearest the screen's, as React Native iOS picks.
   double screenScale = self.window ? self.window.backingScaleFactor : NSScreen.mainScreen.backingScaleFactor;
   auto source = ngn::pickImageSource(p->sources, screenScale);
@@ -64,7 +89,7 @@ using namespace facebook::react;
   [_task cancel];
   _task = nil;
   _load++;
-  self.layer.contents = nil;
+  _imageLayer.contents = nil;
   // A file is drawn only inside the file boundary, and exactly the file checked.
   std::shared_ptr<ngn::FileAccess::Use> use;
   NSString *load = _uri;
@@ -119,11 +144,15 @@ using namespace facebook::react;
 
 - (void)loaded:(NSImage *)image {
   _image = image;
-  self.layer.contents = image;
+  CALayer *layer = [self imageLayer];
+  layer.contentsGravity = self.layer.contentsGravity;
+  layer.contents = image;
   if (auto e = [self imageEmitter]) {
     NSImageRep *rep = image.representations.firstObject;
     ImageSource source;
     source.uri = std::string(_uri.UTF8String);
+    // In pixels, at a scale of 1: ImageSource's default scale of 3 would report three times the size.
+    source.scale = 1;
     source.size = {static_cast<Float>(rep ? rep.pixelsWide : image.size.width),
                    static_cast<Float>(rep ? rep.pixelsHigh : image.size.height)};
     e->onLoad(source);

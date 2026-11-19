@@ -100,7 +100,7 @@ describe('an ICU plural, on the web, in a development build', () => {
       await settle();
       assert.equal(text(root), '0 result');
     } finally {
-      core.ɵsetLocaleId(core.ɵDEFAULT_LOCALE_ID);
+      (core as { ɵsetLocaleId?: (id: string) => void }).ɵsetLocaleId?.(core.ɵDEFAULT_LOCALE_ID);
     }
   });
 });

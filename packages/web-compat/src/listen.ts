@@ -5,6 +5,7 @@ import { canvasCreated, setCanvasSize } from './canvas.ts';
 import { documentOf, heldForMenu, listenAnywhere, type CompatDocument } from './document.ts';
 import { giveDefaults, giveRole, hoverWritten, scrollWhereStyled } from './elements.ts';
 import { nativeEvent } from './event-classes.ts';
+import { pluginFor } from './event-plugins.ts';
 import { inPassiveListener, listen, type Heard } from './events.ts';
 import {
   FIELD_EVENTS,
@@ -307,6 +308,10 @@ export const webListen: RendererExtension = {
     const document = documentOf(engine);
     if (!document) return undefined;
     const on = listenedOn(target, document);
+    // A name an event-manager plugin the app runs claims, such as `click.stop`, is its to attach,
+    // with the window, the document or the body by what Angular names it: see `event-plugins.ts`.
+    const plugin = pluginFor(engine, eventName);
+    if (plugin) return plugin.addEventListener(on, eventName, callback as never, options);
     // An element native says nothing of the event for is given it by the name native would.
     const node = typeof target !== 'string' && on !== globalThis && on !== document;
     const attach = (heard: Heard) =>
