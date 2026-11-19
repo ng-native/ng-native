@@ -130,6 +130,31 @@ void followFontScale() {
   }
 }
 
+// What Dimensions reports: the app window's content size and scale, and its monitor's size (the
+// first monitor's before the window is on one; the window's own size with no monitor at all).
+ngn::WindowMetrics windowMetrics(int width, int height) {
+  double scale = gtk_widget_get_scale_factor(gHost.appWindow);
+  double screenWidth = width, screenHeight = height;
+  GdkDisplay *display = gtk_widget_get_display(gHost.appWindow);
+  GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(gHost.appWindow));
+  GdkMonitor *monitor = surface ? gdk_display_get_monitor_at_surface(display, surface) : nullptr;
+  GListModel *monitors = gdk_display_get_monitors(display);
+  GdkMonitor *first = !monitor && g_list_model_get_n_items(monitors) > 0 ? GDK_MONITOR(g_list_model_get_item(monitors, 0)) : nullptr;
+  if (GdkMonitor *m = monitor ? monitor : first) {
+    GdkRectangle geometry;
+    gdk_monitor_get_geometry(m, &geometry);
+    screenWidth = geometry.width;
+    screenHeight = geometry.height;
+  }
+  if (first) {
+    g_object_unref(first);
+  }
+  return {
+      .window = {.width = static_cast<double>(width), .height = static_cast<double>(height), .scale = scale, .fontScale = ngn::gtk::desktopFontScale()},
+      .screen = {.width = screenWidth, .height = screenHeight, .scale = scale, .fontScale = ngn::gtk::desktopFontScale()},
+  };
+}
+
 // A dev or test run's input script (NGN_INPUT_SCRIPT), played into the first window once it shows.
 std::string gInputScript;
 
@@ -173,31 +198,6 @@ void firstFrameDrawn(GtkWidget *surface) {
   if (capture && !playing) {
     capture();
   }
-}
-
-// What Dimensions reports: the app window's content size and scale, and its monitor's size (the
-// first monitor's before the window is on one; the window's own size with no monitor at all).
-ngn::WindowMetrics windowMetrics(int width, int height) {
-  double scale = gtk_widget_get_scale_factor(gHost.appWindow);
-  double screenWidth = width, screenHeight = height;
-  GdkDisplay *display = gtk_widget_get_display(gHost.appWindow);
-  GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(gHost.appWindow));
-  GdkMonitor *monitor = surface ? gdk_display_get_monitor_at_surface(display, surface) : nullptr;
-  GListModel *monitors = gdk_display_get_monitors(display);
-  GdkMonitor *first = !monitor && g_list_model_get_n_items(monitors) > 0 ? GDK_MONITOR(g_list_model_get_item(monitors, 0)) : nullptr;
-  if (GdkMonitor *m = monitor ? monitor : first) {
-    GdkRectangle geometry;
-    gdk_monitor_get_geometry(m, &geometry);
-    screenWidth = geometry.width;
-    screenHeight = geometry.height;
-  }
-  if (first) {
-    g_object_unref(first);
-  }
-  return {
-      .window = {.width = static_cast<double>(width), .height = static_cast<double>(height), .scale = scale, .fontScale = ngn::gtk::desktopFontScale()},
-      .screen = {.width = screenWidth, .height = screenHeight, .scale = scale, .fontScale = ngn::gtk::desktopFontScale()},
-  };
 }
 
 // The first window's first frame, once drawn: logged, and captured when asked.

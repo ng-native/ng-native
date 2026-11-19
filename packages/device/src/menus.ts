@@ -413,7 +413,7 @@ export class Menus {
     const warned = new Set<string>();
     effect(() => {
       if (!this.menuBarShown()) return;
-      const defaults = defaultMenuBar(this.native?.appName || 'App');
+      const defaults = defaultMenuBar(this.native?.appName || 'App', this.os);
       for (const label of unmergedGroups(defaults, this.menuBar())) {
         if (warned.has(label)) continue;
         warned.add(label);
