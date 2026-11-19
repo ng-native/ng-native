@@ -672,6 +672,7 @@ int main(int argc, char *argv[]) {
   auto updatesConfig = ngn::updatesConfigFrom(settings, os, appData, bundle);
   updatesConfig.off = "Updates are off: the Linux host has no update checks yet.";
   auto updates = std::make_shared<ngn::UpdatesClient>(std::move(updatesConfig), network.http, nullptr);
+  auto fileDialogs = ngn::gtk::makeFileDialogs();
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
   // is left empty, and its module is not registered: JavaScript reads it as absent (NgNativeHost).
   auto desktopModules = ngn::addDesktopModules(
@@ -697,7 +698,7 @@ int main(int argc, char *argv[]) {
            [appData](std::shared_ptr<ngn::NotificationEvents> events) {
              return ngn::gtk::makeNotificationCenter(G_APPLICATION(gHost.application), appData, std::move(events), raiseApp);
            },
-       .fileDialogs = ngn::gtk::makeFileDialogs(),
+       .fileDialogs = fileDialogs,
        .fileWatcher = ngn::gtk::makeFileWatcher(),
        .location = ngn::gtk::makeLocationSource(),
        .bundle = ngn::bundleFactsOf(settings.plist),
@@ -705,6 +706,8 @@ int main(int argc, char *argv[]) {
        .pathMonitor = ngn::gtk::makePathMonitor(),
        .power = ngn::gtk::makePowerSource(),
        .fontRegistrar = ngn::gtk::makeFontRegistrar(),
+       // ImagePicker's library half: the FileChooser portal over the user's files. No camera yet.
+       .photoPicker = ngn::makeFilePhotoPicker(fileDialogs, caches + "/ImagePicker", ngn::gtk::imagePixelSize),
        .imageCodec = ngn::gtk::makeImageCodec(),
        .printSystem = ngn::gtk::makePrintSystem(surfaceWidgetOf),
        .crypto = ngn::gtk::makeCryptoSource(),

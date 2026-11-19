@@ -380,8 +380,10 @@ std::string mimeTypeOf(const std::string &name) {
       {"md", "text/markdown"}, {"json", "application/json"}, {"xml", "application/xml"},
       {"pdf", "application/pdf"}, {"zip", "application/zip"}, {"png", "image/png"}, {"jpg", "image/jpeg"},
       {"jpeg", "image/jpeg"}, {"gif", "image/gif"}, {"heic", "image/heic"}, {"webp", "image/webp"},
-      {"svg", "image/svg+xml"}, {"tiff", "image/tiff"}, {"mp3", "audio/mpeg"}, {"m4a", "audio/mp4"},
-      {"wav", "audio/wav"}, {"mp4", "video/mp4"}, {"mov", "video/quicktime"},
+      {"svg", "image/svg+xml"}, {"tiff", "image/tiff"}, {"tif", "image/tiff"}, {"bmp", "image/bmp"},
+      {"avif", "image/avif"}, {"heif", "image/heif"}, {"mp3", "audio/mpeg"}, {"m4a", "audio/mp4"},
+      {"wav", "audio/wav"}, {"mp4", "video/mp4"}, {"m4v", "video/x-m4v"}, {"mov", "video/quicktime"},
+      {"webm", "video/webm"}, {"mkv", "video/x-matroska"}, {"ogv", "video/ogg"}, {"avi", "video/x-msvideo"},
   };
   auto dot = name.rfind('.');
   if (dot == std::string::npos) {

@@ -106,13 +106,6 @@ export class PermissionsPage {
   private readonly cameraAccess = cameraPermission();
   private readonly microphone = microphonePermission();
   private readonly recording = recordingPermission();
-  private readonly recorder = audioRecorder({
-    extension: '.m4a',
-    sampleRate: 44100,
-    numberOfChannels: 1,
-    bitRate: 128000,
-    ios: { outputFormat: 'aac ', audioQuality: 96 },
-  } as never);
 
   protected readonly page = page;
   protected readonly lines = signal<string[]>([]);
@@ -179,6 +172,7 @@ export class PermissionsPage {
         location: () => this.checkLocation(),
         photos: () => this.checkPhotos(),
         picker: () => this.checkPicker(),
+        'picker-media': () => this.checkPickerMedia(),
         capture: () => this.checkCapture(),
         'capture-video': () => this.checkCaptureVideo(),
         'photos-cleanup': () => this.cleanUpPhoto(),
@@ -240,7 +234,16 @@ export class PermissionsPage {
     await this.recording.check();
     this.note(`microphone ${this.recording.status()}`);
     this.note(`microphone ask ${await this.recording.ensure()} (${this.recording.status()})`);
-    const recorder = this.recorder.native;
+    // Made here, not with the page: audioRecorder() throws where the host has no audio module.
+    const recorder = runInInjectionContext(this.injector, () =>
+      audioRecorder({
+        extension: '.m4a',
+        sampleRate: 44100,
+        numberOfChannels: 1,
+        bitRate: 128000,
+        ios: { outputFormat: 'aac ', audioQuality: 96 },
+      } as never),
+    ).native;
     await recorder.prepareToRecordAsync();
     recorder.record();
     this.note('recording');
@@ -431,6 +434,25 @@ export class PermissionsPage {
     );
     const picked = await this.picker.pick({ mediaTypes: ['images'] });
     this.note(`picked ${picked.length} ${picked.map((each) => each.uri).join(', ')}`);
+  }
+
+  /** Images and videos at once, with base64 and EXIF: what the picker answers for each file. */
+  private async checkPickerMedia(): Promise<void> {
+    this.note(`library permission ${await this.picker.libraryPermission.ensure()}`);
+    const picked = await this.picker.pick({
+      mediaTypes: ['images', 'videos'],
+      allowsMultipleSelection: true,
+      base64: true,
+      exif: true,
+    });
+    this.note(`picked ${picked.length}`);
+    for (const each of picked) {
+      this.note(
+        `${each.type} ${each.fileName} ${each.mimeType} ${each.width}x${each.height} ` +
+          `${each.fileSize} bytes, duration ${each.duration ?? 'none'}, ` +
+          `base64 ${each.base64?.length ?? 'none'}, exif ${this.json(each.exif)}`,
+      );
+    }
   }
 
   private async takePng(): Promise<void> {

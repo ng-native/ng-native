@@ -23,9 +23,14 @@
 // get/requestMediaLibraryPermissionsAsync() as above. Its camera half is the host's own camera
 // sheet (camera.h's launchPickerCamera), since macOS has no system camera screen to open:
 // launchCameraAsync(options) and get/requestCameraPermissionsAsync(), the camera's permission.
+// A picked image comes with `base64` and `exif` when the options ask for them, as a camera shot
+// does: the EXIF the host read, else a JPEG's own. A host with a picker and no photo library (GTK's
+// FileChooser over the user's files, makeFilePhotoPicker) answers the library permissions granted,
+// since an open panel needs none.
 #pragma once
 
 #include "ngn/camera.h"
+#include "ngn/desktop-expo.h"
 #include "ngn/file-system.h"
 
 #include "ngn/native-module.h"
@@ -34,11 +39,37 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ngn {
 
-class PhotoLibrary {
+// The system's photo picker.
+class PhotoPicker {
+ public:
+  struct Picked {
+    // A file url in the app's caches.
+    std::string uri;
+    std::string fileName;
+    std::string mimeType;
+    std::string type;
+    double width{0};
+    double height{0};
+    std::optional<double> duration;
+    double fileSize{0};
+    std::optional<std::string> assetId;
+    // The image's EXIF as expo names its tags, when the host read it; null for the core to read a
+    // JPEG's own.
+    folly::dynamic exif{nullptr};
+  };
+
+  virtual ~PhotoPicker() = default;
+  // Nothing when the user cancels or there is no window to show it on. `options` are
+  // launchImageLibraryAsync's. Any thread.
+  virtual void pick(const folly::dynamic &options, std::function<void(std::optional<std::vector<Picked>>)> done) = 0;
+};
+
+class PhotoLibrary : public PhotoPicker {
  public:
   enum class Access { NotDetermined, Denied, Restricted, Granted, Limited };
 
@@ -79,19 +110,6 @@ class PhotoLibrary {
     // album or smartAlbum.
     std::string type{"album"};
   };
-  struct Picked {
-    // A file url in the app's caches.
-    std::string uri;
-    std::string fileName;
-    std::string mimeType;
-    std::string type;
-    double width{0};
-    double height{0};
-    std::optional<double> duration;
-    double fileSize{0};
-    std::optional<std::string> assetId;
-  };
-
   virtual ~PhotoLibrary() = default;
   virtual Access access(bool writeOnly) = 0;
   // Shows the OS's prompt and answers once the user decides; answers the access as it is, with no
@@ -118,17 +136,38 @@ class PhotoLibrary {
                            std::function<void(std::optional<Album>, const std::string &error)> done) = 0;
   virtual void deleteAlbums(const std::vector<std::string> &ids, bool deleteAssets, Done done) = 0;
   virtual void changeAlbum(const std::string &album, const std::vector<std::string> &ids, bool add, Done done) = 0;
-
-  // The system's photo picker; null when the user cancels or there is no window to show it on.
-  virtual void pick(const folly::dynamic &options, std::function<void(std::optional<std::vector<Picked>>)> done) = 0;
 };
 
 // The query a JS Query describes; throws for a field or operator the library has none of.
 PhotoLibrary::Query photoQueryOf(const folly::dynamic &query);
 
 std::shared_ptr<NativeModule> makeMediaLibraryModule(std::shared_ptr<PhotoLibrary> library, bool noPrompts, std::shared_ptr<FileAccess> files);
-// `camera`: the host's own camera for launchCameraAsync; without it the camera permissions answer
-// denied and launchCameraAsync canceled.
-std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoLibrary> library, bool noPrompts, std::optional<PickerCamera> camera = std::nullopt);
+// `library`, whose permissions the picker answers with, is null for a picker with no library behind
+// it. `camera`: the host's own camera for launchCameraAsync; without it the camera permissions
+// answer denied and launchCameraAsync canceled.
+std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoPicker> picker, std::shared_ptr<PhotoLibrary> library, bool noPrompts,
+                                                    std::optional<PickerCamera> camera = std::nullopt);
+
+// A picker over the OS's open panel, for a host with no photo library: `mediaTypes` choose the
+// filter (images, videos or both), `allowsMultipleSelection` and `selectionLimit` how many. Each
+// file chosen is copied into a folder of its own in `folder` and described there: its MIME type
+// from its name, an image's size from `imageSize` (nothing when it cannot be read), and an MP4 or
+// QuickTime video's size and duration from its own boxes (0 and no duration in another container).
+std::shared_ptr<PhotoPicker> makeFilePhotoPicker(std::shared_ptr<FileDialogs> dialogs, std::string folder,
+                                                 std::function<std::optional<std::pair<double, double>>(const std::string &path)> imageSize);
+
+// An MP4 or QuickTime file's first video track: its size in pixels and its duration in
+// milliseconds, from its moov box; nothing for another file.
+struct VideoFacts {
+  double width{0};
+  double height{0};
+  double duration{0};
+};
+std::optional<VideoFacts> isoVideoFacts(const std::string &path);
+
+// A JPEG's EXIF (its APP1 segment's first IFD, Exif IFD and GPS IFD), keyed by expo's tag names
+// (Orientation, DateTimeOriginal, ExposureTime, GPSLatitude...): numbers, strings, or arrays of
+// them. Null for bytes with no EXIF. Tags it has no name for are left out.
+folly::dynamic jpegExif(const std::string &bytes);
 
 } // namespace ngn

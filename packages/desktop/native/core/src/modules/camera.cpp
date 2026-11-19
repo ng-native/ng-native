@@ -134,13 +134,7 @@ std::string contentsOf(const std::string &path) {
   return {std::istreambuf_iterator<char>(in), {}};
 }
 
-// What expo-image-picker's mediaTypes (a MediaType, a list of them, or the deprecated
-// MediaTypeOptions) let the camera take. As on iOS, live photos are photos, and a request that
-// names neither photos nor videos (left out, or an empty list) takes photos.
-struct MediaKinds {
-  bool photos{false};
-  bool videos{false};
-};
+} // namespace
 
 MediaKinds mediaKindsOf(const folly::dynamic &options) {
   MediaKinds kinds;
@@ -162,6 +156,8 @@ MediaKinds mediaKindsOf(const folly::dynamic &options) {
   kinds.photos = kinds.photos || !kinds.videos;
   return kinds;
 }
+
+namespace {
 
 // AVFoundation's session preset for expo-image-picker's videoQuality, which on iOS is
 // UIImagePickerController's QualityType; High for any other value.
