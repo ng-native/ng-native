@@ -77,6 +77,7 @@ function fakeMac(
     remove: (file) => void removed.push(file),
     copy: (from, to) => void copied.push([from, to]),
     writeFile: (file, text) => void (written[file] = String(text)),
+    mkdir: () => {},
     readBytes: () => new Uint8Array(),
     files: () => [],
     symlink: () => {},
