@@ -1,6 +1,6 @@
 ---
 title: What differs on the desktop
-summary: Where a macOS or Linux app behaves differently from the same app on iOS, and what library code sees.
+summary: Where a macOS or Linux app differs from the same app on iOS, and what library code sees.
 ---
 
 # What differs on the desktop

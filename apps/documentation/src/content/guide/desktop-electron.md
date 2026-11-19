@@ -1,12 +1,13 @@
 ---
 title: Coming from Electron
-summary: Electron's main-process APIs and where each one is in an Angular Native desktop app, on a Mac and on Linux.
+summary: Electron's main-process APIs and where each is in an Angular Native desktop app.
 ---
 
 # Coming from Electron
 
 An Electron app is a web page in a browser window, with a Node.js main process beside it. An
-Angular Native desktop app is native views, AppKit's on a Mac and GTK's on Linux, run by one JavaScript runtime. There is
+Angular Native desktop app is native views, AppKit's on a Mac and GTK's on Linux, run by one
+JavaScript runtime. There is
 no main process and no renderer process, so there is no IPC: every window is part of the one
 Angular app, and a root service is shared by all of them.
 
@@ -51,4 +52,5 @@ declare it, with the arguments they allow, and never through a shell. See
 
 A template is native elements (`<view>`, `<text>`, `<scroll-view>`), styled with CSS that the
 engine resolves into native props, not HTML in a browser. `:hover`, `:focus-visible`, `cursor`
-and the mouse events work on a Mac and on Linux. See [What differs on the desktop](/guide/desktop-differences).
+and the mouse events work on a Mac and on Linux. See [What differs on the
+desktop](/guide/desktop-differences).

@@ -115,7 +115,8 @@ ng generate @ng-native/schematics:mobile native
 ```
 
 This adds iOS and Android to a desktop-only app (see [Options](#options)), undoing what
-`--desktop-only` left out: `ios` and `android` in `expo.platforms` beside `macos` and `linux`, the phone
+`--desktop-only` left out: `ios` and `android` in `expo.platforms` beside `macos` and `linux`, the
+phone
 settings a mobile app's `app.json` has (portrait orientation, `ios.supportsTablet`, and
 `android.package`, which is the iOS bundle identifier), `expo-status-bar` and `expo-system-ui` in
 the root `package.json` and the project's own, whose native modules Expo autolinks, and two targets
@@ -128,7 +129,8 @@ on the `expo` builder:
 
 Both take the `serve` target's port, which `expo run:ios` builds into the app. A setting the app
 already has stays as it is, and running the schematic again changes nothing. It leaves the app's
-screens, its Vitest projects and its `test` target, which runs `node-macos` and `node-linux`, as they are. It stops
+screens, its Vitest projects and its `test` target, which runs `node-macos` and `node-linux`, as
+they are. It stops
 with an error on a project with no `app.json`, which is not an Angular Native app.
 
 ## ng generate
@@ -173,7 +175,8 @@ place of `run-ios` and `run-android`. `ng add` and
 `ng generate @ng-native/schematics:application` both take it. Its `vitest.config.mts` has four
 projects: `node-macos` and `node-linux`, in Node, which its `test` target runs alone through the
 Vitest builder's `project` option (`"options": { "project": ["node-macos", "node-linux"] }`), and
-`macos` and `linux`, which run `src/**/*.device.ts` inside the app and open it. `src/app/app.device.ts` is the example, and its
+`macos` and `linux`, which run `src/**/*.device.ts` inside the app and open it.
+`src/app/app.device.ts` is the example, and its
 `metro.config.js` adds the in-app tests only when Metro starts with `EXPO_PUBLIC_DEVICE_TESTS=1`:
 run `EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start` in the project's folder, then
 `npx vitest --project macos` (on a Mac) or `npx vitest --project linux` (in GTK, on Linux or on a

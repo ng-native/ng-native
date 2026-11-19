@@ -53,7 +53,8 @@ A `<menu-item>` takes `label`, `menuRole`, `shortcut`, `[disabled]`, `[(checked)
 <view shortcut="mod+k" shortcutLabel="Search" (shortcutPress)="search()"></view>
 ```
 
-`mod` is Cmd on Apple's OSes and Ctrl on Android and Linux. The editing keys (mod+z, x, c, v and a) go to a
+`mod` is Cmd on Apple's OSes and Ctrl on Android and Linux. The editing keys (mod+z, x, c, v and a)
+go to a
 focused text input first, so a shortcut on one of them fires only while no text input has focus.
 
 On Android a shortcut works from a hardware keyboard once it has a modifier (Ctrl, Alt, Shift or
@@ -73,7 +74,8 @@ app's shortcuts do not fire there yet.
 </ng-template>
 ```
 
-A right-click opens it on macOS, and on Linux as a popover menu at the point. On Android a long press or a right-click opens it as a menu at the
+A right-click opens it on macOS, and on Linux as a popover menu at the point. On Android a long
+press or a right-click opens it as a menu at the
 press point, and there the long press is the menu's, so the element's `(longPress)` does not also
 fire. TalkBack opens it with the element's long-press action (double-tap and hold). A destructive
 item's label is red, `icon` names a drawable resource shown beside the label (Android 10 and

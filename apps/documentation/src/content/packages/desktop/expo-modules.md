@@ -1,6 +1,6 @@
 ---
 title: Expo modules on the desktop
-summary: The desktop host's modules behind @ng-native/expo's services, what each does on a Mac and on Linux, and the portals Linux uses.
+summary: The desktop host's modules behind @ng-native/expo's services, on a Mac and on Linux.
 ---
 
 # Expo modules on the desktop

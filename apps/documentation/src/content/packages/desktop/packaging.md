@@ -1,6 +1,6 @@
 ---
 title: Inside a package
-summary: What ng-native-desktop package runs on a Mac and on Linux, what it writes, updates and prebuilt hosts.
+summary: What ng-native-desktop package runs on a Mac and on Linux, what it writes, prebuilt hosts.
 ---
 
 # Inside a package

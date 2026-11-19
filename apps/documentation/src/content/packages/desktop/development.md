@@ -59,7 +59,8 @@ XDG_STATE_HOME is unset), prints the same lines to its standard error, and dies 
 ## Logging
 
 `NGN_LOG_COMMITS=1` in the host's environment logs each commit's time to stderr as `[ngn] commit N
-ms`, which `pnpm bench:macos` and `pnpm bench:linux` read. It is off by default, since an animation commits every frame.
+ms`, which `pnpm bench:macos` and `pnpm bench:linux` read. It is off by default, since an
+animation commits every frame.
 `NGN_LOG_ROTORS=1` logs each VoiceOver rotor's items in the first window a second after its first
 frame, for checking them without a screen reader. Both, and `NGN_INPUT_SCRIPT`, work only in a dev
 run: a packaged app ignores them, as it ignores the rest of its environment but `NGN_NO_PROMPTS=1`,

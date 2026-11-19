@@ -1,6 +1,6 @@
 ---
 title: Build for Linux
-summary: The same Angular app as a native Linux app with GTK and libadwaita views, from setup to a signed package.
+summary: The same Angular app as a native Linux app with GTK and libadwaita views, to a package.
 ---
 
 # Build for Linux
