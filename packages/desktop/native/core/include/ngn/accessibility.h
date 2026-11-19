@@ -79,6 +79,16 @@ struct AxInfo {
   std::optional<int> checked;
   // Nothing for a view that neither expands nor collapses.
   std::optional<bool> expanded;
+  // `aria-required` and `aria-invalid`: a field that must be filled in, or whose value is refused.
+  bool required{false};
+  bool invalid{false};
+  // `aria-posinset` and `aria-setsize`: an item's place in its set, from 1, and how many the set
+  // has, for a set not all in the tree. Nothing where unset or below 1.
+  std::optional<int> positionInSet;
+  std::optional<int> setSize;
+  // `aria-rowcount` and `aria-colcount`: how many rows and columns a grid or table has.
+  std::optional<int> rowCount;
+  std::optional<int> columnCount;
   // The declared actions AppKit has no verb of its own for, in their order.
   std::vector<AxAction> customActions;
   // Whether the view offers AppKit's press (VoiceOver's VO-Space), increment and decrement, and

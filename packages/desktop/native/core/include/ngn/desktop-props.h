@@ -25,6 +25,19 @@ enum class ScrollbarGutter { Auto, Stable };
 // popover at its anchor.
 enum class ModalPresentation { Sheet, Cover, Popover };
 
+// The ARIA states and counts no React Native prop carries, as the components commit them: whether a
+// field is required or invalid, an item's place in its set, and a grid's row and column counts.
+struct AriaFields {
+  bool required{false};
+  bool invalid{false};
+  std::optional<int> posInSet;
+  std::optional<int> setSize;
+  std::optional<int> rowCount;
+  std::optional<int> columnCount;
+
+  bool operator==(const AriaFields &other) const = default;
+};
+
 struct DesktopProps {
   // Unset means the toolkit's default for the component.
   std::optional<bool> focusable;
@@ -57,6 +70,9 @@ struct DesktopProps {
   // `accessibilityDescribedBy` (`aria-describedby`): the nativeIDs of the views that describe this
   // one (accessibility-relations.h). React Native's ViewProps has `accessibilityLabelledBy`.
   std::vector<std::string> accessibilityDescribedBy;
+  // `accessibilityRequired` (`aria-required`) and the rest of the ARIA states and counts React
+  // Native's ViewProps lacks (accessibility.h AxInfo).
+  AriaFields aria;
   // ModalHostView only.
   ModalPresentation presentation{ModalPresentation::Sheet};
 

@@ -254,6 +254,54 @@ TEST_CASE("a text input's wrapper is generic, its field the text box with the la
   CHECK(hasProperty(text, GTK_ACCESSIBLE_PROPERTY_LABEL, "Name"));
 }
 
+TEST_CASE("a text input's field is required and invalid as its props say, and stops being so when they drop it") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto field = MountedViews::shadow(
+      2, "TextInput", textInputProps(dynamic::object("accessibilityRequired", true)("accessibilityInvalid", true)), {{10, 10}, {150, 40}});
+  views.add(field);
+  GtkWidget *text = ngn::gtk::viewData(views.view(2))->field->text;
+  char *error = gtk_test_accessible_check_property(GTK_ACCESSIBLE(text), GTK_ACCESSIBLE_PROPERTY_REQUIRED, TRUE);
+  CHECK(error == nullptr);
+  g_free(error);
+  error = gtk_test_accessible_check_state(GTK_ACCESSIBLE(text), GTK_ACCESSIBLE_STATE_INVALID, GTK_ACCESSIBLE_INVALID_TRUE);
+  CHECK(error == nullptr);
+  g_free(error);
+
+  views.update(field, textInputProps(dynamic::object()));
+  CHECK_FALSE(gtk_test_accessible_has_property(GTK_ACCESSIBLE(text), GTK_ACCESSIBLE_PROPERTY_REQUIRED));
+  CHECK_FALSE(gtk_test_accessible_has_state(GTK_ACCESSIBLE(text), GTK_ACCESSIBLE_STATE_INVALID));
+}
+
+TEST_CASE("an item's place in its set and a grid's counts reach GTK as relations, and go when the props drop them") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto item = MountedViews::shadow(
+      2, "View", desktopViewProps(dynamic::object("role", "listitem")("accessibilityPosInSet", 3)("accessibilitySetSize", 10)), {{0, 0}, {50, 20}});
+  auto grid = MountedViews::shadow(
+      3, "View", desktopViewProps(dynamic::object("role", "grid")("accessibilityRowCount", 50)("accessibilityColumnCount", 4)), {{0, 30}, {50, 20}});
+  views.add(item);
+  views.add(grid);
+  auto relation = [](GtkWidget *widget, GtkAccessibleRelation relation, int value) {
+    char *error = gtk_test_accessible_check_relation(GTK_ACCESSIBLE(widget), relation, value);
+    bool ok = error == nullptr;
+    if (!ok) {
+      MESSAGE(std::string(error));
+    }
+    g_free(error);
+    return ok;
+  };
+  CHECK(relation(views.view(2), GTK_ACCESSIBLE_RELATION_POS_IN_SET, 3));
+  CHECK(relation(views.view(2), GTK_ACCESSIBLE_RELATION_SET_SIZE, 10));
+  CHECK(relation(views.view(3), GTK_ACCESSIBLE_RELATION_ROW_COUNT, 50));
+  CHECK(relation(views.view(3), GTK_ACCESSIBLE_RELATION_COL_COUNT, 4));
+  CHECK_FALSE(gtk_test_accessible_has_relation(GTK_ACCESSIBLE(views.view(3)), GTK_ACCESSIBLE_RELATION_POS_IN_SET));
+
+  views.update(item, desktopViewProps(dynamic::object("role", "listitem")));
+  CHECK_FALSE(gtk_test_accessible_has_relation(GTK_ACCESSIBLE(views.view(2)), GTK_ACCESSIBLE_RELATION_POS_IN_SET));
+  CHECK_FALSE(gtk_test_accessible_has_relation(GTK_ACCESSIBLE(views.view(2)), GTK_ACCESSIBLE_RELATION_SET_SIZE));
+}
+
 TEST_CASE("an announcement is said through the window on GTK 4.14 and later, and nothing is said below") {
   REQUIRE(ngn::testing::gtkReady());
   MountedViews views;

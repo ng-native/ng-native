@@ -99,6 +99,57 @@ TEST_CASE("selected and expanded are reported from the state") {
   CHECK(view.isAccessibilityExpanded);
 }
 
+TEST_CASE("an item's place in its set, a table's counts and a refused value are read while the props say them") {
+  MountedViews m;
+  auto item = MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("accessible", true)("role", "listitem")(
+      "accessibilityPosInSet", 3)("accessibilitySetSize", 10)("accessibilityRequired", true)("accessibilityInvalid", true)));
+  m.add(item);
+  m.add(MountedViews::shadow(3, "View", viewProps(folly::dynamic::object("role", "grid")("accessibilityRowCount", 50)(
+      "accessibilityColumnCount", 4))));
+  NGNView *view = m.view(2);
+  NGNView *grid = m.view(3);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  CHECK([[view accessibilityAttributeValue:@"AXARIAPosInSet"] isEqual:@3]);
+  CHECK([[view accessibilityAttributeValue:@"AXARIASetSize"] isEqual:@10]);
+  CHECK([[view accessibilityAttributeValue:@"AXInvalid"] isEqual:@"true"]);
+  CHECK([view.accessibilityAttributeNames containsObject:@"AXARIAPosInSet"]);
+  CHECK(view.isAccessibilityRequired);
+  CHECK([[grid accessibilityAttributeValue:NSAccessibilityRowCountAttribute] isEqual:@50]);
+  CHECK([[grid accessibilityAttributeValue:NSAccessibilityColumnCountAttribute] isEqual:@4]);
+
+  m.update(item, viewProps(folly::dynamic::object("accessible", true)("role", "listitem")));
+  CHECK_FALSE([view.accessibilityAttributeNames containsObject:@"AXARIAPosInSet"]);
+  CHECK(([view accessibilityAttributeValue:@"AXInvalid"] == nil));
+  CHECK_FALSE(view.isAccessibilityRequired);
+#pragma clang diagnostic pop
+}
+
+TEST_CASE("a text input's field is required and refused as its props say") {
+  MountedViews m;
+  auto input = MountedViews::shadow(2, "TextInput", ngn::testing::textInputProps(folly::dynamic::object(
+      "accessibilityRequired", true)("accessibilityInvalid", true)));
+  m.add(input);
+  NSView *field = (NSView *)[m.view(2) keyboardResponder];
+  CHECK(field.isAccessibilityRequired);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  CHECK([[field accessibilityAttributeValue:@"AXInvalid"] isEqual:@"true"]);
+  m.update(input, ngn::testing::textInputProps(folly::dynamic::object()));
+  CHECK_FALSE(field.isAccessibilityRequired);
+  CHECK([[field accessibilityAttributeValue:@"AXInvalid"] isEqual:@"false"]);
+
+  // A multiline input's text view, the same.
+  auto notes = MountedViews::shadow(3, "TextInput", ngn::testing::textInputProps(folly::dynamic::object("multiline", true)(
+      "accessibilityRequired", true)("accessibilityInvalid", true)));
+  m.add(notes);
+  NSView *text = (NSView *)[m.view(3) keyboardResponder];
+  CHECK([text isKindOfClass:NSTextView.class]);
+  CHECK(text.isAccessibilityRequired);
+  CHECK([[text accessibilityAttributeValue:@"AXInvalid"] isEqual:@"true"]);
+#pragma clang diagnostic pop
+}
+
 TEST_CASE("a role AppKit lacks is a group that says what it is") {
   MountedViews m;
   m.add(MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("role", "alert")("accessibilityLabel", "Offline"))));

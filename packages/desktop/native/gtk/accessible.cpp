@@ -156,6 +156,28 @@ void applyAccessibility(GtkWidget *widget, const AxInfo &info) {
   } else {
     gtk_accessible_reset_state(accessible, GTK_ACCESSIBLE_STATE_EXPANDED);
   }
+  if (info.required) {
+    gtk_accessible_update_property(accessible, GTK_ACCESSIBLE_PROPERTY_REQUIRED, TRUE, -1);
+  } else {
+    gtk_accessible_reset_property(accessible, GTK_ACCESSIBLE_PROPERTY_REQUIRED);
+  }
+  if (info.invalid) {
+    gtk_accessible_update_state(accessible, GTK_ACCESSIBLE_STATE_INVALID, GTK_ACCESSIBLE_INVALID_TRUE, -1);
+  } else {
+    gtk_accessible_reset_state(accessible, GTK_ACCESSIBLE_STATE_INVALID);
+  }
+  // GTK has an item's place in its set and a grid's counts as integer relations.
+  auto count = [accessible](GtkAccessibleRelation relation, std::optional<int> value) {
+    if (value) {
+      gtk_accessible_update_relation(accessible, relation, *value, -1);
+    } else {
+      gtk_accessible_reset_relation(accessible, relation);
+    }
+  };
+  count(GTK_ACCESSIBLE_RELATION_POS_IN_SET, info.positionInSet);
+  count(GTK_ACCESSIBLE_RELATION_SET_SIZE, info.setSize);
+  count(GTK_ACCESSIBLE_RELATION_ROW_COUNT, info.rowCount);
+  count(GTK_ACCESSIBLE_RELATION_COL_COUNT, info.columnCount);
 }
 
 } // namespace ngn::gtk
