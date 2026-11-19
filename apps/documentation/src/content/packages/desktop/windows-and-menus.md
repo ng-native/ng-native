@@ -50,7 +50,8 @@ bar under each window's header bar; everywhere else it is the header bar's main 
 apps have it. Linux's default bar is File (Close Window on Ctrl+W, Print...), Edit, View (Back,
 Forward, Show Sidebar on F9, Full Screen on F11), the app's own menus, then a menu named for the app
 with Preferences (Ctrl+comma, shown only when the app handles `settings`), About and Quit (Ctrl+Q).
-`mod` is Ctrl. A key press goes to the app's `[shortcut]` first, then the back and forward keys
+`mod` is Ctrl. The Super key is the desktop's, so an item on `cmd` or `meta` shows no key and no
+press chooses it. A key press goes to the app's `[shortcut]` first, then the back and forward keys
 (Alt+Left and Alt+Right, a keyboard's Back and Forward keys, and mouse buttons 8 and 9), then the
 menus' keys, and a focused text input keeps Ctrl+Z, X, C, V and A. A press nothing in the window
 used then reaches its buttons: Return presses a `default` `<native-button>` and Escape a `cancel`

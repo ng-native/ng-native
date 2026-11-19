@@ -56,6 +56,8 @@ class GtkMenus final : public MenuBackend {
   GSimpleActionGroup *actions_{nullptr};
   // The menu bars and primary menu buttons showing the bar, each cleared as its window goes.
   std::vector<std::unique_ptr<GtkWidget *>> slots_;
+  // Expires as these menus go, for a bar update queued before then.
+  std::shared_ptr<void> alive_{std::make_shared<int>(0)};
 };
 
 // A view's context menu at `point` in `widget`: chosen items call `chosen`. True once shown.

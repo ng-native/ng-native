@@ -12,6 +12,8 @@
 #include <doctest/doctest.h>
 
 #include <memory>
+#include <new>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -30,6 +32,15 @@ bool onX11() {
 #else
   return false;
 #endif
+}
+
+// The model a menu bar, or a primary menu button's popover, draws.
+GMenuModel *shownModel(GtkWidget *slot) {
+  if (GTK_IS_POPOVER_MENU_BAR(slot)) {
+    return gtk_popover_menu_bar_get_menu_model(GTK_POPOVER_MENU_BAR(slot));
+  }
+  GtkPopover *popover = gtk_menu_button_get_popover(GTK_MENU_BUTTON(slot));
+  return GTK_IS_POPOVER_MENU(popover) ? gtk_popover_menu_get_menu_model(GTK_POPOVER_MENU(popover)) : nullptr;
 }
 
 void settle() {
@@ -60,6 +71,24 @@ TEST_CASE("a key press is named as the web names it, with Ctrl, Shift and Alt") 
   CHECK(ngn::gtk::acceleratorOf({.key = "ArrowLeft", .modifiers = ngn::Option}) == "<Alt>Left");
   CHECK(ngn::gtk::acceleratorOf({.key = "F11"}) == "F11");
   CHECK(ngn::gtk::acceleratorOf({.title = "None"}).empty());
+}
+
+TEST_CASE("Insert is named both ways, and a key GTK has no name for shows no accelerator") {
+  REQUIRE(ngn::testing::gtkReady());
+  CHECK(ngn::gtk::chordOf(GDK_KEY_Insert, GDK_CONTROL_MASK) == ngn::KeyChord{.key = "Insert", .modifiers = ngn::Control});
+  CHECK(ngn::gtk::acceleratorOf({.key = "Insert", .modifiers = ngn::Control}) == "<Control>Insert");
+  // Not its first letter, which would show Ctrl+P for a key no press reaches.
+  CHECK(ngn::gtk::acceleratorOf({.key = "Pause", .modifiers = ngn::Control}).empty());
+  CHECK(ngn::gtk::acceleratorOf({.key = ",", .modifiers = ngn::Control}) == "<Control>comma");
+}
+
+TEST_CASE("an item on Command shows no accelerator, as no press on Linux is Command") {
+  REQUIRE(ngn::testing::gtkReady());
+  // `meta+k`: Super is the desktop's, so the window's keys never report it.
+  CHECK(ngn::gtk::acceleratorOf({.key = "k", .modifiers = ngn::Command}).empty());
+  CHECK(ngn::gtk::acceleratorOf({.key = "k", .modifiers = ngn::Command | ngn::Control}).empty());
+  // `mod+k` is Ctrl on Linux.
+  CHECK(ngn::gtk::acceleratorOf({.key = "k", .modifiers = ngn::Control}) == "<Control>k");
 }
 
 TEST_CASE("the menu model holds the core's items, in sections between separators, each an action of the menu group") {
@@ -145,8 +174,7 @@ TEST_CASE("a window's primary menu or KDE menu bar shows the bar once it has one
     menus.setMenuBar(ngn::linuxMenuBar({.appName = "Notes", .os = ngn::linuxOs()}));
     settle();
     CHECK(gtk_widget_get_visible(slot));
-    GMenuModel *shown = placement == ngn::MenuPlacement::MenuBar ? gtk_popover_menu_bar_get_menu_model(GTK_POPOVER_MENU_BAR(slot))
-                                                                 : gtk_menu_button_get_menu_model(GTK_MENU_BUTTON(slot));
+    GMenuModel *shown = shownModel(slot);
     REQUIRE(shown);
     // File, Edit, View and the app's menu.
     GMenuModel *section = g_menu_model_get_item_link(shown, 0, G_MENU_LINK_SECTION);
@@ -159,13 +187,80 @@ TEST_CASE("a window's primary menu or KDE menu bar shows the bar once it has one
     // A new bar replaces it.
     menus.setMenuBar({{.title = "Only", .items = {{.title = "One", .command = MenuCommand::AppItem, .id = "one"}}}});
     settle();
-    GMenuModel *next = placement == ngn::MenuPlacement::MenuBar ? gtk_popover_menu_bar_get_menu_model(GTK_POPOVER_MENU_BAR(slot))
-                                                                : gtk_menu_button_get_menu_model(GTK_MENU_BUTTON(slot));
+    GMenuModel *next = shownModel(slot);
+    REQUIRE(next);
     GMenuModel *nextSection = g_menu_model_get_item_link(next, 0, G_MENU_LINK_SECTION);
     CHECK(g_menu_model_get_n_items(nextSection) == 1);
     g_object_unref(nextSection);
     gtk_window_destroy(GTK_WINDOW(window));
   }
+}
+
+namespace {
+
+// Whether two pages of a stack in `widget` share a name. A sliding popover menu puts each
+// submenu on a page named for its label and opens it by that name, so the second opens the first.
+bool sharedPageName(GtkWidget *widget) {
+  if (GTK_IS_STACK(widget)) {
+    std::set<std::string> names;
+    GListModel *pages = G_LIST_MODEL(gtk_stack_get_pages(GTK_STACK(widget)));
+    bool shared = false;
+    for (guint i = 0; i < g_list_model_get_n_items(pages); ++i) {
+      auto *page = GTK_STACK_PAGE(g_list_model_get_item(pages, i));
+      if (const char *name = gtk_stack_page_get_name(page)) {
+        shared = shared || !names.insert(name).second;
+      }
+      g_object_unref(page);
+    }
+    g_object_unref(pages);
+    if (shared) {
+      return true;
+    }
+  }
+  for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
+    if (sharedPageName(child)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Two menus with one name, each with its own item.
+std::vector<MenuItem> twinMenus() {
+  return {{.title = "File", .items = {{.title = "Open", .command = MenuCommand::AppItem, .id = "open"}}},
+          {.title = "File", .items = {{.title = "Export", .command = MenuCommand::AppItem, .id = "export"}}}};
+}
+
+} // namespace
+
+TEST_CASE("two menus with one name in the primary menu each open their own submenu") {
+  REQUIRE(ngn::testing::gtkReady());
+  ngn::gtk::GtkMenus menus([](const MenuItem &) {});
+  GtkWidget *window = adw_window_new();
+  GtkWidget *surface = ngn::gtk::makeSurfaceWidget(9, nullptr);
+  adw_window_set_content(ADW_WINDOW(window), ngn::gtk::wrapInChrome(surface, {.menus = ngn::MenuPlacement::PrimaryMenu}));
+  menus.attach(surface);
+  menus.setMenuBar(twinMenus());
+  settle();
+  GtkWidget *slot = ngn::gtk::chromeOf(surface)->primaryMenu;
+  CHECK(gtk_widget_get_visible(slot));
+  GtkPopover *popover = gtk_menu_button_get_popover(GTK_MENU_BUTTON(slot));
+  REQUIRE(GTK_IS_POPOVER_MENU(popover));
+  CHECK_FALSE(sharedPageName(GTK_WIDGET(popover)));
+  gtk_window_destroy(GTK_WINDOW(window));
+}
+
+TEST_CASE("a bar set just before its menus go is never drawn into them") {
+  REQUIRE(ngn::testing::gtkReady());
+  // The next menus in the same memory, so a queued update of the old ones shows as their bar.
+  alignas(ngn::gtk::GtkMenus) unsigned char storage[sizeof(ngn::gtk::GtkMenus)];
+  auto *old = new (storage) ngn::gtk::GtkMenus([](const MenuItem &) {});
+  old->setMenuBar({{.title = "Only", .items = {{.title = "One", .command = MenuCommand::AppItem, .id = "one"}}}});
+  old->~GtkMenus();
+  auto *next = new (storage) ngn::gtk::GtkMenus([](const MenuItem &) {});
+  settle();
+  CHECK(next->bar().empty());
+  next->~GtkMenus();
 }
 
 TEST_CASE("a window's keys: the app's shortcuts first, then a menu item's key, then Return and Escape on its buttons") {
@@ -260,6 +355,17 @@ TEST_CASE("a context menu shows its items at the click, and goes once closed, ev
   ngn::testing::runUntil([window] { return gtk_widget_get_mapped(window); });
   std::vector<std::string> chosen;
   CHECK_FALSE(ngn::gtk::popUpContextMenu(view, {10, 10}, {}, [](const MenuItem &) {}));
+  // Nothing GTK would draw: the view's own context menu instead.
+  CHECK_FALSE(ngn::gtk::popUpContextMenu(view, {10, 10}, {{.separator = true}, {.title = "Window", .role = ngn::MenuRole::Window}},
+                                         [](const MenuItem &) {}));
+  CHECK(gtk_widget_get_first_child(view) == nullptr);
+  // Two submenus with one name each open their own.
+  REQUIRE(ngn::gtk::popUpContextMenu(view, {10, 10}, twinMenus(), [](const MenuItem &) {}));
+  GtkWidget *twins = gtk_widget_get_last_child(view);
+  REQUIRE(GTK_IS_POPOVER_MENU(twins));
+  CHECK_FALSE(sharedPageName(twins));
+  gtk_popover_popdown(GTK_POPOVER(twins));
+  settle();
   REQUIRE(ngn::gtk::popUpContextMenu(view, {10, 10}, {{.title = "Rename", .command = MenuCommand::AppItem, .id = "rename"}},
                                      [&chosen](const MenuItem &item) { chosen.push_back(item.id); }));
   GtkWidget *popover = gtk_widget_get_last_child(view);
