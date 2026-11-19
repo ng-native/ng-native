@@ -265,8 +265,25 @@ describe('the icon', () => {
     assert.deepEqual(alphas(pngOf(0, 0, Buffer.from([0, 7]), 1)), [255]);
   });
 
+  it('refuses a PNG whose data is not the size its header says, before inflating it all', () => {
+    const grey = (width: number, height: number, rows: Buffer) =>
+      pngOf(0, 0, rows, width, [], { height });
+    // A 2 by 2 header over a stream that inflates to far more than that holds, a little more, and less.
+    assert.throws(
+      () => decodePng(grey(2, 2, Buffer.alloc(50 * 1024 * 1024))),
+      /more than its header says/,
+    );
+    assert.throws(() => decodePng(grey(2, 2, Buffer.alloc(7))), /more than its header says/);
+    assert.throws(() => decodePng(grey(2, 2, Buffer.alloc(5))), /not the size its header says/);
+    assert.throws(
+      () => decodePng(grey(5000, 1, Buffer.alloc(5001))),
+      /save it at 4096 pixels a side or fewer/,
+    );
+    assert.equal(decodePng(grey(2, 2, Buffer.alloc(6))).width, 2);
+  });
+
   it('reads RGB and palette PNGs, and refuses one it cannot', () => {
-    const rgb = pngOf(2, 0, Buffer.from([0, 1, 2, 3, 4, 5, 6]), 1);
+    const rgb = pngOf(2, 0, Buffer.from([0, 1, 2, 3]), 1);
     assert.deepEqual([...decodePng(rgb).rgba.subarray(0, 4)], [1, 2, 3, 255]);
     const palette = pngOf(3, 0, Buffer.from([0, 1]), 1, [
       ['PLTE', Buffer.from([9, 9, 9, 10, 20, 30])],
@@ -344,6 +361,14 @@ describe('linuxNames', () => {
     );
   });
 
+  it('refuses an id whose metainfo file name would not fit a tar header', () => {
+    const named = (id: string) => desktopAppConfig({ ...EXPO, ios: { bundleIdentifier: id } });
+    const fits = `com.example.${'a'.repeat(87 - 12)}`;
+    assert.equal(fits.length, 87);
+    assert.ok(linuxNames(EXPO, named(fits), 'deb'));
+    assert.throws(() => linuxNames(EXPO, named(`${fits}a`), 'deb'), /too long/);
+  });
+
   it("refuses an id Linux cannot take, a Flatpak's Flathub rules, and a version that is not one", () => {
     const named = (id: string) => desktopAppConfig({ ...EXPO, ios: { bundleIdentifier: id } });
     assert.throws(
@@ -380,6 +405,26 @@ describe('checkLinuxFlags', () => {
       'https://',
     ]) {
       assert.throws(check(bad), /--homepage takes the URL/, JSON.stringify(bad));
+    }
+  });
+});
+
+describe('--license', () => {
+  const check = (license: string) => () => checkLinuxFlags({ format: 'rpm', license });
+
+  it('takes a whole SPDX expression and refuses an unfinished one', () => {
+    for (const good of [
+      'MIT',
+      'Apache-2.0 OR MIT',
+      '(MIT AND BSD-3-Clause) OR GPL-2.0-or-later WITH Classpath-exception-2.0',
+      'GPL-3.0+',
+      'LicenseRef-proprietary',
+      'DocumentRef-x:LicenseRef-y',
+    ]) {
+      assert.doesNotThrow(check(good), good);
+    }
+    for (const bad of ['MIT AND', 'OR MIT', '(MIT', 'MIT)', 'MIT MIT', 'MIT WITH', 'AND', '()']) {
+      assert.throws(check(bad), /--license takes an SPDX license expression/, bad);
     }
   });
 });
@@ -580,6 +625,24 @@ describe('the package formats', () => {
         ],
       ],
     });
+    // A colon in a path would end it and start the mode: it is escaped, and so is a backslash.
+    const colon = desktopAppConfig({
+      ...EXPO,
+      plugins: [
+        [
+          '@ng-native/desktop',
+          {
+            capabilities: {
+              paths: [{ path: '~/Notes:2026' }, { path: '~/a\\b', access: 'readwrite' }],
+            },
+          },
+        ],
+      ],
+    });
+    assert.deepEqual(finishArgs(colon).slice(5), [
+      '--filesystem=~/Notes\\:2026:ro',
+      '--filesystem=~/a\\\\b',
+    ]);
     const warned = flatpakProblems(reserved).filter((line) => line.includes('keeps for its own'));
     assert.equal(warned.length, 1);
     assert.match(warned[0]!, /\/etc\/notes/);
@@ -1071,13 +1134,21 @@ describe('ng-native-desktop package --os linux', () => {
       env: { NGN_GPG_KEY: 'ABCD', GNUPGHOME: '/keys/gnupg' },
     });
     try {
+      // An earlier signed `app` build of the same version, which a Flatpak must leave alone.
+      const out = path.join(app, 'dist', 'linux');
+      mkdirSync(out, { recursive: true });
+      writeFileSync(path.join(out, 'notes-2.0.0-aarch64.tar.gz'), 'the app archive');
+      writeFileSync(path.join(out, 'notes-2.0.0-aarch64.tar.gz.asc'), 'its signature');
       await quiet(() =>
         main(['package', '--format', 'flatpak', '--arch', 'arm64', ...LICENSED], sys),
       );
-      const out = path.join(app, 'dist', 'linux');
+      assert.equal(
+        readFileSync(path.join(out, 'notes-2.0.0-aarch64.tar.gz'), 'utf8'),
+        'the app archive',
+      );
       const manifest = JSON.parse(readFileSync(path.join(out, 'com.example.notes.json'), 'utf8'));
       const source = manifest.modules[0].sources[0];
-      assert.equal(source.path, 'notes-2.0.0-aarch64.tar.gz');
+      assert.equal(source.path, 'notes-2.0.0-aarch64-flatpak-source.tar.gz');
       assert.ok(existsSync(path.join(out, source.path)));
       // The image is built first when it is missing, then the script runs privileged in it.
       assert.equal(
