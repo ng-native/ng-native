@@ -552,7 +552,7 @@ describe('the package formats', () => {
     assert.match(control, /^Installed-Size: 20480$/m);
     assert.match(
       control,
-      /^Depends: libc6 \(>= 2\.34\), libgtk-4-1 \(>= 4\.10\), libadwaita-1-0 \(>= 1\.4\), libsecret-1-0, libgstreamer1\.0-0 \(>= 1\.22\), libgstreamer-plugins-base1\.0-0 \(>= 1\.22\), libssl3t64, libnghttp2-14, zlib1g, libsqlite3-0, libatomic1, libstdc\+\+6$/m,
+      /^Depends: libc6 \(>= 2\.34\), libgtk-4-1 \(>= 4\.10\), libadwaita-1-0 \(>= 1\.4\), libsecret-1-0, libssl3t64, libnghttp2-14, zlib1g, libsqlite3-0, libatomic1, libstdc\+\+6$/m,
     );
     assert.match(control, /^Homepage: https:\/\/example\.com\/notes$/m);
     assert.match(
@@ -569,6 +569,8 @@ describe('the package formats', () => {
     assert.match(spec, /^License: MIT$/m);
     assert.match(spec, /^Requires: gtk4 >= 4\.10$/m);
     assert.match(spec, /^Requires: libadwaita >= 1\.4$/m);
+    // Nothing the host links needs GStreamer until the media modules use it.
+    assert.doesNotMatch(spec, /gstreamer/i);
     assert.match(spec, /^%global __os_install_post %\{nil\}$/m);
     assert.match(spec, /^100%% notes$/m);
     // The build root is under the project and may have a space in its path: each command quotes it.
