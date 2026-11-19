@@ -955,7 +955,12 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
   }
   if (GtkWidget *keys = p.dialog ? p.dialog : p.layer) {
     // As for Escape, whichever layer's shortcut runs first, the presentation in front takes Return.
-    onKey(keys, "Return|KP_Enter", [this, surfaceId] { return pressDefaultFront(surfaceId); });
+    // With no enabled default button it is still consumed, so it does not reach the window's own
+    // default button behind the sheet.
+    onKey(keys, "Return|KP_Enter", [this, surfaceId] {
+      bool pressed = pressDefaultFront(surfaceId);
+      return pressed || frontOf(surfaceId) != 0;
+    });
   }
   backend_.hooks.containerRoot(tag, true);
   backend_.hooks.attachInput(p.slot, surfaceId, tag);

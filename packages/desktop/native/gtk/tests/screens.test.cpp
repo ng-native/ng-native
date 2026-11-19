@@ -603,7 +603,12 @@ TEST_CASE("Escape asks the modal in front to close, whichever layer's shortcut r
     auto *controller = g_list_model_get_item(controllers, i);
     if (GTK_IS_SHORTCUT_CONTROLLER(controller)) {
       auto *shortcut = GTK_SHORTCUT(g_list_model_get_item(G_LIST_MODEL(controller), 0));
-      ran = gtk_shortcut_action_activate(gtk_shortcut_get_action(shortcut), GtkShortcutActionFlags(0), layer, nullptr);
+      // Return is consumed too while a modal is in front, so pick Escape's shortcut by its trigger.
+      char *label = gtk_shortcut_trigger_to_string(gtk_shortcut_get_trigger(shortcut));
+      if (std::string(label).find("Escape") != std::string::npos) {
+        ran = gtk_shortcut_action_activate(gtk_shortcut_get_action(shortcut), GtkShortcutActionFlags(0), layer, nullptr);
+      }
+      g_free(label);
       g_object_unref(shortcut);
     }
     g_object_unref(controller);
@@ -676,6 +681,51 @@ TEST_CASE("Return presses the default button of the modal in front, whichever la
   CHECK(backSent.count("topPressHeaderBarButtonItem") == 0);
   views.mount({ShadowViewMutation::RemoveMutation(2, front, 2), ShadowViewMutation::DeleteMutation(front),
                ShadowViewMutation::RemoveMutation(2, back, 1), ShadowViewMutation::DeleteMutation(back)});
+}
+
+TEST_CASE("Return is the sheet's when it has no default button, so a default button behind it is not pressed") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  gtk_window_set_resizable(GTK_WINDOW(views.window), FALSE);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto firstConfig = shadow(4, "RNSScreenStackHeaderConfig", header("Notes"), {{0, 0}, {800, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {firstConfig, 3}});
+  auto sheet = shadow(7, "RNSScreen", presented("formSheet"), {{0, 0}, {800, 600}});
+  auto sheetConfig = shadow(8, "RNSScreenStackHeaderConfig", header("Plain"), {{0, 0}, {800, 44}});
+  mountAll(views, {{sheet, 2}, {sheetConfig, 7}});
+  views.backend->modals().settle();
+  REQUIRE_FALSE(views.backend->modals().inDialog(7));
+
+  GtkWidget *slot = views.backend->modals().slotOf(7);
+  REQUIRE(slot);
+  GtkWidget *overlay = ngn::gtk::chromeOf(views.surface)->overlay;
+  GtkWidget *layer = slot;
+  while (layer && gtk_widget_get_parent(layer) != overlay) {
+    layer = gtk_widget_get_parent(layer);
+  }
+  REQUIRE(layer);
+  GListModel *controllers = gtk_widget_observe_controllers(layer);
+  bool found = false, consumed = false;
+  for (guint i = 0; i < g_list_model_get_n_items(controllers); ++i) {
+    auto *controller = g_list_model_get_item(controllers, i);
+    if (GTK_IS_SHORTCUT_CONTROLLER(controller)) {
+      auto *shortcut = GTK_SHORTCUT(g_list_model_get_item(G_LIST_MODEL(controller), 0));
+      char *label = gtk_shortcut_trigger_to_string(gtk_shortcut_get_trigger(shortcut));
+      if (std::string(label).find("Return") != std::string::npos) {
+        found = true;
+        consumed = gtk_shortcut_action_activate(gtk_shortcut_get_action(shortcut), GtkShortcutActionFlags(0), layer, nullptr);
+      }
+      g_free(label);
+      g_object_unref(shortcut);
+    }
+    g_object_unref(controller);
+  }
+  g_object_unref(controllers);
+  REQUIRE(found);
+  CHECK(consumed);
+  views.mount({ShadowViewMutation::RemoveMutation(2, sheet, 1), ShadowViewMutation::DeleteMutation(sheet)});
 }
 
 TEST_CASE("a colour's CSS rule writes its alpha with a point in a locale that writes a comma") {
