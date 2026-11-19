@@ -165,9 +165,11 @@ a second copy of `@angular/core` or a native module.
 and 3,000-file caps) or a rate limit must never read as "nothing to do". Bind merges to the checked
 head SHA. Concurrency groups must not let one event cancel another's run.
 
-A spawned process handles its `error` event, is stopped with SIGTERM then SIGKILL to its process
-group after a bounded wait, and is waited for (`close`, not just `exit`) before its state is
-removed. Output is split into lines across chunks. A path with spaces is quoted in every generated
+A spawned process handles its `error` event and is waited for (`close`, not just `exit`) before its
+state is removed. When it is stopped with what it started, it is spawned `detached` so it leads its
+own process group, then sent SIGTERM to that group and, only if it is still running after a bounded
+wait, SIGKILL: a child spawned without `detached` shares the parent's group, so signalling the group
+would stop the parent. Output is split into lines across chunks. A path with spaces is quoted in every generated
 shell, CMake or spec line, a value written into metadata is validated whole (a newline, `MIT AND`),
 and a generated name is checked against the format's limit (ustar's 100 bytes).
 
