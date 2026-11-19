@@ -39,6 +39,7 @@ interface Section {
       [sectionHeaderHeight]="30"
       [sectionFooterHeight]="10"
       [overscan]="1"
+      [windowSize]="1"
       [stickySectionHeadersEnabled]="sticky()"
       [style]="fill"
       (endReached)="ended = ended + 1"
