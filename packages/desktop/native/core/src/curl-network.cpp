@@ -123,6 +123,18 @@ bool parses(const std::string &url) {
   return ok;
 }
 
+// A WebSocket url with an http or https scheme as ws or wss, which NSURLSession's WebSocket task
+// takes and curl's does not. React Native's HMR client opens Metro's /hot by the bundle's http url.
+std::string webSocketUrl(const std::string &url) {
+  if (startsWithNoCase(url, "http://")) {
+    return "ws://" + url.substr(7);
+  }
+  if (startsWithNoCase(url, "https://")) {
+    return "wss://" + url.substr(8);
+  }
+  return url;
+}
+
 // Whether a `file:` url names a regular file. Anything else (a FIFO with no writer, a device)
 // can block the open that curl makes on the thread every request shares, so it is refused first.
 bool regularFile(const std::string &url) {
@@ -529,7 +541,7 @@ class Engine {
     s->offered = protocols;
     CURL *e = s->easy;
     common(e);
-    curl_easy_setopt(e, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(e, CURLOPT_URL, webSocketUrl(url).c_str());
     curl_easy_setopt(e, CURLOPT_PROTOCOLS_STR, "ws,wss");
     // The handshake through the multi handle, then frames by curl_ws_send and curl_ws_recv.
     curl_easy_setopt(e, CURLOPT_CONNECT_ONLY, 2L);

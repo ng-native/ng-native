@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 #include <limits>
+#include <optional>
 
 using namespace facebook::react;
 
@@ -173,9 +174,52 @@ void unfocused(GtkEventControllerFocus *, gpointer user) {
   }
 }
 
+// Whether a key press is the Latin letter `latin`: by the keyval it produced when that is a Latin
+// letter, so that Ctrl+Y redoes on a German layout whose Y sits where the first group has Z, and
+// otherwise by what its hardware key makes in the first layout group, so that Ctrl+Z still undoes
+// on a Cyrillic or Greek layout.
+bool pressesLatin(GtkWidget *widget, guint keyval, guint keycode, guint latin) {
+  guint produced = gdk_keyval_to_lower(keyval);
+  if (produced >= GDK_KEY_a && produced <= GDK_KEY_z) {
+    return produced == latin;
+  }
+  GdkKeymapKey *keys = nullptr;
+  guint *keyvals = nullptr;
+  int count = 0;
+  bool found = false;
+  if (gdk_display_map_keycode(gtk_widget_get_display(widget), keycode, &keys, &keyvals, &count)) {
+    for (int i = 0; i < count && !found; ++i) {
+      found = keys[i].group == 0 && gdk_keyval_to_lower(keyvals[i]) == latin;
+    }
+    g_free(keys);
+    g_free(keyvals);
+  }
+  return found;
+}
+
 // `onKeyPress`, before the key changes the text, with the key as React Native iOS names it.
-gboolean keyPressed(GtkEventControllerKey *, guint keyval, guint, GdkModifierType state, gpointer user) {
+gboolean keyPressed(GtkEventControllerKey *, guint keyval, guint keycode, GdkModifierType state, gpointer user) {
   auto *field = static_cast<TextField *>(user);
+  // GtkText's own undo and redo keys, run here so that its replay is known (a multiline field's
+  // buffer signals its own): Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z, and the Undo and Redo keys GTK 4.18
+  // and later bind.
+  if (!field->scroll) {
+    const char *action = nullptr;
+    GdkModifierType modifiers = static_cast<GdkModifierType>(state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK));
+    if (modifiers == GDK_CONTROL_MASK) {
+      bool shift = state & GDK_SHIFT_MASK;
+      action = pressesLatin(field->text, keyval, keycode, GDK_KEY_z) ? (shift ? "text.redo" : "text.undo")
+               : !shift && pressesLatin(field->text, keyval, keycode, GDK_KEY_y) ? "text.redo" : nullptr;
+    } else if (!modifiers && !(state & GDK_SHIFT_MASK)) {
+      action = keyval == GDK_KEY_Undo ? "text.undo" : keyval == GDK_KEY_Redo ? "text.redo" : nullptr;
+    }
+    if (action) {
+      field->replaying = true;
+      gtk_widget_activate_action(field->text, action, nullptr);
+      field->replaying = false;
+      return TRUE;
+    }
+  }
   if (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) {
     return FALSE;
   }
@@ -201,39 +245,146 @@ std::shared_ptr<const DesktopTextInputProps> propsOf(const ViewData &view) {
   return std::dynamic_pointer_cast<const DesktopTextInputProps>(view.props);
 }
 
-// A multiline field keeps to `maxLength` in UTF-16 units, as a single line's GtkText keeps to its
-// own: what does not fit of an insertion is left out, never inside a character.
-void insertingText(GtkTextBuffer *buffer, GtkTextIter *at, const char *text, int length, gpointer user) {
-  auto *field = static_cast<TextField *>(user);
-  auto props = field->view ? propsOf(*field->view) : nullptr;
-  if (field->settingText || !props || props->maxLength == std::numeric_limits<int>::max()) {
-    return;
+std::u16string toUnits(const std::string &utf8) {
+  glong n = 0;
+  gunichar2 *units = g_utf8_to_utf16(utf8.c_str(), static_cast<glong>(utf8.size()), nullptr, &n, nullptr);
+  std::u16string out = units ? std::u16string(reinterpret_cast<const char16_t *>(units), static_cast<size_t>(n)) : std::u16string();
+  g_free(units);
+  return out;
+}
+
+std::string toUtf8(const std::u16string &units) {
+  gchar *utf8 = g_utf16_to_utf8(reinterpret_cast<const gunichar2 *>(units.data()), static_cast<glong>(units.size()), nullptr, nullptr, nullptr);
+  std::string out = utf8 ? utf8 : "";
+  g_free(utf8);
+  return out;
+}
+
+// GLib's capitals, in the user's locale, and its characters: a code point with the combining marks
+// after it.
+struct GlibCharacters final : TextCharacters {
+  std::u16string uppercase(const std::u16string &text) const override {
+    std::string utf8 = toUtf8(text);
+    gchar *upper = g_utf8_strup(utf8.c_str(), static_cast<gssize>(utf8.size()));
+    auto out = toUnits(upper);
+    g_free(upper);
+    return out;
+  }
+  std::pair<std::size_t, std::size_t> characterAt(const std::u16string &text, std::size_t index) const override {
+    auto codePoint = [&text](std::size_t at, gunichar &c) -> std::size_t {
+      if (at + 1 < text.size() && text[at] >= 0xD800 && text[at] < 0xDC00 && text[at + 1] >= 0xDC00 && text[at + 1] < 0xE000) {
+        c = 0x10000 + ((text[at] - 0xD800) << 10) + (text[at + 1] - 0xDC00);
+        return 2;
+      }
+      c = text[at];
+      return 1;
+    };
+    if (index >= text.size()) {
+      return {text.size(), 0};
+    }
+    auto isHigh = [&text](std::size_t at) { return text[at] >= 0xD800 && text[at] < 0xDC00; };
+    auto isLow = [&text](std::size_t at) { return text[at] >= 0xDC00 && text[at] < 0xE000; };
+    // Back from `index` to the start of its code point, then over the marks before it to their
+    // base: only the text around `index` is read, so fitting a long paste one character at a time
+    // stays linear.
+    std::size_t start = index > 0 && isLow(index) && isHigh(index - 1) ? index - 1 : index;
+    gunichar c;
+    codePoint(start, c);
+    while (start > 0 && g_unichar_ismark(c)) {
+      start -= start > 1 && isLow(start - 1) && isHigh(start - 2) ? 2 : 1;
+      codePoint(start, c);
+    }
+    std::size_t end = start + codePoint(start, c);
+    while (end < text.size()) {
+      std::size_t size = codePoint(end, c);
+      if (!g_unichar_ismark(c)) {
+        break;
+      }
+      end += size;
+    }
+    return {start, end - start};
+  }
+};
+
+// The text an insertion of `text` at character `position` puts in the field: capitalized as
+// `autoCapitalize` asks and cut to `maxLength` (text-input.h). Nothing when it goes in as it is.
+std::optional<std::string> fittedInsertion(const TextField &field, const char *text, int length, int position) {
+  auto props = field.view ? propsOf(*field.view) : nullptr;
+  if (field.settingText || field.replaying || !props) {
+    return std::nullopt;
   }
   std::string inserted(text, length < 0 ? strlen(text) : static_cast<size_t>(length));
-  std::string current = fieldText(*field);
-  auto units = [](const std::string &s) { return static_cast<size_t>(utf16Units(s, static_cast<int>(g_utf8_strlen(s.c_str(), -1)))); };
-  size_t fits = insertionThatFits(units(current), 0, units(inserted), static_cast<size_t>(std::max(0, props->maxLength)));
-  if (fits >= units(inserted)) {
+  std::string current = fieldText(field);
+  auto location = static_cast<std::size_t>(utf16Units(current, position));
+  auto fitted = toUtf8(fitReplacement(toUnits(current), location, 0, toUnits(inserted), textInputOptions(*props), GlibCharacters{}));
+  if (fitted == inserted) {
+    return std::nullopt;
+  }
+  return fitted;
+}
+
+// A multiline field's insertion, as fittedInsertion fits it.
+void insertingText(GtkTextBuffer *buffer, GtkTextIter *at, const char *text, int length, gpointer user) {
+  auto *field = static_cast<TextField *>(user);
+  auto fitted = fittedInsertion(*field, text, length, gtk_text_iter_get_offset(at));
+  if (!fitted) {
     return;
   }
   g_signal_stop_emission_by_name(buffer, "insert-text");
-  std::string part = inserted.substr(0, g_utf8_offset_to_pointer(inserted.c_str(), charactersIn(inserted, static_cast<int>(fits))) - inserted.c_str());
-  if (!part.empty()) {
+  if (!fitted->empty()) {
     g_signal_handlers_block_by_func(buffer, reinterpret_cast<gpointer>(insertingText), user);
-    gtk_text_buffer_insert(buffer, at, part.c_str(), static_cast<int>(part.size()));
+    gtk_text_buffer_insert(buffer, at, fitted->c_str(), static_cast<int>(fitted->size()));
     g_signal_handlers_unblock_by_func(buffer, reinterpret_cast<gpointer>(insertingText), user);
   }
 }
 
-// The run of text attributes a TextInput's text takes: its font and colour.
-PangoAttrList *textAttributes(const DesktopTextInputProps &props) {
+// A single line's insertion, as fittedInsertion fits it.
+void insertingLine(GtkEditable *editable, const char *text, int length, int *position, gpointer user) {
+  auto *field = static_cast<TextField *>(user);
+  auto fitted = fittedInsertion(*field, text, length, *position);
+  if (!fitted) {
+    return;
+  }
+  g_signal_stop_emission_by_name(editable, "insert-text");
+  if (!fitted->empty()) {
+    g_signal_handlers_block_by_func(editable, reinterpret_cast<gpointer>(insertingLine), user);
+    gtk_editable_insert_text(editable, fitted->c_str(), static_cast<int>(fitted->size()), position);
+    g_signal_handlers_unblock_by_func(editable, reinterpret_cast<gpointer>(insertingLine), user);
+  }
+}
+
+// What `autoCapitalize` tells an input method, an on-screen keyboard's shift among them.
+GtkInputHints capitalizeHints(Capitalize capitalize) {
+  switch (capitalize) {
+    case Capitalize::Characters: return GTK_INPUT_HINT_UPPERCASE_CHARS;
+    case Capitalize::Words: return GTK_INPUT_HINT_UPPERCASE_WORDS;
+    case Capitalize::Sentences: return GTK_INPUT_HINT_UPPERCASE_SENTENCES;
+    case Capitalize::None: break;
+  }
+  return GTK_INPUT_HINT_NONE;
+}
+
+// The label GtkText draws its placeholder with, its child named "placeholder".
+GtkWidget *placeholderLabel(GtkWidget *text) {
+  for (GtkWidget *child = gtk_widget_get_first_child(text); child; child = gtk_widget_get_next_sibling(child)) {
+    if (GTK_IS_LABEL(child) && g_strcmp0(gtk_widget_get_css_name(child), "placeholder") == 0) {
+      return child;
+    }
+  }
+  return nullptr;
+}
+
+// The run of text attributes a TextInput's text takes, its font and colour, or its placeholder
+// takes, its font and placeholderTextColor.
+PangoAttrList *textAttributes(const DesktopTextInputProps &props, bool placeholder = false) {
   auto attributes = props.getEffectiveTextAttributes(1);
   PangoAttrList *list = pango_attr_list_new();
   PangoFontDescription *font = fontOf(attributes);
   pango_attr_list_insert(list, pango_attr_font_desc_new(font));
   pango_font_description_free(font);
-  if (attributes.foregroundColor) {
-    auto c = colorComponentsFromColor(attributes.foregroundColor);
+  SharedColor color = placeholder ? props.placeholderTextColor : attributes.foregroundColor;
+  if (color) {
+    auto c = colorComponentsFromColor(color);
     auto channel = [](float v) { return static_cast<guint16>(std::clamp(v, 0.0f, 1.0f) * 65535); };
     pango_attr_list_insert(list, pango_attr_foreground_new(channel(c.red), channel(c.green), channel(c.blue)));
     pango_attr_list_insert(list, pango_attr_foreground_alpha_new(channel(c.alpha)));
@@ -343,6 +494,11 @@ void plainTextViews() {
 void watch(TextField *field, GtkWidget *editor) {
   g_object_set_data(G_OBJECT(editor), "ngn-text-field", field);
   g_signal_connect(editor, "preedit-changed", G_CALLBACK(preeditChanged), field);
+  // Backspace over a mark Pango lets go of alone deletes its whole character and puts the base
+  // back (GtkText and GtkTextBuffer alike): text the field had, not fitted again.
+  g_signal_connect_swapped(editor, "backspace", G_CALLBACK(+[](TextField *f) { f->replaying = true; }), field);
+  g_signal_connect_data(editor, "backspace", G_CALLBACK(+[](TextField *f) { f->replaying = false; }), field, nullptr,
+                        static_cast<GConnectFlags>(G_CONNECT_SWAPPED | G_CONNECT_AFTER));
   GtkEventController *focus = gtk_event_controller_focus_new();
   g_signal_connect(focus, "enter", G_CALLBACK(focused), field);
   g_signal_connect(focus, "leave", G_CALLBACK(unfocused), field);
@@ -418,6 +574,11 @@ void makeTextField(GtkWidget *widget, ViewData &view) {
     g_signal_connect_swapped(buffer, "changed", G_CALLBACK(changed), field);
     g_signal_connect_after(buffer, "changed", G_CALLBACK(restyle), field);
     g_signal_connect(buffer, "insert-text", G_CALLBACK(insertingText), field);
+    for (const char *signal : {"undo", "redo"}) {
+      g_signal_connect_swapped(buffer, signal, G_CALLBACK(+[](TextField *f) { f->replaying = true; }), field);
+      g_signal_connect_data(buffer, signal, G_CALLBACK(+[](TextField *f) { f->replaying = false; }), field, nullptr,
+                            static_cast<GConnectFlags>(G_CONNECT_SWAPPED | G_CONNECT_AFTER));
+    }
     // The cursor, whether set or moved by an edit, and the selection's other end, which only a set moves.
     g_signal_connect_swapped(buffer, "notify::cursor-position", G_CALLBACK(selectionMoved), field);
     g_signal_connect(buffer, "mark-set", G_CALLBACK(+[](GtkTextBuffer *buffer, GtkTextIter *, GtkTextMark *mark, gpointer user) {
@@ -431,6 +592,7 @@ void makeTextField(GtkWidget *widget, ViewData &view) {
     g_signal_connect_swapped(field->text, "notify::cursor-position", G_CALLBACK(selectionMoved), field);
     g_signal_connect_swapped(field->text, "notify::selection-bound", G_CALLBACK(selectionMoved), field);
     g_signal_connect(field->text, "activate", G_CALLBACK(activated), field);
+    g_signal_connect(field->text, "insert-text", G_CALLBACK(insertingLine), field);
   }
   watch(field, field->text);
   // Freed with the editor, after its last signal. A multiline field's buffer, which can outlive it
@@ -487,6 +649,7 @@ void applyTextFieldProps(ViewData &view) {
         text, xalign == 0.5f ? GTK_JUSTIFY_CENTER : (xalign == 1) != rightToLeft ? GTK_JUSTIFY_RIGHT : GTK_JUSTIFY_LEFT);
     styleTextView(field, *props);
     gtk_text_view_set_editable(text, editable);
+    gtk_text_view_set_input_hints(text, capitalizeHints(textInputOptions(*props).capitalize));
     gtk_text_view_set_cursor_visible(text, editable);
   } else {
     GtkText *text = GTK_TEXT(field.text);
@@ -494,6 +657,14 @@ void applyTextFieldProps(ViewData &view) {
     PangoAttrList *list = textAttributes(*props);
     gtk_text_set_attributes(text, list);
     pango_attr_list_unref(list);
+    // The placeholder in the text's font, and in placeholderTextColor when set, else in GTK's
+    // dimmed text.
+    if (GtkWidget *label = placeholderLabel(field.text)) {
+      PangoAttrList *placeholder = textAttributes(*props, true);
+      gtk_label_set_attributes(GTK_LABEL(label), placeholder);
+      pango_attr_list_unref(placeholder);
+    }
+    gtk_text_set_input_hints(text, capitalizeHints(textInputOptions(*props).capitalize));
     gtk_editable_set_editable(GTK_EDITABLE(text), editable);
     gtk_text_set_visibility(text, !props->traits.secureTextEntry);
     gtk_text_set_max_length(text, props->maxLength == std::numeric_limits<int>::max() ? 0 : std::max(0, props->maxLength));
