@@ -243,7 +243,7 @@ TEST_CASE("a window the app opens is an AdwApplicationWindow of the app, in its 
   g_object_unref(unnamed);
 }
 
-TEST_CASE("a window still open when its windows go no longer calls back into them as it lays out") {
+TEST_CASE("a window still open when its windows go is closed, and its clock no longer calls back into them") {
   REQUIRE(ngn::testing::gtkReady());
   GtkApplication *app = ngn::gtk::startApplication("dev.ngnative.ChromeHandlers");
   int laidOut = 0;
@@ -260,8 +260,8 @@ TEST_CASE("a window still open when its windows go no longer calls back into the
   ngn::testing::runUntil([&opened] { return opened; });
   GtkWidget *window = windows->window(8);
   REQUIRE(window);
-  g_object_ref(window);
-  GdkFrameClock *clock = gtk_widget_get_frame_clock(window);
+  // The clock outlives the window the windows close, to show nothing is left on it.
+  GdkFrameClock *clock = GDK_FRAME_CLOCK(g_object_ref(gtk_widget_get_frame_clock(window)));
   // How many times the laidOut hook runs as the window's clock paints once.
   auto paint = [&laidOut, clock] {
     int before = laidOut;
@@ -272,8 +272,7 @@ TEST_CASE("a window still open when its windows go no longer calls back into the
   CHECK(paint() == 1);
   windows.reset();
   CHECK(paint() == 0);
-  gtk_window_destroy(GTK_WINDOW(window));
-  g_object_unref(window);
+  g_object_unref(clock);
   g_object_unref(app);
 }
 

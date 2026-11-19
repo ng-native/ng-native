@@ -172,6 +172,15 @@ TEST_CASE("with no app listening, the close button and quitting do what the OS w
   CHECK(f.host->quitRequested() == ngn::QuitReply::Now);
 }
 
+TEST_CASE("the last window closing quits only when no app is listening to decide") {
+  Fixture f;
+  CHECK(f.host->lastWindowClosed());
+  f.app();
+  CHECK_FALSE(f.host->lastWindowClosed());
+  f.module.reset();
+  CHECK(f.host->lastWindowClosed());
+}
+
 TEST_CASE("quitting waits for the app's answer, and asks once while it waits") {
   Fixture f;
   f.open(request("main"));
@@ -316,6 +325,25 @@ TEST_CASE("a window's frame autosaves under its key and is restored when it open
   CHECK(opened.frame == WindowFrame{.x = 100, .y = 180, .width = 900, .height = 660});
   g.open(request("other"));
   CHECK_FALSE(g.windows->opened[1].restored);
+}
+
+TEST_CASE("a maximised or full-screen window saves that, beside the size it goes back to") {
+  Fixture f;
+  auto main = f.open(request("main"));
+  f.host->resized(main, {.width = 900, .height = 660, .maximized = true}, 1);
+  CHECK(f.system->preferences["NgNativeWindowFrame main"] ==
+        dynamic::object("x", 0)("y", 0)("width", 900)("height", 660)("maximized", true));
+  f.host->resized(main, {.width = 900, .height = 660, .fullScreen = true}, 1);
+  f.host->resized(main, {.width = 800, .height = 600}, 1);
+  CHECK(f.system->preferences["NgNativeWindowFrame main"] == dynamic::object("x", 0)("y", 0)("width", 800)("height", 600));
+
+  f.system->preferences["NgNativeWindowFrame main"] = dynamic::object("x", 0)("y", 0)("width", 800)("height", 600)("fullScreen", true);
+  Fixture g;
+  g.system = f.system;
+  g.host = std::make_shared<WindowHost>(g.windows, g.system);
+  g.windows->host = g.host.get();
+  g.open(request("main"));
+  CHECK(g.windows->opened[0].frame == WindowFrame{.width = 800, .height = 600, .fullScreen = true});
 }
 
 TEST_CASE("a restored frame keeps to the window's size limits, and a fixed-size window keeps its size") {

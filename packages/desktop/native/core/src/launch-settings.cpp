@@ -64,6 +64,24 @@ std::string LaunchSettings::setting(const std::string &plistKey, const std::stri
   return "";
 }
 
+// A link (`scheme:...`) or a file's absolute path, as a launcher's `%U` gives them.
+static bool isOpenArg(const std::string &arg) {
+  if (arg.starts_with("/")) {
+    return true;
+  }
+  auto colon = arg.find(':');
+  if (colon == std::string::npos || colon == 0 || !std::isalpha(static_cast<unsigned char>(arg[0]))) {
+    return false;
+  }
+  for (size_t i = 1; i < colon; ++i) {
+    char c = arg[i];
+    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '+' && c != '-' && c != '.') {
+      return false;
+    }
+  }
+  return true;
+}
+
 std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources, const HostOs &os) {
   LaunchSettings settings;
   settings.env = sources.env;
@@ -88,6 +106,15 @@ std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources, 
     settings.title = plist("CFBundleName").value_or(settings.title);
     settings.appId = plist("CFBundleIdentifier").value_or("");
     settings.capabilitiesJson = plist("NGNCapabilities").value_or("");
+    // A Linux launcher passes the links and files to open, and the bus its service switch. Nothing
+    // else on the command line is read.
+    for (const auto &arg : sources.args) {
+      if (arg == kDBusServiceArg) {
+        settings.dbusService = true;
+      } else if (isOpenArg(arg)) {
+        settings.openArgs.push_back(arg);
+      }
+    }
     return settings;
   }
 
@@ -117,6 +144,8 @@ std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources, 
       settings.initialUrl = args[++i];
     } else if (arg == "--title" && hasValue) {
       settings.title = args[++i];
+    } else if (arg == kDBusServiceArg) {
+      settings.dbusService = true;
     } else if (settings.bundle.empty() && !arg.starts_with("--")) {
       settings.bundle = arg;
     } else {

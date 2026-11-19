@@ -212,6 +212,16 @@ void showAppSurfaceIfUsed() {
   gtk_window_present(GTK_WINDOW(gHost.appWindow));
 }
 
+// A second launch or the bus asks for the app: the window the app draws into without AppWindows,
+// when it has one, else the app's windows (GtkWindows::raise).
+void raiseApp() {
+  if (gHost.appWindowShown) {
+    gtk_window_present(GTK_WINDOW(gHost.appWindow));
+  } else {
+    gHost.windows->raise();
+  }
+}
+
 std::string joined(const std::string &a, const std::string &b) {
   gchar *path = g_build_filename(a.c_str(), b.c_str(), nullptr);
   std::string out = path;
@@ -278,7 +288,17 @@ int main(int argc, char *argv[]) {
 
   gtk_init();
   adw_init();
-  gHost.application = ngn::gtk::startApplication(appId);
+  // One instance of the app, as a Linux app has one: a test launch is its own, beside any other.
+  gHost.application = ngn::gtk::startApplication(appId, !settings.test, settings.dbusService);
+  if (g_application_get_is_remote(G_APPLICATION(gHost.application))) {
+    auto args = settings.openArgs;
+    if (!settings.initialUrl.empty()) {
+      args.push_back(settings.initialUrl);
+    }
+    ngn::gtk::forwardLaunch(gHost.application, args);
+    fprintf(stderr, "[ngn] %s is already running: this launch went to it\n", appId.c_str());
+    return 0;
+  }
   const char *desktop = getenv("XDG_CURRENT_DESKTOP");
   const auto menuPlacement = ngn::linuxMenuPlacement(desktop ? desktop : "");
 
@@ -397,6 +417,10 @@ int main(int argc, char *argv[]) {
   if (!settings.initialUrl.empty()) {
     gHost.state->setInitialUrl(settings.initialUrl);
   }
+  // The links and files a launcher opened the app on: the first is its initial URL.
+  for (const auto &url : ngn::gtk::openUrls(settings.openArgs)) {
+    gHost.state->receiveUrl(url, false);
+  }
   auto curl = ngn::makeCurlNetwork();
   ngn::NetworkClients network{curl.http, curl.webSockets};
   // Images load through the same client, and are kept in memory for the process.
@@ -483,6 +507,17 @@ int main(int argc, char *argv[]) {
   }, gHost.application, menuPlacement);
   auto windowHost = std::make_shared<ngn::WindowHost>(gHost.windows, system);
   gHost.windows->setHost(windowHost);
+  // A second launch, or the session bus: activate raises the app, and open hands it links and
+  // files, which DeepLinks hears (the initial URL until the app has drawn).
+  g_signal_connect(gHost.application, "activate", G_CALLBACK(+[](GApplication *, gpointer) { raiseApp(); }), nullptr);
+  g_signal_connect(gHost.application, "open", G_CALLBACK(+[](GApplication *, GFile **files, gint count, const gchar *, gpointer) {
+    for (gint i = 0; i < count; ++i) {
+      gchar *uri = g_file_get_uri(files[i]);
+      gHost.state->receiveUrl(uri, gHost.firstFrame);
+      g_free(uri);
+    }
+    raiseApp();
+  }), nullptr);
   auto menus = std::make_shared<ngn::MenuHost>(
       ngn::gtk::makeNoMenus(),
       ngn::DefaultMenuOptions{.appName = settings.title, .developer = ngn::DevServer::fromBundleUrl(bundle).has_value(), .os = os});
