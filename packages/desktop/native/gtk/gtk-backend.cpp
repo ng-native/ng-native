@@ -48,6 +48,9 @@ GtkBackend::~GtkBackend() {
   splitViews_.reset();
   modals_.reset();
   headers_.reset();
+  for (auto &[surfaceId, surface] : surfaces_) {
+    g_object_weak_unref(G_OBJECT(surface), surfaceGone, this);
+  }
   for (auto &[tag, entry] : searchEntries_) {
     g_object_unref(entry);
   }
@@ -67,12 +70,29 @@ GtkBackend::~GtkBackend() {
 }
 
 void GtkBackend::addSurface(SurfaceId surfaceId, GtkWidget *surface) {
+  removeSurface(surfaceId);
   surfaces_[surfaceId] = surface;
+  // A surface finalized with its window (the window closed) is forgotten then, so that nothing
+  // reads it after: a header or modal let go of later finds no window.
+  g_object_weak_ref(G_OBJECT(surface), surfaceGone, this);
 }
 
 void GtkBackend::removeSurface(SurfaceId surfaceId) {
   headers_->removeSurface(surfaceId);
-  surfaces_.erase(surfaceId);
+  if (auto it = surfaces_.find(surfaceId); it != surfaces_.end()) {
+    g_object_weak_unref(G_OBJECT(it->second), surfaceGone, this);
+    surfaces_.erase(it);
+  }
+}
+
+void GtkBackend::surfaceGone(gpointer self, GObject *surface) {
+  auto &surfaces = static_cast<GtkBackend *>(self)->surfaces_;
+  for (auto it = surfaces.begin(); it != surfaces.end(); ++it) {
+    if (G_OBJECT(it->second) == surface) {
+      surfaces.erase(it);
+      return;
+    }
+  }
 }
 
 GtkWidget *GtkBackend::view(Tag tag) const {
@@ -427,8 +447,13 @@ void GtkBackend::followRole(const ShadowView &view) {
 void GtkBackend::updateLayout(const ShadowView &view) {
   if (auto it = views_.find(view.tag); it != views_.end()) {
     ViewData *d = viewData(it->second);
+    bool resized = d->layout.frame.size != view.layoutMetrics.frame.size;
     d->layout = view.layoutMetrics;
     forgetText(*d);
+    // A slot is measured from the view it hosts, and GTK keeps a measurement until a resize.
+    if (auto hosted = hosted_.find(view.tag); resized && hosted != hosted_.end()) {
+      gtk_widget_queue_resize(hosted->second.slot);
+    }
     // A field's natural alignment follows the layout's direction, and a scroll view's scroll bars
     // the content's size against its own.
     applyTextFieldProps(*d);
