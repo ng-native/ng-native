@@ -190,7 +190,12 @@ describe('the Linux screens mode', () => {
   });
 
   it('launches as a test launch with no accessibility bus, whatever the caller set', () => {
-    const env = captureEnv({ GSK_RENDERER: 'vulkan', PATH: '/bin' }, '/s', '/o/a.png');
+    const env = captureEnv(
+      { GSK_RENDERER: 'vulkan', GDK_SCALE: '2', PATH: '/bin' },
+      '/s',
+      '/o/a.png',
+    );
+    assert.equal(env['GDK_SCALE'], '1');
     assert.equal(env['GSK_RENDERER'], 'cairo');
     assert.equal(env['GTK_A11Y'], 'none');
     assert.equal(env['NGN_CAPTURE'], '/o/a.png');
