@@ -30,6 +30,76 @@ bool webUrl(const std::string &url) {
   return (scheme == "http" || scheme == "https") && url.compare(colon, 3, "://") == 0 && url.size() > colon + 3;
 }
 
+LinkAuthSession::LinkAuthSession(Hooks hooks) : hooks_(std::move(hooks)) {}
+
+void LinkAuthSession::start(const Request &request, std::function<void(std::optional<std::string> url, std::string error)> done) {
+  {
+    std::lock_guard lock(mutex_);
+    if (done_) {
+      done(std::nullopt, "another authentication session is already open");
+      return;
+    }
+    scheme_ = lower(request.callbackScheme);
+    done_ = std::move(done);
+  }
+  std::weak_ptr<LinkAuthSession> self = weak_from_this();
+  hooks_.openUrl(request.url, [self, url = request.url](bool opened) {
+    if (auto session = self.lock(); session && !opened) {
+      session->finish(std::nullopt, "no browser opened " + url);
+    }
+  });
+  if (!hooks_.prompt) {
+    return;
+  }
+  auto hide = hooks_.prompt([self] {
+    if (auto session = self.lock()) {
+      session->finish(std::nullopt, "");
+    }
+  });
+  std::unique_lock lock(mutex_);
+  if (done_) {
+    hidePrompt_ = std::move(hide);
+  } else {
+    // Ended before its prompt was up: the browser did not open, or a link came back at once.
+    lock.unlock();
+    if (hide) {
+      hide();
+    }
+  }
+}
+
+void LinkAuthSession::cancel() {
+  finish(std::nullopt, "");
+}
+
+bool LinkAuthSession::receive(const std::string &url) {
+  {
+    std::lock_guard lock(mutex_);
+    auto colon = url.find(':');
+    if (!done_ || scheme_.empty() || colon == std::string::npos || lower(url.substr(0, colon)) != scheme_) {
+      return false;
+    }
+  }
+  finish(url, "");
+  return true;
+}
+
+void LinkAuthSession::finish(std::optional<std::string> url, std::string error) {
+  std::function<void(std::optional<std::string>, std::string)> done;
+  std::function<void()> hide;
+  {
+    std::lock_guard lock(mutex_);
+    done.swap(done_);
+    hide.swap(hidePrompt_);
+  }
+  if (hide) {
+    hide();
+  }
+  if (done) {
+    done(std::move(url), std::move(error));
+  }
+}
+
 std::shared_ptr<NativeModule> makeWebBrowserModule(std::shared_ptr<System> system, std::shared_ptr<AuthSession> sessions, bool noPrompts) {
   struct WebBrowser : NativeModule {
     std::shared_ptr<std::atomic<bool>> inSession = std::make_shared<std::atomic<bool>>(false);

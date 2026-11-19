@@ -6,12 +6,14 @@
 #include "../app-windows.h"
 
 #include "fake-system.h"
+#include "ngn/splash-screen.h"
 
 #include <adwaita.h>
 #include <doctest/doctest.h>
 
 #include <memory>
 #include <string>
+#include <thread>
 
 namespace {
 
@@ -168,6 +170,48 @@ TEST_CASE("launching the app again raises its window, or asks the app to reopen 
   for (const auto &event : w.events) {
     CHECK(event["type"] != "reopen");
   }
+}
+
+TEST_CASE("a window the splash screen holds shows once the app hides it, from any thread, and never once closed") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkApplication *app = ngn::gtk::startApplication("dev.ngnative.SplashTest");
+  auto system = std::make_shared<ngn::testing::FakeSystem>();
+  auto splash = std::make_shared<ngn::SplashGate>();
+  REQUIRE(splash->hold());
+  auto windows = std::make_shared<ngn::gtk::GtkWindows>(
+      ngn::gtk::GtkWindows::Hooks{.whenShown = [&splash](std::function<void()> show) { splash->show(std::move(show)); }}, app,
+      ngn::MenuPlacement::PrimaryMenu);
+  auto host = std::make_shared<WindowHost>(windows, system);
+  windows->setHost(host);
+  auto open = [&] {
+    std::optional<SurfaceId> opened;
+    host->open({.title = "Notes"}, [&opened](SurfaceId surface) { opened = surface; });
+    ngn::testing::runUntil([&opened] { return opened.has_value(); });
+    windows->didMount(*opened);
+    return *opened;
+  };
+  auto kept = open();
+  auto closed = open();
+  settle();
+  CHECK_FALSE(gtk_widget_get_mapped(windows->window(kept)));
+  CHECK_FALSE(gtk_widget_get_mapped(windows->window(closed)));
+  windows->closeWindow(closed);
+  settle();
+  // The app hides its splash on the JavaScript thread, or a reload ends the module on another.
+  std::thread([&splash] { splash->release(); }).join();
+  ngn::testing::runUntil([&] { return gtk_widget_get_mapped(windows->window(kept)); });
+  CHECK(gtk_widget_get_mapped(windows->window(kept)));
+  CHECK(windows->window(closed) == nullptr);
+
+  // A show the splash lets go after its windows are gone does nothing.
+  splash = std::make_shared<ngn::SplashGate>();
+  REQUIRE(splash->hold());
+  open();
+  host.reset();
+  windows.reset();
+  splash->release();
+  settle();
+  g_object_unref(app);
 }
 
 TEST_CASE("a launch's files become file URLs, and its links stay as they are") {

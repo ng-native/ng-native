@@ -59,7 +59,8 @@ running or able to start, there is no store and SecureStore is absent: secrets a
 a file. `NgNativeKeepAwake` holds the session idle through the desktop's Inhibit portal, and
 `NgNativeFileSystem` watches with `GFileMonitor`. `NgNativeImagePicker` has its library half alone:
 `pick()` opens the FileChooser portal with an image or video filter (see
-[ImagePicker](/packages/expo/image-picker#on-linux)).
+[ImagePicker](/packages/expo/image-picker#on-linux)). `NgNativeSplashScreen` holds the app's first
+windows hidden until `hideAsync()`, as on macOS.
 
 A module the GTK host has no source for, such as `NgNativeHaptics`, `NgNativeCalendar` or
 `NgNativeCamera`, is not registered, and the host's `NgNativeHost` module names it in

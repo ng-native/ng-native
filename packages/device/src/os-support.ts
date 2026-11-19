@@ -267,7 +267,7 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   ]),
   expoRow('Browser', 'NgNativeWebBrowser', [
     'yes',
-    'an auth session is always cancelled',
+    'an auth session ends on the link back, which reaches an installed package',
     'yes',
     'yes',
     'yes',
@@ -324,7 +324,7 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
     'absent',
   ]),
   expoRow('Printing', 'NgNativePrint', ['yes', 'no HTML', 'yes', 'yes', 'yes', 'absent']),
-  expoRow('SplashScreen', 'NgNativeSplashScreen', NOT_ON_LINUX),
+  expoRow('SplashScreen', 'NgNativeSplashScreen'),
   expoRow('TextRecognition', 'NgNativeTextRecognition', [
     'yes',
     'absent',

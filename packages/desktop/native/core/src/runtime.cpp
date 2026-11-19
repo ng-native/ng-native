@@ -1,5 +1,6 @@
 #include "ngn/runtime.h"
 
+#include "ngn/host-reload.h"
 #include "ngn/worklet-host.h"
 #include "red-box-errors.h"
 
@@ -156,6 +157,9 @@ void Runtime::createHost() {
       nullptr,
       devServer_ ? ReactInstance::BindingsInstallFunc([this](jsi::Runtime &runtime) { installErrorListener(runtime); })
                  : nullptr);
+  // React Native's own reloads (DevSettings, the dev server's, the debugger's) come here instead
+  // (host-reload.h).
+  routeHostReload(host_.get(), [this] { reload(); });
   // Reanimated reaches the UIManager through here as it installs (worklet-host.h).
   auto *host = host_.get();
   workletHost().runOnScheduler.set([host](std::function<void(Scheduler &)> task) { host->runOnScheduler(std::move(task)); });
@@ -337,6 +341,7 @@ void Runtime::reload(std::function<void(bool)> done) {
       if (host_) {
         host_->stopAllSurfaces();
         workletHost().runOnScheduler.set(nullptr);
+        routeHostReload(host_.get(), nullptr);
         host_.reset();
         createHost();
         direction_.instanceStarted();
@@ -415,6 +420,7 @@ void Runtime::shutdown() {
   if (host_) {
     workletHost().runOnScheduler.set(nullptr);
     host_->stopAllSurfaces();
+    routeHostReload(host_.get(), nullptr);
     host_.reset();
   }
 }

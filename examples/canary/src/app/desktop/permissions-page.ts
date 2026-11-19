@@ -14,6 +14,7 @@ import { CURRENT_WINDOW } from '@ng-native/device';
 import { audioPlayer, audioRecorder, recordingPermission } from '@ng-native/expo/audio';
 import { Calendar, EntityTypes } from '@ng-native/expo/calendar';
 import { registerExpoViews } from '@ng-native/expo';
+import { Browser } from '@ng-native/expo/browser';
 import { Camera, cameraPermission, microphonePermission } from '@ng-native/expo/camera';
 import { DocumentPicker } from '@ng-native/expo/document-picker';
 import { ImagePicker } from '@ng-native/expo/image-picker';
@@ -98,6 +99,7 @@ export class PermissionsPage {
   private readonly location = inject(Location);
   private readonly media = inject(MediaLibrary);
   private readonly picker = inject(ImagePicker);
+  private readonly browser = inject(Browser);
   private readonly tracking = inject(Tracking);
   private readonly notifications = inject(Notifications);
   private readonly documents = inject(DocumentPicker);
@@ -173,6 +175,7 @@ export class PermissionsPage {
         photos: () => this.checkPhotos(),
         picker: () => this.checkPicker(),
         'picker-media': () => this.checkPickerMedia(),
+        'sign-in': () => this.checkSignIn(),
         capture: () => this.checkCapture(),
         'capture-video': () => this.checkCaptureVideo(),
         'photos-cleanup': () => this.cleanUpPhoto(),
@@ -453,6 +456,17 @@ export class PermissionsPage {
           `base64 ${each.base64?.length ?? 'none'}, exif ${this.json(each.exif)}`,
       );
     }
+  }
+
+  /** A sign-in against a provider on 127.0.0.1:8765 that redirects to canary://signed-in. */
+  private async checkSignIn(): Promise<void> {
+    // After the window is up, as a sign-in from a button would be.
+    await wait(1500);
+    const returned = await this.browser.signIn(
+      'http://127.0.0.1:8765/authorize?state=s1',
+      'canary://signed-in',
+    );
+    this.note(`signed in ${returned ?? 'null (cancelled)'}`);
   }
 
   private async takePng(): Promise<void> {
