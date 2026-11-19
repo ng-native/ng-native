@@ -168,10 +168,25 @@ const EXPORT_PUBLIC_PATH = '/assets?export_path=assets';
 /** Where a result carries the files its `url()`s named, as far as `transform` below. */
 const URL_FILES = Symbol('urlFiles');
 
+/** The preset's `compilation`, carried to the babel transformer the way `libraryStyles` is. */
+function withCompilation(config, options) {
+  const ngp = config.angularNativeCompilation;
+  if (ngp?.compilation !== 'ngp') return options;
+  return {
+    ...options,
+    customTransformOptions: {
+      ...options.customTransformOptions,
+      angularNativeCompilation: 'ngp',
+      angularNativeTypeCheck: ngp.typeCheck,
+      ...(ngp.tsconfig ? { angularNativeTsconfig: ngp.tsconfig } : {}),
+    },
+  };
+}
+
 /** The file through Expo's worker, or through the one under it that runs our transformer. */
 function transformFile(config, projectRoot, filename, data, options) {
   const expo = upstreamPath(config, projectRoot);
-  options = withLibraryStyles(config, options);
+  options = withCompilation(config, withLibraryStyles(config, options));
   const page = domComponentPage(filename, options);
   if (page) return innerWorker(expo).transform(config, projectRoot, filename, page, options);
 
