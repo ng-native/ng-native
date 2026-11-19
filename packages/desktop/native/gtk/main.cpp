@@ -11,6 +11,7 @@
 // in-process (capture.h).
 #include "app-info.h"
 #include "app-windows.h"
+#include "auth-session.h"
 #include "battery.h"
 #include "capture.h"
 #include "crypto.h"
@@ -100,6 +101,9 @@ struct Host {
 // The splash screen (NgNativeSplashScreen): the first windows wait for the app to hide it. The gate
 // is the process's, so a reload, which lets it go, never leaves it behind a window it shows.
 std::shared_ptr<ngn::SplashGate> gSplash = std::make_shared<ngn::SplashGate>();
+
+// WebBrowser's sign-in (auth-session.h): the link back to the app ends it, and only it hears that.
+std::shared_ptr<ngn::LinkAuthSession> gAuthSession = ngn::gtk::makeAuthSession();
 
 // Runs a window's first show once the splash lets it, on the UI thread: the gate lets go on the
 // JavaScript thread, or on the one a reload ends the module on.
@@ -639,7 +643,9 @@ int main(int argc, char *argv[]) {
   g_signal_connect(gHost.application, "open", G_CALLBACK(+[](GApplication *, GFile **files, gint count, const gchar *, gpointer) {
     for (gint i = 0; i < count; ++i) {
       gchar *uri = g_file_get_uri(files[i]);
-      gHost.state->receiveUrl(uri, gHost.firstFrame);
+      if (!gAuthSession->receive(uri)) {
+        gHost.state->receiveUrl(uri, gHost.firstFrame);
+      }
       g_free(uri);
     }
     raiseApp();
@@ -723,6 +729,7 @@ int main(int argc, char *argv[]) {
        .pathMonitor = ngn::gtk::makePathMonitor(),
        .power = ngn::gtk::makePowerSource(),
        .fontRegistrar = ngn::gtk::makeFontRegistrar(),
+       .authSession = gAuthSession,
        .splash = gSplash,
        // ImagePicker's library half: the FileChooser portal over the user's files. No camera yet.
        .photoPicker = ngn::makeFilePhotoPicker(fileDialogs, caches + "/ImagePicker", ngn::gtk::imagePixelSize),

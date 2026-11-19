@@ -99,3 +99,115 @@ TEST_CASE("NgNativeWebBrowser reports a sign-in that could not start, and can st
   module->callWithPromise("openAuthSessionAsync", dynamic::array("https://id.example.com", "myapp://"), {.resolve = {}, .reject = {}});
   CHECK(sessions->started.size() == 2);
 }
+
+namespace {
+
+// The browser and the prompt a LinkAuthSession drives: what was opened, whether the prompt is up,
+// and its Cancel.
+struct Desk {
+  std::vector<std::string> opened;
+  bool opens{true};
+  bool promptUp{false};
+  std::function<void()> cancelPrompt;
+  std::shared_ptr<ngn::LinkAuthSession> session = std::make_shared<ngn::LinkAuthSession>(ngn::LinkAuthSession::Hooks{
+      .openUrl =
+          [this](const std::string &url, std::function<void(bool)> done) {
+            opened.push_back(url);
+            done(opens);
+          },
+      .prompt =
+          [this](std::function<void()> cancelled) {
+            promptUp = true;
+            cancelPrompt = std::move(cancelled);
+            return std::function<void()>([this] { promptUp = false; });
+          }});
+  std::optional<std::pair<std::optional<std::string>, std::string>> ended;
+  void start(const std::string &scheme) {
+    ended.reset();
+    session->start({.url = "https://id.example/authorize", .callbackScheme = scheme},
+                   [this](std::optional<std::string> url, std::string error) { ended = std::pair(std::move(url), std::move(error)); });
+  }
+};
+
+} // namespace
+
+TEST_CASE("A link auth session opens the page in the browser and ends on the first link back on its scheme, which only it hears") {
+  Desk desk;
+  desk.start("myapp");
+  CHECK(desk.opened == std::vector<std::string>{"https://id.example/authorize"});
+  CHECK(desk.promptUp);
+  CHECK_FALSE(desk.ended);
+  // Another app's link, or one on another scheme, is the app's own.
+  CHECK_FALSE(desk.session->receive("otherapp://cb?code=1"));
+  CHECK_FALSE(desk.session->receive("https://myapp.example/cb"));
+  CHECK_FALSE(desk.ended);
+  CHECK(desk.session->receive("MyApp://signed-in?code=42&state=s"));
+  REQUIRE(desk.ended);
+  CHECK(desk.ended->first == std::optional<std::string>("MyApp://signed-in?code=42&state=s"));
+  CHECK(desk.ended->second.empty());
+  CHECK_FALSE(desk.promptUp);
+  // Once ended, a link on the scheme is the app's again.
+  CHECK_FALSE(desk.session->receive("myapp://signed-in?code=43"));
+}
+
+TEST_CASE("A link auth session is cancelled by its prompt's Cancel or by cancel(), and refuses a second while one runs") {
+  Desk desk;
+  desk.start("myapp");
+  std::optional<std::string> second;
+  desk.session->start({.url = "https://id.example/again", .callbackScheme = "myapp"},
+                      [&second](std::optional<std::string>, std::string error) { second = error; });
+  CHECK(second == std::optional<std::string>("another authentication session is already open"));
+  CHECK(desk.opened.size() == 1);
+  desk.cancelPrompt();
+  REQUIRE(desk.ended);
+  CHECK_FALSE(desk.ended->first);
+  CHECK(desk.ended->second.empty());
+  CHECK_FALSE(desk.promptUp);
+
+  desk.start("myapp");
+  CHECK(desk.promptUp);
+  desk.session->cancel();
+  REQUIRE(desk.ended);
+  CHECK_FALSE(desk.ended->first);
+  CHECK_FALSE(desk.promptUp);
+  // Cancelling with nothing running answers nothing.
+  desk.ended.reset();
+  desk.session->cancel();
+  CHECK_FALSE(desk.ended);
+}
+
+TEST_CASE("A link auth session whose browser does not open ends with an error, and its prompt never stays up") {
+  Desk desk;
+  desk.opens = false;
+  desk.start("myapp");
+  REQUIRE(desk.ended);
+  CHECK_FALSE(desk.ended->first);
+  CHECK(desk.ended->second == "no browser opened https://id.example/authorize");
+  CHECK_FALSE(desk.promptUp);
+  // With no callback scheme only Cancel ends it.
+  desk.opens = true;
+  desk.start("");
+  CHECK_FALSE(desk.session->receive("myapp://cb"));
+  CHECK_FALSE(desk.ended);
+  desk.session->cancel();
+  CHECK(desk.ended);
+}
+
+TEST_CASE("NgNativeWebBrowser over a link auth session answers the redirect as success and a cancel as cancel") {
+  Desk desk;
+  auto module = ngn::makeWebBrowserModule(std::make_shared<ngn::testing::FakeSystem>(), desk.session, false);
+  std::optional<dynamic> answer;
+  module->callWithPromise("openAuthSessionAsync", dynamic::array("https://id.example/authorize", "myapp://signed-in"),
+                          {.resolve = [&](dynamic v) { answer = v; }, .reject = [](const std::string &) {}});
+  CHECK_FALSE(answer);
+  CHECK(desk.session->receive("myapp://signed-in?code=7"));
+  REQUIRE(answer);
+  CHECK((*answer)["type"] == "success");
+  CHECK((*answer)["url"] == "myapp://signed-in?code=7");
+  answer.reset();
+  module->callWithPromise("openAuthSessionAsync", dynamic::array("https://id.example/authorize", "myapp://signed-in"),
+                          {.resolve = [&](dynamic v) { answer = v; }, .reject = [](const std::string &) {}});
+  ask(*module, "dismissAuthSession", dynamic::array());
+  REQUIRE(answer);
+  CHECK((*answer)["type"] == "cancel");
+}

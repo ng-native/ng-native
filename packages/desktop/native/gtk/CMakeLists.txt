@@ -29,6 +29,7 @@ add_library(ngn_gtk OBJECT
     accessible.cpp
     app-info.cpp
     app-windows.cpp
+    auth-session.cpp
     battery.cpp
     box-paint.cpp
     cairo-canvas.cpp
