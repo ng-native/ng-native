@@ -812,6 +812,16 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
     gtk_popover_set_child(GTK_POPOVER(popover), p.slot);
     gtk_popover_set_autohide(GTK_POPOVER(popover), TRUE);
     gtk_widget_set_parent(popover, anchorWidget);
+    // GTK moves the focus into an autohide popover as it shows. With nothing in it to take the
+    // focus and nothing focused in the window, as at launch, GTK passes the window's null focus to
+    // gtk_widget_is_ancestor, a critical: the popover takes the focus itself first then, and a
+    // field in it still takes it from there.
+    gtk_widget_set_focusable(popover, TRUE);
+    g_signal_connect(popover, "map", G_CALLBACK(+[](GtkWidget *shown, gpointer) {
+      if (GtkRoot *root = gtk_widget_get_root(shown); root && !gtk_root_get_focus(root)) {
+        gtk_widget_grab_focus(shown);
+      }
+    }), nullptr);
     GdkRectangle rect{0, 0, std::max(1, gtk_widget_get_width(anchorWidget)), std::max(1, gtk_widget_get_height(anchorWidget))};
     gtk_popover_set_pointing_to(GTK_POPOVER(popover), &rect);
     // Closed by GTK (a click outside, or Escape): the app decides, as for Escape on a sheet.
