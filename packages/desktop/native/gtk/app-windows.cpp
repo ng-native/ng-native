@@ -77,6 +77,17 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   }
   gtk_window_set_child(GTK_WINDOW(window), widget);
   windows_[surface] = {.window = window, .surface = widget};
+  // A move to a monitor of another scale changes no size, so the surface widget does not report it.
+  g_signal_connect_data(
+      window, "notify::scale-factor", G_CALLBACK(+[](GtkWidget *scaled, GParamSpec *, gpointer data) {
+        auto *r = static_cast<CloseRequest *>(data);
+        GtkWidget *content = r->windows->surfaceWidget(r->surface);
+        if (content && r->windows->hooks_.resizeSurface) {
+          r->windows->hooks_.resizeSurface(
+              r->surface, gtk_widget_get_width(content), gtk_widget_get_height(content), gtk_widget_get_scale_factor(scaled));
+        }
+      }),
+      new CloseRequest{this, surface}, [](gpointer data, GClosure *) { delete static_cast<CloseRequest *>(data); }, GConnectFlags(0));
   auto *request_ = new CloseRequest{this, surface};
   g_signal_connect_data(
       window, "close-request", G_CALLBACK(+[](GtkWindow *, gpointer data) -> gboolean {

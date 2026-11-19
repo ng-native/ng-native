@@ -168,6 +168,23 @@ TEST_CASE("work queued for the UI thread runs on it, never on the thread that qu
   CHECK(ranOn == std::this_thread::get_id());
 }
 
+TEST_CASE("a window's surface hears a change of scale, which resizes nothing") {
+  REQUIRE(ngn::testing::gtkReady());
+  int resized = 0, scale = 0;
+  ngn::gtk::GtkWindows windows({.resizeSurface =
+                                    [&](SurfaceId, int, int, int s) {
+                                      resized++;
+                                      scale = s;
+                                    }});
+  windows.openWindow(12, ngn::WindowRequest{.title = "Scaled"}, ngn::WindowPlacement{}, nullptr);
+  ngn::testing::runUntil([&] { return windows.window(12) != nullptr; });
+  int before = resized;
+  // As GTK notifies when the window moves to a monitor of another scale.
+  g_object_notify(G_OBJECT(windows.window(12)), "scale-factor");
+  CHECK(resized == before + 1);
+  CHECK(scale == gtk_widget_get_scale_factor(windows.window(12)));
+}
+
 TEST_CASE("the user closing the last window is the host's to act on; the app or a reload closing it is not") {
   REQUIRE(ngn::testing::gtkReady());
   int quits = 0, lastClosed = 0;
