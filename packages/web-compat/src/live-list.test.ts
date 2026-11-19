@@ -35,6 +35,22 @@ const page = async () => {
 };
 
 const globals = globalThis as Dom;
+const XHTML = 'http://www.w3.org/1999/xhtml';
+
+/** An element as a failed assertion shows it, which an engine node is too large to be. */
+const label = (node: Dom): string =>
+  node ? node.localName + (node.id ? `#${node.id}` : '') : 'null';
+
+/** That a list holds these nodes, these and no others, in this order. */
+function same(actual: Iterable<Dom>, expected: Iterable<Dom>): void {
+  const found = [...actual];
+  const wanted = [...expected];
+  assert.deepEqual(found.map(label), wanted.map(label));
+  assert.ok(
+    found.every((node, at) => node === wanted[at]),
+    'the same nodes',
+  );
+}
 
 describe('live lists', () => {
   it('childNodes sees what is put in and taken out after it was asked for', async () => {
@@ -109,6 +125,70 @@ describe('live lists', () => {
       spans[0] = null;
     }, TypeError);
     assert.equal(document.getElementsByClassName('  ').length, 0);
+  });
+
+  // Chrome's answers, for a page of `<html><head><title>` and a body: Taiga UI's `provideTaiga()`
+  // and Angular's `Meta` take `getElementsByTagName('head')[0]`, and a theme a class on `<html>`.
+  it("a document's lookups find <html> and the head, in the order the page has them", async () => {
+    const { document } = await page();
+    const { documentElement: html, head } = document;
+    same(document.getElementsByTagName('*'), document.querySelectorAll('*'));
+    assert.deepEqual([...document.getElementsByTagName('*')].slice(0, 3).map(label), [
+      'html',
+      'head',
+      'body',
+    ]);
+    same(document.getElementsByTagName('html'), [html]);
+    same(document.getElementsByTagName('HTML'), [html]);
+    same(document.getElementsByTagName('head'), [head]);
+    same(document.getElementsByTagNameNS(XHTML, 'html'), [html]);
+    same(document.getElementsByTagNameNS('*', 'head'), [head]);
+    same(document.querySelectorAll(':root'), [html]);
+    html.id = 'page';
+    head.id = 'top';
+    same([document.getElementById('page'), document.getElementById('top')], [html, head]);
+    html.setAttribute('name', 'shell');
+    head.setAttribute('name', 'shell');
+    same(document.getElementsByName('shell'), [html, head]);
+  });
+
+  it("a document's lists follow classes on <html> and the head, and what it holds", async () => {
+    const { document, list } = await page();
+    const { documentElement: html, head } = document;
+    const dark = document.getElementsByClassName('dark');
+    const metas = document.getElementsByTagName('meta');
+    const every = document.getElementsByTagName('*');
+    same(dark, []);
+    same(every, document.querySelectorAll('*'));
+    html.classList.add('dark');
+    same(dark, [html]);
+    head.className = 'dark';
+    list.classList.add('dark');
+    same(dark, [html, head, list]);
+    html.classList.remove('dark');
+    same(dark, [head, list]);
+    const meta = document.createElement('meta');
+    head.appendChild(meta);
+    same(metas, [meta]);
+    same([...every].slice(0, 3), [html, head, meta]);
+    meta.remove();
+    same(metas, []);
+    // A head a script puts in the page is found once, where it is.
+    html.insertBefore(head, html.firstChild);
+    same(document.getElementsByTagName('head'), [head]);
+    same(every, document.querySelectorAll('*'));
+  });
+
+  it("an element's own lookups find what is under it, and not <html> or the head", async () => {
+    const { document, list } = await page();
+    const { documentElement: html, head } = document;
+    html.classList.add('item');
+    head.classList.add('item');
+    assert.deepEqual([...list.getElementsByTagName('*')].map(label), ['span#first', 'span']);
+    assert.equal(list.getElementsByClassName('item').length, 2);
+    assert.equal(list.getElementsByTagName('html').length, 0);
+    assert.equal(list.getElementsByTagName('head').length, 0);
+    assert.equal(document.getElementsByClassName('item').length, 4);
   });
 
   it('works out what it holds once for as long as the tree does not change', async () => {
