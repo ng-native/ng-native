@@ -169,6 +169,8 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   CGFloat _plainWidth;
   ngn::SidebarCollapse _collapse;
   std::string _autosave;
+  // A screen in front covers the one holding it: the window's surface is the window's content.
+  BOOL _screenCovered;
 }
 
 + (ngn::InputSink *)input {
@@ -294,7 +296,7 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 
 - (void)viewDidMoveToWindow {
   [super viewDidMoveToWindow];
-  if (_decided && _windows && _controller == nil && self.window != nil) {
+  if (_decided && _windows && _controller == nil && self.window != nil && !_screenCovered) {
     [self build];
   }
 }
@@ -304,7 +306,9 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
     return;
   }
   if (_windows) {
-    [self installInWindow];
+    if (!_screenCovered) {
+      [self installInWindow];
+    }
   } else {
     [self buildPlain];
   }
@@ -427,6 +431,18 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   _controller = nil;
   _sidebarItem = nil;
   _ownWindow = nil;
+}
+
+- (void)setScreenCovered:(BOOL)covered {
+  if (covered == _screenCovered) {
+    return;
+  }
+  _screenCovered = covered;
+  if (covered) {
+    [self uninstall];
+  } else if (_decided && _windows) {
+    [self build];
+  }
 }
 
 - (void)dealloc {

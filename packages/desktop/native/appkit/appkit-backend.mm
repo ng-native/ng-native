@@ -155,7 +155,23 @@ void AppKitBackend::dispatchCommand(Tag tag, const std::string &name, const foll
 }
 
 void AppKitBackend::setCovered(SurfaceId, Tag tag, bool covered) {
-  views_[@(tag)].covered = covered;
+  NGNView *screen = views_[@(tag)];
+  if (screen == nil) {
+    return;
+  }
+  screen.covered = covered;
+  // A window's split view on the covered screen gives the window back to the screen in front.
+  // ponytail: walks the screen's views on each push and pop; keep a registry if that shows up.
+  NSMutableArray<NSView *> *queue = [NSMutableArray arrayWithObject:screen];
+  while (queue.count > 0) {
+    NSView *view = queue.firstObject;
+    [queue removeObjectAtIndex:0];
+    if ([view isKindOfClass:NGNSplitView.class]) {
+      [(NGNSplitView *)view setScreenCovered:covered];
+      continue;
+    }
+    [queue addObjectsFromArray:view.subviews];
+  }
 }
 
 NGNHeaderToolbar *AppKitBackend::toolbarFor(SurfaceId surfaceId) {
