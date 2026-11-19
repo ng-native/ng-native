@@ -1,7 +1,11 @@
 // `<split-view>` and its sidebar on GTK, over the core's split views and source lists
 // (split-view.h): the same for the window's split view and a plain one in the content.
 //
-// A placed split view holds an AdwNavigationSplitView in an AdwBreakpointBin, filling its view. Each
+// A placed split view holds an AdwNavigationSplitView in an AdwBreakpointBin, filling its view. The
+// window's own runs the full height of the window, as a libadwaita window lays one out: each pane is
+// under a header bar of its own in an AdwToolbarView, the window's header bar (its title, history
+// pair, sidebar button and header items) moves over the content pane, and it moves back as the split
+// view goes. A window whose content already runs under its header bar keeps it there. Each
 // pane moves into a slot of its own in a page of the split view, a container of its own for input,
 // and its size goes back to its shadow node as state, coalesced to once a frame (FrameSizes). The
 // core owns collapse (FoldingSplit): the bin's one AdwBreakpoint, whose condition is the core's
@@ -80,6 +84,10 @@ class SplitViews {
     AdwBreakpoint *breakpoint{nullptr};
     GtkWidget *sidebarSlot{nullptr};
     GtkWidget *contentSlot{nullptr};
+    // A window's split view, full height: the sidebar's own header bar, and the toolbar view over
+    // the content that holds the window's header bar while the split view is there.
+    GtkWidget *sidebarHeader{nullptr};
+    GtkWidget *contentToolbar{nullptr};
     Tag sidebar{-1};
     Tag content{-1};
     SidebarCollapse collapse;
@@ -98,6 +106,8 @@ class SplitViews {
     bool syncing{false};
   };
   void host(Split &s, Tag pane);
+  // Moves the window's header bar over the content pane, or back over the whole window.
+  void moveHeaderBar(Split &s, bool overContent);
   void tearDown(Split &s);
   void refill(Tag parent);
   void applyWidths(Split &s);
