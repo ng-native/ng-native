@@ -104,8 +104,13 @@ function writeFixtures(samples: DocSample[]): Map<string, DocSample> {
 function writeStylesheetDeclaration(): string {
   const file = path.join(OUT_DIR, 'stylesheets.d.ts');
   // Reanimated is a peer an app installs, not a dependency here: a sample that animates with it
-  // is checked for everything but what the library returns.
-  writeFileSync(file, "declare module '*.css';\ndeclare module 'react-native-reanimated';\n");
+  // is checked for everything but what the library returns. Taiga UI is the same, for the
+  // web-compat page's sample that provides it.
+  writeFileSync(
+    file,
+    "declare module '*.css';\ndeclare module 'react-native-reanimated';\n" +
+      "declare module '@taiga-ui/core';\n",
+  );
   return file;
 }
 

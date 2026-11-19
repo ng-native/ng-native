@@ -276,6 +276,9 @@ void useFontLibrary(std::shared_ptr<const FontLibrary> library) {
   gFontLibrary = std::move(library);
 }
 
+// A line through a range of text, in kCTUnderlineStyle's numbers, which Core Text does not draw.
+static const CFStringRef kStrikethroughStyle = CFSTR("NGNStrikethroughStyle");
+
 CFAttributedStringRef makeAttributedString(const AttributedString &attributedString) {
   CFMutableAttributedStringRef out = CFAttributedStringCreateMutable(kCFAllocatorDefault, 0);
   CFAttributedStringBeginEditing(out);
@@ -336,12 +339,35 @@ CFAttributedStringRef makeAttributedString(const AttributedString &attributedStr
     CFAttributedStringSetAttribute(out, range, kCTParagraphStyleAttributeName, style);
     CFRelease(style);
 
-    if (a.textDecorationLineType == TextDecorationLineType::Underline ||
-        a.textDecorationLineType == TextDecorationLineType::UnderlineStrikethrough) {
-      int32_t single = kCTUnderlineStyleSingle;
-      CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &single);
-      CFAttributedStringSetAttribute(out, range, kCTUnderlineStyleAttributeName, n);
+    // Core Text draws an underline, in its style and colour; a line through is drawText's.
+    auto line = a.textDecorationLineType.value_or(TextDecorationLineType::None);
+    bool under = line == TextDecorationLineType::Underline || line == TextDecorationLineType::UnderlineStrikethrough;
+    bool through = line == TextDecorationLineType::Strikethrough || line == TextDecorationLineType::UnderlineStrikethrough;
+    if (under || through) {
+      auto decoration = a.textDecorationStyle.value_or(TextDecorationStyle::Solid);
+      int32_t style = decoration == TextDecorationStyle::Double ? kCTUnderlineStyleDouble : kCTUnderlineStyleSingle;
+      if (decoration == TextDecorationStyle::Dotted) {
+        style |= kCTUnderlinePatternDot;
+      } else if (decoration == TextDecorationStyle::Dashed) {
+        style |= kCTUnderlinePatternDash;
+      }
+      CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &style);
+      CFAttributedStringSetAttribute(out, range, under ? kCTUnderlineStyleAttributeName : kStrikethroughStyle, n);
+      if (under && through) {
+        CFAttributedStringSetAttribute(out, range, kStrikethroughStyle, n);
+      }
       CFRelease(n);
+      if (a.textDecorationColor) {
+        // Faded with the text, as its foreground is.
+        CGColorRef decorationColor = cgColor(a.textDecorationColor);
+        if (!std::isnan(a.opacity)) {
+          CGColorRef faded = CGColorCreateCopyWithAlpha(decorationColor, CGColorGetAlpha(decorationColor) * a.opacity);
+          CGColorRelease(decorationColor);
+          decorationColor = faded;
+        }
+        CFAttributedStringSetAttribute(out, range, kCTUnderlineColorAttributeName, decorationColor);
+        CGColorRelease(decorationColor);
+      }
     }
     CFRelease(font);
   }
@@ -429,7 +455,7 @@ TextLayout layoutText(
     if (fixed <= 0) {
       baseline = y + ascent;
     }
-    layout.lines.push_back({line, CGPointMake(0, baseline), width, rightToLeftAt(layout.string, r.location, paragraph)});
+    layout.lines.push_back({line, CGPointMake(0, baseline), width, rightToLeftAt(layout.string, r.location, paragraph), y, height});
     widest = std::max(widest, width);
     y += height;
     at += count;
@@ -442,32 +468,91 @@ TextLayout layoutText(
   return layout;
 }
 
+// Each run's line through, half its font's x-height above the baseline at `baseline`, the
+// underline's thickness and in the underline's colour, or the text's: a double one is two lines,
+// and a dotted or dashed one is stroked in that pattern.
+static void drawStrikethroughs(CTLineRef line, CGContextRef context, CGPoint baseline) {
+  CFArrayRef runs = CTLineGetGlyphRuns(line);
+  for (CFIndex i = 0; i < CFArrayGetCount(runs); i++) {
+    auto run = (CTRunRef)CFArrayGetValueAtIndex(runs, i);
+    CFDictionaryRef attributes = CTRunGetAttributes(run);
+    auto styleNumber = (CFNumberRef)CFDictionaryGetValue(attributes, kStrikethroughStyle);
+    auto font = (CTFontRef)CFDictionaryGetValue(attributes, kCTFontAttributeName);
+    if (styleNumber == nullptr || font == nullptr) {
+      continue;
+    }
+    int32_t style = 0;
+    CFNumberGetValue(styleNumber, kCFNumberSInt32Type, &style);
+    auto color = (CGColorRef)CFDictionaryGetValue(attributes, kCTUnderlineColorAttributeName);
+    if (color == nullptr) {
+      color = (CGColorRef)CFDictionaryGetValue(attributes, kCTForegroundColorAttributeName);
+    }
+    // The run as drawn: its first glyph's position on the line and its advance, whatever direction
+    // the run or the line goes.
+    if (CTRunGetGlyphCount(run) == 0) {
+      continue;
+    }
+    CGPoint first = CGPointZero;
+    CTRunGetPositions(run, CFRangeMake(0, 1), &first);
+    CGFloat left = first.x;
+    CGFloat width = CTRunGetTypographicBounds(run, CFRangeMake(0, 0), nullptr, nullptr, nullptr);
+    CGFloat thickness = std::max<CGFloat>(CTFontGetUnderlineThickness(font), 1);
+    CGFloat middle = baseline.y - CTFontGetXHeight(font) / 2;
+    bool twice = (style & 0xff) == kCTUnderlineStyleDouble;
+    CGContextSaveGState(context);
+    if (color != nullptr) {
+      CGContextSetStrokeColorWithColor(context, color);
+    }
+    CGContextSetLineWidth(context, thickness);
+    if (style & kCTUnderlinePatternDot) {
+      CGFloat dots[] = {thickness, thickness * 2};
+      CGContextSetLineDash(context, 0, dots, 2);
+    } else if (style & kCTUnderlinePatternDash) {
+      CGFloat dashes[] = {thickness * 4, thickness * 2};
+      CGContextSetLineDash(context, 0, dashes, 2);
+    }
+    for (CGFloat y : twice ? std::vector<CGFloat>{middle - thickness, middle + thickness} : std::vector<CGFloat>{middle}) {
+      CGContextMoveToPoint(context, baseline.x + left, y);
+      CGContextAddLineToPoint(context, baseline.x + left + width, y);
+    }
+    CGContextStrokePath(context);
+    CGContextRestoreGState(context);
+  }
+}
+
+// How far right of the box's left edge a line starts: its paragraph's alignment in a box this wide.
+static CGFloat lineOffset(const TextLayout &layout, const TextLine &l, CGFloat boxWidth) {
+  CFRange r = CTLineGetStringRange(l.line);
+  CTTextAlignment alignment = kCTTextAlignmentNatural;
+  CTParagraphStyleRef style = r.length > 0
+      ? (CTParagraphStyleRef)CFAttributedStringGetAttribute(
+            layout.string, r.location, kCTParagraphStyleAttributeName, nullptr)
+      : nullptr;
+  if (style != nullptr) {
+    CTParagraphStyleGetValueForSpecifier(style, kCTParagraphStyleSpecifierAlignment, sizeof(alignment), &alignment);
+  }
+  CGFloat x = 0;
+  if (alignment == kCTTextAlignmentCenter) {
+    x = (boxWidth - l.width) / 2;
+  } else if (alignment == kCTTextAlignmentRight) {
+    x = boxWidth - l.width;
+  } else if (alignment == kCTTextAlignmentJustified && l.rightToLeft) {
+    // A justified paragraph's last line follows the paragraph's direction.
+    x = boxWidth - l.width;
+  }
+  return x;
+}
+
 void drawText(const TextLayout &layout, CGContextRef context, CGPoint origin, CGFloat boxWidth) {
   CGContextSaveGState(context);
   // The view is flipped; glyphs are drawn with an inverted text matrix rather than by flipping
   // the whole context, so line origins stay top-down.
   CGContextSetTextMatrix(context, CGAffineTransformMakeScale(1, -1));
   for (const auto &l : layout.lines) {
-    CFRange r = CTLineGetStringRange(l.line);
-    CTTextAlignment alignment = kCTTextAlignmentNatural;
-    CTParagraphStyleRef style = r.length > 0
-        ? (CTParagraphStyleRef)CFAttributedStringGetAttribute(
-              layout.string, r.location, kCTParagraphStyleAttributeName, nullptr)
-        : nullptr;
-    if (style != nullptr) {
-      CTParagraphStyleGetValueForSpecifier(style, kCTParagraphStyleSpecifierAlignment, sizeof(alignment), &alignment);
-    }
-    CGFloat x = 0;
-    if (alignment == kCTTextAlignmentCenter) {
-      x = (boxWidth - l.width) / 2;
-    } else if (alignment == kCTTextAlignmentRight) {
-      x = boxWidth - l.width;
-    } else if (alignment == kCTTextAlignmentJustified && l.rightToLeft) {
-      // A justified paragraph's last line follows the paragraph's direction.
-      x = boxWidth - l.width;
-    }
+    CGFloat x = lineOffset(layout, l, boxWidth);
     CGContextSetTextPosition(context, origin.x + x, origin.y + l.origin.y);
     CTLineDraw(l.line, context);
+    drawStrikethroughs(l.line, context, CGPointMake(origin.x + x, origin.y + l.origin.y));
   }
   CGContextRestoreGState(context);
 }
@@ -482,4 +567,42 @@ facebook::react::Size CoreTextMeasurer::measure(
   }
 }
 
+LinesMeasurements CoreTextMeasurer::lines(
+    const AttributedString &text,
+    const ParagraphAttributes &paragraph,
+    facebook::react::Float width) const {
+  @autoreleasepool {
+    // The slack drawing gives the width Yoga rounded (NGNView's drawRect:), so the lines match.
+    auto layout = layoutText(text, paragraph, width + 0.5);
+    CFStringRef string = layout.string ? CFAttributedStringGetString(layout.string) : nullptr;
+    LinesMeasurements lines;
+    for (const auto &l : layout.lines) {
+      CGFloat ascent = 0, descent = 0, leading = 0;
+      CTLineGetTypographicBounds(l.line, &ascent, &descent, &leading);
+      CFRange range = CTLineGetStringRange(l.line);
+      NSString *lineText = string ? (__bridge NSString *)string : @"";
+      lineText = [lineText substringWithRange:NSMakeRange(range.location, range.length)];
+      CGFloat capHeight = 0, xHeight = 0;
+      CFArrayRef runs = CTLineGetGlyphRuns(l.line);
+      if (CFArrayGetCount(runs) > 0) {
+        auto font = (CTFontRef)CFDictionaryGetValue(
+            CTRunGetAttributes((CTRunRef)CFArrayGetValueAtIndex(runs, 0)), kCTFontAttributeName);
+        if (font != nullptr) {
+          capHeight = CTFontGetCapHeight(font);
+          xHeight = CTFontGetXHeight(font);
+        }
+      }
+      lines.emplace_back(
+          std::string(lineText.UTF8String),
+          facebook::react::Rect{{static_cast<Float>(lineOffset(layout, l, width)), static_cast<Float>(l.top)}, {static_cast<Float>(l.width), static_cast<Float>(l.height)}},
+          static_cast<Float>(descent),
+          static_cast<Float>(capHeight),
+          static_cast<Float>(l.origin.y - l.top),
+          static_cast<Float>(xHeight));
+    }
+    return lines;
+  }
+}
+
 } // namespace ngn
+

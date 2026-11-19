@@ -60,4 +60,17 @@ TextMeasurement TextLayoutManager::measure(
       compute);
 }
 
+LinesMeasurements TextLayoutManager::measureLines(
+    const AttributedStringBox &attributedStringBox,
+    const ParagraphAttributes &paragraphAttributes,
+    const Size &size) const {
+  auto measurer = contextContainer_
+      ? contextContainer_->find<std::shared_ptr<const ngn::TextMeasurer>>(ngn::kTextMeasurerKey)
+      : std::nullopt;
+  if (!measurer || !*measurer) {
+    return {};
+  }
+  return (*measurer)->lines(attributedStringBox.getValue(), paragraphAttributes, size.width);
+}
+
 } // namespace facebook::react

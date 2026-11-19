@@ -1,3 +1,60 @@
+## 0.24.0 (2026-11-18)
+
+### 🩹 Fixes
+
+- `Camera` from `@ng-native/expo/camera` gains a `mute` input that sets `<expo-camera>`'s `mute` prop, and the macOS desktop host now honours it, so a muted view records with no audio track on iOS, Android and macOS. ([#1540](https://github.com/ng-native/ng-native/pull/1540), [#1537](https://github.com/ng-native/ng-native/issues/1537))
+
+  A bare `mute` attribute is true, and `null` or `undefined` leaves the prop unset, with sound. Before, a bare `mute` committed an empty string, which no platform reads as true, and `[mute]` did not compile. On macOS the view's `mute` as `record()` starts holds for that recording; a change while it records applies to the next one. As in expo-camera on iOS, `record()` no longer reads a `mute` option of its own on macOS, which was never part of expo-camera's `CameraRecordingOptions`.
+
+- `ColorScheme.set` on Android 12 and later, in an app rebuilt with this release of `@ng-native/components`, also sets the app's night mode through `UiModeManager.setApplicationNightMode`, so native views created after the change, such as Compose sliders, use the chosen scheme instead of the system's. ([#1566](https://github.com/ng-native/ng-native/pull/1566), [#1563](https://github.com/ng-native/ng-native/issues/1563))
+
+  React Native's `Appearance.setColorScheme` sets only AppCompat's default night mode, which the system overwrote on activities that handle `uiMode` themselves, as Expo's do, while the CSS kept the chosen scheme. The new `NgNativeColorScheme` module ships in `@ng-native/components` and needs a native rebuild; Expo Go keeps the old behaviour. On Android 12 and later the system now keeps the scheme across launches until `set()` or `set(null)` changes it; iOS and earlier Android are unchanged.
+
+- `@ng-native/expo` gains typed components for `<expo-video>`, `<expo-blur>`, `<expo-gl>`, `<expo-mesh-gradient>` and `<expo-live-photo>`, `Camera` takes all of `<expo-camera>`'s view props as inputs, and `MapView` also types `<expo-maps-apple>` and `<expo-maps-google>`, so a boolean prop written as a bare attribute commits as true when the component is imported. ([#1546](https://github.com/ng-native/ng-native/pull/1546), [#1542](https://github.com/ng-native/ng-native/issues/1542))
+
+  `ExpoVideo`, `ExpoBlur`, `ExpoGL`, `ExpoMeshGradient` and `ExpoLivePhoto` are on the bare `@ng-native/expo` import. Each input is the module's own view prop, typed, and goes to the view as it is, except that `ExpoVideo`'s `player` takes a `videoPlayer()` as well as its id and commits the id. A boolean input written bare is true, `null` or `undefined` leaves the prop to the view's default, and an input left unset commits nothing, except where the module's React component sends a default of its own: `ExpoGL`'s `msaaSamples` is 4 unless set on iOS, as `expo-gl`'s `GLView` sends it. Without the component imported, a bare boolean attribute still reaches native as an empty string, which iOS, Android and macOS each drop for a boolean prop.
+
+  `Camera`'s new inputs are `facing`, `flash`, `zoom`, `mode`, `mirror`, `autofocus`, `active`, `videoQuality`, `videoBitrate`, `animateShutter`, `pictureSize`, `selectedLens`, `enableTorch`, `videoStabilizationMode`, `barcodeScannerEnabled`, `barcodeScannerSettings`, `responsiveOrientationWhenOrientationLocked` and `ratio`. `flash` and `autofocus` are now committed as `flashMode` and `autoFocus`, the props the native view reads, as `expo-camera`'s `CameraView` renames them; before, `flash="on"` and `autofocus="on"` on the element reached no native prop. `flashMode` and `autoFocus` still work, as inputs, and `flash` or `autofocus` wins when both are set. `flash` is committed as `off` unless set, as `CameraView` sends it, so an iOS camera with `Camera` imported no longer fires the flash automatically by default; set `flash="auto"` for that.
+
+  `MapView`'s shape colours also take a number, a colour React Native's `processColor` already returned, as `expo-maps`' own types do, and pass it to native unconverted. A template that imports `Camera` and binds one of these props to a value of the wrong type now fails to compile under strict template checking.
+
+- Tab and Shift-Tab on the macOS desktop host pass over a disabled native control (a button, switch, segmented control or date picker) instead of moving the focus onto it. ([#1525](https://github.com/ng-native/ng-native/pull/1525))
+
+  AppKit's `makeFirstResponder:` focuses a disabled control all the same, so the host now checks that the control is enabled before moving the focus there, and Tab goes on to the next view in order.
+
+- On macOS, text with no `textAlign`, in `<text>` and in a `<text-input>` and its placeholder, aligns to the layout's leading side as on iOS, rather than by its script or the system's language. ([#1545](https://github.com/ng-native/ng-native/pull/1545), [#1543](https://github.com/ng-native/ng-native/issues/1543), [#1544](https://github.com/ng-native/ng-native/issues/1544))
+
+  `<text>` with no `textAlign` in a left-to-right layout now aligns to the left, where a paragraph that starts with a right-to-left script (Hebrew, Arabic) used to align to the right; a justified paragraph's last line still follows its own script. A `<text-input>`, single line or multiline, used to take AppKit's natural alignment from the system's language and ignore `textAlign` and `writingDirection`. With no `textAlign` its text and placeholder now align to the right when `I18nManager.isRTL` is true and to the left otherwise. A `textAlign` that is set on a `<text-input>` applies as React Native iOS applies it, not turned round in right to left: `auto`, `start` and `left` align to the left, `end` and `right` to the right, and `center` and `justify` as named. That differs from `<text>`, where right to left puts `auto` and `start` on the right and `end` on the left and swaps `left` and `right`, as on iOS. `writingDirection` sets the field's base writing direction.
+
+- On macOS, an app's views now lay out right to left whenever `I18nManager.isRTL` is true (a right-to-left system language, unless the app calls `allowRTL(false)`, or `forceRTL(true)`), as on iOS, where they laid out left to right inside window chrome AppKit had mirrored. ([#1531](https://github.com/ng-native/ng-native/pull/1531), [#1515](https://github.com/ng-native/ng-native/issues/1515))
+
+  In a right-to-left window `--safe-area-inset-titlebar-leading` measures the close, minimise and zoom buttons from the right edge, where AppKit puts them, and a secondary click on the back chevron, which a right-to-left toolbar puts on the right, lists the back history rather than the forward one.
+
+- On macOS, `<text>` in a right-to-left layout is aligned as on iOS, and the trackpad's back and forward swipes turn round when the app lays out right to left. ([#1541](https://github.com/ng-native/ng-native/pull/1541), [#1533](https://github.com/ng-native/ng-native/issues/1533), [#1534](https://github.com/ng-native/ng-native/issues/1534))
+
+  In a right-to-left layout, `<text>` with no alignment, `auto` or `start` aligns to the right whatever its script, `end` aligns to the left, and `left` and `right` swap, where text used to align by its own script and keep `left` and `right` as they are. In a left-to-right layout an alignment of `auto` or `start` that is set aligns to the left, as on iOS. A text input's text and placeholder are unchanged. When `I18nManager.isRTL` is true, a two-finger or three-finger swipe to the left goes back and one to the right goes forward, as Safari's do, and the screen in front of a native stack follows the fingers to the left during an interactive back swipe.
+
+- On macOS the desktop host draws SVG `text-anchor` (start, middle and end) and text along a `<textPath>`, where it drew all text start-anchored and drew nothing on a path. ([#1520](https://github.com/ng-native/ng-native/pull/1520), [#1508](https://github.com/ng-native/ng-native/issues/1508))
+
+  Anchors apply per text chunk, as in Chrome: a span with its own `x`, or off a path its own `y`, starts a chunk, anchored by its own `text-anchor`; on a `<textPath>` a span's `y` places nothing and starts no chunk. On a path each glyph (a grapheme cluster, drawn as its run shaped it, kerning and joined forms kept) is placed at the point its middle reaches, turned with the path, from `startOffset` (a length or a percentage of the path), with `side="right"` setting it along the path reversed; a glyph whose middle falls off the path is not drawn. A `<tspan>`'s or `<textPath>`'s `opacity` now applies once to all the text it holds. A character's `x`, `y`, `dx` and `dy` come from the innermost element that sets them for it, as in Chrome, so a `<text>`'s `dx` and `dy` reach the first glyph on its `<textPath>` and a `<tspan>` with no characters places nothing. `method` and `spacing` are not read, and `<foreignObject>` content still does not draw.
+
+- On macOS an svg draws the views in a `foreignObject` at its `x` and `y`, cut to its `width` and `height`, and draws them again when a commit changes one of them. ([#1532](https://github.com/ng-native/ng-native/pull/1532), [#1522](https://github.com/ng-native/ng-native/issues/1522))
+
+  As react-native-svg does on iOS, they are drawn from their layers in the object's place among the shapes, under the transforms, opacity, clip paths, masks and filters around it, so they take no clicks. What a layer does not draw into its own contents, such as a video or a visual-effect (glass) view, does not show.
+
+- On macOS `<dom-component>` renders its DOM component in the desktop host's WebKit web view, with its inputs and outputs bound as on iOS, from the dev server in development and from the `www.bundle` that `ng-native-desktop package` writes into the app's `Resources` in a packaged app. ([#1528](https://github.com/ng-native/ng-native/pull/1528), [#1509](https://github.com/ng-native/ng-native/issues/1509))
+- On macOS `ImagePicker.capture()` from `@ng-native/expo` takes a photo with the desktop host's own camera sheet, and `Camera.takePicture()` writes a PNG with `imageType: 'png'`. ([#1530](https://github.com/ng-native/ng-native/pull/1530), [#1510](https://github.com/ng-native/ng-native/issues/1510))
+
+  The sheet shows on the window in front with the camera's preview, mirrored, and Cancel (Escape). In photo mode its shutter is Take Photo (Return); in video mode it is Record, then Stop (Return). The photo is a JPEG at `quality`, not mirrored, shaped as iOS shapes a camera shot: no `assetId` or `fileName`, and `base64` and `exif` only when asked. `cameraPermission` on `ImagePicker` is now the camera's permission on macOS, where it used to answer denied; it is asked only when the app declares `NSCameraUsageDescription`. On a Mac with no camera `capture()` rejects. `takePicture()` rejects an `imageType` other than `'jpg'` or `'png'` on macOS, as on iOS.
+
+- On macOS `ImagePicker.capture()` from `@ng-native/expo` records video in the desktop host's camera sheet when `mediaTypes` asks for videos. ([#1536](https://github.com/ng-native/ng-native/pull/1536), [#1529](https://github.com/ng-native/ng-native/issues/1529))
+
+  With videos alone the sheet's shutter is Record, then Stop, with the time recorded beside it; with photos and videos it adds a Photo and Video switch, in photo mode first. The video is a QuickTime movie, not mirrored, recorded at `videoQuality` and stopped at `videoMaxDuration`, and is shaped as iOS shapes a recorded video: `type: 'video'`, a `.mov` `uri`, `width`, `height`, `duration` in milliseconds, `mimeType: 'video/quicktime'` and `fileSize`. A request for videos asks for the microphone when it has not been asked; with the microphone refused the video is recorded with no sound, as on iOS, and the request rejects with iOS's message only when the app has no `NSMicrophoneUsageDescription`. A request whose `mediaTypes` is an empty list takes a photo, as on iOS. The sheet also shows when the app is not active, as just after the OS asked for the microphone.
+
+### ❤️ Thank You
+
+- Ashley Hunter
+
 ## 0.23.0 (2026-11-17)
 
 ### 🚀 Features
