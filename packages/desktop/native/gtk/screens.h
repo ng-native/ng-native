@@ -120,12 +120,14 @@ class Headers {
     // The widgets it put in the header bar, and the views moved into slots.
     std::vector<GtkWidget *> packed;
     std::vector<Tag> hosted;
+    // The search fields packed at the end, kept across a layout that keeps them.
+    std::vector<GtkWidget *> searches;
     GtkWidget *back{nullptr};
     // The bar's background colour class.
     std::string background;
   };
   void layOut(SurfaceId surfaceId, Shown &shown);
-  void clear(SurfaceId surfaceId, Shown &shown);
+  void clear(SurfaceId surfaceId, Shown &shown, bool keepSearches = false);
   GtkWidget *headerBarOf(SurfaceId surfaceId) const;
 
   GtkBackend &backend_;
@@ -167,6 +169,8 @@ class Modals {
   std::optional<Tag> front(GtkWindow *window) const;
   // What Return does: presses a sheet's default button. Whether there was one to press.
   bool pressDefault(Tag tag);
+  // Escape over a surface's modals: asks to close the one presented last.
+  void requestCloseFront(SurfaceId surfaceId);
 
  private:
   struct Presented {
@@ -174,6 +178,8 @@ class Modals {
     ModalPresentation presentation{ModalPresentation::Sheet};
     // A presented RNSScreen, not a <modal>.
     bool screen{false};
+    // When it was presented among the others: the latest is in front.
+    uint64_t order{0};
     GtkWidget *slot{nullptr};
     // The AdwDialog, the overlay's backdrop or cover, or the popover.
     GtkWidget *dialog{nullptr};
@@ -189,8 +195,6 @@ class Modals {
     std::pair<int, int> size{0, 0};
     // Where the focus was, to go back to.
     GtkWidget *opener{nullptr};
-    // When it was presented, against the others: the front one is the latest.
-    uint64_t order{0};
   };
   void present(SurfaceId surfaceId, Tag tag);
   void fit(Tag tag, Presented &presented);

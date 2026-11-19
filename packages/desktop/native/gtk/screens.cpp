@@ -370,7 +370,9 @@ GtkWidget *makeSearchEntry(GtkBackend &backend, Tag tag) {
   g_object_set_data_full(G_OBJECT(entry), "ngn-search", new SearchField{&backend, tag}, [](gpointer p) {
     delete static_cast<SearchField *>(p);
   });
-  g_signal_connect(entry, "search-changed", G_CALLBACK(+[](GtkSearchEntry *e, gpointer) {
+  // Each change as it happens: `search-changed` comes after a delay, when a change the host made
+  // can no longer be told from the user's.
+  g_signal_connect(entry, "changed", G_CALLBACK(+[](GtkEditable *e, gpointer) {
     if (!searchFieldOf(GTK_WIDGET(e))->setting) {
       emitSearch(GTK_WIDGET(e), SearchBarInput::Typed);
     }
@@ -472,14 +474,38 @@ void Headers::refresh() {
 
 void Headers::forget(Tag tag) {
   for (auto &[surfaceId, shown] : shown_) {
-    if (std::find(shown.hosted.begin(), shown.hosted.end(), tag) != shown.hosted.end()) {
-      shown.hosted.erase(std::remove(shown.hosted.begin(), shown.hosted.end(), tag), shown.hosted.end());
+    if (auto it = std::find(shown.hosted.begin(), shown.hosted.end(), tag); it != shown.hosted.end()) {
+      // Let go of as clear() lets go of it, which will no longer see it.
+      backend_.unhostView(tag);
+      backend_.hooks.detachInput(tag);
+      backend_.hooks.containerRoot(tag, false);
+      shown.hosted.erase(it);
     }
   }
 }
 
-void Headers::clear(SurfaceId surfaceId, Shown &shown) {
+namespace {
+
+// Takes a widget packed into the header bar back out, and lets it go.
+void unpack(GtkWidget *bar, GtkWidget *widget) {
+  if (bar && gtk_widget_is_ancestor(widget, bar)) {
+    adw_header_bar_remove(ADW_HEADER_BAR(bar), widget);
+  } else if (gtk_widget_get_parent(widget)) {
+    gtk_widget_unparent(widget);
+  }
+  g_object_unref(widget);
+}
+
+} // namespace
+
+void Headers::clear(SurfaceId surfaceId, Shown &shown, bool keepSearches) {
   GtkWidget *bar = headerBarOf(surfaceId);
+  if (!keepSearches) {
+    for (GtkWidget *entry : shown.searches) {
+      unpack(bar, entry);
+    }
+    shown.searches.clear();
+  }
   for (Tag tag : shown.hosted) {
     backend_.unhostView(tag);
     backend_.hooks.detachInput(tag);
@@ -492,12 +518,7 @@ void Headers::clear(SurfaceId surfaceId, Shown &shown) {
   // What was packed into the bar comes out of it; the title's own children go with the title. A
   // search field is its search bar view's, which keeps it for the next header.
   for (GtkWidget *widget : shown.packed) {
-    if (bar && gtk_widget_is_ancestor(widget, bar)) {
-      adw_header_bar_remove(ADW_HEADER_BAR(bar), widget);
-    } else if (gtk_widget_get_parent(widget)) {
-      gtk_widget_unparent(widget);
-    }
-    g_object_unref(widget);
+    unpack(bar, widget);
   }
   shown.packed.clear();
   shown.back = nullptr;
@@ -508,13 +529,35 @@ void Headers::clear(SurfaceId surfaceId, Shown &shown) {
 }
 
 void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
-  clear(surfaceId, shown);
+  // The search fields stay packed when they stay the same: one taken out loses the focus, and
+  // typing into it stops.
+  clear(surfaceId, shown, true);
   GtkWidget *bar = headerBarOf(surfaceId);
   const ViewData *config = shown.header ? backend_.data(shown.header->config) : nullptr;
   shown.bar = config && config->props ? headerBar(*config->props) : std::nullopt;
   auto subviews = subviewsOf(config);
   shown.layout = headerLayout(shown.bar.value_or(HeaderBar{}), subviews, shown.header && shown.header->canGoBack);
-  if (!bar || !shown.bar || shown.bar->hidden) {
+  bool showing = bar && shown.bar && !shown.bar->hidden;
+  std::vector<GtkWidget *> searches;
+  for (Tag tag : showing ? shown.layout.searchBars : std::vector<Tag>{}) {
+    const ViewData *subview = backend_.data(tag);
+    for (GtkWidget *c = subview ? gtk_widget_get_first_child(subview->widget) : nullptr; c; c = gtk_widget_get_next_sibling(c)) {
+      if (const ViewData *d = viewData(c); d && d->component == "RNSSearchBar") {
+        if (GtkWidget *entry = backend_.searchEntry(d->tag)) {
+          searches.push_back(entry);
+        }
+      }
+    }
+  }
+  if (searches != shown.searches) {
+    clear(surfaceId, shown);
+    // The end packs from the window's edge inward: the search fields are outermost.
+    for (GtkWidget *entry : searches) {
+      adw_header_bar_pack_end(ADW_HEADER_BAR(bar), entry);
+      shown.searches.push_back(GTK_WIDGET(g_object_ref(entry)));
+    }
+  }
+  if (!showing) {
     return;
   }
   const HeaderLayout &layout = shown.layout;
@@ -596,17 +639,7 @@ void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
     addClass(title, colorClass("color", shown.bar->titleColor));
     adw_header_bar_set_title_widget(ADW_HEADER_BAR(bar), title);
   }
-  // The end packs from the window's edge inward: the last piece in reading order first.
-  for (Tag tag : layout.searchBars) {
-    const ViewData *subview = backend_.data(tag);
-    for (GtkWidget *c = subview ? gtk_widget_get_first_child(subview->widget) : nullptr; c; c = gtk_widget_get_next_sibling(c)) {
-      if (const ViewData *d = viewData(c); d && d->component == "RNSSearchBar") {
-        if (GtkWidget *entry = backend_.searchEntry(d->tag)) {
-          adw_header_bar_pack_end(ADW_HEADER_BAR(bar), keep(entry));
-        }
-      }
-    }
-  }
+  // Inward of the search fields, the last piece in reading order first.
   for (auto it = layout.right.rbegin(); it != layout.right.rend(); ++it) {
     adw_header_bar_pack_end(ADW_HEADER_BAR(bar), slotFor(*it));
   }
@@ -767,6 +800,18 @@ bool Modals::pressDefault(Tag tag) {
   return false;
 }
 
+void Modals::requestCloseFront(SurfaceId surfaceId) {
+  const std::pair<const Tag, Presented> *front = nullptr;
+  for (const auto &entry : presented_) {
+    if (entry.second.surfaceId == surfaceId && (!front || entry.second.order > front->second.order)) {
+      front = &entry;
+    }
+  }
+  if (front) {
+    requestClose(front->first);
+  }
+}
+
 void Modals::present(SurfaceId surfaceId, Tag tag) {
   const ViewData *d = backend_.data(tag);
   GtkWidget *surface = backend_.surfaceWidget(surfaceId);
@@ -775,7 +820,7 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
     return;
   }
   installSheetStyle();
-  Presented p{.surfaceId = surfaceId, .presentation = d->desktop.presentation, .screen = d->component == "RNSScreen"};
+  Presented p{.surfaceId = surfaceId, .presentation = d->desktop.presentation, .screen = d->component == "RNSScreen", .order = ++presentations_};
   std::optional<Tag> anchor = d->desktop.anchor;
   if (p.screen) {
     p.presentation = screenPresentation(*d->props).value_or(ModalPresentation::Sheet);
@@ -799,6 +844,9 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
   }
   p.slot = GTK_WIDGET(g_object_ref_sink(makeHostSlot()));
   backend_.hostView(tag, p.slot);
+  // libadwaita presents a dialog in a window of its own outside an AdwWindow, or over one that is
+  // not resizable: the sheet is drawn over the window there instead.
+  bool inWindow = root && (ADW_IS_WINDOW(root) || ADW_IS_APPLICATION_WINDOW(root)) && gtk_window_get_resizable(GTK_WINDOW(root));
   if (p.presentation == ModalPresentation::Sheet) {
     // What a sheet shows: the screen's header, when it has one (dress), over the content.
     p.card = GTK_WIDGET(g_object_ref_sink(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0)));
@@ -822,7 +870,7 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
         new CloseTarget(this, tag), [](gpointer data, GClosure *) { delete static_cast<CloseTarget *>(data); },
         GConnectFlags(0));
     p.popover = GTK_WIDGET(g_object_ref(popover));
-  } else if (p.presentation == ModalPresentation::Sheet && haveAdwDialog()) {
+  } else if (p.presentation == ModalPresentation::Sheet && inWindow && haveAdwDialog()) {
     // AdwDialog by its type and properties, which 1.4's headers do not declare. It asks before it
     // closes, and the app decides, as Escape on macOS asks.
     GtkWidget *dialog = GTK_WIDGET(g_object_new(g_type_from_name("AdwDialog"), "can-close", FALSE, "child", p.card, nullptr));
@@ -853,8 +901,9 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
     p.layer = p.slot;
   }
   if (p.layer) {
-    onKey(p.layer, "Escape", [this, tag] {
-      requestClose(tag);
+    // Each layer's Escape reaches the presentation in front: GTK runs the first one registered.
+    onKey(p.layer, "Escape", [this, surfaceId] {
+      requestCloseFront(surfaceId);
       return true;
     });
     gtk_overlay_add_overlay(GTK_OVERLAY(chrome->overlay), p.layer);
@@ -864,7 +913,6 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
   }
   backend_.hooks.containerRoot(tag, true);
   backend_.hooks.attachInput(p.slot, surfaceId, tag);
-  p.order = ++presentations_;
   auto &presented = presented_[tag] = p;
   dress(tag, presented);
   fit(tag, presented);
