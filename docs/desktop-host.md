@@ -25,8 +25,8 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   ScrollView is a `GtkScrolledWindow` whose document holds the content, telling the core's hit
   test each offset, with classic scroll bars (`gtk-overlay-scrolling` off) taking their gutter from
   the content through `scrollers.h`. An Image reads its source through the core's
-  `loadImageSource` (`image-source.h`), which keeps what a GET fetched over http(s) in memory for
-  the process in place of macOS's URL cache, and GDK decodes it off the UI thread. The XDG desktop
+  `loadImageSource` (`image-source.h`), which keeps what a GET with no body fetched over http(s) in memory
+  for the process, by its url and headers, in place of macOS's URL cache, and GDK decodes it off the UI thread. The XDG desktop
   portals are called through `portal.h`, one GDBus request and response routine of our own, inside
   a sandbox and outside one; where no portal answers (no session bus, as in the dev loop on a Mac),
   each caller falls back to GTK's own path. Linking and Shell open a url, a file or its folder
