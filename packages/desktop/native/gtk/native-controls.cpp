@@ -5,6 +5,7 @@
 #include <react/renderer/core/RawEvent.h>
 
 #include <dlfcn.h>
+#include <langinfo.h>
 
 #include <algorithm>
 #include <cmath>
@@ -27,8 +28,15 @@ struct Control {
   std::string colorClass;
   // An activity indicator drawn by AdwSpinner, which has no stopped state.
   bool adwSpinner{false};
-  // A date picker's calendar.
+  // A date picker's calendar, and its time as an hour and a minute, with AM and PM on a 12-hour
+  // clock.
   GtkWidget *calendar{nullptr};
+  GtkWidget *timeRow{nullptr};
+  GtkWidget *hours{nullptr};
+  GtkWidget *minutes{nullptr};
+  GtkWidget *meridiem{nullptr};
+  bool twelveHour{false};
+  bool afterNoon{false};
 };
 
 namespace {
@@ -201,28 +209,126 @@ bool picksDate(const NativeControlProps &p) {
   return p.mode == "date" || p.mode == "datetime";
 }
 
+bool picksTime(const NativeControlProps &p) {
+  return p.mode == "time" || p.mode == "datetime";
+}
+
+GDateTime *pickerDate(const NativeControlProps &p) {
+  return g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(p.date.value_or(0) / 1000)));
+}
+
+// Sends `at`, kept within the picker's bounds, and answers the milliseconds sent.
+double sendDate(Control *c, const NativeControlProps &p, GDateTime *at) {
+  double ms = static_cast<double>(g_date_time_to_unix(at)) * 1000;
+  ms = std::max(ms, p.minimumDate.value_or(ms));
+  ms = std::min(ms, p.maximumDate.value_or(ms));
+  GDateTime *sent = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(ms / 1000)));
+  double offset = static_cast<double>(g_date_time_get_utc_offset(sent)) / G_TIME_SPAN_MINUTE;
+  g_date_time_unref(sent);
+  send(c, "change", folly::dynamic::object("timestamp", ms)("utcOffset", offset));
+  return ms;
+}
+
+// The time of `ms` in the spin buttons, sending nothing.
+void showTime(Control *c, double ms) {
+  GDateTime *at = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(ms / 1000)));
+  if (!at) {
+    return;
+  }
+  bool was = c->applying;
+  c->applying = true;
+  int hour = g_date_time_get_hour(at);
+  c->afterNoon = hour >= 12;
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(c->hours), c->twelveHour ? clockHour(hour) : hour);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(c->minutes), g_date_time_get_minute(at));
+  gtk_button_set_label(GTK_BUTTON(c->meridiem), nl_langinfo(c->afterNoon ? PM_STR : AM_STR));
+  c->applying = was;
+  g_date_time_unref(at);
+}
+
 // The day chosen in the calendar, at the time of day the picker held, kept within its bounds.
 void dayChosen(Control *c) {
   const auto *p = controlProps(*c->view);
   if (!p || c->applying) {
     return;
   }
-  GDateTime *was = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(p->date.value_or(0) / 1000)));
+  GDateTime *was = pickerDate(*p);
   GDateTime *day = gtk_calendar_get_date(GTK_CALENDAR(c->calendar));
   GDateTime *at = g_date_time_new_local(
       g_date_time_get_year(day), g_date_time_get_month(day), g_date_time_get_day_of_month(day), g_date_time_get_hour(was),
       g_date_time_get_minute(was), g_date_time_get_seconds(was));
-  double ms = static_cast<double>(g_date_time_to_unix(at)) * 1000;
-  ms = std::max(ms, p->minimumDate.value_or(ms));
-  ms = std::min(ms, p->maximumDate.value_or(ms));
-  double offset = static_cast<double>(g_date_time_get_utc_offset(at)) / G_TIME_SPAN_MINUTE;
+  sendDate(c, *p, at);
   g_date_time_unref(was);
   g_date_time_unref(day);
   g_date_time_unref(at);
-  send(c, "change", folly::dynamic::object("timestamp", ms)("utcOffset", offset));
-  if (GtkPopover *popover = gtk_menu_button_get_popover(GTK_MENU_BUTTON(c->widget))) {
+  // A date and time picker stays open for the time.
+  if (GtkPopover *popover = gtk_menu_button_get_popover(GTK_MENU_BUTTON(c->widget)); popover && !picksTime(*p)) {
     gtk_popover_popdown(popover);
   }
+}
+
+// The hour and minute chosen, on the day the picker held, kept within its bounds: the spin buttons
+// then show the time sent.
+void timeChosen(Control *c) {
+  const auto *p = controlProps(*c->view);
+  if (!p || c->applying) {
+    return;
+  }
+  int hour = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(c->hours));
+  if (c->twelveHour) {
+    hour = dayHour(hour, c->afterNoon);
+  }
+  GDateTime *was = pickerDate(*p);
+  GDateTime *at = g_date_time_new_local(
+      g_date_time_get_year(was), g_date_time_get_month(was), g_date_time_get_day_of_month(was), hour,
+      gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(c->minutes)), 0);
+  showTime(c, sendDate(c, *p, at));
+  g_date_time_unref(was);
+  g_date_time_unref(at);
+}
+
+gboolean twoDigits(GtkSpinButton *b, gpointer) {
+  gchar *text = g_strdup_printf("%02d", gtk_spin_button_get_value_as_int(b));
+  gtk_editable_set_text(GTK_EDITABLE(b), text);
+  g_free(text);
+  return TRUE;
+}
+
+// An hour and a minute in spin buttons that wrap, as GNOME Clocks and Calendar pick a time, each
+// written with two digits; on a 12-hour clock (the locale's time format, twelveHourClock) the hour
+// runs 1 to 12 beside an AM and PM button.
+GtkWidget *makeTimeRow(Control *c) {
+  c->twelveHour = twelveHourClock(nl_langinfo(T_FMT));
+  auto spin = [c](int from, int to, const char *label) {
+    GtkWidget *b = gtk_spin_button_new_with_range(from, to, 1);
+    gtk_spin_button_set_wrap(GTK_SPIN_BUTTON(b), TRUE);
+    gtk_spin_button_set_numeric(GTK_SPIN_BUTTON(b), TRUE);
+    gtk_orientable_set_orientation(GTK_ORIENTABLE(b), GTK_ORIENTATION_VERTICAL);
+    gtk_accessible_update_property(GTK_ACCESSIBLE(b), GTK_ACCESSIBLE_PROPERTY_LABEL, label, -1);
+    g_signal_connect(b, "value-changed", G_CALLBACK(+[](GtkSpinButton *, gpointer data) { timeChosen(static_cast<Control *>(data)); }), c);
+    return b;
+  };
+  c->hours = c->twelveHour ? spin(1, 12, "Hour") : spin(0, 23, "Hour");
+  c->minutes = spin(0, 59, "Minute");
+  g_signal_connect(c->minutes, "output", G_CALLBACK(twoDigits), nullptr);
+  if (!c->twelveHour) {
+    g_signal_connect(c->hours, "output", G_CALLBACK(twoDigits), nullptr);
+  }
+  c->meridiem = gtk_button_new_with_label(nl_langinfo(AM_STR));
+  gtk_widget_set_valign(c->meridiem, GTK_ALIGN_CENTER);
+  gtk_widget_set_visible(c->meridiem, c->twelveHour);
+  g_signal_connect(c->meridiem, "clicked", G_CALLBACK(+[](GtkButton *, gpointer data) {
+    auto *c = static_cast<Control *>(data);
+    c->afterNoon = !c->afterNoon;
+    timeChosen(c);
+  }), c);
+  GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+  gtk_widget_set_halign(row, GTK_ALIGN_CENTER);
+  gtk_box_append(GTK_BOX(row), c->hours);
+  gtk_box_append(GTK_BOX(row), gtk_label_new(":"));
+  gtk_box_append(GTK_BOX(row), c->minutes);
+  gtk_box_append(GTK_BOX(row), c->meridiem);
+  return row;
 }
 
 // --- Search field -----------------------------------------------------------------------------
@@ -340,8 +446,12 @@ void wire(Control *c) {
       break;
     case ControlKind::DatePicker: {
       c->calendar = gtk_calendar_new();
+      c->timeRow = makeTimeRow(c);
+      GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+      gtk_box_append(GTK_BOX(box), c->calendar);
+      gtk_box_append(GTK_BOX(box), c->timeRow);
       GtkWidget *popover = gtk_popover_new();
-      gtk_popover_set_child(GTK_POPOVER(popover), c->calendar);
+      gtk_popover_set_child(GTK_POPOVER(popover), box);
       gtk_menu_button_set_popover(GTK_MENU_BUTTON(w), popover);
       g_signal_connect(c->calendar, "day-selected", G_CALLBACK(+[](GtkCalendar *, gpointer data) { dayChosen(static_cast<Control *>(data)); }), c);
       break;
@@ -456,8 +566,11 @@ void applyControlProps(ViewData &view) {
           g_date_time_unref(at);
         }
       }
-      // The time modes have nothing to pick from yet: the button shows the time alone.
-      gtk_widget_set_sensitive(w, p->enabled && picksDate(*p));
+      showTime(c, p->date.value_or(0));
+      // The calendar for a date, the hour and minute for a time; `countdown` has nothing to pick.
+      gtk_widget_set_visible(c->calendar, picksDate(*p));
+      gtk_widget_set_visible(c->timeRow, picksTime(*p));
+      gtk_widget_set_sensitive(w, p->enabled && (picksDate(*p) || picksTime(*p)));
       break;
     }
     case ControlKind::SearchField: {
