@@ -107,6 +107,7 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
   // Each view's relations while it has any: set again on its new widget, and on the widgets that
   // point at it, when a role change replaces a widget.
   std::unordered_map<Tag, AxRelations> relations_;
+  static void surfaceGone(gpointer self, GObject *surface);
   std::unordered_map<SurfaceId, GtkWidget *> surfaces_;
   struct Hosted {
     GtkWidget *placeholder;

@@ -9,9 +9,6 @@
 #include <doctest/doctest.h>
 
 #include <react/renderer/components/textinput/TextInputEventEmitter.h>
-#include <react/renderer/core/EventBeat.h>
-#include <react/renderer/core/EventDispatcher.h>
-#include <react/renderer/runtimescheduler/RuntimeScheduler.h>
 
 #include <algorithm>
 #include <chrono>
@@ -37,37 +34,14 @@ AttributedString paragraph(const std::string &text, float lineHeight) {
 
 const std::string kWords = "one two three four five six seven eight nine ten";
 
-// The events a view's field sends, by type, kept by a dispatcher's listener before any queue.
-struct SentEvents {
-  RuntimeScheduler scheduler{[](auto &&) {}};
-  std::shared_ptr<EventDispatcher> dispatcher;
-  std::vector<std::string> types;
-
-  explicit SentEvents(ngn::gtk::ViewData &view) {
-    EventQueueProcessor processor([](auto &&...) {}, [](auto &&...) {}, [](auto &&...) {}, {});
-    dispatcher = std::make_shared<EventDispatcher>(
-        processor, std::make_unique<EventBeat>(std::make_shared<EventBeat::OwnerBox>(), scheduler), [](auto &&...) {},
-        std::weak_ptr<EventLogger>());
-    dispatcher->addListener(std::make_shared<const EventListener>([this](const RawEvent &event) {
-      types.push_back(event.type);
-      return true;
-    }));
-    view.emitter = std::make_shared<TextInputEventEmitter>(nullptr, dispatcher);
-  }
-
-  long count(const std::string &type) const {
-    return std::count(types.begin(), types.end(), type);
-  }
-};
-
 // Presses a key through the field's own key controller, which GTK gives a key before the editor.
-bool pressKey(GtkWidget *editor, guint keyval, GdkModifierType state) {
+bool pressKey(GtkWidget *editor, guint keyval, GdkModifierType state, guint keycode = 0) {
   GListModel *controllers = gtk_widget_observe_controllers(editor);
   gboolean handled = FALSE;
   for (guint i = 0; i < g_list_model_get_n_items(controllers) && !handled; ++i) {
     auto *controller = GTK_EVENT_CONTROLLER(g_list_model_get_item(controllers, i));
     if (GTK_IS_EVENT_CONTROLLER_KEY(controller) && gtk_event_controller_get_propagation_phase(controller) == GTK_PHASE_CAPTURE) {
-      g_signal_emit_by_name(controller, "key-pressed", keyval, 0u, state, &handled);
+      g_signal_emit_by_name(controller, "key-pressed", keyval, keycode, state, &handled);
     }
     g_object_unref(controller);
   }
@@ -429,7 +403,7 @@ TEST_CASE("a multiline text input sends a selection change when an edit moves it
   MountedViews views;
   views.add(MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("multiline", true)), {{10, 10}, {150, 80}}));
   auto *data = ngn::gtk::viewData(views.view(2));
-  SentEvents sent(*data);
+  ngn::testing::SentEvents<TextInputEventEmitter> sent(*data);
   GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(data->field->text));
   // Typing moves the cursor without setting its mark.
   gtk_text_buffer_insert_interactive_at_cursor(buffer, "a", -1, TRUE);
@@ -563,6 +537,10 @@ TEST_CASE("undo and redo put back what the field had, not capitalized again, one
     g_signal_emit_by_name(field->text, "backspace");
     REQUIRE(ngn::gtk::fieldText(*field).empty());
     int before = field->eventCount;
+    if (!multiline && gtk_check_version(4, 12, 3)) {
+      // GTK before 4.12.3 deletes on Backspace outside a change, which it cannot undo.
+      continue;
+    }
     // A single line's undo and redo are its keys; a multiline field's, its buffer's.
     auto replay = [&](bool redo) {
       if (multiline) {
@@ -585,6 +563,64 @@ TEST_CASE("undo and redo put back what the field had, not capitalized again, one
       gtk_editable_insert_text(GTK_EDITABLE(field->text), "a", -1, &position);
     }
     CHECK(ngn::gtk::fieldText(*field) == "A");
+  }
+}
+
+TEST_CASE("a single line's undo and redo keys work on a layout whose letters are not Latin") {
+  REQUIRE(ngn::testing::gtkReady());
+  // GTK before 4.12.3 deletes on Backspace outside a change, which it cannot undo.
+  if (gtk_check_version(4, 12, 3)) {
+    return;
+  }
+  MountedViews views;
+  views.add(MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("autoCapitalize", "characters")("defaultValue", "\xC3\x9F")), {{10, 10}, {150, 80}}));
+  auto *field = ngn::gtk::viewData(views.view(2))->field;
+  gtk_editable_set_position(GTK_EDITABLE(field->text), -1);
+  g_signal_emit_by_name(field->text, "backspace");
+  REQUIRE(ngn::gtk::fieldText(*field).empty());
+  // The hardware key that makes a Latin z in the first group makes Cyrillic ya on a Russian layout.
+  GdkKeymapKey *keys = nullptr;
+  int count = 0;
+  REQUIRE(gdk_display_map_keyval(gtk_widget_get_display(field->text), GDK_KEY_z, &keys, &count));
+  REQUIRE(count > 0);
+  guint keycode = keys[0].keycode;
+  g_free(keys);
+  CHECK(pressKey(field->text, GDK_KEY_Cyrillic_ya, GDK_CONTROL_MASK, keycode));
+  CHECK(ngn::gtk::fieldText(*field) == "\xC3\x9F");
+  CHECK(pressKey(field->text, GDK_KEY_Cyrillic_YA, static_cast<GdkModifierType>(GDK_CONTROL_MASK | GDK_SHIFT_MASK), keycode));
+  CHECK(ngn::gtk::fieldText(*field).empty());
+}
+
+TEST_CASE("Backspace over a mark puts its base back as it was, not capitalized, one line or many") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    // Armenian small ayb and a combining acute: Pango lets Backspace delete the acute alone, which
+    // GTK does by deleting both and putting the ayb back.
+    views.add(MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("multiline", multiline)("autoCapitalize", "characters")("defaultValue", "\xD5\xA1\xCC\x81")), {{10, 10}, {150, 80}}));
+    auto *field = ngn::gtk::viewData(views.view(2))->field;
+    if (multiline) {
+      GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text));
+      GtkTextIter end;
+      gtk_text_buffer_get_end_iter(buffer, &end);
+      gtk_text_buffer_place_cursor(buffer, &end);
+    } else {
+      gtk_editable_set_position(GTK_EDITABLE(field->text), -1);
+    }
+    int before = field->eventCount;
+    g_signal_emit_by_name(field->text, "backspace");
+    CHECK(ngn::gtk::fieldText(*field) == "\xD5\xA1");
+    // Still the user's change, which JavaScript hears of.
+    CHECK(field->eventCount > before);
+    // What is typed afterwards is capitalized as before.
+    if (multiline) {
+      gtk_text_buffer_insert_at_cursor(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), "\xD5\xA1", -1);
+    } else {
+      int position = gtk_editable_get_position(GTK_EDITABLE(field->text));
+      gtk_editable_insert_text(GTK_EDITABLE(field->text), "\xD5\xA1", -1, &position);
+    }
+    CHECK(ngn::gtk::fieldText(*field) == "\xD5\xA1\xD4\xB1");
   }
 }
 
