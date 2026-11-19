@@ -2,10 +2,14 @@
 // value as the dispatcher's items, and what a drag out offers. Which view takes a drop, and the
 // events it hears, are the core's (input-dispatcher tests).
 #include "../drag-and-drop.h"
+#include "../input-replay.h"
 #include "../surface-input.h"
 #include "mounted-views.h"
 
 #include <doctest/doctest.h>
+#ifdef GDK_WINDOWING_X11
+#include <gdk/x11/gdkx.h>
+#endif
 
 #include <optional>
 #include <string>
@@ -50,18 +54,22 @@ GValue fileListValue(const std::vector<std::string> &uris) {
   return value;
 }
 
-GtkDropTarget *dropTargetOf(GtkWidget *widget) {
-  GListModel *controllers = gtk_widget_observe_controllers(widget);
-  GtkDropTarget *found = nullptr;
-  for (guint i = 0; i < g_list_model_get_n_items(controllers) && !found; ++i) {
-    auto *controller = g_list_model_get_item(controllers, i);
-    if (GTK_IS_DROP_TARGET(controller)) {
-      found = GTK_DROP_TARGET(controller);
-    }
-    g_object_unref(controller);
-  }
-  g_object_unref(controllers);
-  return found;
+// What a browser's link drag offers: the link as a uri list, and words as text.
+GdkContentProvider *linkAndText(GtkDragSource *, double, double, gpointer) {
+  static const char uris[] = "https://ng-native.dev/\r\n";
+  GBytes *bytes = g_bytes_new_static(uris, sizeof uris - 1);
+  GdkContentProvider *parts[] = {gdk_content_provider_new_for_bytes("text/uri-list", bytes),
+                                 gdk_content_provider_new_typed(G_TYPE_STRING, "Read the guide")};
+  g_bytes_unref(bytes);
+  return gdk_content_provider_new_union(parts, 2);
+}
+
+bool onX11() {
+#ifdef GDK_WINDOWING_X11
+  return GDK_IS_X11_DISPLAY(gdk_display_get_default());
+#else
+  return false;
+#endif
 }
 
 std::optional<std::string> valueOf(GdkContentProvider *content, GType type) {
@@ -106,40 +114,47 @@ TEST_CASE("a drop's files and urls come from its file list, and its text from a 
   CHECK(ngn::gtk::dropItems(nullptr).files.empty());
 }
 
-TEST_CASE("a drag over a surface goes to the input sink as its container's, and so does a drop and a leave") {
+TEST_CASE("a drag carrying a link and text hands the view under it both, and the drop goes to the input sink") {
   REQUIRE(ngn::testing::gtkReady());
+  if (!onX11()) {
+    MESSAGE("not X11: no input script to drag with");
+    return;
+  }
   RecordingSink sink;
+  GtkWidget *window = gtk_window_new();
+  gtk_window_set_default_size(GTK_WINDOW(window), 400, 100);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *source = gtk_label_new("link");
+  gtk_widget_set_size_request(source, 200, 100);
   GtkWidget *surface = gtk_label_new("surface");
-  g_object_ref_sink(surface);
+  gtk_widget_set_size_request(surface, 200, 100);
+  gtk_box_append(GTK_BOX(box), source);
+  gtk_box_append(GTK_BOX(box), surface);
+  gtk_window_set_child(GTK_WINDOW(window), box);
   ngn::gtk::attachPointerInput(surface, 1, 7, &sink);
-  GtkDropTarget *target = dropTargetOf(surface);
-  REQUIRE(target);
+  GtkDragSource *drag = gtk_drag_source_new();
+  g_signal_connect(drag, "prepare", G_CALLBACK(linkAndText), nullptr);
+  gtk_widget_add_controller(source, GTK_EVENT_CONTROLLER(drag));
+  gtk_window_present(GTK_WINDOW(window));
+  ngn::testing::runUntil([window] { return gtk_widget_get_mapped(window) && gtk_widget_get_width(window) > 0; });
 
-  GdkDragAction action{};
-  g_signal_emit_by_name(target, "enter", 12.0, 34.0, &action);
-  CHECK(action == GDK_ACTION_COPY);
-  REQUIRE(sink.over.size() == 1);
-  CHECK(sink.over[0].first.x == 12);
-  CHECK(sink.over[0].first.y == 34);
-  // No view there takes drops: the drag is refused.
-  sink.takes = false;
-  g_signal_emit_by_name(target, "motion", 50.0, 60.0, &action);
-  CHECK(action == 0);
-  sink.takes = true;
-
-  g_signal_emit_by_name(target, "leave");
-  CHECK(sink.exits == std::vector<ngn::ContainerId>{7});
-
-  GValue files = fileListValue({"file:///tmp/dropped.png"});
-  gboolean taken = FALSE;
-  g_signal_emit_by_name(target, "drop", &files, 5.0, 6.0, &taken);
-  CHECK(taken);
+  // X11 drag and drop needs a few positions over the target before it enters, and the drag's data
+  // comes a little after: the waits give both time.
+  auto script = ngn::parseInputScript(
+      "wait 200\nmove 50 50\ndown 50 50\ndrag 80 50\ndrag 150 50\ndrag 250 50\nwait 300\ndrag 270 55\nwait 300\ndrag 290 60\nwait 300\ndrag 300 60\nwait 1500\nup 300 60\nwait 300\n");
+  REQUIRE(ngn::gtk::replayInputScript(window, std::move(script)));
+  ngn::testing::runUntil([&sink] { return !sink.drops.empty(); });
   REQUIRE(sink.drops.size() == 1);
-  CHECK(sink.drops[0].first.x == 5);
-  REQUIRE(sink.drops[0].second.files.size() == 1);
-  CHECK(sink.drops[0].second.files[0].name == "dropped.png");
-  g_value_unset(&files);
-  g_object_unref(surface);
+  const auto &[point, items] = sink.drops[0];
+  // At the surface's own point.
+  CHECK(point.x == doctest::Approx(100).epsilon(0.1));
+  CHECK(items.urls == std::vector<std::string>{"https://ng-native.dev/"});
+  CHECK(items.text == "Read the guide");
+  // The view under the drag heard what it carries before the drop.
+  REQUIRE_FALSE(sink.over.empty());
+  CHECK(sink.over.back().second.text == "Read the guide");
+  CHECK(sink.over.back().second.urls == std::vector<std::string>{"https://ng-native.dev/"});
+  gtk_window_destroy(GTK_WINDOW(window));
 }
 
 TEST_CASE("a drag out offers its files as a file list and its text, or its url, as a string and a uri list") {
