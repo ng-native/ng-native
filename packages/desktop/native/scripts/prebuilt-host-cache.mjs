@@ -139,23 +139,27 @@ export function readHostCache(dir, key, layout = MACOS_HOST) {
     return { host: null, reason: `the host in ${dir} was built from other inputs` };
   }
   const host = path.join(dir, layout.folder);
+  const reason = changedFrom(host, layout.files, saved.files);
+  return reason ? { host: null, reason: `the host in ${dir} ${reason}` } : { host };
+}
+
+/**
+ * Why the host in `host` is not the one saved with `digests`, or null where every file is there
+ * and as it was.
+ *
+ * @param {string} host
+ * @param {readonly string[]} files
+ * @param {unknown} digests
+ */
+function changedFrom(host, files, digests) {
   try {
-    for (const name of layout.files) {
-      if (!existsSync(path.join(host, name))) {
-        return { host: null, reason: `the host in ${dir} has no ${name}` };
-      }
-    }
-    const now = JSON.stringify(treeDigests(host, host));
-    if (now !== JSON.stringify(saved.files)) {
-      return { host: null, reason: `the host in ${dir} is not as it was saved` };
-    }
+    const gone = files.find((name) => !existsSync(path.join(host, name)));
+    if (gone) return `has no ${gone}`;
+    const same = JSON.stringify(treeDigests(host, host)) === JSON.stringify(digests);
+    return same ? null : 'is not as it was saved';
   } catch (error) {
-    return {
-      host: null,
-      reason: `the host in ${dir} is unreadable: ${/** @type {Error} */ (error).message}`,
-    };
+    return `is unreadable: ${/** @type {Error} */ (error).message}`;
   }
-  return { host };
 }
 
 /**
