@@ -536,3 +536,69 @@ TEST_CASE("a multiline placeholder taller than its field is clipped to the field
   CHECK(inside > 5);
   CHECK(below == 0);
 }
+
+TEST_CASE("undo and redo put back what the field had, not capitalized again, one line or many") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    views.add(MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("multiline", multiline)("autoCapitalize", "characters")("defaultValue", "\xC3\x9F")), {{10, 10}, {150, 80}}));
+    auto *field = ngn::gtk::viewData(views.view(2))->field;
+    REQUIRE(ngn::gtk::fieldText(*field) == "\xC3\x9F");
+    if (multiline) {
+      GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text));
+      GtkTextIter end;
+      gtk_text_buffer_get_end_iter(buffer, &end);
+      gtk_text_buffer_place_cursor(buffer, &end);
+    } else {
+      gtk_editable_set_position(GTK_EDITABLE(field->text), -1);
+    }
+    g_signal_emit_by_name(field->text, "backspace");
+    REQUIRE(ngn::gtk::fieldText(*field).empty());
+    int before = field->eventCount;
+    // A single line's undo and redo are its keys; a multiline field's, its buffer's.
+    auto replay = [&](bool redo) {
+      if (multiline) {
+        gtk_widget_activate_action(field->text, redo ? "text.redo" : "text.undo", nullptr);
+      } else {
+        CHECK(pressKey(field->text, redo ? GDK_KEY_y : GDK_KEY_z, GDK_CONTROL_MASK));
+      }
+    };
+    replay(false);
+    CHECK(ngn::gtk::fieldText(*field) == "\xC3\x9F");
+    // Still the user's change, which JavaScript hears of.
+    CHECK(field->eventCount > before);
+    replay(true);
+    CHECK(ngn::gtk::fieldText(*field).empty());
+    // What is typed afterwards is capitalized as before.
+    if (multiline) {
+      gtk_text_buffer_insert_at_cursor(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), "a", -1);
+    } else {
+      int position = 0;
+      gtk_editable_insert_text(GTK_EDITABLE(field->text), "a", -1, &position);
+    }
+    CHECK(ngn::gtk::fieldText(*field) == "A");
+  }
+}
+
+TEST_CASE("autoCapitalize words fits a long paste in linear time, and maxLength never cuts inside a character") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  views.add(MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("autoCapitalize", "words")("maxLength", 4)), {{10, 10}, {150, 40}}));
+  views.add(MountedViews::shadow(3, "TextInput", textInputProps(dynamic::object("autoCapitalize", "words")("maxLength", 2)), {{10, 50}, {150, 40}}));
+  auto *pasted = ngn::gtk::viewData(views.view(2))->field;
+  auto *marked = ngn::gtk::viewData(views.view(3))->field;
+  std::string paste(200000, 'a');
+  int position = 0;
+  auto started = std::chrono::steady_clock::now();
+  gtk_editable_insert_text(GTK_EDITABLE(pasted->text), paste.c_str(), -1, &position);
+  auto took = std::chrono::steady_clock::now() - started;
+  CHECK(ngn::gtk::fieldText(*pasted) == "Aaaa");
+  // Linear, this takes milliseconds; scanning from the start for each character, close to a minute.
+  // A bound far from both holds on a busy machine.
+  CHECK(took < std::chrono::seconds(5));
+  // b with a combining acute is one character over two units: the cut keeps all of it or none.
+  position = 0;
+  gtk_editable_insert_text(GTK_EDITABLE(marked->text), "ab\xCC\x81", -1, &position);
+  CHECK(ngn::gtk::fieldText(*marked) == "A");
+}

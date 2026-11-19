@@ -284,7 +284,6 @@ void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int ind
   if (ViewData *d = viewData(c->second); d && d->image) {
     applyImageProps(*d, gtk_widget_get_scale_factor(c->second));
   }
-  }
   if (viewData(c->second)->component == "ModalHostView") {
     modals_->mounted(surfaceId, child);
   }
