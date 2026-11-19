@@ -9,11 +9,16 @@
 #   /stall          headers and part of the body, then silence
 #   /redirect       302 to /text; /see-other 303 and /temporary 307 to /echo; /loop 302 to itself
 #   /empty-location 302 with an empty Location and a body; /multiple-choices 300 to /text
+#   /moved          301 to /echo; /found 302 to /echo
 #   /set-cookie     sets flavour=lemon
 #   /gzip           a gzip-encoded body
 #   /ws             a WebSocket that echoes, picks the subprotocol "chat", refuses "refuse", picks
 #                   "other" when offered "pick-other", and answers the texts "pings" (pings seen),
 #                   "fragments" (a message in two frames), "close-me" (a close 4000 "bye"),
+#                   "ping-me" (a ping "hb", then logs the pong), "ping-flood" (reads nothing for
+#                   300 ms, pings 200 times, waits 300 ms, then reads until the text "done" and
+#                   logs the pongs and the last one's payload), "bad-utf8" (a text that is not
+#                   UTF-8), "split-utf8" (an é split across two frames),
 #                   "flood" (2000 one-byte texts at once) and "close-later" (reads nothing for
 #                   300 ms, closes 4000 "bye", then reads until the client's close frame and logs
 #                   it). Offered "mute", it drops the connection on a close frame; offered
@@ -100,6 +105,10 @@ class Handler(socketserver.BaseRequestHandler):
             self.respond(302, [('Location', '')], b'stay', reason='Found')
         elif path == '/multiple-choices':
             self.respond(300, [('Location', '/text')], b'choices', reason='Multiple Choices')
+        elif path == '/moved':
+            self.respond(301, [('Location', '/echo')], reason='Moved Permanently')
+        elif path == '/found':
+            self.respond(302, [('Location', '/echo')], reason='Found')
         elif path == '/ws-log':
             with LOG_LOCK:
                 self.respond(200, [('Content-Type', 'application/json')], json.dumps(LOG).encode())
@@ -144,6 +153,30 @@ class Handler(socketserver.BaseRequestHandler):
                     return
                 elif text == 'flood':
                     self.request.sendall((bytes([0x81, 1]) + b"f") * 2000)
+                elif text == 'ping-me':
+                    self.send_frame(9, b'hb')
+                    answer = self.read_frame()
+                    with LOG_LOCK:
+                        LOG.append(f'pong {answer[1].decode()}' if answer and answer[0] == 10 else 'no pong')
+                elif text == 'ping-flood':
+                    time.sleep(0.3)
+                    for i in range(200):
+                        self.send_frame(9, str(i).encode())
+                    time.sleep(0.3)
+                    pongs, last = 0, None
+                    while True:
+                        frame = self.read_frame()
+                        if frame is None or (frame[0] == 1 and frame[1] == b'done'):
+                            break
+                        if frame[0] == 10:
+                            pongs, last = pongs + 1, frame[1].decode()
+                    with LOG_LOCK:
+                        LOG.append(f'pongs {pongs} last {last}')
+                elif text == 'bad-utf8':
+                    self.send_frame(1, b'\xff\xfe')
+                elif text == 'split-utf8':
+                    self.send_frame(1, b'\xc3', fin=False)
+                    self.send_frame(0, b'\xa9')
                 elif text == 'close-later':
                     time.sleep(0.3)
                     self.send_frame(8, struct.pack('!H', 4000) + b'bye')
