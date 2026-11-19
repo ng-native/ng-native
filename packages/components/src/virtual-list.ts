@@ -1002,10 +1002,15 @@ export class VirtualList<T> extends ScrollViewProps {
       .slice(this.measuring() ? 1 : 0);
     const axis = this.horizontal() ? 'x' : 'y';
     const live = new Set<HostNode>();
-    // Where the list scrolled itself to, until native has scrolled there: native draws a graph
-    // when its offset changes, and after a jump the offset of a drive just made may not. Only
+    // After the list scrolled itself, where it went: native draws a graph when its offset
+    // changes, and after a jump the offset of a drive just made may not. The target until native
+    // reports, then what it reported, which an animated scroll is still on its way from. Only
     // then, since mid-fling the offset here trails native's and would set it back a frame.
-    const from = this.jumped ? this.headerHeight() + this.lastOffset : undefined;
+    const from = !this.jumped
+      ? undefined
+      : this.landed
+        ? this.headerHeight() + this.lastOffset
+        : this.jumpedTo;
     this.window().forEach((row, at) => {
       const view = views[at];
       const next = this.stickyDrive(row);
@@ -1037,6 +1042,8 @@ export class VirtualList<T> extends ScrollViewProps {
   private jumped = false;
   /** A scroll event has come since, so the next pass's drives are the last to need telling. */
   private landed = false;
+  /** Where the list scrolled itself to, in the scroll view, which native reports with its event. */
+  private jumpedTo = 0;
 
   /** Which recycling slot each rendered item holds, by key: its type, and the row it last drew. */
   private readonly recycled = new Map<
@@ -1356,6 +1363,7 @@ export class VirtualList<T> extends ScrollViewProps {
     const [x, y] = this.horizontal() ? [offset, 0] : [0, offset];
     this.jumped = true;
     this.landed = false;
+    this.jumpedTo = offset;
     this.engine.dispatchCommand(this.node, 'scrollTo', [x, y, animated]);
   }
 

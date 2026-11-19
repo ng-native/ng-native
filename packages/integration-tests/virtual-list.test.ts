@@ -736,6 +736,30 @@ describe('windowed list options', () => {
     assert.deepEqual(named('set').slice(before), []);
   });
 
+  it('tells native where a direct scroll is going, before native has reported it', async () => {
+    // scrollToOffset, unlike scrollToIndex, says only where to go: a render before native's
+    // scroll event must hand native that, not the offset the list was last at.
+    const { native, named } = recorder();
+    await boot({ height: VIEWPORT }, { nativeAnimated: native });
+    instance.sticky.set([0, 200]);
+    await settle();
+    await fireEvent.scroll(host, { contentOffset: { y: 5 * ITEM_HEIGHT } });
+    const offset = named('create').find(
+      ([, , config]) => (config as { offset?: number }).offset !== undefined,
+    )![1];
+    const list = (
+      instance as unknown as {
+        list(): { scrollToOffset(options: { offset: number; animated?: boolean }): void };
+      }
+    ).list();
+    list.scrollToOffset({ offset: 50 * ITEM_HEIGHT, animated: false });
+    instance.sticky.set([0, 200, 400]);
+    await settle();
+    const placed = named('set').filter(([, tag]) => tag === offset);
+    assert.notEqual(placed.length, 0, 'native is told');
+    assert.deepEqual(placed.at(-1), ['set', offset, 50 * ITEM_HEIGHT]);
+  });
+
   it('leaves native s offset to native while the user scrolls', async () => {
     // Mid-fling the offset here trails native's: setting it as a new sticky row arrives would
     // pull every pinned row back by the difference for a frame.
