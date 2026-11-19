@@ -39,6 +39,9 @@
 - (const facebook::react::LayoutMetrics &)layoutMetrics;
 // What VoiceOver is told about the view (accessibility.h).
 - (ngn::AxInfo)axInfo;
+// The views it is labelled and described by (accessibility-relations.h), held weakly. Their text is
+// its label, ahead of its own, and its help, ahead of its hint, read each time VoiceOver asks.
+- (void)setLabelledBy:(NSArray<NGNView *> *)labelledBy describedBy:(NSArray<NGNView *> *)describedBy;
 // Where Fabric children mount: the view itself, or a scroll view's document view.
 - (NSView *)contentContainer;
 // What takes the keyboard when Tab moves the focus here: the view itself, or the AppKit control

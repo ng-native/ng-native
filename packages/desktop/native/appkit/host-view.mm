@@ -203,6 +203,8 @@ static ngn::InputDispatcher *gViewInput;
 @end
 
 @implementation NGNView {
+  NSPointerArray *_labelledBy;
+  NSPointerArray *_describedBy;
   Props::Shared _props;
   LayoutMetrics _layout;
   State::Shared _state;
@@ -393,7 +395,41 @@ static BOOL focusFromKeyboard() {
   return NSAccessibilityRoleDescription(nsRole(info.role), nsSubrole(info.subrole));
 }
 
+- (void)setLabelledBy:(NSArray<NGNView *> *)labelledBy describedBy:(NSArray<NGNView *> *)describedBy {
+  auto weakly = [](NSArray<NGNView *> *views) {
+    NSPointerArray *array = [NSPointerArray weakObjectsPointerArray];
+    for (NGNView *view in views) {
+      [array addPointer:(__bridge void *)view];
+    }
+    return views.count > 0 ? array : nil;
+  };
+  _labelledBy = weakly(labelledBy);
+  _describedBy = weakly(describedBy);
+}
+
+// The text of the views a relation names, in order: each one's label, or the text inside it, as
+// aria-labelledby reads them.
+- (NSString *)textOfRelation:(NSPointerArray *)views {
+  NSMutableArray<NSString *> *texts = [NSMutableArray array];
+  for (NGNView *view in views.allObjects) {
+    NSString *label = view.accessibilityLabel;
+    if (label.length > 0) {
+      [texts addObject:label];
+    } else {
+      [view collectTextInto:texts];
+    }
+  }
+  return texts.count > 0 ? [texts componentsJoinedByString:@" "] : nil;
+}
+
+- (id)accessibilityTitleUIElement {
+  return _labelledBy.allObjects.firstObject;
+}
+
 - (NSString *)accessibilityLabel {
+  if (NSString *named = [self textOfRelation:_labelledBy]) {
+    return named;
+  }
   auto info = [self axInfo];
   if (info.label.empty() && info.hidesChildren && ![_componentName isEqualToString:@"Paragraph"]) {
     // Read as one element with no label of its own: named by the text inside it, as iOS does.
@@ -433,6 +469,9 @@ static BOOL focusFromKeyboard() {
 }
 
 - (NSString *)accessibilityHelp {
+  if (NSString *described = [self textOfRelation:_describedBy]) {
+    return described;
+  }
   auto info = [self axInfo];
   return info.hint.empty() ? nil : nsString(info.hint);
 }

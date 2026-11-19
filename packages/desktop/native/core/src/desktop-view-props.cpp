@@ -38,6 +38,8 @@ DesktopProps parseDesktopProps(const PropsParserContext &context, const DesktopP
       .contextMenu = convertRawProp(context, rawProps, "contextMenu", source.contextMenu, folly::dynamic(nullptr)),
       .role = convertRawProp(context, rawProps, "role", source.role, std::string{}),
       .accessibilityLevel = convertRawProp(context, rawProps, "accessibilityLevel", source.accessibilityLevel, {}),
+      .accessibilityDescribedBy =
+          convertRawProp(context, rawProps, "accessibilityDescribedBy", source.accessibilityDescribedBy, {}),
   };
 }
 

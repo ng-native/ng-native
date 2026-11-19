@@ -140,3 +140,26 @@ TEST_CASE("hidden and presentational views are no elements") {
     CHECK_FALSE(m.view(tag).isAccessibilityElement);
   }
 }
+
+TEST_CASE("a view is labelled and described by the views its props name, ahead of its own label and hint") {
+  MountedViews m;
+  m.add(MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("nativeID", "name")("accessibilityLabel", "Name"))));
+  m.add(MountedViews::shadow(3, "View", viewProps(folly::dynamic::object("nativeID", "hint")("accessibilityLabel", "As on your passport"))));
+  auto field = MountedViews::shadow(4, "View", viewProps(folly::dynamic::object("accessible", true)("role", "button")(
+      "accessibilityLabel", "Own")("accessibilityHint", "Own hint")("accessibilityLabelledBy", folly::dynamic::array("name"))(
+      "accessibilityDescribedBy", folly::dynamic::array("hint"))));
+  m.add(field);
+  NGNView *view = m.view(4);
+  CHECK([view.accessibilityLabel isEqualToString:@"Name"]);
+  CHECK([view.accessibilityHelp isEqualToString:@"As on your passport"]);
+  CHECK((view.accessibilityTitleUIElement == m.view(2)));
+
+  // The view named goes: the view's own hint is read again.
+  auto hint = m.mounting->tree().find(3)->view;
+  m.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, hint, 1), ShadowViewMutation::DeleteMutation(hint)});
+  CHECK([view.accessibilityHelp isEqualToString:@"Own hint"]);
+  // The props stop naming the label: the view's own label is read again.
+  m.update(field, viewProps(folly::dynamic::object("accessible", true)("role", "button")("accessibilityLabel", "Own")));
+  CHECK([view.accessibilityLabel isEqualToString:@"Own"]);
+  CHECK((view.accessibilityTitleUIElement == nil));
+}

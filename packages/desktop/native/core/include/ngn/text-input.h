@@ -16,6 +16,8 @@
 
 #include <cstddef>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace ngn {
 
@@ -31,6 +33,8 @@ class DesktopTextInputProps final : public facebook::react::BaseTextInputProps {
   std::optional<facebook::react::Selection> selection{};
   // Curly quotes and em dashes as the user types. Unset follows `autoCorrect`.
   std::optional<bool> smartQuotes{};
+  // `accessibilityDescribedBy` (`aria-describedby`), as a view's desktop props have it.
+  std::vector<std::string> accessibilityDescribedBy;
 };
 
 extern const char DesktopTextInputComponentName[];

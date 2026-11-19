@@ -101,10 +101,35 @@ TEST_CASE("a window's split view is an AdwNavigationSplitView holding its panes,
   // The window's header bar has the sidebar button.
   CHECK(s.views.backend->headers().sidebarButton(MountedViews::kSurface) != nullptr);
 
-  // The split view gone, so are its widget and the button.
+  // Full height: the window's header bar is over the content pane, the sidebar has one of its own,
+  // and both start at the window's top edge.
+  const auto *chrome = ngn::gtk::chromeOf(s.views.surface);
+  REQUIRE(chrome);
+  GtkWidget *over = gtk_widget_get_ancestor(chrome->headerBar, ADW_TYPE_TOOLBAR_VIEW);
+  CHECK(over != chrome->toolbarView);
+  CHECK(gtk_widget_is_ancestor(over, GTK_WIDGET(s.widget())));
+  CHECK(gtk_widget_is_ancestor(s.views.view(4), over));
+  CHECK_FALSE(gtk_widget_is_ancestor(s.views.view(3), over));
+  GtkWidget *sidebarToolbar = gtk_widget_get_ancestor(s.views.view(3), ADW_TYPE_TOOLBAR_VIEW);
+  CHECK(sidebarToolbar != chrome->toolbarView);
+  CHECK(gtk_widget_is_ancestor(sidebarToolbar, GTK_WIDGET(s.widget())));
+  s.views.settle();
+  graphene_point_t origin{0, 0}, headerTop, sidebarTop;
+  REQUIRE(gtk_widget_compute_point(chrome->headerBar, s.views.window, &origin, &headerTop));
+  REQUIRE(gtk_widget_compute_point(sidebarToolbar, s.views.window, &origin, &sidebarTop));
+  CHECK(headerTop.y == 0);
+  CHECK(sidebarTop.y == 0);
+  // The sidebar's pane starts under its own header bar.
+  graphene_point_t paneTop;
+  REQUIRE(gtk_widget_compute_point(s.views.view(3), s.views.window, &origin, &paneTop));
+  CHECK(paneTop.y > 0);
+
+  // The split view gone, so are its widget and the button, and the header bar is over the whole
+  // window again.
   s.views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, s.split, 0), ShadowViewMutation::DeleteMutation(s.split)});
   CHECK(s.splits().splitWidget(2) == nullptr);
   CHECK(s.views.backend->headers().sidebarButton(MountedViews::kSurface) == nullptr);
+  CHECK(gtk_widget_get_ancestor(chrome->headerBar, ADW_TYPE_TOOLBAR_VIEW) == chrome->toolbarView);
 }
 
 TEST_CASE("Show Sidebar collapses the sidebar while wide and swaps the stack's front pane while compact") {
