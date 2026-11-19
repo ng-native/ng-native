@@ -31,6 +31,7 @@
 #include "ngn/dev-server.h"
 #include "ngn/file-system.h"
 #include "ngn/host-os.h"
+#include "ngn/host-state.h"
 #include "ngn/host-views.h"
 #include "ngn/launch-settings.h"
 #include "ngn/layout-animations.h"
@@ -115,6 +116,31 @@ void followFontScale() {
           surface, metricsFor(gtk_widget_get_width(widget), gtk_widget_get_height(widget), gtk_widget_get_scale_factor(widget)));
     }
   }
+}
+
+// What Dimensions reports: the app window's content size and scale, and its monitor's size (the
+// first monitor's before the window is on one; the window's own size with no monitor at all).
+ngn::WindowMetrics windowMetrics(int width, int height) {
+  double scale = gtk_widget_get_scale_factor(gHost.appWindow);
+  double screenWidth = width, screenHeight = height;
+  GdkDisplay *display = gtk_widget_get_display(gHost.appWindow);
+  GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(gHost.appWindow));
+  GdkMonitor *monitor = surface ? gdk_display_get_monitor_at_surface(display, surface) : nullptr;
+  GListModel *monitors = gdk_display_get_monitors(display);
+  GdkMonitor *first = !monitor && g_list_model_get_n_items(monitors) > 0 ? GDK_MONITOR(g_list_model_get_item(monitors, 0)) : nullptr;
+  if (GdkMonitor *m = monitor ? monitor : first) {
+    GdkRectangle geometry;
+    gdk_monitor_get_geometry(m, &geometry);
+    screenWidth = geometry.width;
+    screenHeight = geometry.height;
+  }
+  if (first) {
+    g_object_unref(first);
+  }
+  return {
+      .window = {.width = static_cast<double>(width), .height = static_cast<double>(height), .scale = scale, .fontScale = ngn::gtk::desktopFontScale()},
+      .screen = {.width = screenWidth, .height = screenHeight, .scale = scale, .fontScale = ngn::gtk::desktopFontScale()},
+  };
 }
 
 // A dev or test run's input script (NGN_INPUT_SCRIPT), played into the first window once it shows.
@@ -468,6 +494,11 @@ int main(int argc, char *argv[]) {
   gtk_window_set_default_size(GTK_WINDOW(gHost.appWindow), width, height);
   gHost.appSurface = ngn::gtk::makeSurfaceWidget(kAppSurface, [](int w, int h) {
     reportContainer(kAppSurface);
+    reportContainer(kAppSurface, w, h);
+    // Each allocation, a new size or a new scale: Dimensions follows the window, as on macOS.
+    if (gHost.state) {
+      gHost.state->metrics.set(windowMetrics(w, h));
+    }
     if (gHost.runtime) {
       gHost.runtime->updateSurface(kAppSurface, metricsFor(w, h, gtk_widget_get_scale_factor(gHost.appWindow)));
     }
@@ -480,6 +511,18 @@ int main(int argc, char *argv[]) {
   }), nullptr);
   gtk_widget_realize(gHost.appWindow);
   ngn::gtk::afterLayout(gHost.appWindow, [] { reportContainer(kAppSurface); });
+  // A move to a monitor of another scale changes no size, so the surface would not hear of it.
+  g_signal_connect(gHost.appWindow, "notify::scale-factor", G_CALLBACK(+[](GObject *, GParamSpec *, gpointer) {
+    // One declaration each: a comma here would split G_CALLBACK's argument.
+    int w = gtk_widget_get_width(gHost.appSurface);
+    int h = gtk_widget_get_height(gHost.appSurface);
+    if (gHost.state) {
+      gHost.state->metrics.set(windowMetrics(w, h));
+    }
+    if (gHost.runtime) {
+      gHost.runtime->updateSurface(kAppSurface, metricsFor(w, h, gtk_widget_get_scale_factor(gHost.appWindow)));
+    }
+  }), nullptr);
 
   // The app's folders: a test launch's own, else the XDG ones named for the app.
   std::string appData = settings.test ? settings.test->applicationSupport() : joined(g_get_user_data_dir(), appId);
@@ -487,10 +530,7 @@ int main(int argc, char *argv[]) {
   g_mkdir_with_parents(caches.c_str(), 0700);
   auto system = ngn::gtk::makeSystem(appId, appData);
   gHost.state = std::make_shared<ngn::HostState>();
-  gHost.state->metrics.set({
-      .window = {.width = static_cast<double>(width), .height = static_cast<double>(height), .scale = 1, .fontScale = ngn::gtk::desktopFontScale()},
-      .screen = {.width = 1920, .height = 1080, .scale = 1, .fontScale = ngn::gtk::desktopFontScale()},
-  });
+  gHost.state->metrics.set(windowMetrics(width, height));
   if (!settings.initialUrl.empty()) {
     gHost.state->setInitialUrl(settings.initialUrl);
   }
@@ -551,6 +591,13 @@ int main(int argc, char *argv[]) {
           },
       .laidOut = reportContainer,
       .quit = [] { gHost.quit = true; },
+      // The app's own window, once shown, keeps the app running; closing it quits.
+      .lastWindowClosed =
+          [] {
+            if (!gHost.appWindowShown) {
+              gHost.quit = true;
+            }
+          },
   }, gHost.application, menuPlacement);
   auto windowHost = std::make_shared<ngn::WindowHost>(gHost.windows, system);
   gHost.windows->setHost(windowHost);
@@ -591,7 +638,7 @@ int main(int argc, char *argv[]) {
   // The Expo Updates client, off: this backend has no crypto yet, which a fetched update needs
   // to be checked, so it never fetches one. The bundle runs as given.
   auto updatesConfig = ngn::updatesConfigFrom(settings, os, appData, bundle);
-  updatesConfig.url.clear();
+  updatesConfig.off = "Updates are off: the Linux host has no update checks yet.";
   auto updates = std::make_shared<ngn::UpdatesClient>(std::move(updatesConfig), network.http, nullptr);
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
   // is left empty, and its module answers that it is unavailable.

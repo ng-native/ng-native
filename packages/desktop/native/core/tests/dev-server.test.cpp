@@ -1,6 +1,8 @@
 #include "ngn/dev-server.h"
 
 #include <doctest/doctest.h>
+#include <stdexcept>
+#include <string>
 
 TEST_CASE("a Metro bundle URL names the dev server, the entry and the OS") {
   auto server = ngn::DevServer::fromBundleUrl(
@@ -67,4 +69,11 @@ TEST_CASE("an IPv6 dev server keeps its brackets and its port") {
   CHECK(unported->port == 443);
   CHECK_FALSE(ngn::DevServer::fromBundleUrl("http://[::1]x/index.bundle"));
   CHECK_FALSE(ngn::DevServer::fromBundleUrl("http://[::1/index.bundle"));
+}
+
+TEST_CASE("an empty OS id for the dev server is refused, and leaves the one it had") {
+  // Only the refused call, so the process's OS id is never changed.
+  std::string before = ngn::devServerOs();
+  CHECK_THROWS_AS(ngn::setDevServerOs(""), std::invalid_argument);
+  CHECK(ngn::devServerOs() == before);
 }
