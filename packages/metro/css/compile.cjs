@@ -3365,8 +3365,8 @@ function undrawn({ name, os }, context) {
       `${context}: filter: ${name}() is not drawn on macOS. The desktop host draws every other ` +
         `filter function through its layer's Core Image filters, and has no filter that adds a ` +
         `copy of the view under itself, so this would leave the view without its shadow on a Mac. ` +
-        `Use box-shadow, or scope the rule to the other platforms with a .platform-ios or ` +
-        `.platform-android ancestor (Tailwind's ios: and android: variants).`,
+        `Use box-shadow, or scope the rule to Android with a .platform-android ancestor ` +
+        `(Tailwind's android: variant).`,
     );
   }
   return new CssUnsupported(

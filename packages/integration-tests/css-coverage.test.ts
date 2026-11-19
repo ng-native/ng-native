@@ -425,6 +425,15 @@ describe('skew, per platform', () => {
     }
   });
 
+  it('points a refused macOS drop-shadow at Android alone, where iOS refuses it too', () => {
+    assert.throws(
+      () =>
+        compileCss('.a { filter: drop-shadow(2px 2px 3px red) }', 'test', { platform: 'macos' }),
+      (error: Error) =>
+        error.message.includes('.platform-android') && !error.message.includes('.platform-ios'),
+    );
+  });
+
   it('keeps a drop-shadow in a rule scoped to Android, even in a macOS build', () => {
     const scoped = compileCss(
       '.platform-android .a { filter: drop-shadow(1px 1px 2px red) }',
