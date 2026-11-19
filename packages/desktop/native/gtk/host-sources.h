@@ -1,14 +1,13 @@
 // What the GTK host passes the core for the OS, as far as this backend reaches it yet: the System
-// over GLib and libadwaita, and stand-ins for what later steps add (networking over libcurl, menus,
-// the tray and native controls), each of which refuses or does nothing rather than
-// pretend.
+// over GLib and libadwaita, and stand-ins for what later steps add (menus, the tray and native
+// controls), each of which refuses or does nothing rather than pretend. Networking is the core's
+// libcurl client (curl-network.h).
 #pragma once
 
 #include "ngn/app-menus.h"
 #include "ngn/app-windows.h"
 #include "ngn/native-controls.h"
 #include "ngn/network-state.h"
-#include "ngn/network.h"
 #include "ngn/system.h"
 #include "ngn/tray-and-dock.h"
 
@@ -24,10 +23,6 @@ std::shared_ptr<System> makeSystem(const std::string &appId, const std::string &
 
 // Strings in a key file at `path`, written on each change.
 std::shared_ptr<StringStore> makeKeyFileStore(const std::string &path);
-
-// Every request fails, saying so: the libcurl client comes with the must-have modules.
-std::shared_ptr<Http> makeNoHttp();
-std::shared_ptr<WebSockets> makeNoWebSockets();
 
 std::shared_ptr<MenuBackend> makeNoMenus();
 std::shared_ptr<TrayBackend> makeNoTray();

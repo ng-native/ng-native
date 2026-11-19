@@ -173,30 +173,6 @@ class GtkSystem final : public System {
   std::atomic<int64_t> changes_{1};
 };
 
-class NoHttp final : public Http {
- public:
-  std::unique_ptr<HttpTask> send(HttpRequest, HttpCallbacks callbacks) override {
-    if (callbacks.onComplete) {
-      callbacks.onComplete("The Linux host has no HTTP client yet", false);
-    }
-    return nullptr;
-  }
-  void clearCookies(std::function<void(bool)> done) override {
-    done(true);
-  }
-};
-
-class NoWebSockets final : public WebSockets {
- public:
-  std::unique_ptr<WebSocketConnection> connect(
-      const std::string &, const std::vector<std::string> &, const Headers &, WebSocketCallbacks callbacks) override {
-    if (callbacks.onError) {
-      callbacks.onError("The Linux host has no WebSocket client yet");
-    }
-    return nullptr;
-  }
-};
-
 class NoMenus final : public MenuBackend {
  public:
   void setMenuBar(std::vector<MenuItem>) override {}
@@ -251,14 +227,6 @@ std::shared_ptr<System> makeSystem(const std::string &appId, const std::string &
 
 std::shared_ptr<StringStore> makeKeyFileStore(const std::string &path) {
   return std::make_shared<KeyFileStore>(path);
-}
-
-std::shared_ptr<Http> makeNoHttp() {
-  return std::make_shared<NoHttp>();
-}
-
-std::shared_ptr<WebSockets> makeNoWebSockets() {
-  return std::make_shared<NoWebSockets>();
 }
 
 std::shared_ptr<MenuBackend> makeNoMenus() {

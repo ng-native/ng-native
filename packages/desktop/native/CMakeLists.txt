@@ -267,6 +267,39 @@ if(NGN_TESTS)
   add_test(NAME core COMMAND ngn_core_tests)
 endif()
 
+# --- the HTTP and WebSocket client over libcurl, for a backend whose OS has none (gtk) -------------
+# AUTO follows the backend on every configure, so a build directory reused for another backend
+# gets that backend's choice; ON or OFF is the developer's own.
+set(NGN_CURL AUTO CACHE STRING "Build the libcurl client (core/src/curl-network.cpp) and its tests: AUTO (on for gtk), ON or OFF")
+set_property(CACHE NGN_CURL PROPERTY STRINGS AUTO ON OFF)
+if(NGN_CURL STREQUAL "AUTO")
+  if(NGN_BACKEND STREQUAL "gtk")
+    set(_ngn_curl ON)
+  else()
+    set(_ngn_curl OFF)
+  endif()
+else()
+  set(_ngn_curl ${NGN_CURL})
+endif()
+if(NGN_BACKEND STREQUAL "gtk" AND NOT _ngn_curl)
+  message(FATAL_ERROR "The GTK backend's networking is the libcurl client: NGN_CURL must be AUTO or ON")
+endif()
+if(_ngn_curl)
+  include(cmake/curl.cmake)
+  add_library(ngn_curl STATIC core/src/curl-network.cpp)
+  target_link_libraries(ngn_curl PUBLIC ngn_core PRIVATE ngn_libcurl)
+  target_compile_options(ngn_curl PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter -Wno-missing-field-initializers)
+  if(NGN_TESTS)
+    # Against a local server, test-server.py, which needs python3.
+    set(_curl_tests core/tests/curl/network.test.cpp)
+    target_sources(ngn_core_tests PRIVATE ${_curl_tests})
+    target_link_libraries(ngn_core_tests PRIVATE ngn_curl)
+    set_source_files_properties(${_curl_tests} PROPERTIES
+        COMPILE_DEFINITIONS NGN_CURL_TEST_SERVER="${CMAKE_CURRENT_SOURCE_DIR}/core/tests/curl/test-server.py"
+        COMPILE_OPTIONS "${NGN_DOCTEST_SOURCE_OPTIONS}")
+  endif()
+endif()
+
 # --- the core's runtime half: ReactHost over Hermes ----------------------------------------------
 if(NGN_WITH_RUNTIME)
   add_library(ngn_core_runtime STATIC
