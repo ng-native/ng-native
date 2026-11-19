@@ -659,9 +659,9 @@ class Engine {
     curl_easy_setopt(e, CURLOPT_NOSIGNAL, 1L);
     // A proxy's answer to CONNECT is not the response.
     curl_easy_setopt(e, CURLOPT_SUPPRESS_CONNECT_HEADERS, 1L);
-    // NSURLSession always names itself, and some servers refuse a request that does not. A
+    // NSURLSession always names the app, and some servers refuse a request that names nothing. A
     // User-Agent header of the request's own replaces it.
-    curl_easy_setopt(e, CURLOPT_USERAGENT, "ng-native libcurl/" LIBCURL_VERSION);
+    curl_easy_setopt(e, CURLOPT_USERAGENT, userAgent_.c_str());
     if (!ca_.file.empty()) {
       curl_easy_setopt(e, CURLOPT_CAINFO, ca_.file.c_str());
     }
@@ -1244,6 +1244,7 @@ class Engine {
   }
 
   CurlOptions options_;
+  std::string userAgent_{curlUserAgent(options_.appName, options_.appVersion)};
   bool useDesktopProxies_{false};
   struct KeptProxy {
     Clock::time_point asked;
@@ -1400,6 +1401,31 @@ class CurlWebSockets final : public WebSockets {
 CurlNetwork makeCurlNetwork(CurlOptions options) {
   auto client = std::make_shared<Client>(std::move(options));
   return {.http = std::make_shared<CurlHttp>(client), .webSockets = std::make_shared<CurlWebSockets>(client)};
+}
+
+// `text` as one HTTP token (RFC 9110's tchar, but `/`, which ends a product's name), with what a
+// token cannot hold percent-encoded, as CFNetwork encodes an app's name.
+static std::string tokenOf(const std::string &text) {
+  std::string out;
+  for (unsigned char c : text) {
+    if ((c < 0x80 && std::isalnum(c)) || std::string_view("!#$&'*+-.^_`|~").find(static_cast<char>(c)) != std::string_view::npos) {
+      out += static_cast<char>(c);
+    } else {
+      static const char *hex = "0123456789ABCDEF";
+      out += '%';
+      out += hex[c >> 4];
+      out += hex[c & 15];
+    }
+  }
+  return out;
+}
+
+std::string curlUserAgent(const std::string &appName, const std::string &appVersion) {
+  std::string agent = "ng-native libcurl/" LIBCURL_VERSION;
+  if (appName.empty()) {
+    return agent;
+  }
+  return tokenOf(appName) + (appVersion.empty() ? "" : "/" + tokenOf(appVersion)) + " " + agent;
 }
 
 std::optional<std::string> curlProxyFor(const std::vector<std::string> &proxies) {

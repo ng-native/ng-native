@@ -654,6 +654,8 @@ int main(int argc, char *argv[]) {
   auto curl = ngn::makeCurlNetwork({
       .cookieFile = joined(appData, "cookies.txt"),
       .desktopProxies = [](const std::string &url) { return ngn::gtk::desktopProxies(url); },
+      .appName = settings.title,
+      .appVersion = settings.setting("CFBundleShortVersionString", "NGN_APP_VERSION"),
   });
   ngn::NetworkClients network{curl.http, curl.webSockets};
   // Images load through the same client, and are kept in memory for the process.

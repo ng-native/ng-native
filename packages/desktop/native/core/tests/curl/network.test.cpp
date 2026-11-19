@@ -752,6 +752,31 @@ TEST_CASE("a request over libcurl goes through the desktop's proxy for its url, 
   }
 }
 
+TEST_CASE("the User-Agent over libcurl names the app and its version first, as CFNetwork's does on macOS") {
+  CHECK(ngn::curlUserAgent("Notes", "1.2.0").starts_with("Notes/1.2.0 ng-native libcurl/"));
+  // A name is one HTTP token: what a token cannot hold is percent-encoded, as CFNetwork does.
+  CHECK(ngn::curlUserAgent("My Notes (beta)", "2").starts_with("My%20Notes%20%28beta%29/2 ng-native libcurl/"));
+  CHECK(ngn::curlUserAgent("Café", "1").starts_with("Caf%C3%A9/1 "));
+  CHECK(ngn::curlUserAgent("Notes", "").starts_with("Notes ng-native libcurl/"));
+  // So is the version, which a dev run takes from the environment: no header can be broken into.
+  CHECK(ngn::curlUserAgent("Notes", "1.0 beta\r\nX-Evil: 1").starts_with("Notes/1.0%20beta%0D%0AX-Evil%3A%201 ng-native"));
+  CHECK(ngn::curlUserAgent("", "1.0").starts_with("ng-native libcurl/"));
+
+  TestServer server;
+  auto agent = [&](ngn::CurlNetwork &network, ngn::Headers headers) {
+    auto r = std::make_shared<Recorder>();
+    network.http->send({.url = server.url("/echo"), .headers = std::move(headers)}, Recorder::owned(r));
+    REQUIRE(r->waitForComplete());
+    return echoedHeader(echoed(*r), "user-agent");
+  };
+  auto named = ngn::makeCurlNetwork({.appName = "Notes", .appVersion = "1.2.0"});
+  CHECK(agent(named, {}) == ngn::curlUserAgent("Notes", "1.2.0"));
+  // A request's own User-Agent replaces it.
+  CHECK(agent(named, {{"User-Agent", "custom/1"}}) == "custom/1");
+  auto unnamed = ngn::makeCurlNetwork();
+  CHECK(agent(unnamed, {}) == ngn::curlUserAgent("", ""));
+}
+
 TEST_CASE("a compressed body over libcurl arrives decoded") {
   TestServer server;
   Recorder r;

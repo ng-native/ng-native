@@ -53,7 +53,10 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   the rest) when any is set, else from the desktop's settings, asked for each origin at most every 30 seconds: the
   proxy portal (`org.freedesktop.portal.ProxyResolver`) when one answers, else GLib's
   `GProxyResolver` (`proxy-resolver.h`), which reads GNOME's and KDE's settings only where glib-networking is
-  installed. `NO_PROXY` applies to either. It runs a `linux`
+  installed. `NO_PROXY` applies to either.
+  A request names the app in its User-Agent unless it sets its own, as CFNetwork does on macOS:
+  `<name>/<version> ng-native libcurl/<version>`, from `metadata.json`'s `CFBundleName` and
+  `CFBundleShortVersionString` in a package, or `--title` and `NGN_APP_VERSION` in a dev run. It runs a `linux`
   bundle, which `expo export` makes once the app's `app.config.js` registers the platform
   (`@ng-native/metro/linux.cjs`). A window is an
   `AdwApplicationWindow` of the app's `AdwApplication`, holding an `AdwToolbarView` with an

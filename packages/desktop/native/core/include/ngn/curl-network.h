@@ -39,7 +39,16 @@ struct CurlOptions {
   // origin every 30 seconds at most, unless a libcurl proxy variable is set, which wins. Unset, or answering nothing usable: libcurl's own
   // choice, from the environment.
   std::function<std::vector<std::string>(const std::string &url)> desktopProxies;
+  // The app's name and version, which lead the User-Agent (curlUserAgent).
+  std::string appName;
+  std::string appVersion;
 };
+
+// The User-Agent a request sends unless it sets its own: `<name>/<version> ng-native libcurl/<v>`,
+// as CFNetwork's on macOS leads with the app's bundle name and version. The name is percent-encoded
+// where an HTTP token cannot hold it; without a version it stands alone, and without a name only
+// `ng-native libcurl/<v>` is sent.
+std::string curlUserAgent(const std::string &appName, const std::string &appVersion);
 
 // The proxy libcurl takes (CURLOPT_PROXY) for desktopProxies' answer: the first it can use, with
 // GNOME's `socks://` as SOCKS 5, and `direct://` as "" (none, whatever the environment says).
