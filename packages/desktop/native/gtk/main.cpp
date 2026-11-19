@@ -312,7 +312,9 @@ int main(int argc, char *argv[]) {
   gHost.input->onCursor = [](ngn::Cursor cursor) {
     for (SurfaceId surface : gHost.surfaces) {
       if (GtkWidget *widget = surfaceWidgetOf(surface)) {
-        gtk_widget_set_cursor_from_name(widget, ngn::gtk::cursorName(cursor));
+        GdkCursor *shown = ngn::gtk::makeCursor(cursor);
+        gtk_widget_set_cursor(widget, shown);
+        g_clear_object(&shown);
       }
     }
   };
