@@ -67,3 +67,24 @@ TEST_CASE("GNOME's Animations switch off is reduce motion, heard as it changes")
   CHECK(heard.size() == count);
   g_object_set(settings, "gtk-enable-animations", was, nullptr);
 }
+
+TEST_CASE("the host's state is made with its accessibility settings, read at start and followed") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkSettings *settings = gtk_settings_get_default();
+  gboolean was = TRUE;
+  g_object_get(settings, "gtk-enable-animations", &was, nullptr);
+  g_object_set(settings, "gtk-enable-animations", FALSE, nullptr);
+  try {
+    auto made = ngn::gtk::makeWatchedHostState();
+    REQUIRE(made.state);
+    REQUIRE(made.accessibility);
+    CHECK(made.state->accessibility.get().reduceMotion);
+    g_object_set(settings, "gtk-enable-animations", TRUE, nullptr);
+    auto &sources = made.accessibility->sources();
+    CHECK(made.state->accessibility.get().reduceMotion == (sources.portalReducedMotion || sources.gtkReducedMotion));
+  } catch (...) {
+    g_object_set(settings, "gtk-enable-animations", was, nullptr);
+    throw;
+  }
+  g_object_set(settings, "gtk-enable-animations", was, nullptr);
+}
