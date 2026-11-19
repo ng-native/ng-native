@@ -9,7 +9,7 @@
  * end of the host's output.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import { constants } from 'node:os';
 import path from 'node:path';
 import type { AppLauncher, LaunchRequest, LaunchedApp } from './launcher.ts';
@@ -308,14 +308,44 @@ function signalGroup(group: number, signal: NodeJS.Signals): void {
   }
 }
 
-/** Whether any process of the group `group` is left. */
+/**
+ * Whether any process of the group `group` is left. A zombie is not: when the process running
+ * Vitest is PID 1 (a container started without `--init`), what the session leaves behind is
+ * reparented to it and never reaped, so the group never empties of zombies. Where `/proc` cannot
+ * be read, any process counts.
+ */
 function groupAlive(group: number): boolean {
+  if (process.platform === 'linux') {
+    const alive = liveGroupMember(group);
+    if (alive !== undefined) return alive;
+  }
   try {
     process.kill(-group, 0);
     return true;
   } catch {
     return false;
   }
+}
+
+/** Whether `/proc` lists a process of group `group` that is not a zombie, or undefined without `/proc`. */
+function liveGroupMember(group: number): boolean | undefined {
+  let pids: string[];
+  try {
+    pids = readdirSync('/proc').filter((name) => /^\d+$/.test(name));
+  } catch {
+    return undefined;
+  }
+  return pids.some((pid) => {
+    let stat: string;
+    try {
+      stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    } catch {
+      return false; // Gone since the listing.
+    }
+    // `pid (comm) state ppid pgrp ...`, where comm may hold spaces and parentheses.
+    const [state, , pgrp] = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    return Number(pgrp) === group && state !== 'Z';
+  });
 }
 
 async function untilGroupGone(group: number): Promise<void> {
