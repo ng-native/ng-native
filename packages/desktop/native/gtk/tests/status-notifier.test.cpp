@@ -41,6 +41,14 @@ void drop(GVariant *reply) {
   }
 }
 
+// Returns once the bus daemon has every match rule `bus` subscribed before the call: it answers a
+// connection's messages in the order they came, and a subscription sends its rule without waiting.
+void awaitMatchRules(GDBusConnection *bus) {
+  drop(g_dbus_connection_call_sync(
+      bus, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "GetId", nullptr, nullptr, G_DBUS_CALL_FLAGS_NONE, 2000,
+      nullptr, nullptr));
+}
+
 void spin(int turns = 40) {
   for (int i = 0; i < turns; ++i) {
     g_main_context_iteration(nullptr, FALSE);
@@ -292,6 +300,9 @@ TEST_CASE("an icon sent again keeps its item and shows its change, and one left 
   next.pop_back();
   next[0].title = "24:59";
   next[0].menu = std::vector<MenuItem>{{.title = "Resume", .command = ngn::MenuCommand::AppItem, .id = "2"}};
+  // Each icon has a connection of its own, so the bus daemon could take its signals before this
+  // connection's match rules, and the test would never hear them.
+  awaitMatchRules(watcher.bus);
   tray->setIcons(next);
   REQUIRE(spinUntil([&] { return titles == 1 && layouts == 1 && !watcher.hasOwner(sync.sender); }));
 
