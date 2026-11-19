@@ -118,7 +118,7 @@ export function checkLinuxFlags({ format, license, homepage, categories, maintai
         'LicenseRef-proprietary), which the package and its metainfo state.',
     );
   }
-  if (license !== undefined && !/^[A-Za-z0-9.+\-:() ]+$/.test(license)) {
+  if (license !== undefined && !isSpdxExpression(license)) {
     throw new UsageError(`--license takes an SPDX license expression, not "${license}".`);
   }
   if (homepage !== undefined && !isWebUrl(homepage)) {
@@ -126,6 +126,48 @@ export function checkLinuxFlags({ format, license, homepage, categories, maintai
   }
   if (categories !== undefined) categoryList(categories);
   checkMaintainer(format, maintainer);
+}
+
+/**
+ * Whether `value` is an SPDX license expression: ids (a `LicenseRef-` one too), `WITH` an
+ * exception, `AND`, `OR` and parentheses, complete, so `MIT AND` is not.
+ *
+ * @param {string} value
+ */
+function isSpdxExpression(value) {
+  const tokens = value.match(/[()]|[^\s()]+/g) ?? [];
+  const id =
+    /^(?:(?:DocumentRef-[A-Za-z0-9.-]+:)?LicenseRef-[A-Za-z0-9.-]+|[A-Za-z0-9][A-Za-z0-9.-]*\+?)$/;
+  let at = 0;
+  const word = () => {
+    const token = tokens[at];
+    if (token === undefined || !id.test(token) || ['AND', 'OR', 'WITH'].includes(token)) {
+      return false;
+    }
+    at++;
+    return true;
+  };
+  const term = () => {
+    if (tokens[at] === '(') {
+      at++;
+      if (!compound() || tokens[at] !== ')') return false;
+      at++;
+      return true;
+    }
+    if (!word()) return false;
+    if (tokens[at] !== 'WITH') return true;
+    at++;
+    return word();
+  };
+  const compound = () => {
+    if (!term()) return false;
+    while (tokens[at] === 'AND' || tokens[at] === 'OR') {
+      at++;
+      if (!term()) return false;
+    }
+    return true;
+  };
+  return compound() && at === tokens.length;
 }
 
 /**
@@ -198,6 +240,22 @@ function idPart(slug) {
 }
 
 /**
+ * Throws a usage error for an id whose longest generated file name, `<id>.metainfo.xml`, is more
+ * than the 100 bytes a tar header holds. The id is the app's identity, so it is not shortened.
+ *
+ * @param {string} appId
+ */
+function checkIdLength(appId) {
+  if (Buffer.byteLength(`${appId}.metainfo.xml`) > 100) {
+    throw new UsageError(
+      `The application id "${appId}" is too long: its metainfo file, ${appId}.metainfo.xml, takes ` +
+        'more than the 100 bytes an archive holds. Shorten expo.ios.bundleIdentifier to 87 ' +
+        'bytes or fewer.',
+    );
+  }
+}
+
+/**
  * The application id `linuxNames` gives a package, checked for Linux and, for a Flatpak, Flathub.
  *
  * @param {string | null} bundleIdentifier
@@ -264,6 +322,7 @@ export function linuxNames(expo, config, format) {
     );
   }
   const appId = linuxAppId(config.bundleIdentifier, format, slug);
+  checkIdLength(appId);
   const version = config.version;
   if (!/^\d[A-Za-z0-9.+~]*$/.test(version)) {
     throw new UsageError(
@@ -505,7 +564,9 @@ export function finishArgs(config) {
   }
   for (const entry of config.options.capabilities?.paths ?? []) {
     const access = (entry.access ?? 'read') === 'read' ? ':ro' : '';
-    args.push(`--filesystem=${entry.path.replace(/\/$/, '')}${access}`);
+    // A colon starts the mode, so one in the path is escaped, with the backslash that escapes it.
+    const declared = entry.path.replace(/\/$/, '').replace(/[\\:]/g, '\\$&');
+    args.push(`--filesystem=${declared}${access}`);
   }
   return args;
 }
@@ -802,7 +863,12 @@ function packageTree(sys, plan, { arch, tree, archives }) {
     return plan.runner ? [buildRpm(sys, { ...plan, runner: plan.runner, arch, tree })] : [];
   }
   const base = `${app.packageName}-${app.version}-${LINUX_ARCHES[arch].rpm}`;
-  const archive = path.join(format === 'app' ? plan.output : plan.staging, `${base}.tar.gz`);
+  // A Flatpak's source is not the `app` archive of the same name: its metadata differs, and the
+  // output folder may hold the `app` one and its signature.
+  const archive =
+    format === 'app'
+      ? path.join(plan.output, `${base}.tar.gz`)
+      : path.join(plan.staging, `${base}-flatpak-source.tar.gz`);
   sys.writeFile(archive, tarGz(treeEntries(sys, tree, `${base}/`)));
   archives.push({ arch, file: archive, sha256: sys.sha256(archive) });
   return format === 'app' ? shipFolder(sys, plan, { tree, archive, base }) : [];

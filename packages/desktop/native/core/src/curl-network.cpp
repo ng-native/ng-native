@@ -149,8 +149,48 @@ std::string utf8Prefix(const std::string &text, size_t limit) {
   return text.substr(0, n);
 }
 
-// A `data:` url's bytes: `data:[<type>][;base64],<data>`, its data percent-decoded.
-std::optional<std::string> dataUriBytes(const std::string &uri) {
+// Whether `text` is well-formed UTF-8: no overlong forms, surrogates or code points past U+10FFFF.
+bool validUtf8(std::string_view text) {
+  size_t i = 0;
+  while (i < text.size()) {
+    auto c = static_cast<unsigned char>(text[i]);
+    size_t extra;
+    unsigned char low = 0x80, high = 0xBF;
+    if (c < 0x80) {
+      ++i;
+      continue;
+    } else if (c >= 0xC2 && c <= 0xDF) {
+      extra = 1;
+    } else if (c >= 0xE0 && c <= 0xEF) {
+      extra = 2;
+      low = c == 0xE0 ? 0xA0 : 0x80;
+      high = c == 0xED ? 0x9F : 0xBF;
+    } else if (c >= 0xF0 && c <= 0xF4) {
+      extra = 3;
+      low = c == 0xF0 ? 0x90 : 0x80;
+      high = c == 0xF4 ? 0x8F : 0xBF;
+    } else {
+      return false;
+    }
+    if (text.size() - i <= extra) {
+      return false;
+    }
+    for (size_t k = 1; k <= extra; ++k) {
+      auto b = static_cast<unsigned char>(text[i + k]);
+      unsigned char lo = k == 1 ? low : 0x80, hi = k == 1 ? high : 0xBF;
+      if (b < lo || b > hi) {
+        return false;
+      }
+    }
+    i += extra + 1;
+  }
+  return true;
+}
+
+// A `data:` url's bytes: `data:[<type>][;base64],<data>`, its data percent-decoded. A fragment
+// (from the first `#`) is not part of it; `%23` is a `#` in the data.
+std::optional<std::string> dataUriBytes(const std::string &url) {
+  const std::string uri = url.substr(0, url.find('#'));
   auto comma = uri.find(',');
   if (comma == std::string::npos) {
     return std::nullopt;
@@ -263,6 +303,8 @@ struct Socket {
   std::string message;
   unsigned messageFlags{0};
   std::string closePayload;
+  // A ping's payload while it arrives, which its pong echoes.
+  std::string pingPayload;
   // This side's close frame, queued and then sent, and when to stop waiting for the closing
   // handshake to finish.
   bool closeQueued{false};
@@ -410,10 +452,13 @@ class Engine {
     } else {
       if (method != "POST") {
         curl_easy_setopt(e, CURLOPT_CUSTOMREQUEST, request.method.c_str());
+        // curl treats this method's body as a POST's, and would make it a GET on a 301 or 302 too.
+        // Only POST changes there, as in browsers.
+        curl_easy_setopt(e, CURLOPT_POSTREDIR, static_cast<long>(CURL_REDIR_POST_301 | CURL_REDIR_POST_302));
       }
       // A body goes as curl's POST does, under the method named, and POST, PUT and PATCH send an
       // empty one with its length. OBEYCODE above turns a POST into a GET on a 301, 302 or 303,
-      // as NSURLSession does.
+      // and any method into a GET on a 303, as NSURLSession does.
       if (!request.body.empty() || method == "POST" || method == "PUT" || method == "PATCH") {
         t->body = std::move(request.body);
         curl_easy_setopt(e, CURLOPT_POST, 1L);
@@ -488,6 +533,9 @@ class Engine {
     curl_easy_setopt(e, CURLOPT_PROTOCOLS_STR, "ws,wss");
     // The handshake through the multi handle, then frames by curl_ws_send and curl_ws_recv.
     curl_easy_setopt(e, CURLOPT_CONNECT_ONLY, 2L);
+    // A ping is answered through the outgoing queue: curl's own pong waits for a send or a read
+    // that finds more, which an idle connection never makes.
+    curl_easy_setopt(e, CURLOPT_WS_OPTIONS, static_cast<long>(CURLWS_NOAUTOPONG));
     curl_easy_setopt(e, CURLOPT_HEADERFUNCTION, &Engine::onSocketHeader);
     curl_easy_setopt(e, CURLOPT_HEADERDATA, s.get());
     // A refused upgrade's body, which would otherwise go to stdout.
@@ -901,8 +949,14 @@ class Engine {
         }
         continue;
       }
-      if (meta->flags & (CURLWS_PING | CURLWS_PONG)) {
-        // curl answers a ping itself.
+      if (meta->flags & CURLWS_PING) {
+        s.pingPayload.append(buffer, n);
+        if (meta->bytesleft == 0) {
+          queuePong(s);
+        }
+        continue;
+      }
+      if (meta->flags & CURLWS_PONG) {
         continue;
       }
       if (s.message.empty()) {
@@ -913,19 +967,47 @@ class Engine {
         fail(id, "Message too long");
         return false;
       }
-      if (meta->bytesleft == 0 && !(meta->flags & CURLWS_CONT)) {
-        deliver(s);
+      if (meta->bytesleft == 0 && !(meta->flags & CURLWS_CONT) && !deliver(id, s)) {
+        return false;
       }
     }
     return true;
   }
 
-  void deliver(Socket &s) {
+  // The pong to the ping just read, ahead of anything not yet begun and of this side's close.
+  static void queuePong(Socket &s) {
+    std::string payload;
+    payload.swap(s.pingPayload);
+    if (s.closeSent) {
+      return;
+    }
+    // One pong waits at most: a later ping's replaces it, as RFC 6455 allows, so a peer that
+    // pings without reading cannot grow the queue.
+    for (auto &frame : s.outgoing) {
+      if (!frame.started && (frame.flags & CURLWS_PONG)) {
+        frame.bytes = std::move(payload);
+        return;
+      }
+    }
+    auto at = s.outgoing.begin();
+    if (at != s.outgoing.end() && at->started) {
+      ++at;
+    }
+    s.outgoing.insert(at, {.flags = CURLWS_PONG, .bytes = std::move(payload)});
+  }
+
+  // False once a text message that is not UTF-8 has failed the socket.
+  bool deliver(uint64_t id, Socket &s) {
     std::string message;
     message.swap(s.message);
+    if ((s.messageFlags & CURLWS_TEXT) && !validUtf8(message)) {
+      // As a browser fails the connection on a text message that is not UTF-8.
+      fail(id, "Invalid UTF-8 in a text message");
+      return false;
+    }
     std::lock_guard lock(s.state->mutex);
     if (s.state->finished) {
-      return;
+      return true;
     }
     if (s.messageFlags & CURLWS_TEXT) {
       if (s.state->callbacks.onText) {
@@ -934,6 +1016,7 @@ class Engine {
     } else if (s.state->callbacks.onBinary) {
       s.state->callbacks.onBinary(message);
     }
+    return true;
   }
 
   // The server's close frame. The socket closes with its code once this side's close frame has
