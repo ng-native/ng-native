@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const probe = fileURLToPath(new URL('../native/scripts/launch-probe.sh', import.meta.url));
 
 /** Runs the probe on a host whose body is `script` (it gets the bundle path as $1). */
-function launch(script: string, seconds = 10) {
+function launch(script: string, seconds = 10, env: Record<string, string> = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'ngn-launch-probe-'));
   try {
     const host = path.join(dir, 'ngn-macos');
@@ -21,7 +21,10 @@ function launch(script: string, seconds = 10) {
     chmodSync(host, 0o755);
     const bundle = path.join(dir, 'main.js');
     writeFileSync(bundle, '');
-    const result = spawnSync('bash', [probe, host, bundle, String(seconds)], { encoding: 'utf8' });
+    const result = spawnSync('bash', [probe, host, bundle, String(seconds)], {
+      encoding: 'utf8',
+      env: { ...process.env, ...env },
+    });
     return { status: result.status, stdout: result.stdout, stderr: result.stderr };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -80,5 +83,40 @@ describe('launch-probe.sh', () => {
       launch(`${started}; sleep 1; ${consoleError}; exec sleep 30`).stderr,
       /a JavaScript error after the first frame/,
     );
+  });
+
+  describe('NGN_EXPECT_RENDERER', () => {
+    const vulkan = { NGN_EXPECT_RENDERER: 'GskVulkanRenderer' };
+    const asked = /GTK did not use the GskVulkanRenderer renderer it was asked for/;
+
+    it('passes when GTK logs the renderer, in the wording of GTK 4.14 and of 4.16', () => {
+      for (const line of [
+        `Using renderer of type 'GskVulkanRenderer' for surface 'GdkX11Surface'`,
+        `Using renderer 'GskVulkanRenderer' for surface 'GdkX11Surface'`,
+      ]) {
+        const result = launch(`echo "${line}" >&2; ${started}; exec sleep 30`, 10, vulkan);
+        assert.equal(result.status, 0, result.stderr);
+      }
+    });
+
+    it('fails when GTK fell back to another renderer', () => {
+      const result = launch(
+        `echo "Failed to realize renderer 'GskVulkanRenderer' for surface 'GdkX11Surface': no device" >&2; echo "Using renderer 'GskNglRenderer' for surface 'GdkX11Surface'" >&2; ${started}; exec sleep 30`,
+        10,
+        vulkan,
+      );
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, asked);
+    });
+
+    it('fails when GTK logs no renderer at all', () => {
+      const result = launch(`${started}; exec sleep 30`, 10, vulkan);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, asked);
+    });
+
+    it('checks nothing when no renderer is expected', () => {
+      assert.equal(launch(`${started}; exec sleep 30`).status, 0);
+    });
   });
 });

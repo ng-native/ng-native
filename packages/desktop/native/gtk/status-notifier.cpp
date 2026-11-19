@@ -7,6 +7,7 @@
 #include <gtk/gtk.h>
 
 #include <cstdio>
+#include <functional>
 #include <map>
 #include <optional>
 #include <vector>
@@ -273,10 +274,20 @@ void menuCall(GDBusConnection *, const gchar *, const gchar *, const gchar *, co
     GVariantBuilder out;
     g_variant_builder_init(&out, G_VARIANT_TYPE("a(ia{sv})"));
     gint32 id = 0;
+    bool any = false;
     while (g_variant_iter_next(ids, "i", &id)) {
+      any = true;
       if (const DbusMenuNode *node = findDbusMenuNode(icon->layout, id)) {
         g_variant_builder_add(&out, "(i@a{sv})", id, nodeProperties(*node, id == 0));
       }
+    }
+    // dbusmenu: no ids asks for every item.
+    if (!any) {
+      std::function<void(const DbusMenuNode &)> all = [&](const DbusMenuNode &node) {
+        g_variant_builder_add(&out, "(i@a{sv})", node.id, nodeProperties(node, node.id == 0));
+        for (const auto &child : node.children) all(child);
+      };
+      all(icon->layout);
     }
     g_variant_iter_free(ids);
     g_dbus_method_invocation_return_value(invocation, g_variant_new("(@a(ia{sv}))", g_variant_builder_end(&out)));
@@ -415,12 +426,22 @@ class Tray final : public TrayBackend, public std::enable_shared_from_this<Tray>
       if (!(icon->icon == spec)) {
         auto layout = dbusMenuLayout(spec.menu.value_or(std::vector<MenuItem>{}));
         bool relaid = !(layout == icon->layout);
+        bool menuChanged = icon->icon.menu.has_value() != spec.menu.has_value();
         icon->icon = spec;
         icon->layout = std::move(layout);
         for (const char *signal : {"NewTitle", "NewIcon", "NewToolTip"}) {
           icon->emit("org.kde.StatusNotifierItem", kItemPath, signal, nullptr);
         }
         icon->emit("org.kde.StatusNotifierItem", kItemPath, "NewStatus", g_variant_new("(s)", "Active"));
+        if (menuChanged) {
+          // Menu and ItemIsMenu follow whether there is a menu, which no New* signal tells a host to reread.
+          GVariantBuilder changed;
+          g_variant_builder_init(&changed, G_VARIANT_TYPE("a{sv}"));
+          g_variant_builder_add(&changed, "{sv}", "Menu", g_variant_new_object_path(spec.menu ? kMenuPath : "/NO_DBUSMENU"));
+          g_variant_builder_add(&changed, "{sv}", "ItemIsMenu", g_variant_new_boolean(spec.menu.has_value()));
+          icon->emit("org.freedesktop.DBus.Properties", kItemPath, "PropertiesChanged",
+                     g_variant_new("(sa{sv}as)", "org.kde.StatusNotifierItem", &changed, nullptr));
+        }
         if (relaid) {
           icon->emit("com.canonical.dbusmenu", kMenuPath, "LayoutUpdated", g_variant_new("(ui)", ++icon->revision, 0));
         }

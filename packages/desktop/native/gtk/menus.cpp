@@ -17,7 +17,7 @@ const std::map<std::string, guint> &namedKeys() {
   static const std::map<std::string, guint> keys{
       {"ArrowLeft", GDK_KEY_Left}, {"ArrowRight", GDK_KEY_Right}, {"ArrowUp", GDK_KEY_Up}, {"ArrowDown", GDK_KEY_Down},
       {"Enter", GDK_KEY_Return}, {"Escape", GDK_KEY_Escape}, {"Backspace", GDK_KEY_BackSpace}, {"Delete", GDK_KEY_Delete},
-      {"Tab", GDK_KEY_Tab}, {"Home", GDK_KEY_Home}, {"End", GDK_KEY_End}, {"PageUp", GDK_KEY_Page_Up},
+      {"Tab", GDK_KEY_Tab}, {"Insert", GDK_KEY_Insert}, {"Home", GDK_KEY_Home}, {"End", GDK_KEY_End}, {"PageUp", GDK_KEY_Page_Up},
       {"PageDown", GDK_KEY_Page_Down}, {"F1", GDK_KEY_F1}, {"F2", GDK_KEY_F2}, {"F3", GDK_KEY_F3}, {"F4", GDK_KEY_F4},
       {"F5", GDK_KEY_F5}, {"F6", GDK_KEY_F6}, {"F7", GDK_KEY_F7}, {"F8", GDK_KEY_F8}, {"F9", GDK_KEY_F9},
       {"F10", GDK_KEY_F10}, {"F11", GDK_KEY_F11}, {"F12", GDK_KEY_F12},
@@ -49,7 +49,9 @@ struct Chosen {
   std::function<void(const MenuItem &)> chosen;
 };
 
-void addItems(GMenu *menu, const std::vector<MenuItem> &items, GSimpleActionGroup *group, const std::function<void(const MenuItem &)> &chosen, int &next) {
+// `disabled` when a menu above is: its items are too, as findMenuItem skips the whole branch.
+void addItems(GMenu *menu, const std::vector<MenuItem> &items, GSimpleActionGroup *group, const std::function<void(const MenuItem &)> &chosen, int &next,
+              bool disabled) {
   GMenu *section = g_menu_new();
   auto flush = [&] {
     if (g_menu_model_get_n_items(G_MENU_MODEL(section)) > 0) {
@@ -69,7 +71,7 @@ void addItems(GMenu *menu, const std::vector<MenuItem> &items, GSimpleActionGrou
     }
     if (!item.items.empty()) {
       GMenu *sub = g_menu_new();
-      addItems(sub, item.items, group, chosen, next);
+      addItems(sub, item.items, group, chosen, next, disabled || item.disabled);
       if (item.inlineItems) {
         flush();
         g_menu_append_section(menu, nullptr, G_MENU_MODEL(sub));
@@ -82,7 +84,7 @@ void addItems(GMenu *menu, const std::vector<MenuItem> &items, GSimpleActionGrou
     std::string name = actionName(next++);
     GSimpleAction *action = item.checked ? g_simple_action_new_stateful(name.c_str(), nullptr, g_variant_new_boolean(TRUE))
                                          : g_simple_action_new(name.c_str(), nullptr);
-    g_simple_action_set_enabled(action, !item.disabled);
+    g_simple_action_set_enabled(action, !disabled && !item.disabled);
     g_signal_connect_data(
         action, item.checked ? "change-state" : "activate", G_CALLBACK(+[](GSimpleAction *, GVariant *, gpointer data) {
           auto *c = static_cast<Chosen *>(data);
@@ -136,17 +138,22 @@ KeyChord chordOf(guint keyval, GdkModifierType state) {
 }
 
 std::string acceleratorOf(const MenuItem &item) {
-  if (item.key.empty()) {
+  // None on Command either: Super is the desktop's, so no press here chooses the item, and a Ctrl
+  // label would name a press that does not.
+  if (item.key.empty() || (item.modifiers & Command)) {
     return {};
   }
   guint keyval = 0;
   if (auto named = namedKeys().find(item.key); named != namedKeys().end()) {
     keyval = named->second;
-  } else {
+  } else if (g_utf8_strlen(item.key.c_str(), -1) == 1) {
     keyval = gdk_unicode_to_keyval(g_utf8_get_char(item.key.c_str()));
+  } else {
+    // A key named some other way, such as "Pause": shown as its first letter, it would be another key.
+    return {};
   }
   unsigned state = 0;
-  if (item.modifiers & (Control | Command)) state |= GDK_CONTROL_MASK;
+  if (item.modifiers & Control) state |= GDK_CONTROL_MASK;
   if (item.modifiers & Shift) state |= GDK_SHIFT_MASK;
   if (item.modifiers & Option) state |= GDK_ALT_MASK;
   gchar *name = gtk_accelerator_name(gdk_keyval_to_lower(keyval), static_cast<GdkModifierType>(state));
@@ -158,8 +165,12 @@ std::string acceleratorOf(const MenuItem &item) {
 GMenuModel *buildMenu(const std::vector<MenuItem> &items, GSimpleActionGroup *group, std::function<void(const MenuItem &)> chosen) {
   GMenu *menu = g_menu_new();
   int next = 0;
-  addItems(menu, items, group, chosen, next);
+  addItems(menu, items, group, chosen, next, false);
   return G_MENU_MODEL(menu);
+}
+
+GtkWidget *nestedPopoverMenu(GMenuModel *model) {
+  return gtk_popover_menu_new_from_model_full(model, GTK_POPOVER_MENU_NESTED);
 }
 
 GtkMenus::GtkMenus(std::function<void(const MenuItem &item)> chosen) : chosen_(std::move(chosen)) {}
@@ -175,7 +186,11 @@ GtkMenus::~GtkMenus() {
 }
 
 void GtkMenus::setMenuBar(std::vector<MenuItem> bar) {
-  onMainContext([this, bar = std::move(bar)]() mutable {
+  onMainContext([this, alive = std::weak_ptr<void>(alive_), bar = std::move(bar)]() mutable {
+    // Queued, so these menus may have gone by the time it runs.
+    if (alive.expired()) {
+      return;
+    }
     bar_ = std::move(bar);
     g_clear_object(&model_);
     g_clear_object(&actions_);
@@ -212,7 +227,8 @@ void GtkMenus::show(GtkWidget *slot) {
   if (GTK_IS_POPOVER_MENU_BAR(slot)) {
     gtk_popover_menu_bar_set_menu_model(GTK_POPOVER_MENU_BAR(slot), model_);
   } else {
-    gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(slot), model_);
+    // Nested, as the menu bar's are.
+    gtk_menu_button_set_popover(GTK_MENU_BUTTON(slot), model_ ? nestedPopoverMenu(model_) : nullptr);
   }
   // The items' actions are the window's `menu` group, so each window's slot reaches them.
   if (GtkRoot *root = gtk_widget_get_root(slot)) {
@@ -227,7 +243,13 @@ bool popUpContextMenu(GtkWidget *widget, facebook::react::Point point, const std
   }
   GSimpleActionGroup *group = g_simple_action_group_new();
   GMenuModel *model = buildMenu(items, group, std::move(chosen));
-  GtkWidget *popover = gtk_popover_menu_new_from_model(model);
+  // Only separators and empty menus: nothing to draw, so the view's own menu instead.
+  if (g_menu_model_get_n_items(model) == 0) {
+    g_object_unref(model);
+    g_object_unref(group);
+    return false;
+  }
+  GtkWidget *popover = nestedPopoverMenu(model);
   g_object_unref(model);
   gtk_widget_insert_action_group(popover, "menu", G_ACTION_GROUP(group));
   g_object_unref(group);
@@ -301,7 +323,8 @@ void routeKeys(GtkWindow *window, std::shared_ptr<KeyRouting> routing) {
           return TRUE;
         }
         const MenuItem *item = routing->menuKey ? routing->menuKey(chord) : nullptr;
-        if (!item || (text && isEditingCommand(item->command))) {
+        // A focused text input keeps its editing keys, from the app's items as from the OS's.
+        if (!item || (text && (isEditingCommand(item->command) || (routing->editingKey && routing->editingKey(chord))))) {
           return FALSE;
         }
         routing->choose(*item, window);

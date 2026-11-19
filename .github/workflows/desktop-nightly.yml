@@ -1,0 +1,178 @@
+name: Desktop host nightly
+
+# The Linux host built where every pull request builds it, in the AlmaLinux 9 image, then launched
+# on the distributions it supports, which run newer GTK, libadwaita, Mesa and compositors than the
+# image: Ubuntu 24.04 (the runner itself), Ubuntu 26.04, Debian 13, Fedora 44 and Fedora 45, on
+# x86_64 and arm64. Each installs what the host links from its own packages and launches the host on
+# the notes example's release bundle to its first frame under Xvfb and headless Weston
+# (launch-cell.sh). Fedora 45 also runs GNOME's mutter headless, and on x86_64 GTK's Vulkan
+# renderer over lavapipe, Mesa's software Vulkan. The build job also runs `pnpm bench:linux`, the
+# timed budget, in the image. A pull request runs it only when this workflow, the cell script or
+# the bench changed; it runs every night on main and by hand on any branch.
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  pull_request:
+    paths:
+      - '.github/workflows/desktop-nightly.yml'
+      - 'packages/desktop/native/scripts/launch-cell.sh'
+      - 'scripts/bench-linux.mjs'
+      - 'scripts/bench-linux-budget.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NGN_DESKTOP_CACHE: ${{ github.workspace }}/.desktop-cache
+  NGN_JOBS: '4'
+  NGN_COMPILER_LAUNCHER: ccache
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_BASEDIR: ${{ github.workspace }}
+  CCACHE_NOHASHDIR: '1'
+  CCACHE_SLOPPINESS: include_file_mtime,include_file_ctime,time_macros
+  CCACHE_MAXSIZE: 1G
+
+jobs:
+  # The host and the bundle, as host-linux in desktop.yml builds them. The ccache main saves there is
+  # restored here and never saved, so this job adds nothing to the Actions cache.
+  build:
+    name: build (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      - id: ccache
+        run: echo "key=desktop-linux-${{ matrix.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'packages/desktop/native/scripts/build-icu.sh', 'packages/desktop/native/docker/Dockerfile', 'pnpm-lock.yaml') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build the AlmaLinux 9 image
+        run: docker build -t ngn-el9 packages/desktop/native/docker
+
+      - uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ steps.ccache.outputs.key }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ steps.ccache.outputs.key }}-
+            desktop-linux-${{ matrix.arch }}-
+
+      - uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.NGN_DESKTOP_CACHE }}/*/src
+          key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
+
+      - name: Build the GTK host
+        run: |
+          mkdir -p "$CCACHE_DIR" "$NGN_DESKTOP_CACHE" "$GITHUB_WORKSPACE/.linux-nightly"
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -e NGN_DESKTOP_CACHE -e NGN_JOBS -e NGN_COMPILER_LAUNCHER -e GITHUB_WORKSPACE \
+            -e CCACHE_DIR -e CCACHE_BASEDIR -e CCACHE_NOHASHDIR -e CCACHE_SLOPPINESS -e CCACHE_MAXSIZE \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
+            bash -euo pipefail -c '
+              build=$(native/scripts/build.sh --backend gtk --no-debug-info --no-tests | tail -n 1)
+              cp "$build/gtk/ngn-linux" "$GITHUB_WORKSPACE/.linux-nightly/ngn-linux"
+              cp "$build/gtk/hermesc" "$GITHUB_WORKSPACE/.linux-nightly/hermesc"
+            '
+
+      - name: Export the notes example's Linux bundle
+        env:
+          EXPO_NO_TELEMETRY: '1'
+        run: |
+          cd examples/notes
+          pnpm exec expo export:embed --platform linux --dev false \
+            --bundle-output "$GITHUB_WORKSPACE/.linux-nightly/main.js" \
+            --assets-dest "$GITHUB_WORKSPACE/.linux-nightly/assets"
+
+      # The timed budget, in the setting it is gated in: this image at runner class, Xvfb, cairo.
+      - name: Measure the host against the Linux budget
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ngn-el9 \
+            node scripts/bench-linux.mjs --host .linux-nightly/ngn-linux --bundle .linux-nightly/main.js
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-host-${{ matrix.arch }}
+          path: .linux-nightly
+          retention-days: 3
+          include-hidden-files: true
+          if-no-files-found: error
+
+  # The built host on each distribution, as a person installs and runs it there.
+  launch:
+    name: launch (${{ matrix.distro }}, ${{ matrix.arch }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+        distro: [ubuntu-24.04, ubuntu-26.04, debian-13, fedora-44, fedora-45]
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+          # The runner itself, with no container.
+          - distro: ubuntu-24.04
+            image: ''
+          - distro: ubuntu-26.04
+            image: ubuntu:26.04
+          - distro: debian-13
+            image: debian:13
+          - distro: fedora-44
+            image: fedora:44
+          - distro: fedora-45
+            image: fedora:45
+            cells: mutter
+          - distro: fedora-45
+            arch: x86_64
+            cells: vulkan mutter
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: packages/desktop/native/scripts
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: linux-host-${{ matrix.arch }}
+          path: .linux-nightly
+
+      - name: Launch the host to its first frame
+        env:
+          IMAGE: ${{ matrix.image }}
+          CELLS: x11 wayland ${{ matrix.cells }}
+        run: |
+          chmod +x .linux-nightly/ngn-linux
+          dir="$GITHUB_WORKSPACE/.linux-nightly"
+          script="$GITHUB_WORKSPACE/packages/desktop/native/scripts/launch-cell.sh"
+          # shellcheck disable=SC2086 # CELLS is a list of words
+          if [ -n "$IMAGE" ]; then
+            docker run --rm -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" "$IMAGE" \
+              "$script" "$dir/ngn-linux" "$dir/main.js" "$dir/out" $CELLS
+          else
+            sudo "$script" "$dir/ngn-linux" "$dir/main.js" "$dir/out" $CELLS
+          fi
+
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-nightly-${{ matrix.distro }}-${{ matrix.arch }}
+          path: .linux-nightly/out
+          include-hidden-files: true
+          if-no-files-found: ignore

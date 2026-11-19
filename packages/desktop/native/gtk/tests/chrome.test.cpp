@@ -12,6 +12,7 @@
 
 #include <react/renderer/components/view/ViewProps.h>
 
+#include <optional>
 #include <string>
 
 namespace {
@@ -240,6 +241,39 @@ TEST_CASE("a window the app opens is an AdwApplicationWindow of the app, in its 
   GtkApplication *unnamed = ngn::gtk::startApplication("My Notes");
   CHECK(g_application_get_application_id(G_APPLICATION(unnamed)) == nullptr);
   g_object_unref(unnamed);
+}
+
+TEST_CASE("a window still open when its windows go is closed, and its clock no longer calls back into them") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkApplication *app = ngn::gtk::startApplication("dev.ngnative.ChromeHandlers");
+  int laidOut = 0;
+  // In place after it goes, so a handler left behind calls into what was there instead of crashing.
+  std::optional<ngn::gtk::GtkWindows> windows;
+  windows.emplace(
+      ngn::gtk::GtkWindows::Hooks{
+          .laidOut = [&laidOut](ngn::SurfaceId) { ++laidOut; },
+          .quit = [] {},
+      },
+      app, MenuPlacement::MenuBar);
+  bool opened = false;
+  windows->openWindow(8, {.title = "Handlers"}, {.frame = {0, 0, 400, 300}}, [&opened] { opened = true; });
+  ngn::testing::runUntil([&opened] { return opened; });
+  GtkWidget *window = windows->window(8);
+  REQUIRE(window);
+  // The clock outlives the window the windows close, to show nothing is left on it.
+  GdkFrameClock *clock = GDK_FRAME_CLOCK(g_object_ref(gtk_widget_get_frame_clock(window)));
+  // How many times the laidOut hook runs as the window's clock paints once.
+  auto paint = [&laidOut, clock] {
+    int before = laidOut;
+    g_signal_emit_by_name(clock, "paint");
+    return laidOut - before;
+  };
+
+  CHECK(paint() == 1);
+  windows.reset();
+  CHECK(paint() == 0);
+  g_object_unref(clock);
+  g_object_unref(app);
 }
 
 TEST_CASE("a cover starts below the header bar, whether or not the window's content runs under it") {

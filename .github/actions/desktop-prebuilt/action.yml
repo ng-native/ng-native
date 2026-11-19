@@ -5,7 +5,7 @@ description: >-
   the same caches. In order: the last release's archive when it was built from the same inputs
   (byte for byte, no build), then a host built from the same inputs kept in the Actions cache or,
   once the cache has evicted it, as an artifact of the Desktop host workflow on main, then a build
-  through ccache with Hermes and the fetched sources restored. Anything that cannot be
+  through ccache with the fetched sources restored. Anything that cannot be
   checked falls through to the next, and the last builds from scratch.
 
 inputs:
@@ -135,7 +135,7 @@ runs:
       id: ccache
       uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
       with:
-        key: desktop-prebuilt-${{ inputs.flavour }}-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'pnpm-lock.yaml') }}
+        key: desktop-prebuilt-${{ inputs.flavour }}-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/fetch-hermes.sh', 'pnpm-lock.yaml') }}
         restore-keys: desktop-prebuilt-${{ inputs.flavour }}-${{ runner.os }}-
         max-size: 1500M
         # Only what this build compiled is saved, so the set does not grow with every change.
@@ -147,14 +147,6 @@ runs:
       with:
         path: ${{ github.workspace }}/.desktop-cache/*/src
         key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
-
-    # The universal Hermes, which build.sh skips when hermes-built.sh finds it built for the macOS
-    # the host targets. The same for both flavours.
-    - if: steps.build.outputs.needed == 'true'
-      uses: actions/cache@v6
-      with:
-        path: ${{ github.workspace }}/.desktop-cache/*/hermes-arm64-x86_64
-        key: desktop-hermes-universal-${{ runner.os }}-${{ steps.target.outputs.macos }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'packages/desktop/native/scripts/compiler-launcher.sh', 'pnpm-lock.yaml') }}
 
     # Whether or not a host was restored, since a cached host that fails its check builds after all.
     - if: steps.reuse.outputs.done != 'true'
