@@ -111,9 +111,43 @@ void redrawPlaceholder(const TextField &field) {
   }
 }
 
+void cancelPendingApply(TextField &field) {
+  if (field.applyPendingSource) {
+    g_source_remove(field.applyPendingSource);
+    field.applyPendingSource = 0;
+  }
+}
+
+// Applies the held controlled value, unless the user changed the text since it was captured.
+gboolean applyPendingText(gpointer user) {
+  auto *field = static_cast<TextField *>(user);
+  field->applyPendingSource = 0;
+  if (!field->pendingText || field->composing) {
+    return G_SOURCE_REMOVE;
+  }
+  auto pending = std::move(*field->pendingText);
+  field->pendingText.reset();
+  if (field->view && pending.seen >= field->eventCount) {
+    if (pending.text != fieldText(*field)) {
+      setText(*field, pending.text);
+    }
+    if (pending.selection) {
+      selectUnits(*field, pending.selection->first, pending.selection->second);
+    }
+  }
+  return G_SOURCE_REMOVE;
+}
+
 void preeditChanged(GtkWidget *, const char *preedit, gpointer user) {
   auto *field = static_cast<TextField *>(user);
   field->composing = preedit && *preedit;
+  if (field->composing) {
+    cancelPendingApply(*field);
+  } else if (field->pendingText && !field->applyPendingSource) {
+    // An input method sends an empty preedit and then commits what was composed: apply the held
+    // value after the commit, which counts as a user change that makes it stale.
+    field->applyPendingSource = g_idle_add(applyPendingText, field);
+  }
   redrawPlaceholder(*field);
 }
 
@@ -143,6 +177,19 @@ void unfocused(GtkEventControllerFocus *, gpointer user) {
 // `onKeyPress`, before the key changes the text, with the key as React Native iOS names it.
 gboolean keyPressed(GtkEventControllerKey *, guint keyval, guint, GdkModifierType state, gpointer user) {
   auto *field = static_cast<TextField *>(user);
+  // GtkText's own undo and redo keys, run here so that its replay is known (a multiline field's
+  // buffer signals its own).
+  if (!field->scroll && (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) == GDK_CONTROL_MASK) {
+    guint key = gdk_keyval_to_lower(keyval);
+    bool shift = state & GDK_SHIFT_MASK;
+    const char *action = key == GDK_KEY_z ? (shift ? "text.redo" : "text.undo") : key == GDK_KEY_y && !shift ? "text.redo" : nullptr;
+    if (action) {
+      field->replaying = true;
+      gtk_widget_activate_action(field->text, action, nullptr);
+      field->replaying = false;
+      return TRUE;
+    }
+  }
   if (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) {
     return FALSE;
   }
@@ -202,23 +249,30 @@ struct GlibCharacters final : TextCharacters {
       c = text[at];
       return 1;
     };
-    std::size_t start = 0;
-    while (start < text.size()) {
-      gunichar c;
-      std::size_t end = start + codePoint(start, c);
-      while (end < text.size()) {
-        std::size_t size = codePoint(end, c);
-        if (!g_unichar_ismark(c)) {
-          break;
-        }
-        end += size;
-      }
-      if (index < end) {
-        return {start, end - start};
-      }
-      start = end;
+    if (index >= text.size()) {
+      return {text.size(), 0};
     }
-    return {text.size(), 0};
+    auto isHigh = [&text](std::size_t at) { return text[at] >= 0xD800 && text[at] < 0xDC00; };
+    auto isLow = [&text](std::size_t at) { return text[at] >= 0xDC00 && text[at] < 0xE000; };
+    // Back from `index` to the start of its code point, then over the marks before it to their
+    // base: only the text around `index` is read, so fitting a long paste one character at a time
+    // stays linear.
+    std::size_t start = index > 0 && isLow(index) && isHigh(index - 1) ? index - 1 : index;
+    gunichar c;
+    codePoint(start, c);
+    while (start > 0 && g_unichar_ismark(c)) {
+      start -= start > 1 && isLow(start - 1) && isHigh(start - 2) ? 2 : 1;
+      codePoint(start, c);
+    }
+    std::size_t end = start + codePoint(start, c);
+    while (end < text.size()) {
+      std::size_t size = codePoint(end, c);
+      if (!g_unichar_ismark(c)) {
+        break;
+      }
+      end += size;
+    }
+    return {start, end - start};
   }
 };
 
@@ -226,7 +280,7 @@ struct GlibCharacters final : TextCharacters {
 // `autoCapitalize` asks and cut to `maxLength` (text-input.h). Nothing when it goes in as it is.
 std::optional<std::string> fittedInsertion(const TextField &field, const char *text, int length, int position) {
   auto props = field.view ? propsOf(*field.view) : nullptr;
-  if (field.settingText || !props) {
+  if (field.settingText || field.replaying || !props) {
     return std::nullopt;
   }
   std::string inserted(text, length < 0 ? strlen(text) : static_cast<size_t>(length));
@@ -429,8 +483,15 @@ void makeTextField(GtkWidget *widget, ViewData &view) {
     g_signal_connect_swapped(buffer, "changed", G_CALLBACK(changed), field);
     g_signal_connect_after(buffer, "changed", G_CALLBACK(restyle), field);
     g_signal_connect(buffer, "insert-text", G_CALLBACK(insertingText), field);
+    for (const char *signal : {"undo", "redo"}) {
+      g_signal_connect_swapped(buffer, signal, G_CALLBACK(+[](TextField *f) { f->replaying = true; }), field);
+      g_signal_connect_data(buffer, signal, G_CALLBACK(+[](TextField *f) { f->replaying = false; }), field, nullptr,
+                            static_cast<GConnectFlags>(G_CONNECT_SWAPPED | G_CONNECT_AFTER));
+    }
+    // The cursor, whether set or moved by an edit, and the selection's other end, which only a set moves.
+    g_signal_connect_swapped(buffer, "notify::cursor-position", G_CALLBACK(selectionMoved), field);
     g_signal_connect(buffer, "mark-set", G_CALLBACK(+[](GtkTextBuffer *buffer, GtkTextIter *, GtkTextMark *mark, gpointer user) {
-      if (mark == gtk_text_buffer_get_insert(buffer) || mark == gtk_text_buffer_get_selection_bound(buffer)) {
+      if (mark == gtk_text_buffer_get_selection_bound(buffer)) {
         selectionMoved(static_cast<TextField *>(user));
       }
     }), field);
@@ -443,8 +504,13 @@ void makeTextField(GtkWidget *widget, ViewData &view) {
     g_signal_connect(field->text, "insert-text", G_CALLBACK(insertingLine), field);
   }
   watch(field, field->text);
-  // Freed with the field's widget, after its last signal.
-  g_object_set_data_full(G_OBJECT(fieldWidget(*field)), "ngn-text-field-owner", field, [](gpointer p) { delete static_cast<TextField *>(p); });
+  // Freed with the editor, after its last signal. A multiline field's buffer, which can outlive it
+  // (a paste still to arrive), is disconnected from the field when its view goes.
+  g_object_set_data_full(G_OBJECT(field->text), "ngn-text-field-owner", field, [](gpointer p) {
+    auto *field = static_cast<TextField *>(p);
+    cancelPendingApply(*field);
+    delete field;
+  });
   view.field = field;
   gtk_widget_set_parent(fieldWidget(*field), widget);
   if (props && props->text.empty() && !props->defaultValue.empty()) {
@@ -461,6 +527,9 @@ void destroyTextField(ViewData &view) {
   if (view.field) {
     // The editor may still signal as it goes (its focus leaving): the field hears nothing more.
     view.field->view = nullptr;
+    if (multiline(*view.field)) {
+      g_signal_handlers_disconnect_by_data(bufferOf(*view.field), view.field);
+    }
     view.field = nullptr;
   }
 }
@@ -510,12 +579,21 @@ void applyTextFieldProps(ViewData &view) {
     gtk_text_set_max_length(text, props->maxLength == std::numeric_limits<int>::max() ? 0 : std::max(0, props->maxLength));
     gtk_editable_set_alignment(GTK_EDITABLE(text), xalign);
   }
-  // A controlled value JavaScript set, when it has seen every change the user made and no input
-  // method is composing. Once per props: a layout update applies the same props again, which
+  // A controlled value JavaScript set, when it has seen every change the user made, held while an
+  // input method composes. Once per props: a layout update applies the same props again, which
   // must not undo a setTextAndSelection.
-  if (field.applied != view.props && controlledTextIsCurrent(props->mostRecentEventCount, field.eventCount, field.composing) && props->text != fieldText(field) &&
-      (!props->text.empty() || props->defaultValue.empty() || field.eventCount > 0)) {
-    setText(field, props->text);
+  if (field.applied != view.props) {
+    // Stale props, which cannot supersede a held value, leave it alone.
+    if (controlledTextIsCurrent(props->mostRecentEventCount, field.eventCount, false) &&
+        (!props->text.empty() || props->defaultValue.empty() || field.eventCount > 0)) {
+      field.pendingText.reset();
+      cancelPendingApply(field);
+      if (field.composing) {
+        field.pendingText.emplace(TextField::Pending{props->text, props->mostRecentEventCount, std::nullopt});
+      } else if (props->text != fieldText(field)) {
+        setText(field, props->text);
+      }
+    }
   }
   auto before = std::dynamic_pointer_cast<const DesktopTextInputProps>(field.applied);
   if (auto range = newSelection(before.get(), *props)) {
@@ -564,12 +642,19 @@ void snapshotPlaceholder(const ViewData &view, GtkSnapshot *snapshot) {
     auto c = colorComponentsFromColor(props->placeholderTextColor);
     color = {c.red, c.green, c.blue, c.alpha};
   }
+  // Within the content box, however many lines it wraps to.
+  graphene_rect_t box;
+  graphene_rect_init(&box, static_cast<float>(insets.left), static_cast<float>(insets.top),
+                     static_cast<float>(std::max<Float>(0, view.layout.frame.size.width - insets.left - insets.right)),
+                     static_cast<float>(std::max<Float>(0, view.layout.frame.size.height - insets.top - insets.bottom)));
+  gtk_snapshot_push_clip(snapshot, &box);
   gtk_snapshot_save(snapshot);
   graphene_point_t at;
   graphene_point_init(&at, static_cast<float>(insets.left), static_cast<float>(insets.top));
   gtk_snapshot_translate(snapshot, &at);
   gtk_snapshot_append_layout(snapshot, layout, &color);
   gtk_snapshot_restore(snapshot);
+  gtk_snapshot_pop(snapshot);
   g_object_unref(layout);
 }
 
@@ -586,12 +671,23 @@ void textFieldCommand(ViewData &view, const std::string &name, const folly::dyna
     }
   } else if (name == "setTextAndSelection" && args.isArray() && args.size() >= 4) {
     // [mostRecentEventCount, value, start, end]: a value only when JavaScript has seen every change,
-    // and never over an input method's composition.
+    // held while an input method composes.
     // The count is a JavaScript number, which can arrive as a double.
     if (args[0].isNumber() && args[0].asDouble() < field.eventCount) {
       return;
     }
-    if (args[1].isString() && !field.composing) {
+    if (args[1].isString() && field.composing) {
+      TextField::Pending pending{
+          args[1].getString(), args[0].isNumber() ? static_cast<int>(args[0].asDouble()) : field.eventCount, std::nullopt};
+      if (args[2].isNumber() && args[3].isNumber()) {
+        pending.selection.emplace(static_cast<int>(args[2].asDouble()), static_cast<int>(args[3].asDouble()));
+      }
+      field.pendingText.emplace(std::move(pending));
+      return;
+    }
+    if (args[1].isString()) {
+      field.pendingText.reset();
+      cancelPendingApply(field);
       setText(field, args[1].getString());
     }
     if (args[2].isNumber() && args[3].isNumber()) {
