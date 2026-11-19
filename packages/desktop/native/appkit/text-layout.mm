@@ -429,7 +429,7 @@ TextLayout layoutText(
     if (fixed <= 0) {
       baseline = y + ascent;
     }
-    layout.lines.push_back({line, CGPointMake(0, baseline), width, rightToLeftAt(layout.string, r.location, paragraph)});
+    layout.lines.push_back({line, CGPointMake(0, baseline), width, rightToLeftAt(layout.string, r.location, paragraph), y, height});
     widest = std::max(widest, width);
     y += height;
     at += count;
@@ -482,4 +482,42 @@ facebook::react::Size CoreTextMeasurer::measure(
   }
 }
 
+LinesMeasurements CoreTextMeasurer::lines(
+    const AttributedString &text,
+    const ParagraphAttributes &paragraph,
+    facebook::react::Float width) const {
+  @autoreleasepool {
+    // The slack drawing gives the width Yoga rounded (NGNView's drawRect:), so the lines match.
+    auto layout = layoutText(text, paragraph, width + 0.5);
+    CFStringRef string = layout.string ? CFAttributedStringGetString(layout.string) : nullptr;
+    LinesMeasurements lines;
+    for (const auto &l : layout.lines) {
+      CGFloat ascent = 0, descent = 0, leading = 0;
+      CTLineGetTypographicBounds(l.line, &ascent, &descent, &leading);
+      CFRange range = CTLineGetStringRange(l.line);
+      NSString *lineText = string ? (__bridge NSString *)string : @"";
+      lineText = [lineText substringWithRange:NSMakeRange(range.location, range.length)];
+      CGFloat capHeight = 0, xHeight = 0;
+      CFArrayRef runs = CTLineGetGlyphRuns(l.line);
+      if (CFArrayGetCount(runs) > 0) {
+        auto font = (CTFontRef)CFDictionaryGetValue(
+            CTRunGetAttributes((CTRunRef)CFArrayGetValueAtIndex(runs, 0)), kCTFontAttributeName);
+        if (font != nullptr) {
+          capHeight = CTFontGetCapHeight(font);
+          xHeight = CTFontGetXHeight(font);
+        }
+      }
+      lines.emplace_back(
+          std::string(lineText.UTF8String),
+          facebook::react::Rect{{0, static_cast<Float>(l.top)}, {static_cast<Float>(l.width), static_cast<Float>(l.height)}},
+          static_cast<Float>(descent),
+          static_cast<Float>(capHeight),
+          static_cast<Float>(l.origin.y - l.top),
+          static_cast<Float>(xHeight));
+    }
+    return lines;
+  }
+}
+
 } // namespace ngn
+
