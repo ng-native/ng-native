@@ -301,6 +301,9 @@ TEST_CASE("a sheet over a window that is not resizable is drawn over it") {
 TEST_CASE("Escape asks the modal in front to close, whichever layer's shortcut runs") {
   REQUIRE(ngn::testing::gtkReady());
   MountedViews views(true, 800, 600);
+  // A window that cannot be resized gets its modals as overlay layers on every libadwaita version,
+  // never as AdwDialog sheets, so the layers' own Escape shortcuts and requestCloseFront always run.
+  gtk_window_set_resizable(GTK_WINDOW(views.window), FALSE);
   auto back = shadow(3, "ModalHostView", nullptr, {{0, 0}, {800, 600}});
   mountAll(views, {{back, MountedViews::kSurface}});
   auto front = shadow(5, "ModalHostView", nullptr, {{0, 0}, {800, 600}});
@@ -311,11 +314,8 @@ TEST_CASE("Escape asks the modal in front to close, whichever layer's shortcut r
   // The back modal's layer registered its Escape first, so GTK runs it first.
   GtkWidget *slot = views.backend->modals().slotOf(3);
   REQUIRE(slot);
-  GtkWidget *layer = views.backend->modals().inDialog(3) ? nullptr : (gtk_widget_get_parent(slot) == ngn::gtk::chromeOf(views.surface)->overlay ? slot : gtk_widget_get_parent(slot));
-  if (!layer) {
-    // libadwaita 1.5 and later: AdwDialog sheets, which take Escape themselves.
-    return;
-  }
+  REQUIRE_FALSE(views.backend->modals().inDialog(3));
+  GtkWidget *layer = gtk_widget_get_parent(slot) == ngn::gtk::chromeOf(views.surface)->overlay ? slot : gtk_widget_get_parent(slot);
   GListModel *controllers = gtk_widget_observe_controllers(layer);
   bool ran = false;
   for (guint i = 0; i < g_list_model_get_n_items(controllers) && !ran; ++i) {
