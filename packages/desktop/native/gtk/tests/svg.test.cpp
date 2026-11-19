@@ -81,12 +81,13 @@ void answer(ngn::testing::FakeHttp &http, const std::string &bytes, int index = 
 }
 
 // Draws an svg <image> of `uri` on a cairo canvas of its own, as an svg view's snapshot does. When
-// its load ends, loaded or failed, `ended` counts it.
-void drawImage(const std::string &uri, int *ended = nullptr) {
+// its load ends, loaded or failed, `ended` counts it: the cache keeps the count alive past a test
+// that gave up waiting. The canvas notes the image in `hold`, when given.
+void drawImage(const std::string &uri, std::shared_ptr<int> ended = nullptr, ngn::gtk::SvgImageHold *hold = nullptr) {
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 10, 10);
   cairo_t *cr = cairo_create(surface);
   std::function<void()> told = ended ? std::function<void()>([ended] { ++*ended; }) : nullptr;
-  ngn::gtk::makeCairoCanvas(cr, 10, 10, 1, told)->image(uri, {0, 0, 10, 10}, "xMidYMid", 0, 1);
+  ngn::gtk::makeCairoCanvas(cr, 10, 10, 1, told, hold)->image(uri, {0, 0, 10, 10}, "xMidYMid", 0, 1);
   cairo_destroy(cr);
   cairo_surface_destroy(surface);
 }
@@ -285,10 +286,10 @@ TEST_CASE("an svg <image> whose load failed, or whose picture cairo cannot hold,
     }
   } restore;
 
-  int ended = 0;
-  drawImage("https://example.com/offline.png", &ended);
+  auto ended = std::make_shared<int>(0);
+  drawImage("https://example.com/offline.png", ended);
   answer(*http, "");
-  ngn::testing::runUntil([&ended] { return ended == 1; });
+  ngn::testing::runUntil([ended] { return *ended == 1; });
   drawImage("https://example.com/offline.png");
   CHECK(http->sent.size() == 1);
 
@@ -304,11 +305,11 @@ TEST_CASE("an svg <image> whose load failed, or whose picture cairo cannot hold,
   guint handler = g_log_set_handler("Gdk", G_LOG_LEVEL_CRITICAL, [](const gchar *, GLogLevelFlags, const gchar *, gpointer count) {
     ++*static_cast<int *>(count);
   }, &criticals);
-  drawImage("https://example.com/huge.png", &ended);
+  drawImage("https://example.com/huge.png", ended);
   answer(*http, std::string(static_cast<const char *>(g_bytes_get_data(png, nullptr)), g_bytes_get_size(png)));
   g_bytes_unref(png);
   // Decoded off the main thread: only the load's end says cairo has been given it.
-  ngn::testing::runUntil([&ended] { return ended == 2; });
+  ngn::testing::runUntil([ended] { return *ended == 2; });
   drawImage("https://example.com/huge.png");
   g_log_remove_handler("Gdk", handler);
   CHECK(criticals == 0);
@@ -401,28 +402,109 @@ TEST_CASE("an svg that draws more images than the cache keeps loads each of them
   mountSvg(*views, node(root, std::move(images)));
   REQUIRE(http->sent.size() == kImages);
   // A canvas beside the view's, told as each load ends.
-  int ended = 0;
+  auto ended = std::make_shared<int>(0);
   for (int i = 0; i < kImages; ++i) {
-    drawImage(uri(i), &ended);
+    drawImage(uri(i), ended);
   }
   std::string red = pngOf(1, 1, 0xffff0000);
   for (int i = 0; i < kImages; ++i) {
     answer(*http, red, i);
   }
-  ngn::testing::runUntil([&ended] { return ended == kImages; });
+  ngn::testing::runUntil([ended] { return *ended == kImages; });
   views->settle();
   views->settle();
   CHECK(http->sent.size() == kImages);
   CHECK(reddish(views->pixel(5, 5)));
   CHECK(reddish(views->pixel(15, 75)));
+  CHECK(ngn::gtk::svgImagesKept() == kImages);
 
-  // Gone, the view holds them no more: the next load lets the oldest go, back to 64.
+  // Gone, the view holds them no more: the cache is back to 64 at once.
   views.reset();
-  drawImage(uri(kImages), &ended);
-  answer(*http, red);
-  ngn::testing::runUntil([&ended] { return ended == kImages + 1; });
-  for (int i = 0; i < kImages; ++i) {
-    drawImage(uri(i));
+  CHECK(ngn::gtk::svgImagesKept() == 64);
+}
+
+TEST_CASE("each svg view is told once when an image it draws while it loads has loaded") {
+  REQUIRE(ngn::testing::gtkReady());
+  auto http = std::make_shared<ngn::testing::FakeHttp>();
+  ngn::gtk::useImageLoading(http, nullptr);
+  struct Restore {
+    ~Restore() {
+      ngn::gtk::useImageLoading(nullptr, nullptr);
+    }
+  } restore;
+  const std::string uri = "https://example.com/told-once.png";
+  ngn::gtk::SvgImageHold one, two;
+  auto toldOne = std::make_shared<int>(0), toldTwo = std::make_shared<int>(0), toldGone = std::make_shared<int>(0);
+  for (int i = 0; i < 3; ++i) {
+    drawImage(uri, toldOne, &one);
   }
-  CHECK(http->sent.size() > kImages + 1);
+  drawImage(uri, toldTwo, &two);
+  {
+    // A view that goes while the image loads is not told.
+    ngn::gtk::SvgImageHold gone;
+    drawImage(uri, toldGone, &gone);
+  }
+  REQUIRE(http->sent.size() == 1);
+  answer(*http, pngOf(1, 1, 0xffff0000));
+  ngn::testing::runUntil([toldTwo] { return *toldTwo == 1; });
+  CHECK(*toldOne == 1);
+  CHECK(*toldGone == 0);
+}
+
+TEST_CASE("an svg draws a masked element in a pattern's tile of less than a pixel") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  SvgElement mask{.kind = SvgKind::Mask, .name = "m"};
+  mask.units = 1;
+  mask.lengths = {{"x", len(0)}, {"y", len(0)}, {"width", len(24)}, {"height", len(24)}};
+  // Tiles of 0.1 units, 0.4 pixels, each filled with red through a mask that shows all of it.
+  SvgElement pattern{.kind = SvgKind::Pattern, .name = "p"};
+  pattern.units = 1;
+  pattern.lengths = {{"x", len(0)}, {"y", len(0)}, {"width", len(0.1)}, {"height", len(0.1)}};
+  auto masked = rect(0, 0, 0.1, 0.1, 0xffff0000);
+  masked.mask = "m";
+  auto tiled = rect(0, 0, 24, 24);
+  tiled.fill = {.type = SvgBrush::Type::Ref, .ref = "p"};
+  tiled.propList = {"fill"};
+  mountSvg(views, node(icon(), {node(mask, {node(rect(0, 0, 24, 24, 0xffffffff))}), node(pattern, {node(masked)}), node(tiled)}));
+  CHECK(reddish(views.pixel(48, 48)));
+}
+
+TEST_CASE("an svg draws what follows a filter region wider than cairo's bitmaps") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  // 10000 units of 4 pixels: 40000 pixels wide, past cairo's 32767, in few pixels all told.
+  SvgElement filter{.kind = SvgKind::Filter, .name = "f"};
+  filter.units = 1;
+  filter.contentUnits = 1;
+  filter.lengths = {{"x", len(0)}, {"y", len(0)}, {"width", len(10000)}, {"height", len(1)}};
+  SvgElement offset{.kind = SvgKind::FeOffset};
+  offset.lengths = {{"dx", len(0)}, {"dy", len(0)}};
+  auto filtered = rect(0, 0, 24, 1, 0xff0000ff);
+  filtered.filter = "f";
+  mountSvg(views, node(icon(), {node(filter, {node(offset)}), node(filtered), node(rect(0, 12, 24, 12, 0xffff0000))}));
+  CHECK(bluish(views.pixel(48, 2)));
+  CHECK(reddish(views.pixel(48, 72)));
+}
+
+TEST_CASE("the cairo canvas draws a filter's source unfiltered when its bitmap cannot be made") {
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 10, 10);
+  cairo_t *cr = cairo_create(surface);
+  // A view wider than cairo's bitmaps, so even the view's pixels do not fit.
+  auto canvas = ngn::gtk::makeCairoCanvas(cr, 40000, 10, 1);
+  ngn::SvgPath square;
+  square.moveTo(0, 0);
+  square.lineTo(10, 0);
+  square.lineTo(10, 10);
+  square.lineTo(0, 10);
+  square.close();
+  canvas->beginFilter({.region = {0, 0, 40000, 10}});
+  canvas->fill(square, false, {.argb = 0xffff0000});
+  canvas->endFilter();
+  canvas.reset();
+  cairo_destroy(cr);
+  cairo_surface_flush(surface);
+  // Premultiplied ARGB: the corner pixel is red.
+  CHECK(*reinterpret_cast<const uint32_t *>(cairo_image_surface_get_data(surface)) == 0xffff0000);
+  cairo_surface_destroy(surface);
 }

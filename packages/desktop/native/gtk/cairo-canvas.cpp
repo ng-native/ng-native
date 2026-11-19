@@ -155,7 +155,8 @@ struct ShapedGlyphs {
 // Images an svg's <image> draws, by uri, loaded once for every svg, and the canvases waiting for one.
 struct SvgImages {
   std::map<std::string, cairo_surface_t *> loaded;
-  std::map<std::string, std::vector<std::function<void()>>> waiting;
+  // Each with the svg view it is for (its SvgImageHold), or null.
+  std::map<std::string, std::vector<std::pair<const SvgImageHold *, std::function<void()>>>> waiting;
   // The uris that failed to load or to become a cairo surface: not asked for again on each draw.
   std::set<std::string> failed;
   // The loaded ones in the order they loaded.
@@ -167,6 +168,23 @@ struct SvgImages {
 SvgImages &svgImages() {
   static SvgImages images;
   return images;
+}
+
+// At most `keep` kept, the first loaded going first, as macOS lets its image cache go; one an svg
+// view holds stays, past `keep` when need be.
+void trimSvgImages(size_t keep) {
+  auto &images = svgImages();
+  while (images.loaded.size() > keep) {
+    auto unheld = std::find_if(images.order.begin(), images.order.end(), [&images](const auto &entry) {
+      return !images.holders.contains(entry.first);
+    });
+    if (unheld == images.order.end()) {
+      return;
+    }
+    cairo_surface_destroy(unheld->second);
+    images.loaded.erase(unheld->first);
+    images.order.erase(unheld);
+  }
 }
 
 // Null when cairo cannot hold the picture: larger than an image surface can be, or out of memory.
@@ -314,7 +332,10 @@ class CairoCanvas final : public SvgCanvas {
     cairo_surface_set_device_scale(surface, width / tile.tile.width, height / tile.tile.height);
     {
       cairo_t *cr = cairo_create(surface);
-      CairoCanvas inner(cr, tile.tile.width, tile.tile.height, density, imageLoaded_, hold_);
+      // At the bitmap's own pixels a point, which rounding up makes more than `density`: a mask's or
+      // filter's bitmap in the tile lines up with it.
+      double pixels = std::min(width / tile.tile.width, height / tile.tile.height);
+      CairoCanvas inner(cr, tile.tile.width, tile.tile.height, pixels, imageLoaded_, hold_);
       drawTile(inner);
       cairo_destroy(cr);
     }
@@ -350,10 +371,16 @@ class CairoCanvas final : public SvgCanvas {
 
   // The source is drawn in a bitmap of the filter region's pixels, which can reach past the view's,
   // so an offset brings in what is drawn outside the view; the filter's result is drawn back in its
-  // place.
+  // place. With no bitmap (more pixels than cairo holds) the source is drawn as it is, unfiltered,
+  // as on macOS.
   void beginFilter(const SvgFilter &filter) override {
-    auto [x, y, width, height] = regionPixels(filter.region);
+    auto [x, y, width, height] = regionPixels(filter);
     cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+    if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+      cairo_surface_destroy(surface);
+      filters_.push_back({.parent = cr_, .cr = nullptr, .surface = nullptr, .saved = saved_, .filter = filter});
+      return;
+    }
     cairo_surface_set_device_scale(surface, scale_, scale_);
     cairo_surface_set_device_offset(surface, -x, -y);
     cairo_t *cr = drawingInto(surface);
@@ -367,6 +394,9 @@ class CairoCanvas final : public SvgCanvas {
     }
     Filter frame = std::move(filters_.back());
     filters_.pop_back();
+    if (!frame.surface) {
+      return;
+    }
     cr_ = frame.parent;
     saved_ = frame.saved;
     cairo_destroy(frame.cr);
@@ -551,9 +581,12 @@ class CairoCanvas final : public SvgCanvas {
     int x{0}, y{0};
   };
 
-  // The filter region's bounds in the view's pixels: x, y, width and height. A region of more pixels
-  // than the view and than 2048 by 2048 is cut to the view's: the filter's work grows with them.
-  std::array<int, 4> regionPixels(const SvgRect &region) const {
+  // The filter region's bounds in the view's pixels: x, y, width and height. The filter keeps a
+  // float image of the region for each step and its two sources, so a region past the view is cut to
+  // the view's when those would take more than 64 MiB, or when it is wider or taller than the view
+  // and than 2048 pixels.
+  std::array<int, 4> regionPixels(const SvgFilter &filter) const {
+    const SvgRect &region = filter.region;
     SvgMatrix toPixels = SvgMatrix::scale(scale_, scale_) * matrix_;
     double minX = INFINITY, minY = INFINITY, maxX = -INFINITY, maxY = -INFINITY;
     for (auto [rx, ry] : {std::pair{region.x, region.y}, {region.x + region.width, region.y}, {region.x, region.y + region.height},
@@ -566,7 +599,12 @@ class CairoCanvas final : public SvgCanvas {
     }
     double viewWidth = std::ceil(width_ * scale_), viewHeight = std::ceil(height_ * scale_);
     minX = std::floor(minX), minY = std::floor(minY), maxX = std::ceil(maxX), maxY = std::ceil(maxY);
-    if (!((maxX - minX) * (maxY - minY) <= std::max(viewWidth * viewHeight, 2048.0 * 2048.0) &&std::abs(minX) < 1e7 && std::abs(minY) < 1e7)) {
+    double images = static_cast<double>(filter.steps.size()) + 3;
+    double pixels = (64.0 * 1024 * 1024) / (images * 4 * sizeof(float));
+    bool fits = (maxX - minX) * (maxY - minY) <= std::max(viewWidth * viewHeight, pixels) &&
+                maxX - minX <= std::max(viewWidth, 2048.0) && maxY - minY <= std::max(viewHeight, 2048.0) &&
+                std::abs(minX) < 1e7 && std::abs(minY) < 1e7;
+    if (!fits) {
       minX = std::max(minX, 0.0), minY = std::max(minY, 0.0), maxX = std::min(maxX, viewWidth), maxY = std::min(maxY, viewHeight);
     }
     if (!(maxX > minX && maxY > minY)) {
@@ -614,8 +652,10 @@ class CairoCanvas final : public SvgCanvas {
     auto &images = svgImages();
     bool started = images.waiting.contains(uri);
     auto &waiters = images.waiting[uri];
-    if (imageLoaded_) {
-      waiters.push_back(imageLoaded_);
+    // Once for each svg view, however often it draws the uri while it loads.
+    bool waiting = hold_ && std::ranges::any_of(waiters, [this](const auto &waiter) { return waiter.first == hold_; });
+    if (imageLoaded_ && !waiting) {
+      waiters.emplace_back(hold_, imageLoaded_);
     }
     if (started) {
       return;
@@ -633,24 +673,12 @@ class CairoCanvas final : public SvgCanvas {
       if (!surface) {
         images.failed.insert(uri);
       } else {
-        // At most 64 kept, the first loaded going first, as macOS lets its image cache go; one an
-        // svg view holds stays, past 64 when need be.
-        while (images.loaded.size() >= 64) {
-          auto unheld = std::find_if(images.order.begin(), images.order.end(), [&images](const auto &entry) {
-            return !images.holders.contains(entry.first);
-          });
-          if (unheld == images.order.end()) {
-            break;
-          }
-          cairo_surface_destroy(unheld->second);
-          images.loaded.erase(unheld->first);
-          images.order.erase(unheld);
-        }
+        trimSvgImages(63);
         images.loaded[uri] = surface;
         images.order.emplace_back(uri, surface);
       }
       for (auto &waiter : waiters) {
-        waiter();
+        waiter.second();
       }
     });
   }
@@ -671,6 +699,10 @@ class CairoCanvas final : public SvgCanvas {
 } // namespace
 
 SvgImageHold::~SvgImageHold() {
+  // Its view waits for nothing more, and another hold made at this address waits for itself.
+  for (auto &[uri, waiters] : svgImages().waiting) {
+    std::erase_if(waiters, [this](const auto &waiter) { return waiter.first == this; });
+  }
   next_.clear();
   drawn();
 }
@@ -691,6 +723,11 @@ void SvgImageHold::drawn() {
   }
   held_ = std::move(next_);
   next_.clear();
+  trimSvgImages(64);
+}
+
+size_t svgImagesKept() {
+  return svgImages().loaded.size();
 }
 
 std::unique_ptr<SvgCanvas> makeCairoCanvas(

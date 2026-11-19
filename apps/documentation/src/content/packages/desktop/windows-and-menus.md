@@ -55,8 +55,8 @@ with Preferences (Ctrl+comma, shown only when the app handles `settings`), About
 menus' keys, and a focused text input keeps Ctrl+Z, X, C, V and A. A press nothing in the window
 used then reaches its buttons: Return presses a `default` `<native-button>` and Escape a `cancel`
 one, while a focused text input or button keeps Return for itself. Close Window (Ctrl+W) closes the
-sheet, cover or popover in front first, as Escape asks it to, and the window after. A view's `[contextMenu]` shows as
-a GTK popover menu at the secondary click.
+sheet, cover or popover in front first, as Escape asks it to, and the window after. A view's
+`[contextMenu]` shows as a GTK popover menu at the secondary click.
 
 ## The tray and the Dock
 
