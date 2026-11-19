@@ -32,7 +32,8 @@ its outer shadows.
 
 An `<image>` fits its picture to its box by `resizeMode`: `cover`, `contain`, `center` or `stretch`,
 and `repeat`, which tiles the picture from the box's top left corner at its pixel size divided by
-its source's `scale`, as React Native iOS does.
+its source's `scale`, as React Native iOS does. With a `tintColor` it shows the colour in the shape
+of its picture, keeping the picture's alpha, as React Native iOS does.
 
 ## Modals
 

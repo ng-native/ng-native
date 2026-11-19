@@ -11,6 +11,42 @@
 
 using namespace facebook::react;
 
+namespace {
+
+// The image's shape filled with `tint`, at the image's own pixels: what UIKit's template rendering
+// makes of it, and what React Native iOS shows for `tintColor`. An image with no pixels to draw is
+// handed back as it is.
+NSImage *tintedImage(NSImage *image, const SharedColor &tint) {
+  CGImageRef source = [image CGImageForProposedRect:nullptr context:nil hints:nil];
+  size_t width = source ? CGImageGetWidth(source) : 0, height = source ? CGImageGetHeight(source) : 0;
+  if (width == 0 || height == 0) {
+    return image;
+  }
+  CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef context = CGBitmapContextCreate(nullptr, width, height, 8, 0, space, kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(space);
+  if (context == nullptr) {
+    return image;
+  }
+  CGRect rect = CGRectMake(0, 0, width, height);
+  CGContextDrawImage(context, rect, source);
+  // Source-in keeps the colour of the tint where the image has alpha, and the image's alpha with it.
+  CGContextSetBlendMode(context, kCGBlendModeSourceIn);
+  auto c = colorComponentsFromColor(tint);
+  CGContextSetRGBFillColor(context, c.red, c.green, c.blue, c.alpha);
+  CGContextFillRect(context, rect);
+  CGImageRef made = CGBitmapContextCreateImage(context);
+  CGContextRelease(context);
+  if (made == nullptr) {
+    return image;
+  }
+  NSImage *result = [[NSImage alloc] initWithCGImage:made size:image.size];
+  CGImageRelease(made);
+  return result;
+}
+
+} // namespace
+
 @implementation NGNImageView {
   NSString *_uri;
   // The source picked, whose method, headers and body the request carries.
@@ -23,6 +59,9 @@ using namespace facebook::react;
   // The picked source's scale: how many of the picture's pixels make a point, as React Native iOS
   // hands the source's scale to its loader. Sizes the repeat tile.
   double _scale;
+  // The `tintColor` the image is shown in, if it has one. Present and transparent black (0, which
+  // converts to false) still tints: the picture goes clear, as it does in React Native iOS.
+  std::optional<SharedColor> _tint;
   // Holds the image under the view's children. The view's own layer is no place for it: NGNView
   // draws its box in drawRect:, and each redraw (every layout asks for one) replaces the layer's
   // contents, so an image that loaded before the redraw was wiped.
@@ -81,7 +120,8 @@ using namespace facebook::react;
   self.layer.masksToBounds = YES;
   _imageLayer.contentsGravity = self.layer.contentsGravity;
   BOOL repeat = p->resizeMode == ImageResizeMode::Repeat;
-  if (repeat != _repeat) {
+  if (p->tintColor != _tint || repeat != _repeat) {
+    _tint = p->tintColor;
     _repeat = repeat;
     [self showImage];
   }
@@ -159,31 +199,34 @@ using namespace facebook::react;
   [_task resume];
 }
 
-// The picture at its pixel size divided by the source's scale, in points: the size one tile takes.
-// A copy, so the image that other drawing uses keeps its own size.
-- (NSImage *)tile {
+// `shown`, the loaded picture or its tinted copy, at the loaded picture's pixel size divided by the
+// source's scale, in points: the size one tile takes. A copy, so the image that other drawing uses
+// keeps its own size. The tinted copy is drawn at the screen's scale, so its own pixels are no guide.
+- (NSImage *)tile:(NSImage *)shown {
   NSImageRep *rep = _image.representations.firstObject;
   NSSize pixels = rep && rep.pixelsWide > 0 && rep.pixelsHigh > 0 ? NSMakeSize(rep.pixelsWide, rep.pixelsHigh) : _image.size;
-  NSImage *tile = [_image copy];
+  NSImage *tile = [shown copy];
   tile.size = NSMakeSize(pixels.width / _scale, pixels.height / _scale);
   return tile;
 }
 
-// The image on its layer: tiled as that layer's background, or as its contents.
+// The image on its layer, in the tint if there is one: tiled as that layer's background, or as its
+// contents.
 - (void)showImage {
   if (_image == nil && _imageLayer == nil) {
     return;
   }
   CALayer *layer = [self imageLayer];
+  NSImage *shown = _image != nil && _tint.has_value() ? tintedImage(_image, *_tint) : _image;
   [CATransaction begin];
   [CATransaction setDisableActions:YES];
   layer.contentsGravity = self.layer.contentsGravity;
-  if (_image != nil && _repeat) {
+  if (shown != nil && _repeat) {
     layer.contents = nil;
-    layer.backgroundColor = [NSColor colorWithPatternImage:[self tile]].CGColor;
+    layer.backgroundColor = [NSColor colorWithPatternImage:[self tile:shown]].CGColor;
   } else {
     layer.backgroundColor = nil;
-    layer.contents = _image;
+    layer.contents = shown;
   }
   [CATransaction commit];
 }
