@@ -92,6 +92,8 @@ class SplitViews {
     SourceListFolds folds;
     // The custom rows' items, hosted in the rows.
     std::vector<Tag> hosted;
+    // A rebuild waiting for the next idle, after a fold.
+    guint refill{0};
     // While the boxes are rebuilt or their selection set: no choice to report.
     bool syncing{false};
   };

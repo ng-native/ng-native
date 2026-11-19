@@ -121,6 +121,9 @@ SplitViews::~SplitViews() {
     g_source_remove(flush_);
   }
   for (auto &[parent, l] : lists_) {
+    if (l.refill != 0) {
+      g_source_remove(l.refill);
+    }
     for (Tag tag : l.hosted) {
       backend_.unhostView(tag);
     }
@@ -370,6 +373,9 @@ void SplitViews::setSourceLists(Tag parent, const std::vector<SourceList> &lists
   }
   l.lists = lists;
   if (lists.empty()) {
+    if (l.refill != 0) {
+      g_source_remove(l.refill);
+    }
     lists_.erase(parent);
     return;
   }
@@ -546,12 +552,18 @@ void SplitViews::fold(Tag parent, Tag section, bool folded) {
       state->updateState(SidebarSectionState{.collapsed = folded});
     }
   }
-  // Rebuilt on the next idle: the row activated is the list's own until its signal returns.
-  g_idle_add_full(G_PRIORITY_DEFAULT, [](gpointer data) -> gboolean {
-    auto *t = static_cast<RowTarget *>(data);
-    t->splits->refill(t->parent);
-    return G_SOURCE_REMOVE;
-  }, new RowTarget{this, parent}, [](gpointer data) { delete static_cast<RowTarget *>(data); });
+  // Rebuilt on the next idle, at most once: the row activated is the list's own until its signal
+  // returns.
+  if (l.refill == 0) {
+    l.refill = g_idle_add_full(G_PRIORITY_DEFAULT, [](gpointer data) -> gboolean {
+      auto *t = static_cast<RowTarget *>(data);
+      if (auto it = t->splits->lists_.find(t->parent); it != t->splits->lists_.end()) {
+        it->second.refill = 0;
+      }
+      t->splits->refill(t->parent);
+      return G_SOURCE_REMOVE;
+    }, new RowTarget{this, parent}, [](gpointer data) { delete static_cast<RowTarget *>(data); });
+  }
 }
 
 void SplitViews::refill(Tag parent) {
