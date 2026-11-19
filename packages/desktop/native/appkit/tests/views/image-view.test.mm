@@ -257,6 +257,9 @@ TEST_CASE("An image with resizeMode repeat tiles a picture whose source has a sc
   [view displayIfNeeded];
   auto data = drawnPixels(view, 200, 24);
   Rgb origin = at(data, 200, 0, 0);
+  // Opaque and the quadrants' mean, not blank output, which every comparison below would also pass.
+  CHECK(data[3] == 255);
+  CHECK(is(origin, {127, 127, 127}));
   CHECK(!is(origin, {255, 0, 0}));
   CHECK(is(at(data, 200, 1, 0), origin));
   CHECK(is(at(data, 200, 0, 1), origin));
