@@ -35,6 +35,8 @@ class ModuleRegistry {
   // A core module. A second registration under one name replaces the first.
   void add(const std::string &name, Factory factory);
   void addProvider(std::shared_ptr<ModuleProvider> provider);
+  // The names the core modules were added under, sorted.
+  std::vector<std::string> names() const;
 
   std::shared_ptr<facebook::react::TurboModule> module(
       const std::string &name,

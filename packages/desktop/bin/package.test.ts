@@ -672,6 +672,75 @@ describe('packageApp', () => {
     );
   });
 
+  it("embeds the host's Hermes framework and signs it before the app, in every format", async () => {
+    const app = '/apps/notes/dist/macos/Notes.app';
+    const built = `${BUILD}/appkit/hermesvm.framework`;
+    const embedded = `${app}/Contents/Frameworks/hermesvm.framework`;
+    const withHermes = (env: Record<string, string>) =>
+      fakeMac({ env, exists: (file) => file === HERMESC || file === built });
+    const signed = (calls: Call[]) =>
+      calls.filter((call) => call.command === 'codesign').map((call) => call.args);
+
+    const plain = withHermes({});
+    await quiet(() => packageApp(parsePackage([]), plain.sys));
+    assert.ok(plain.copied.some(([from, to]) => from === built && to === embedded));
+    assert.deepEqual(signed(plain.calls), [
+      ['--force', '--sign', '-', embedded],
+      ['--force', '--sign', '-', app],
+    ]);
+
+    const dmg = withHermes(DMG_ENV);
+    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), dmg.sys));
+    const [framework, ofApp] = signed(dmg.calls);
+    assert.deepEqual(framework, [
+      '--force',
+      '--options',
+      'runtime',
+      '--timestamp',
+      '--sign',
+      DMG_ENV.NGN_SIGN_IDENTITY,
+      embedded,
+    ]);
+    assert.equal(ofApp!.at(-1), app);
+
+    const mas = withHermes(MAS_ENV);
+    await quiet(() => packageApp(parsePackage(['--format', 'mas']), mas.sys));
+    assert.deepEqual(
+      signed(mas.calls)
+        .slice(0, 2)
+        .map((args) => args.at(-1)),
+      [embedded, app],
+    );
+    assert.ok(signed(mas.calls)[0]!.includes(MAS_ENV.NGN_SIGN_IDENTITY));
+  });
+
+  it('turns off library validation only in an ad hoc dmg that embeds the Hermes framework', async () => {
+    const built = `${BUILD}/appkit/hermesvm.framework`;
+    const file = '/apps/notes/.expo/ng-native-desktop/package/entitlements.plist';
+    const make = async (env: Record<string, string>, hermes: boolean) => {
+      const { sys, written } = fakeMac({
+        env,
+        exists: (path) => path === HERMESC || (hermes && path === built),
+      });
+      await quiet(() => packageApp(parsePackage(['--format', 'dmg', '--skip-notarize']), sys));
+      return written[file]!;
+    };
+    const validation = /com\.apple\.security\.cs\.disable-library-validation/;
+    assert.match(await make({}, true), validation, 'ad hoc, with the framework');
+    assert.doesNotMatch(await make({}, false), validation, 'ad hoc, Hermes linked in');
+    assert.doesNotMatch(
+      await make({ NGN_SIGN_IDENTITY: DMG_ENV.NGN_SIGN_IDENTITY }, true),
+      validation,
+      'a real identity, which signs the framework too',
+    );
+  });
+
+  it('embeds no Hermes framework for a host with Hermes linked in', async () => {
+    const { sys, copied } = fakeMac();
+    await quiet(() => packageApp(parsePackage([]), sys));
+    assert.ok(!copied.some(([, to]) => to.includes('hermesvm.framework')));
+  });
+
   it('signs with the hardened runtime, notarises and staples the app and the dmg', async () => {
     const { sys, calls } = fakeMac({ env: DMG_ENV });
     await quiet(() => packageApp(parsePackage(['--format', 'dmg']), sys));
@@ -733,7 +802,8 @@ describe('packageApp', () => {
   it('embeds Sparkle with a feed, signs its parts first and zips the stapled app beside the dmg', async () => {
     const { sys, calls, copied, written } = fakeMac({
       env: { ...DMG_ENV, NGN_SPARKLE_PUBLIC_KEY: 'EDKEY=' },
-      exists: () => true,
+      // A host with Hermes linked in, so Sparkle's parts are all that is signed before the app.
+      exists: (file) => !file.endsWith('hermesvm.framework'),
     });
     await quiet(() =>
       packageApp(parsePackage(['--format', 'dmg', '--feed-url', 'https://e.com/appcast.xml']), sys),

@@ -12,6 +12,15 @@ void ModuleRegistry::add(const std::string &name, Factory factory) {
   factories_[name] = std::move(factory);
 }
 
+std::vector<std::string> ModuleRegistry::names() const {
+  std::vector<std::string> names;
+  names.reserve(factories_.size());
+  for (const auto &entry : factories_) {
+    names.push_back(entry.first);
+  }
+  return names;
+}
+
 void ModuleRegistry::addProvider(std::shared_ptr<ModuleProvider> provider) {
   providers_.push_back(std::move(provider));
 }

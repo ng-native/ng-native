@@ -10,25 +10,28 @@ from.
 
 ## The build
 
-`ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url>]
-[--sparkle-key <key>] [--skip-notarize]` builds a
-universal Release host (arm64 and x86_64, without the core tests, dead code stripped), or takes the
-[prebuilt one](#prebuilt-hosts), bundles
-with `expo export:embed --platform macos` (the assets laid out as React Native's resolver reads
-them beside an embedded bundle), compiles the bundle to Hermes bytecode with the `hermesc` the
-host build puts beside its binary, built from the same Hermes, and assembles
-`<output>/<name>.app`: the host binary as `Contents/MacOS/<name>` with its local symbols stripped,
-the bytecode bundle and assets in `Resources`, the icon compiled by `actool`, and an `Info.plist`
-from the Expo keys. Then `app` is
-signed ad hoc, `dmg` is signed with the hardened runtime, notarised and stapled (app and disk
-image), and `mas` is signed in the App Sandbox and wrapped by `productbuild`. `codesign`,
-`notarytool`, `stapler`, `hdiutil`, `ditto`, `sips`, `actool` and `productbuild` are Xcode's.
+`ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url>] [--sparkle-key
+<key>] [--skip-notarize]` builds a universal Release host (arm64 and x86_64, without the core tests,
+dead code stripped), or takes the [prebuilt one](#prebuilt-hosts), bundles with `expo export:embed
+--platform macos` (the assets laid out as React Native's resolver reads them beside an embedded
+bundle), compiles the bundle to Hermes bytecode with the `hermesc` the host build puts beside its
+binary, for the same Hermes, and assembles `<output>/<name>.app`: the host binary as
+`Contents/MacOS/<name>` with its local symbols stripped, the `hermesvm.framework` it links in
+`Frameworks`, the bytecode bundle and assets in `Resources`, the icon compiled by `actool`, and an
+`Info.plist` from the Expo keys. `hermesvm.framework` is signed before the app, with the same
+identity. Then `app` is signed ad hoc, `dmg` is signed with the hardened runtime, notarised and
+stapled (app and disk image), and `mas` is signed in the App Sandbox and wrapped by `productbuild`.
+`codesign`, `notarytool`, `stapler`, `hdiutil`, `ditto`, `sips`, `actool` and `productbuild` are
+Xcode's.
 
 A `dmg` stops before anything builds when its signing identity or notary credentials are missing,
 naming them. `--skip-notarize`, for testing a `dmg` on this Mac only, makes it without them: signed
 with `NGN_SIGN_IDENTITY` when that is set and ad hoc when not, with the hardened runtime, and never
-sent to Apple. Gatekeeper refuses such a disk image on any other Mac. Sparkle (`--feed-url`) still
-needs `NGN_SIGN_IDENTITY` there, since it loads only into an app signed with a Team ID.
+sent to Apple. An ad hoc signature has no Team ID for library validation to check
+`hermesvm.framework` against, so the app, not the framework, is signed with
+`com.apple.security.cs.disable-library-validation`. Gatekeeper refuses such a disk image on any
+other Mac. Sparkle (`--feed-url`) still needs `NGN_SIGN_IDENTITY` there, since it loads only into an
+app signed with a Team ID.
 
 ## `Info.plist` keys
 
@@ -66,19 +69,20 @@ with `expo-updates` on iOS and Android.
 ## Prebuilt hosts
 
 An app with no native desktop code of its own compiles nothing when `prebuilt.json` has a host for
-its React Native version. Each version has two, both universal and packed with their `hermesc` and
-Sparkle: `run` downloads the debug host, the dev build with React Native's debugger, and `package`
-the release host, the Release build without it. Each unpacks into the per-user cache under its
-hash. Each archive's SHA-256 is in `prebuilt.json`, inside the npm package, and a download that
-does not match it is deleted and stops the command. The host is built from source instead when
-the app links a library's or its own native desktop code, when a host library it has installed
-(`react-native-screens`, `react-native-safe-area-context`, `react-native-svg`,
+its React Native version. Each version has two, both universal and packed with their `hermesc`,
+`hermesvm.framework` and Sparkle: `run` downloads the debug host, the dev build with React Native's
+debugger, and `package` the release host, the Release build without it. Each unpacks into the
+per-user cache under its hash. Each archive's SHA-256 is in `prebuilt.json`, inside the npm package,
+and a download that does not match it is deleted and stops the command. The host is built from
+source instead when the app links a library's or its own native desktop code, when a host library it
+has installed (`react-native-screens`, `react-native-safe-area-context`, `react-native-svg`,
 `react-native-webview`, `react-native-worklets`, `react-native-reanimated`) is another version than
 the prebuilt one or one the prebuilt host lacks, when the prebuilt host has a library the app
-denies, when `prebuilt.json` has no host of the command's flavour for its React Native version,
-when the download fails (with a warning), and when `NGN_DESKTOP_FROM_SOURCE=1` is set.
+denies, when `prebuilt.json` has no host of the command's flavour for its React Native version, when
+the download fails (with a warning), and when `NGN_DESKTOP_FROM_SOURCE=1` is set.
 
-The host's `ngn-macos` and `hermesc` are signed ad hoc with the hardened runtime, with no
-Developer ID: `package` signs the app, host included, with the app's own identity, and the download
-is checked by the SHA-256 in `prebuilt.json`. Each release attaches both prebuilt hosts to the
-GitHub release.
+The host's `ngn-macos`, `hermesc` and `hermesvm.framework` are signed ad hoc with the hardened
+runtime, with no Developer ID, and `ngn-macos` with library validation off, since an ad hoc
+signature has no Team ID to check the framework against: `package` signs the app, host included,
+with the app's own identity, and the download is checked by the SHA-256 in `prebuilt.json`. Each
+release attaches both prebuilt hosts to the GitHub release.
