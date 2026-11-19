@@ -760,9 +760,11 @@ export class VirtualList<T> extends ScrollViewProps {
     if (index === 'start') return this.showStart();
     if (index < 0) return this.atOffset();
     // No further than native can scroll, past the footer and the inset after the content: native
-    // stops there, and the window must be built for where it is.
+    // stops there, and the window must be built for where it is. Not cut at the start, where an
+    // inset before the rows, or a bounce, puts native above zero.
     const header = this.headerHeight();
-    const held = this.reachable(header + this.topOf(index) + anchor.within) - header;
+    const want = this.topOf(index) + anchor.within;
+    const held = Math.min(want, this.reachable(header + want) - header);
     if (Math.abs(held - this.lastOffset) > HOLD_TOLERANCE) {
       this.pendingScroll = { offset: held, animated: false };
       this.lastOffset = held;

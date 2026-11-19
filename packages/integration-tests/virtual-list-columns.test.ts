@@ -30,7 +30,7 @@ interface Instance {
   list(): { scrollToIndex(options: { index: number; animated?: boolean }): void };
   tiles: WritableSignal<readonly { id: number; label: string }[]>;
   windowSize: WritableSignal<number>;
-  inset: WritableSignal<{ bottom?: number } | undefined>;
+  inset: WritableSignal<{ top?: number; bottom?: number } | undefined>;
   height: WritableSignal<unknown>;
   padding: WritableSignal<unknown>;
   rowGap: WritableSignal<number>;
@@ -210,6 +210,19 @@ describe('a windowed list in columns', () => {
     await settle();
     const scrolled = fabric.commands.filter((c) => c.name === 'scrollTo').at(-1)!;
     assert.equal(scrolled.args[1], 3810);
+  });
+
+  it('holds an offset inside the content inset before the rows', async () => {
+    // A 100 inset before the rows lets the viewport sit at -80, which a change below must keep.
+    const { instance, scroll, fabric } = await boot((page) => {
+      page.columns.set(1);
+      page.inset.set({ top: 100 });
+    });
+    await scroll(-80);
+    const before = fabric.commands.filter((c) => c.name === 'scrollTo').length;
+    instance.height.set((_: unknown, index: number) => (index === 50 ? 50 : 40));
+    await settle();
+    assert.equal(fabric.commands.filter((c) => c.name === 'scrollTo').length, before);
   });
 
   it('fills ahead after a jump into the middle of a line, as after one to its start', async () => {

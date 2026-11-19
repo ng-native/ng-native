@@ -58,7 +58,7 @@ export class VirtualColumns {
   readonly sticky = signal<readonly number[]>([]);
   readonly horizontal = signal(false);
   readonly windowSize = signal(5);
-  readonly inset = signal<{ bottom?: number } | undefined>(undefined);
+  readonly inset = signal<{ top?: number; bottom?: number } | undefined>(undefined);
   readonly viewable = signal<readonly number[]>([]);
   readonly ends: number[] = [];
   readonly indexOf = (row: { index: number }) => row.index;
