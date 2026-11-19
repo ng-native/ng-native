@@ -168,14 +168,30 @@ TEST_CASE("work queued for the UI thread runs on it, never on the thread that qu
   CHECK(ranOn == std::this_thread::get_id());
 }
 
+namespace {
+
+// GtkWindows over an application of its own, which outlives them.
+struct AppWindows {
+  GtkApplication *app;
+  ngn::gtk::GtkWindows windows;
+  AppWindows(const char *id, ngn::gtk::GtkWindows::Hooks hooks)
+      : app(ngn::gtk::startApplication(id)), windows(std::move(hooks), app, ngn::MenuPlacement::PrimaryMenu) {}
+  ~AppWindows() {
+    g_object_unref(app);
+  }
+};
+
+} // namespace
+
 TEST_CASE("a window's surface hears a change of scale, which resizes nothing") {
   REQUIRE(ngn::testing::gtkReady());
   int resized = 0, scale = 0;
-  ngn::gtk::GtkWindows windows({.resizeSurface =
-                                    [&](SurfaceId, int, int, int s) {
-                                      resized++;
-                                      scale = s;
-                                    }});
+  AppWindows w("dev.ngnative.ScaleTest", {.resizeSurface =
+                                              [&](SurfaceId, int, int, int s) {
+                                                resized++;
+                                                scale = s;
+                                              }});
+  auto &windows = w.windows;
   windows.openWindow(12, ngn::WindowRequest{.title = "Scaled"}, ngn::WindowPlacement{}, nullptr);
   ngn::testing::runUntil([&] { return windows.window(12) != nullptr; });
   int before = resized;
@@ -188,7 +204,8 @@ TEST_CASE("a window's surface hears a change of scale, which resizes nothing") {
 TEST_CASE("the user closing the last window is the host's to act on; the app or a reload closing it is not") {
   REQUIRE(ngn::testing::gtkReady());
   int quits = 0, lastClosed = 0;
-  ngn::gtk::GtkWindows windows({.quit = [&] { quits++; }, .lastWindowClosed = [&] { lastClosed++; }});
+  AppWindows w("dev.ngnative.LastWindowTest", {.quit = [&] { quits++; }, .lastWindowClosed = [&] { lastClosed++; }});
+  auto &windows = w.windows;
   windows.openWindow(10, ngn::WindowRequest{.title = "First"}, ngn::WindowPlacement{}, nullptr);
   ngn::testing::runUntil([&] { return windows.window(10) != nullptr; });
   // As WindowHost::reloading closes an unkeyed window.
