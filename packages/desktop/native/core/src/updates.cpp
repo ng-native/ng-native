@@ -216,7 +216,7 @@ folly::dynamic toJson(const std::optional<LaunchState::Update> &update) {
     return nullptr;
   }
   return folly::dynamic::object("id", update->id)("createdAt", update->createdAt)("runtimeVersion", update->runtimeVersion)(
-      "file", update->file);
+      "file", update->file)("embedded", update->embedded);
 }
 
 std::optional<LaunchState::Update> updateFrom(const folly::dynamic &json) {
@@ -228,7 +228,26 @@ std::optional<LaunchState::Update> updateFrom(const folly::dynamic &json) {
     return value != nullptr && value->isString() ? value->asString() : std::string();
   };
   return LaunchState::Update{
-      .id = text("id"), .createdAt = text("createdAt"), .runtimeVersion = text("runtimeVersion"), .file = text("file")};
+      .id = text("id"),
+      .createdAt = text("createdAt"),
+      .runtimeVersion = text("runtimeVersion"),
+      .file = text("file"),
+      .embedded = text("embedded")};
+}
+
+// The embedded bundle as it is on disk now, its size and modification time: a package or app
+// update that replaces it changes both. Empty for a bundle that is not a file.
+std::string fingerprintOf(const std::string &bundle) {
+  std::error_code error;
+  auto size = fs::file_size(bundle, error);
+  if (error) {
+    return "";
+  }
+  auto time = fs::last_write_time(bundle, error);
+  if (error) {
+    return "";
+  }
+  return std::to_string(size) + ":" + std::to_string(time.time_since_epoch().count());
 }
 
 // The response body and status of one request, gathered from its callbacks.
@@ -435,9 +454,25 @@ std::optional<std::string> UpdatesClient::signatureProblem(
   return std::nullopt;
 }
 
+bool UpdatesClient::stale(const LaunchState::Update &update) const {
+  return update.runtimeVersion != config_.runtimeVersion || update.embedded != fingerprintOf(config_.embeddedBundle);
+}
+
+void UpdatesClient::prune(const LaunchState &state) const {
+  std::error_code error;
+  for (const auto &entry : fs::directory_iterator(config_.directory, error)) {
+    auto name = entry.path().filename().string();
+    bool keep = !entry.is_directory() || (state.current && name == state.current->id) ||
+        (state.previous && name == state.previous->id) || (running_ && name == running_->id);
+    if (!keep) {
+      fs::remove_all(entry.path(), error);
+    }
+  }
+}
+
 bool UpdatesClient::usable(const LaunchState::Update &update, const LaunchState &state) const {
   // Only `<uuid>/launch-asset`, whatever the state file says.
-  if (!isUuid(update.id) || update.file != update.id + "/launch-asset" || update.runtimeVersion != config_.runtimeVersion ||
+  if (!isUuid(update.id) || update.file != update.id + "/launch-asset" || stale(update) ||
       std::find(state.failed.begin(), state.failed.end(), update.id) != state.failed.end() || !fs::exists(pathOf(update))) {
     return false;
   }
@@ -484,6 +519,11 @@ std::string UpdatesClient::launch() {
     }
     state.launching.clear();
   }
+  // An update for another runtime version, or fetched over the embedded bundle a package update
+  // has since replaced, is dropped with its files.
+  if (state.previous && stale(*state.previous)) {
+    state.previous.reset();
+  }
   if (state.current && !usable(*state.current, state)) {
     state.current.reset();
   }
@@ -493,6 +533,7 @@ std::string UpdatesClient::launch() {
   }
   try {
     save(state);
+    prune(state);
   } catch (const std::exception &) {
     // Without its launch mark a crash in the update would never roll it back: the embedded
     // bundle runs instead.
@@ -586,10 +627,7 @@ std::string UpdatesClient::beginReload() {
 }
 
 std::string UpdatesClient::offReason() const {
-  if (config_.url.empty()) {
-    return "Updates are off: the app has no updates URL (updates.url in app.json).";
-  }
-  return config_.off;
+  return enabled() ? "" : "Updates are off: the app has no updates URL (updates.url in app.json).";
 }
 
 void UpdatesClient::check(std::function<void(CheckResult)> done) {
@@ -761,6 +799,7 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
           .createdAt = found.createdAt,
           .runtimeVersion = found.runtimeVersion,
           .file = found.id + "/launch-asset",
+          .embedded = fingerprintOf(config_.embeddedBundle),
       };
       for (const auto &[file, bytes] : fetching.files) {
         writeFile(config_.directory / update.id / file, bytes);
@@ -780,14 +819,7 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
       state.current = update;
       save(state);
       // Only the updates the state names, and the one running, are kept.
-      for (const auto &entry : fs::directory_iterator(config_.directory)) {
-        auto name = entry.path().filename().string();
-        bool keep = !entry.is_directory() || name == update.id || (state.previous && name == state.previous->id) ||
-            (running_ && name == running_->id);
-        if (!keep) {
-          fs::remove_all(entry.path());
-        }
-      }
+      prune(state);
       found_.reset();
       result.isNew = true;
       result.manifest = found.raw;

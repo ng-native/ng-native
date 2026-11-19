@@ -12,6 +12,10 @@
 
 namespace ngn {
 
+// How long a launch's first frame stays on screen before the launch counts as a success: an update
+// that crashes before then is rolled back at the next launch.
+constexpr double kLaunchSuccessSeconds = 10;
+
 class LaunchFrame {
  public:
   // The launch `generation` (UpdatesClient::launchGeneration) loaded its bundle into the mounting

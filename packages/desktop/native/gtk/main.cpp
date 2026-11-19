@@ -37,7 +37,9 @@
 #include "ngn/host-state.h"
 #include "ngn/host-views.h"
 #include "ngn/launch-settings.h"
+#include "ngn/launch-frame.h"
 #include "ngn/layout-animations.h"
+#include "ngn/openssl-update-crypto.h"
 #include "ngn/processes.h"
 #include "ngn/runtime.h"
 
@@ -51,6 +53,7 @@
 #include <cstdio>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
 
 using facebook::react::Float;
@@ -89,7 +92,20 @@ struct Host {
   bool firstFrame{false};
   bool quit{false};
   guint animationTimer{0};
+  // The Expo Updates client (updates.h), and which launch owes its first frame on screen.
+  std::shared_ptr<ngn::UpdatesClient> updates;
+  ngn::LaunchFrame launchFrame;
 } gHost;
+
+// The bundle the runtime runs now, for SourceCode's scriptURL: set at launch and before a reload
+// into an update, read on the JavaScript thread.
+std::mutex gBundleMutex;
+std::string gBundle;
+
+void setRunningBundle(const std::string &bundle) {
+  std::lock_guard lock(gBundleMutex);
+  gBundle = bundle;
+}
 
 // The event beat: React Native's RunLoopObserverManager wants a tick as the UI thread is about to
 // go idle. GLib calls a source's prepare before each poll, which is that moment.
@@ -211,6 +227,56 @@ void watchFirstFrame(GtkWidget *window, GtkWidget *surface) {
   }), surface);
 }
 
+// A launch running an update counts once its first frame has been up kLaunchSuccessSeconds
+// (launch-frame.h); until then a crash rolls the update back at the next launch.
+void markLaunchSucceededLater(uint64_t generation) {
+  if (!gHost.updates || !gHost.updates->running()) {
+    return;
+  }
+  // For this launch only: a reload since begins another, with a timer of its own.
+  ngn::gtk::runAfter(ngn::kLaunchSuccessSeconds, [generation] { gHost.updates->markLaunchSucceeded(generation); });
+}
+
+// `window` shows `surface`'s content: the launch's first, mounted by its own JavaScript instance
+// while it is still the launch running, starts the launch's success timer. UI thread.
+void launchFrameShown(SurfaceId surface, GtkWidget *window) {
+  const auto *root = gHost.mounting->tree().find(surface);
+  if (!gHost.updates || !window || !gtk_widget_get_visible(window) || !root || root->children.empty()) {
+    return;
+  }
+  if (auto generation = gHost.launchFrame.shown(gHost.mounting->mountedBy(surface), gHost.updates->launchGeneration())) {
+    markLaunchSucceededLater(*generation);
+  }
+}
+
+// A reload's bundle (the launch `generation`) loaded into the JavaScript instance `instance`: its
+// launch counts from its first frame on screen, which may already be there or come with a later
+// mount. UI thread.
+void reloadLaunched(uint64_t generation, uint64_t instance) {
+  gHost.launchFrame.loaded(generation, instance);
+  launchFrameShown(kAppSurface, gHost.appWindowShown ? gHost.appWindow : nullptr);
+  for (SurfaceId surface : gHost.surfaces) {
+    if (surface != kAppSurface) {
+      launchFrameShown(surface, gHost.windows->window(surface));
+    }
+  }
+}
+
+// The menu's reload: the same launch, in a new instance. Its first frame, if still owed, comes from
+// that instance once the bundle loads; the instance it replaces owes nothing from now.
+void reloadSameLaunch() {
+  uint64_t generation = gHost.updates ? gHost.updates->launchGeneration() : 0;
+  gHost.launchFrame.reloadBegan();
+  gHost.runtime->reload([generation](bool loaded) {
+    if (!loaded) {
+      fprintf(stderr, "ngn-linux: the reload could not load the bundle\n");
+      return;
+    }
+    uint64_t instance = gHost.mounting->instance();
+    gHost.backend->runOnUiThread([generation, instance] { reloadLaunched(generation, instance); });
+  });
+}
+
 // A surface's size and the safe area its window's chrome leaves it (chromeInsets), each time
 // either changes: as it resizes, and as the header bar or the window controls move over content
 // that runs under them.
@@ -266,7 +332,7 @@ void runMenuItem(const ngn::MenuItem &item, GtkWindow *window) {
   }
   switch (item.command) {
     case ngn::MenuCommand::Reload:
-      gHost.runtime->reload();
+      reloadSameLaunch();
       return;
     case ngn::MenuCommand::OpenDevTools:
       gHost.runtime->openDebugger();
@@ -511,11 +577,13 @@ int main(int argc, char *argv[]) {
       showAppSurfaceIfUsed();
       if (gHost.appWindowShown) {
         watchFirstFrame(gHost.appWindow, gHost.appSurface);
+        launchFrameShown(surfaceId, gHost.appWindow);
       }
     } else {
       gHost.windows->didMount(surfaceId);
       if (GtkWidget *window = gHost.windows->window(surfaceId)) {
         watchFirstFrame(window, gHost.windows->surfaceWidget(surfaceId));
+        launchFrameShown(surfaceId, window);
       }
     }
   };
@@ -630,7 +698,10 @@ int main(int argc, char *argv[]) {
        .webSockets = network.webSockets,
        .files = fileAccess,
        .reactNativeVersion = NGN_REACT_NATIVE_VERSION,
-       .bundle = [bundle] { return bundle; },
+       .bundle = [] {
+         std::lock_guard lock(gBundleMutex);
+         return gBundle;
+       },
        .fakeSystemUI = settings.test && settings.test->fakeSystemUI,
        .gestures = views.gestures,
        .runOnUiThread = [](std::function<void()> task) { gHost.backend->runOnUiThread(std::move(task)); }});
@@ -732,11 +803,19 @@ int main(int argc, char *argv[]) {
     }));
     *host = tray;
   }
-  // The Expo Updates client, off: this backend has no crypto yet, which a fetched update needs
-  // to be checked, so it never fetches one. The bundle runs as given.
-  auto updatesConfig = ngn::updatesConfigFrom(settings, os, appData, bundle);
-  updatesConfig.off = "Updates are off: the Linux host has no update checks yet.";
-  auto updates = std::make_shared<ngn::UpdatesClient>(std::move(updatesConfig), network.http, nullptr);
+  // A bundle on disk runs the newest update the Expo Updates client keeps, in the app's data
+  // folder ($XDG_DATA_HOME/<app-id>/updates: the install tree is read-only), when the app has an
+  // updates URL; one from a dev server never does.
+  bool fromDevServer = ngn::DevServer::fromBundleUrl(bundle).has_value();
+  gHost.updates = std::make_shared<ngn::UpdatesClient>(
+      ngn::updatesConfigFrom(settings, os, appData, bundle), network.http, ngn::makeOpenSslUpdateCrypto());
+  if (!fromDevServer && gHost.updates->enabled()) {
+    bundle = gHost.updates->launch();
+    if (auto running = gHost.updates->running()) {
+      fprintf(stderr, "[ngn] running update %s\n", running->id.c_str());
+    }
+  }
+  setRunningBundle(bundle);
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
   // is left empty, and its module answers that it is unavailable.
   ngn::addDesktopModules(
@@ -762,8 +841,25 @@ int main(int argc, char *argv[]) {
          auto dash = locale.find('-');
          return dash == std::string::npos ? std::string() : locale.substr(dash + 1);
        },
-       .updates = updates,
-       .reload = [](const std::string &next, std::function<void(bool)> done) { gHost.runtime->reload(next, std::move(done)); }});
+       .updates = gHost.updates,
+       .fromDevServer = fromDevServer,
+       .reload =
+           [](const std::string &next, std::function<void(bool)> done) {
+             setRunningBundle(next);
+             // The launch the module's beginReload just began.
+             uint64_t generation = gHost.updates->launchGeneration();
+             gHost.runtime->reload(next, [next, done, generation](bool loaded) {
+               // A bundle that did not load never counts as a launch that succeeded; one that did
+               // counts from the first frame its own instance mounts on screen.
+               if (loaded) {
+                 uint64_t instance = gHost.mounting->instance();
+                 gHost.backend->runOnUiThread([generation, instance] { reloadLaunched(generation, instance); });
+               } else {
+                 fprintf(stderr, "ngn-linux: the update's bundle %s did not load\n", next.c_str());
+               }
+               done(loaded);
+             });
+           }});
 
   gHost.runtime = std::make_unique<ngn::Runtime>(
       gHost.mounting,
@@ -772,6 +868,8 @@ int main(int argc, char *argv[]) {
       modules, network, bundle,
       ngn::DebuggerIdentity{.appId = appId, .deviceName = g_get_host_name(), .os = os.id});
   gHost.runtime->rightToLeft = [system] { return ngn::appRightToLeft(*system); };
+  // The first launch owes its first frame from the instance the runtime just began.
+  gHost.launchFrame.loaded(gHost.updates->launchGeneration(), gHost.mounting->instance());
 
   ngn::onLayoutAnimationsRunning([](bool running) {
     gHost.backend->runOnUiThread([running] {
@@ -804,6 +902,8 @@ int main(int argc, char *argv[]) {
   while (!gHost.quit) {
     g_main_context_iteration(nullptr, TRUE);
   }
+  // A clean quit is no crash: the update running is not rolled back, however soon it quit.
+  gHost.updates->markLaunchSucceeded();
   gHost.runtime->shutdown();
   gHost.runtime.reset();
   return 0;

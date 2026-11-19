@@ -37,7 +37,7 @@ add_library(ngn_gtk OBJECT
     surface-input.cpp
     text-field.cpp
     view-widget.cpp)
-target_link_libraries(ngn_gtk PUBLIC ngn_core_runtime ngn_curl ngn_libraries PkgConfig::NGN_GTK)
+target_link_libraries(ngn_gtk PUBLIC ngn_core_runtime ngn_curl ngn_openssl ngn_libraries PkgConfig::NGN_GTK)
 if(NOT APPLE)
   target_link_libraries(ngn_gtk PUBLIC PkgConfig::NGN_X11)
 endif()

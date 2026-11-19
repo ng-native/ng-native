@@ -313,6 +313,49 @@ TEST_CASE("an update for another runtime version is not launched after the app i
   ngn::UpdatesClient client(config, f.http, f.crypto);
   CHECK(client.launch() == "/app/Contents/Resources/main.jsbundle");
   CHECK_FALSE(client.running());
+  // Nor kept: its folder goes, and the state names nothing.
+  CHECK_FALSE(fs::exists(f.dir / "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a"));
+  CHECK_FALSE(client.state().current);
+}
+
+TEST_CASE("a new embedded bundle, from a package or app update, runs over an update fetched for the old one") {
+  Fixture f;
+  auto embedded = f.dir.parent_path() / (f.dir.filename().string() + "-embedded.js");
+  struct Remove {
+    fs::path path;
+    ~Remove() {
+      fs::remove(path);
+    }
+  } remove{embedded};
+  fs::create_directories(f.dir);
+  std::ofstream(embedded) << "embedded v1";
+  auto config = f.config();
+  config.embeddedBundle = embedded.string();
+  auto client = [&] { return std::make_shared<ngn::UpdatesClient>(config, f.http, f.crypto); };
+  {
+    auto first = client();
+    first->launch();
+    f.check(*first, kJson, folly::toJson(manifest("1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a", "1.0.0", "bundle a")));
+    REQUIRE(f.fetch(*first, "bundle a").isNew);
+    f.check(*first, kJson, folly::toJson(manifest("2a1b0c9d-3e4f-4a5b-9c6d-7e8f9a0b1c2b", "1.0.0", "bundle b")));
+    REQUIRE(f.fetch(*first, "bundle b").isNew);
+  }
+  {
+    // The same embedded bundle: the update runs, with the one before it kept to roll back to.
+    auto same = client();
+    CHECK(same->launch() == (f.dir / "2a1b0c9d-3e4f-4a5b-9c6d-7e8f9a0b1c2b" / "launch-asset").string());
+    CHECK(same->state().previous);
+    same->markLaunchSucceeded();
+  }
+  // The package manager installs a new version of the app, with the same runtime version.
+  std::ofstream(embedded, std::ios::trunc) << "embedded v3, newer";
+  auto updated = client();
+  CHECK(updated->launch() == embedded.string());
+  CHECK_FALSE(updated->running());
+  CHECK_FALSE(updated->state().current);
+  CHECK_FALSE(updated->state().previous);
+  CHECK_FALSE(fs::exists(f.dir / "1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a"));
+  CHECK_FALSE(fs::exists(f.dir / "2a1b0c9d-3e4f-4a5b-9c6d-7e8f9a0b1c2b"));
 }
 
 TEST_CASE("NgNativeUpdates answers what Updates calls, and is off in development") {
@@ -358,31 +401,24 @@ TEST_CASE("NgNativeUpdates answers what Updates calls, and is off in development
   CHECK(refused->find("development") != std::string::npos);
 }
 
-TEST_CASE("updates the host turns off are refused with its reason, and an app with no URL is told it has none") {
+TEST_CASE("an app with no updates URL is told it has none, and nothing is asked") {
   Fixture f;
   auto config = f.config();
-  config.off = "Updates are off: the Linux host has no update checks yet.";
-  auto off = std::make_shared<ngn::UpdatesClient>(config, f.http, nullptr);
-  CHECK_FALSE(off->enabled());
-  CHECK(off->launch() == config.embeddedBundle);
-  auto refusal = [](const std::shared_ptr<ngn::UpdatesClient> &client) {
-    auto module = ngn::makeUpdatesModule(client, false, nullptr);
-    CHECK(module->property("isEnabled") == dynamic(false));
-    std::optional<std::string> refused;
-    module->callWithPromise("checkForUpdateAsync", dynamic::array(), {.reject = [&](const std::string &e) { refused = e; }});
-    std::optional<ngn::UpdatesClient::CheckResult> checked;
-    client->check([&](auto r) { checked = std::move(r); });
-    REQUIRE(refused);
-    REQUIRE(checked);
-    CHECK(checked->error == *refused);
-    return *refused;
-  };
-  CHECK(refusal(off) == "Updates are off: the Linux host has no update checks yet.");
-  CHECK(f.http->sent.empty());
-
   config.url.clear();
   auto noUrl = std::make_shared<ngn::UpdatesClient>(config, f.http, nullptr);
-  CHECK(refusal(noUrl) == "Updates are off: the app has no updates URL (updates.url in app.json).");
+  CHECK_FALSE(noUrl->enabled());
+  CHECK(noUrl->launch() == config.embeddedBundle);
+  auto module = ngn::makeUpdatesModule(noUrl, false, nullptr);
+  CHECK(module->property("isEnabled") == dynamic(false));
+  std::optional<std::string> refused;
+  module->callWithPromise("checkForUpdateAsync", dynamic::array(), {.reject = [&](const std::string &e) { refused = e; }});
+  std::optional<ngn::UpdatesClient::CheckResult> checked;
+  noUrl->check([&](auto r) { checked = std::move(r); });
+  REQUIRE(refused);
+  REQUIRE(checked);
+  CHECK(checked->error == *refused);
+  CHECK(*refused == "Updates are off: the app has no updates URL (updates.url in app.json).");
+  CHECK(f.http->sent.empty());
 }
 
 namespace {
