@@ -164,6 +164,20 @@ Release build (`build.sh --universal --release`), which `package` downloads.
    archives. It stops when either is missing.
 3. Both archives go up with the GitHub release.
 
+It publishes the Linux hosts too, both flavours for x64 and arm64. Its `desktop-host-linux` job,
+once per architecture and flavour on a runner of that architecture, runs
+`.github/actions/desktop-prebuilt-linux`: it builds the AlmaLinux 9 image (`native/docker`), runs
+`make-prebuilt.mjs examples/canary .prebuilt --os linux --flavour <flavour> ...` in it, which builds
+`build.sh --backend gtk`, strips `gtk/ngn-linux` and `gtk/hermesc` and packs them as
+`...-linux-<arch>[-debug].tar.gz` with the entry `prebuilt-host-linux-<arch>-<flavour>.json`, and
+checks the packed host needs glibc 2.34 at most. A Linux host leaves out `react-native-worklets`
+and `react-native-reanimated` (`LINUX_LEFT_OUT` in `make-prebuilt.mjs`), whose shared C++ does not
+compile for the GTK host yet. The release job writes all six entries
+(`RELEASE_HOSTS` in `bin/prebuilt.mjs`) and stops when one is missing. A Linux host has no
+`--reuse` or `--host-cache` yet: each release builds it, through ccache. The Desktop host
+workflow's `prebuilt-host-linux` job runs the same action on a push to `main` that changed the
+host's inputs, and on a manual run on any branch, keeping each archive as an artifact.
+
 A host is built only when something it is built from changed. `make-prebuilt.mjs --print-key`
 computes the key of its inputs: the host's native sources and build scripts, React Native's and
 each compiled-in library's version, the flavour, the compiler, the SDK and the signing identity.

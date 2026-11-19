@@ -21,6 +21,7 @@ npm run linux       # on Linux: the same, in GTK
 npm test            # Vitest, in Node against a fake native layer: no app window needed
 npx vitest --project macos   # tests in src/**/*.device.ts, inside the running app; needs
                              # EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start in another terminal
+npx vitest --project linux   # the same in GTK: on Linux, or on a Mac in the ngn-el9 container
 npm run typecheck
 npm run package     # the .app on a Mac, an app folder and .tar.gz on Linux
 npm run package -- --format dmg   # a signed, notarised download; --format mas for the Mac App Store

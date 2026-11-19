@@ -24,13 +24,16 @@ the details, and the Nx and Angular CLI generators that do it for you.
 ```sh
 npm start                          # the Expo CLI's dev server, in one terminal
 npx ng-native-desktop run          # builds the host the first time, then opens the app
+npx ng-native-desktop run --os linux   # the same on Linux, in GTK
 npx ng-native-desktop package      # dist/macos/<name>.app; --format dmg or mas to ship it
 ```
 
 The first run for a React Native version builds the host from source, which needs Xcode 16 or its
-Command Line Tools, CMake and Ninja, unless the package has a prebuilt host for that version and
-the app has no native desktop code of its own: `run` downloads the debug host, with React Native's
-debugger, and `package` the release one.
+Command Line Tools, CMake and Ninja on a Mac, and clang, lld, CMake, Ninja and the GTK 4 and
+libadwaita development packages on Linux, unless the package has a prebuilt host for that version
+(and on Linux that architecture) and the app has no native desktop code of its own: `run` downloads
+the debug host, with React Native's debugger, and `package` the release one. The command checks the
+toolchain first and names what to install.
 
 ## Docs
 

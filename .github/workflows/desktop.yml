@@ -14,8 +14,9 @@ name: Desktop host
 # through ccache, kept per job and saved only from main, which every pull request restores: a set
 # saved per pull request run filled the repository's 10 GB of Actions cache and evicted main's.
 #
-# On main, `prebuilt-host` also makes both universal prebuilt hosts the release publishes, when
-# anything they are built from changed, so the release finds their caches warm.
+# On main, `prebuilt-host` also makes both universal prebuilt hosts the release publishes, and
+# `prebuilt-host-linux` the Linux ones for x86_64 and arm64, when anything they are built from
+# changed, so the release finds their caches warm. A manual run makes the Linux ones on any branch.
 on:
   push:
     branches: [main]
@@ -374,6 +375,48 @@ jobs:
 
       - if: always()
         run: ccache --show-stats
+
+  # The prebuilt Linux hosts, both flavours on x86_64 and arm64, as the release makes them (the
+  # same action and caches), on a push to main that changed anything they are built from, or by
+  # hand on any branch. Each archive and its entry are kept as an artifact, so a branch's host can
+  # be run (NGN_DESKTOP_FROM_SOURCE unset, a prebuilt.json naming it). Nothing is published.
+  prebuilt-host-linux:
+    name: prebuilt-host-linux (${{ matrix.arch }}, ${{ matrix.flavour }})
+    needs: changes
+    if: >-
+      always() && (github.event_name == 'workflow_dispatch' ||
+      (github.ref == 'refs/heads/main' &&
+      (needs.changes.outputs.desktop == 'true' || needs.changes.outputs.pins == 'true')))
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+        flavour: [debug, release]
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/desktop-prebuilt-linux
+        with:
+          flavour: ${{ matrix.flavour }}
+          version: 0.0.0-main
+          base-url: https://github.com/${{ github.repository }}/releases/download/main
+          out: .prebuilt
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: prebuilt-host-linux-${{ matrix.arch }}-${{ matrix.flavour }}
+          path: .prebuilt
+          include-hidden-files: true
+          if-no-files-found: error
 
   # Both universal prebuilt hosts, as the release makes them (the same action and caches), on a push
   # to main that changed anything they are built from, or by hand. A release on main then finds the

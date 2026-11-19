@@ -3,15 +3,20 @@
  * Builds the prebuilt desktop host for one React Native version and flavour and packs it for a
  * release.
  *
- *   make-prebuilt.mjs <app> <out> [--flavour debug|release] [--version <v>] [--base-url <url>]
- *                     [--manifest <prebuilt.json>] [--host-cache <dir>] [--reuse <prebuilt.json>]
- *                     [--reuse-only] [--build-dir <dir>]
+ *   make-prebuilt.mjs <app> <out> [--os macos|linux] [--flavour debug|release] [--version <v>]
+ *                     [--base-url <url>] [--manifest <prebuilt.json>] [--host-cache <dir>]
+ *                     [--reuse <prebuilt.json>] [--reuse-only] [--build-dir <dir>]
  *   make-prebuilt.mjs <app> --print-key [--flavour debug|release]
  *
  * - <app>: the app whose react-native and host libraries (react-native-screens,
  *   react-native-safe-area-context) the host is built against: the desktop template.
  * - <out>: where the archive and `prebuilt-host-<flavour>.json`, its manifest entry, go. Runs into
  *   the same folder take turns there (publishPrebuilt), so the two always come from the same build.
+ * - --os: `macos` (the default), the universal AppKit host, built on a Mac; or `linux`, the GTK
+ *   host for this machine's architecture (x64 or arm64), built on Linux (the AlmaLinux 9 image in
+ *   CI, so it needs glibc 2.34 at most). A Linux archive holds `gtk/ngn-linux` and `gtk/hermesc`,
+ *   stripped of debug info and local symbols and not signed, and its entry names `os` and `arch`.
+ *   --host-cache, --reuse and --print-key are for macOS only.
  * - --flavour: `release` (the default), the universal Release build a packaged app ships
  *   (`build.sh --universal --release`), or `debug`, the universal dev build `run` uses
  *   (`build.sh --universal --no-tests`), which carries React Native's debugger.
@@ -62,8 +67,8 @@ import { parseArgs } from 'node:util';
 
 import { HOST_LIBRARIES, packageDir } from '../../bin/host.mjs';
 import {
+  findHost,
   FLAVOURS,
-  flavourOf,
   prebuiltName,
   publishPrebuilt,
   readManifest,
@@ -91,6 +96,7 @@ function run(command, args, options = {}) {
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
+    os: { type: 'string', default: 'macos' },
     flavour: { type: 'string', default: 'release' },
     version: { type: 'string' },
     'base-url': { type: 'string' },
@@ -119,6 +125,33 @@ if (!FLAVOURS.includes(flavour)) {
   console.error(`--flavour takes debug or release, not "${values.flavour}".`);
   process.exit(2);
 }
+const os = values.os;
+if (os !== 'macos' && os !== 'linux') {
+  console.error(`--os takes macos or linux, not "${os}".`);
+  process.exit(2);
+}
+const linux = os === 'linux';
+if (linux) {
+  const macOnly = ['host-cache', 'reuse', 'print-key'].find((flag) => values[flag]);
+  if (macOnly) {
+    console.error(`--${macOnly} is for --os macos only.`);
+    process.exit(2);
+  }
+  if (process.platform !== 'linux') {
+    console.error(
+      '--os linux builds on Linux only: run it in the AlmaLinux 9 image (native/docker).',
+    );
+    process.exit(2);
+  }
+}
+/**
+ * The host libraries a Linux host leaves out: their shared C++ does not compile for the GTK host
+ * yet (react-native-worklets 0.13 calls Apple's one-argument pthread_setname_np), so the entry
+ * says so and an app that has them builds its own.
+ */
+const LINUX_LEFT_OUT = ['react-native-worklets', 'react-native-reanimated'];
+/** @type {import('../../bin/prebuilt.mjs').HostPlatform} */
+const platform = linux ? { os, arch: process.arch === 'arm64' ? 'arm64' : 'x64' } : {};
 const baseUrl = values['base-url'];
 if (values.manifest !== undefined || baseUrl !== undefined) {
   /** @type {URL | null} */
@@ -163,7 +196,7 @@ const reactNative = versionOf(reactNativeDir);
 const libraries = Object.fromEntries(
   HOST_LIBRARIES.flatMap((name) => {
     const dir = installed(name);
-    return dir ? [[name, dir]] : [];
+    return dir && !(linux && LINUX_LEFT_OUT.includes(name)) ? [[name, dir]] : [];
   }),
 );
 
@@ -227,9 +260,11 @@ if (hostCache || reuse) {
  */
 async function reuseArchive(manifestFile, inputs, packed) {
   try {
-    const entry = readManifest(readFileSync(manifestFile, 'utf8')).hosts.find(
-      (each) => each.reactNative === reactNative && flavourOf(each) === flavour,
-    );
+    // The universal macOS host, never a Linux one for the same version and flavour.
+    const entry = findHost(readManifest(readFileSync(manifestFile, 'utf8')), {
+      reactNative,
+      flavour,
+    });
     if (!entry) return `${manifestFile} has no ${flavour} host for React Native ${reactNative}`;
     if (entry.inputs !== inputs)
       return `the ${flavour} host in ${manifestFile} was built from other inputs`;
@@ -246,14 +281,36 @@ async function reuseArchive(manifestFile, inputs, packed) {
   }
 }
 
+/**
+ * Throws unless the executable is built for what the archive says: arm64 and x86_64 for macOS,
+ * this machine's architecture for Linux.
+ *
+ * @param {string} executable
+ */
+function checkArchitecture(executable) {
+  if (linux) {
+    const kind = capture('file', ['-b', executable]);
+    const want = platform.arch === 'arm64' ? /ARM aarch64/ : /x86-64/;
+    if (!want.test(kind)) throw new Error(`${executable} is not a ${platform.arch} ELF: ${kind}`);
+    return;
+  }
+  const archs = capture('lipo', ['-archs', executable]);
+  if (archs.split(' ').sort().join(' ') !== 'arm64 x86_64') {
+    throw new Error(`ngn-macos is built for ${archs}, not arm64 and x86_64.`);
+  }
+}
+
 const desktopVersion = values.version ?? versionOf(packageDir);
-const name = prebuiltName(desktopVersion, reactNative, flavour);
+const name = prebuiltName(desktopVersion, reactNative, flavour, platform);
+// The build folder's subfolder the host's files are in, and the files archived from it.
+const folder = linux ? 'gtk' : 'appkit';
+const files = linux ? ['ngn-linux', 'hermesc'] : HOST_FILES;
 mkdirSync(out, { recursive: true });
 // Packed at a name of its own in <out>, and moved into place with its entry by publishPrebuilt.
 const packed = path.join(out, `.${name}.${process.pid}.partial`);
 const staging = mkdtempSync(path.join(tmpdir(), 'ngn-prebuilt-'));
 try {
-  const appkit = path.join(staging, 'appkit');
+  const appkit = path.join(staging, folder);
   let reused = false;
   if (reuse && key) {
     const why = await reuseArchive(reuse, key, packed);
@@ -296,7 +353,8 @@ try {
         path.join(here, 'build.sh'),
         [
           reactNativeDir,
-          '--universal',
+          // A Linux host is built for this machine's architecture.
+          ...(linux ? ['--backend', 'gtk'] : ['--universal']),
           // The debug host is the dev build an app's `run` makes, with React Native's debugger.
           flavour === 'release' ? '--release' : '--no-tests',
           // Stripped before it is packed, so debug info would only slow the build.
@@ -307,39 +365,45 @@ try {
         ],
         { stdio: ['inherit', 'pipe', 'inherit'], env: { ...process.env, NGN_DESKTOP_LINK: '' } },
       );
-      source = built = path.join(build.stdout.trim().split('\n').pop() ?? '', 'appkit');
+      source = built = path.join(build.stdout.trim().split('\n').pop() ?? '', folder);
     }
     mkdirSync(appkit, { recursive: true });
-    for (const file of HOST_FILES) {
+    for (const file of files) {
       cpSync(path.join(source, file), path.join(appkit, file), {
         recursive: true,
         verbatimSymlinks: true,
       });
     }
-    signPrebuiltFiles(
-      run,
-      ['ngn-macos', 'hermesc'].map((file) => path.join(appkit, file)),
-      process.env,
-    );
+    const binaries = files.filter((file) => file !== 'Sparkle.framework');
+    if (linux) {
+      for (const file of binaries)
+        run('strip', ['--strip-debug', '--discard-all', path.join(appkit, file)]);
+    } else {
+      signPrebuiltFiles(
+        run,
+        binaries.map((file) => path.join(appkit, file)),
+        process.env,
+      );
+    }
   }
-  for (const file of HOST_FILES) {
+  for (const file of files) {
     if (!existsSync(path.join(appkit, file))) throw new Error(`The host has no ${file}.`);
   }
-  const archs = run('lipo', ['-archs', path.join(appkit, 'ngn-macos')], {
-    stdio: ['inherit', 'pipe', 'inherit'],
-  }).stdout.trim();
-  if (archs.split(' ').sort().join(' ') !== 'arm64 x86_64') {
-    throw new Error(`ngn-macos is built for ${archs}, not arm64 and x86_64.`);
-  }
+  checkArchitecture(path.join(appkit, files[0] ?? ''));
   // Kept as the build left it, unstripped and unsigned, for the next run with the same inputs.
   if (built && hostCache && key) writeHostCache(hostCache, key, built);
 
-  // Owner and group dropped, so the archive does not carry the build machine's.
-  if (!reused) run('tar', ['-czf', packed, '--uid', '0', '--gid', '0', '-C', staging, 'appkit']);
+  // Owner and group dropped, so the archive does not carry the build machine's: bsdtar on a Mac,
+  // GNU tar on Linux.
+  const owner = linux
+    ? ['--owner=0', '--group=0', '--numeric-owner']
+    : ['--uid', '0', '--gid', '0'];
+  if (!reused) run('tar', ['-czf', packed, ...owner, '-C', staging, folder]);
   const sha256 = createHash('sha256').update(readFileSync(packed)).digest('hex');
   const host = {
     reactNative,
     flavour,
+    ...platform,
     url: `${(baseUrl ?? '').replace(/\/$/, '')}/${name}`,
     sha256,
     libraries: libraryVersions,

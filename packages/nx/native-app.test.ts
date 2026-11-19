@@ -293,7 +293,7 @@ describe('withDesktop', () => {
     assert.deepEqual(native.desktopDependencies, { '@ng-native/desktop': version });
     assert.deepEqual(native.DESKTOP_SCRIPTS, {
       macos: 'ng-native-desktop run',
-      linux: 'ng-native-desktop run',
+      linux: 'ng-native-desktop run --os linux',
       package: 'ng-native-desktop package',
     });
     assert.match(native.DESKTOP_GITIGNORE, /^\/dist\/macos$\n^\/dist\/linux$/m);

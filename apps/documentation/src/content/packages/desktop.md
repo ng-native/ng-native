@@ -65,6 +65,7 @@ options:
 
 | Option            | What it does                                              |
 | ----------------- | --------------------------------------------------------- |
+| `--os <os>`       | `macos` or `linux`. Default: this machine's OS.           |
 | `--module <name>` | The registered app to start. Default `main`.              |
 | `--port <port>`   | The dev server's port. Default `8081`.                    |
 | `--url <link>`    | A link to open the app on, as `Linking`'s initial URL.    |
@@ -97,6 +98,42 @@ later and Ninja 1.10 or later. Before it builds, the command checks the toolchai
 | Ninja                           | 1.10                   | `brew install ninja` / `brew upgrade ninja`  |
 
 A prebuilt host needs none of them.
+
+### On Linux
+
+```sh
+npm start        # the Expo CLI's dev server, in one terminal
+npm run linux    # ng-native-desktop run --os linux: gets the GTK host, then opens the app
+```
+
+`run` takes `--os macos` or `--os linux`, and defaults to the machine's own OS. On Linux it loads
+`http://localhost:8081/.expo/.virtual-metro-entry.bundle?platform=linux&dev=true` from the dev
+server, with Fast Refresh, and takes the same options as on a Mac but `--universal`: a Linux host
+is built for the machine's own architecture, x64 or arm64.
+
+As on a Mac, the first run uses a prebuilt debug host for the machine's architecture when
+`@ng-native/desktop` has one for the app's React Native version and the app links no native desktop
+code of its own. Otherwise it builds the GTK host from source, React Native, Hermes, ICU and libcurl
+included, into `$XDG_CACHE_HOME/ng-native/desktop/rn-<version>` (`~/.cache` when that is not set),
+and later runs reuse it. Building needs clang and lld, CMake 3.25 or later, Ninja 1.10 or later,
+Git, curl, unzip, xz, Perl with `shasum`, Python 3, pkg-config, and the development packages of GTK
+4.10 or later, libadwaita 1.4 or later, libsecret 0.20 or later, Pango, GLib, X11, OpenSSL 3,
+nghttp2, zlib and SQLite. The command checks them first and names the package for each problem, for
+apt or dnf by `/etc/os-release`:
+
+```sh
+# Debian and Ubuntu
+sudo apt install clang lld cmake ninja-build git curl unzip xz-utils perl python3 pkg-config \
+  libgtk-4-dev libadwaita-1-dev libsecret-1-dev libpango1.0-dev libglib2.0-dev libx11-dev libssl-dev \
+  libnghttp2-dev zlib1g-dev libsqlite3-dev
+# Fedora, and RHEL 9 and its rebuilds with CRB enabled
+sudo dnf install clang lld cmake ninja-build git curl unzip xz perl perl-Digest-SHA python3 \
+  pkgconf-pkg-config gtk4-devel libadwaita-devel libsecret-devel pango-devel glib2-devel libX11-devel \
+  openssl-devel libnghttp2-devel zlib-devel sqlite-devel
+```
+
+The GTK host runs on Linux only for now: on a Mac, `npm run linux` stops and says so. A Mac makes
+Linux packages with `npm run package -- --os linux`.
 
 ## Package the app
 
