@@ -515,9 +515,7 @@ int main(int argc, char *argv[]) {
   gHost.application = ngn::gtk::startApplication(appId, !settings.test, settings.dbusService);
   if (g_application_get_is_remote(G_APPLICATION(gHost.application))) {
     auto args = settings.openArgs;
-    gHost.accessibility = std::make_unique<ngn::gtk::AccessibilitySettingsWatcher>(
-      [](const ngn::AccessibilitySettings &settings) { gHost.state->accessibility.set(settings); });
-  if (!settings.initialUrl.empty()) {
+    if (!settings.initialUrl.empty()) {
       args.push_back(settings.initialUrl);
     }
     ngn::gtk::forwardLaunch(gHost.application, args);
@@ -640,7 +638,10 @@ int main(int argc, char *argv[]) {
   std::string caches = settings.test ? settings.test->caches() : joined(g_get_user_cache_dir(), appId);
   g_mkdir_with_parents(caches.c_str(), 0700);
   auto system = ngn::gtk::makeSystem(appId, appData);
-  gHost.state = std::make_shared<ngn::HostState>();
+  // The state and the watcher of the desktop's accessibility settings, which only the running app has.
+  auto watched = ngn::gtk::makeWatchedHostState();
+  gHost.state = std::move(watched.state);
+  gHost.accessibility = std::move(watched.accessibility);
   gHost.state->metrics.set(windowMetrics(width, height));
   if (!settings.initialUrl.empty()) {
     gHost.state->setInitialUrl(settings.initialUrl);
