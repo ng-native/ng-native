@@ -46,6 +46,26 @@ TEST_CASE("a crash report goes in a test launch's state folder, else under XDG_S
   CHECK(ngn::crashReportPath("dev.notes", std::nullopt, env) == "/home/ada/.local/state/dev.notes/crash.txt");
 }
 
+TEST_CASE("a crash report goes under the account's home folder for a process started without HOME") {
+  std::map<std::string, std::string> vars;
+  auto env = [&vars](const std::string &name) -> std::optional<std::string> {
+    auto it = vars.find(name);
+    return it == vars.end() ? std::nullopt : std::optional<std::string>(it->second);
+  };
+  auto account = []() -> std::optional<std::string> { return "/home/ada"; };
+  CHECK(ngn::crashReportPath("dev.notes", std::nullopt, env, account) == "/home/ada/.local/state/dev.notes/crash.txt");
+  // An empty HOME is unset too.
+  vars["HOME"] = "";
+  CHECK(ngn::crashReportPath("dev.notes", std::nullopt, env, account) == "/home/ada/.local/state/dev.notes/crash.txt");
+  // With no account either, the temporary folder, never the root's.
+  std::string temporary = std::filesystem::temp_directory_path().string();
+  auto none = []() -> std::optional<std::string> { return std::nullopt; };
+  CHECK(ngn::crashReportPath("dev.notes", std::nullopt, env, none) == temporary + "/.local/state/dev.notes/crash.txt");
+  // By default, the password database's (a container's user can have no entry).
+  auto home = ngn::accountHomeDirectory();
+  CHECK(ngn::crashReportPath("dev.notes", std::nullopt, env) == home.value_or(temporary) + "/.local/state/dev.notes/crash.txt");
+}
+
 // Linux only, the one host that installs it: on macOS each crash would go to the system's crash
 // reporter as well.
 #ifdef __linux__

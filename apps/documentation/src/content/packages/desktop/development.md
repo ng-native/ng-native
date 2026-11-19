@@ -48,9 +48,9 @@ screens-check's Linux mode drives an exported bundle. It plays under X11 only, X
 posting each step to the X server through XTest (`libXtst.so.6`), so a step reaches GTK as a
 person's input does, native controls included. The pointer steps, `key` and `type` play, with the
 command modifier as Ctrl and option as Alt, so `key left option` is the back key. A script with
-`scroll`, `magnify`, `rotate` or `choose` is refused, with the reason in the host's log. With
-`NGN_CAPTURE` set too, the GTK host takes its screenshot a second after the script has played,
-rather than a second after the first frame.
+`scroll`, `magnify`, `rotate` or `choose` is refused, as is any script on an X server without the
+XTEST extension, with the reason in the host's log. With `NGN_CAPTURE` set too, the GTK host takes
+its screenshot a second after the script has played, rather than a second after the first frame.
 
 ## Crash reports
 
