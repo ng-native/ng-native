@@ -1,6 +1,7 @@
 #include "screens.h"
 
 #include "gtk-backend.h"
+#include "menus.h"
 #include "view-widget.h"
 
 #include "ngn/screen-presentation.h"
@@ -270,7 +271,11 @@ namespace {
 
 // What a bar button, the back button and a dialog's close attempt reach when pressed.
 using PressTarget = std::pair<GtkBackend *, std::pair<Tag, std::string>>;
-using BackTarget = std::pair<GtkBackend *, Tag>;
+struct ChevronTarget {
+  Headers *headers;
+  SurfaceId surfaceId;
+  NavigationDirection direction;
+};
 using CloseTarget = std::pair<Modals *, Tag>;
 
 // The menu entries of a bar button's menu, as a GMenu whose actions are `group`'s: choosing one
@@ -443,6 +448,63 @@ GtkWidget *Headers::backButton(SurfaceId surfaceId) const {
   return it == shown_.end() ? nullptr : it->second.back;
 }
 
+GtkWidget *Headers::forwardButton(SurfaceId surfaceId) const {
+  auto it = shown_.find(surfaceId);
+  return it == shown_.end() ? nullptr : it->second.forward;
+}
+
+void Headers::setHistory(SurfaceId surfaceId, const std::optional<WindowHistory> &history) {
+  auto &shown = shown_[surfaceId];
+  if (shown.history == history) {
+    return;
+  }
+  shown.history = history;
+  layOut(surfaceId, shown);
+}
+
+void Headers::pressChevron(SurfaceId surfaceId, NavigationDirection direction) {
+  auto it = shown_.find(surfaceId);
+  if (it == shown_.end()) {
+    return;
+  }
+  const Shown &shown = it->second;
+  if (shown.buttons.fromHistory) {
+    if (navigate) {
+      navigate(surfaceId, direction, 1);
+    }
+  } else if (direction == NavigationDirection::Back && shown.header) {
+    if (const ViewData *d = backend_.data(shown.header->screen); d && d->emitter) {
+      d->emitter->dispatchEvent("headerBackButtonClicked");
+    }
+  }
+}
+
+bool Headers::showHistoryMenu(SurfaceId surfaceId, NavigationDirection direction) {
+  auto it = shown_.find(surfaceId);
+  if (it == shown_.end() || !it->second.history || !it->second.buttons.fromHistory) {
+    return false;
+  }
+  GtkWidget *chevron = direction == NavigationDirection::Back ? it->second.back : it->second.forward;
+  if (!chevron || !gtk_widget_get_sensitive(chevron)) {
+    return false;
+  }
+  std::vector<MenuItem> items;
+  for (const auto &entry : historyMenu(*it->second.history, direction)) {
+    items.push_back({
+        .title = entry.title,
+        .command = direction == NavigationDirection::Back ? MenuCommand::Back : MenuCommand::Forward,
+        .id = std::to_string(entry.steps),
+    });
+  }
+  // Under the chevron, where a menu button's list opens.
+  Point at{0, static_cast<Float>(gtk_widget_get_height(chevron))};
+  return popUpContextMenu(chevron, at, items, [this, surfaceId, direction](const MenuItem &item) {
+    if (navigate) {
+      navigate(surfaceId, direction, std::stoi(item.id));
+    }
+  });
+}
+
 void Headers::show(SurfaceId surfaceId, const std::optional<ScreenStacks::FrontHeader> &header) {
   auto &shown = shown_[surfaceId];
   shown.header = header;
@@ -470,6 +532,13 @@ void Headers::refresh() {
   }
 }
 
+void Headers::removeSurface(SurfaceId surfaceId) {
+  if (auto it = shown_.find(surfaceId); it != shown_.end()) {
+    clear(surfaceId, it->second);
+    shown_.erase(it);
+  }
+}
+
 void Headers::forget(Tag tag) {
   for (auto &[surfaceId, shown] : shown_) {
     if (std::find(shown.hosted.begin(), shown.hosted.end(), tag) != shown.hosted.end()) {
@@ -489,6 +558,16 @@ void Headers::clear(SurfaceId surfaceId, Shown &shown) {
   if (bar) {
     adw_header_bar_set_title_widget(ADW_HEADER_BAR(bar), nullptr);
   }
+  // A chevron's list still open goes before the chevron does.
+  for (GtkWidget *chevron : {shown.back, shown.forward}) {
+    for (GtkWidget *c = chevron ? gtk_widget_get_first_child(chevron) : nullptr; c;) {
+      GtkWidget *next = gtk_widget_get_next_sibling(c);
+      if (GTK_IS_POPOVER(c)) {
+        gtk_widget_unparent(c);
+      }
+      c = next;
+    }
+  }
   // What was packed into the bar comes out of it; the title's own children go with the title. A
   // search field is its search bar view's, which keeps it for the next header.
   for (GtkWidget *widget : shown.packed) {
@@ -501,6 +580,8 @@ void Headers::clear(SurfaceId surfaceId, Shown &shown) {
   }
   shown.packed.clear();
   shown.back = nullptr;
+  shown.forward = nullptr;
+  shown.buttons = {};
   if (bar && !shown.background.empty()) {
     gtk_widget_remove_css_class(bar, shown.background.c_str());
   }
@@ -564,20 +645,50 @@ void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
     return keep(widget);
   };
 
-  if (layout.back) {
-    GtkWidget *back = keep(gtk_button_new_from_icon_name("go-previous-symbolic"));
-    addClass(back, tint);
-    gtk_widget_set_tooltip_text(back, "Back");
-    gtk_accessible_update_property(GTK_ACCESSIBLE(back), GTK_ACCESSIBLE_PROPERTY_LABEL, "Back", -1);
-    auto *where = new BackTarget(&backend_, shown.header->screen);
-    g_signal_connect_data(back, "clicked", G_CALLBACK(+[](GtkButton *, gpointer data) {
-      auto *p = static_cast<BackTarget *>(data);
-      if (const ViewData *d = p->first->data(p->second); d && d->emitter) {
-        d->emitter->dispatchEvent("headerBackButtonClicked");
-      }
-    }), where, [](gpointer data, GClosure *) { delete static_cast<BackTarget *>(data); }, GConnectFlags(0));
-    adw_header_bar_pack_start(ADW_HEADER_BAR(bar), back);
-    shown.back = back;
+  // The pair leads the bar while the window has history, or, for an app that reports none, while
+  // the stack can go back; the header's hideBackButton and its own left items replace it. The
+  // layout is asked as though the screen could go back, so the history has its say as well.
+  bool backAllowed = headerLayout(*shown.bar, subviews, true).back;
+  shown.buttons = historyButtons(shown.history, shown.header && shown.header->canGoBack, !backAllowed);
+  if (shown.buttons.shown) {
+    GtkWidget *pair = keep(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+    gtk_widget_add_css_class(pair, "linked");
+    auto chevron = [&](NavigationDirection direction) {
+      bool back = direction == NavigationDirection::Back;
+      GtkWidget *button = gtk_button_new_from_icon_name(back ? "go-previous-symbolic" : "go-next-symbolic");
+      addClass(button, tint);
+      gtk_widget_set_tooltip_text(button, back ? "Back" : "Forward");
+      gtk_accessible_update_property(GTK_ACCESSIBLE(button), GTK_ACCESSIBLE_PROPERTY_LABEL, back ? "Back" : "Forward", -1);
+      gtk_widget_set_sensitive(button, back ? shown.buttons.backEnabled : shown.buttons.forwardEnabled);
+      ChevronTarget target{this, surfaceId, direction};
+      g_signal_connect_data(button, "clicked", G_CALLBACK(+[](GtkButton *, gpointer data) {
+        auto *t = static_cast<ChevronTarget *>(data);
+        t->headers->pressChevron(t->surfaceId, t->direction);
+      }), new ChevronTarget(target), [](gpointer data, GClosure *) { delete static_cast<ChevronTarget *>(data); }, GConnectFlags(0));
+      // A secondary click or a long press lists the entries that way, as AppKit's segments do.
+      GtkGesture *secondary = gtk_gesture_click_new();
+      gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(secondary), GDK_BUTTON_SECONDARY);
+      g_signal_connect_data(secondary, "pressed", G_CALLBACK(+[](GtkGestureClick *g, int, double, double, gpointer data) {
+        auto *t = static_cast<ChevronTarget *>(data);
+        if (t->headers->showHistoryMenu(t->surfaceId, t->direction)) {
+          gtk_gesture_set_state(GTK_GESTURE(g), GTK_EVENT_SEQUENCE_CLAIMED);
+        }
+      }), new ChevronTarget(target), [](gpointer data, GClosure *) { delete static_cast<ChevronTarget *>(data); }, GConnectFlags(0));
+      gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(secondary));
+      GtkGesture *hold = gtk_gesture_long_press_new();
+      g_signal_connect_data(hold, "pressed", G_CALLBACK(+[](GtkGestureLongPress *g, double, double, gpointer data) {
+        auto *t = static_cast<ChevronTarget *>(data);
+        if (t->headers->showHistoryMenu(t->surfaceId, t->direction)) {
+          gtk_gesture_set_state(GTK_GESTURE(g), GTK_EVENT_SEQUENCE_CLAIMED);
+        }
+      }), new ChevronTarget(target), [](gpointer data, GClosure *) { delete static_cast<ChevronTarget *>(data); }, GConnectFlags(0));
+      gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(hold));
+      gtk_box_append(GTK_BOX(pair), button);
+      return button;
+    };
+    shown.back = chevron(NavigationDirection::Back);
+    shown.forward = chevron(NavigationDirection::Forward);
+    adw_header_bar_pack_start(ADW_HEADER_BAR(bar), pair);
   }
   for (Tag tag : layout.left) {
     adw_header_bar_pack_start(ADW_HEADER_BAR(bar), slotFor(tag));

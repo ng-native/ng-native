@@ -569,6 +569,9 @@ int main(int argc, char *argv[]) {
           },
       .stopSurface =
           [](SurfaceId surface) {
+            if (gHost.menus) {
+              gHost.menus->forgetHistory(surface);
+            }
             gHost.runtime->stopSurface(surface);
             gHost.mounting->removeContainerInsets(surface);
             gHost.reported.erase(surface);
@@ -596,6 +599,18 @@ int main(int argc, char *argv[]) {
   auto menus = std::make_shared<ngn::MenuHost>(
       gHost.gtkMenus, ngn::DefaultMenuOptions{.appName = settings.title, .developer = ngn::DevServer::fromBundleUrl(bundle).has_value(), .os = os});
   gHost.menus = menus;
+  // Each window's history, as the app's router reports it, for its header bar's back and forward
+  // pair, which goes through it.
+  menus->historyChanged = [](SurfaceId surface) {
+    gHost.backend->runOnUiThread([surface] {
+      if (gHost.menus) {
+        gHost.backend->headers().setHistory(surface, gHost.menus->history(surface));
+      }
+    });
+  };
+  gHost.backend->headers().navigate = [](SurfaceId surface, ngn::NavigationDirection direction, int steps) {
+    gHost.menus->navigate(direction, surface, steps);
+  };
   routeWindow(gHost.appSurface);
   // A view's context menu (its `contextMenu` prop), drawn where the secondary click was.
   ngn::gtk::setContextMenuShower([](GtkWidget *widget, const ngn::PointerInput &input) {

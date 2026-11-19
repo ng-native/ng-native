@@ -7,8 +7,10 @@
 // bar; `transparent` runs it under a flat one, which the safe area's top inset clears; `hidden` does
 // the same and hides the title, keeping the window controls, as AppKit does. The front screen's
 // header goes into the header bar as the AppKit host puts it into the window's toolbar: the back
-// button, the header's subviews moved into slots of their own, its bar buttons and its search
-// fields, with the title between.
+// and forward pair, the header's subviews moved into slots of their own, its bar buttons and its
+// search fields, with the title between. The pair follows the window's history as the app's router
+// reports it (app-menus.h's historyButtons), and a secondary click or a long press on either lists
+// the entries that way (historyMenu).
 //
 // Where the app's menus go (default-menu.h's MenuPlacement) is set up with the chrome: an empty
 // GtkPopoverMenuBar under the header bar, or a primary GtkMenuButton at its end, each hidden until
@@ -28,6 +30,7 @@
 // `dismissed` for a screen, which the router follows. A click outside a popover asks the same.
 #pragma once
 
+#include "ngn/app-menus.h"
 #include "ngn/app-windows.h"
 #include "ngn/default-menu.h"
 #include "ngn/desktop-modal.h"
@@ -108,8 +111,20 @@ class Headers {
   void refresh();
   // A view went: a header showing it lets it go.
   void forget(Tag tag);
-  // The window's header bar's back button, for tests; null when none shows.
+  // A surface went: its header, history and pair with it.
+  void removeSurface(SurfaceId surfaceId);
+  // The window's history, as the app's router reports it (MenuHost::history), for the pair.
+  void setHistory(SurfaceId surfaceId, const std::optional<WindowHistory> &history);
+  // What a press of the pair, or an entry chosen from its list, asks of the window's history.
+  std::function<void(SurfaceId, NavigationDirection, int steps)> navigate;
+  // A chevron pressed: through the history, or, for an app that reports none, the stack's back.
+  void pressChevron(SurfaceId surfaceId, NavigationDirection direction);
+  // The list of the entries `direction` way, at the chevron, as a secondary click shows it. Whether
+  // there was one to show.
+  bool showHistoryMenu(SurfaceId surfaceId, NavigationDirection direction);
+  // The window's header bar's back and forward chevrons, for tests; null when the pair is not shown.
   GtkWidget *backButton(SurfaceId surfaceId) const;
+  GtkWidget *forwardButton(SurfaceId surfaceId) const;
 
  private:
   struct Shown {
@@ -120,7 +135,11 @@ class Headers {
     // The widgets it put in the header bar, and the views moved into slots.
     std::vector<GtkWidget *> packed;
     std::vector<Tag> hosted;
+    // The window's history, and the pair it shows.
+    std::optional<WindowHistory> history;
+    HistoryButtons buttons;
     GtkWidget *back{nullptr};
+    GtkWidget *forward{nullptr};
     // The bar's background colour class.
     std::string background;
   };
