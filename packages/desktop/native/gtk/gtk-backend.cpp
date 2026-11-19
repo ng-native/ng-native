@@ -101,6 +101,19 @@ void GtkBackend::serviceUiThread() {
   g_main_context_iteration(nullptr, FALSE);
 }
 
+namespace {
+
+// react-native-svg's elements draw nothing of their own: the svg draws them. A foreignObject's
+// views stay hidden with them.
+void hideSvgElement(GtkWidget *widget) {
+  const std::string &component = viewData(widget)->component;
+  if (component.starts_with("RNSVG") && component != "RNSVGSvgView") {
+    gtk_widget_set_child_visible(widget, FALSE);
+  }
+}
+
+} // namespace
+
 void GtkBackend::createView(const ShadowView &view) {
   auto accessibility = accessibilityOf(view);
   GtkWidget *widget = makeViewWidget(accessibleRole(view));
@@ -122,11 +135,8 @@ void GtkBackend::createView(const ShadowView &view) {
     applyScrollViewState(*d);
   } else if (d->component == "Image") {
     applyImageProps(*d, gtk_widget_get_scale_factor(widget));
-  } else if (d->component.starts_with("RNSVG") && d->component != "RNSVGSvgView") {
-    // react-native-svg's elements draw nothing of their own: the svg draws them. A foreignObject's
-    // views stay hidden with them.
-    gtk_widget_set_child_visible(widget, FALSE);
   }
+  hideSvgElement(widget);
   applyViewProps(widget, *d);
   views_[view.tag] = widget;
   if (view.tag == view.surfaceId) {
@@ -166,6 +176,8 @@ void GtkBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
     }
   }
   gtk_widget_insert_before(c->second, parentWidget, sibling);
+  // Unparenting, here or in removeChild, made it visible again.
+  hideSvgElement(c->second);
 }
 
 void GtkBackend::removeChild(SurfaceId, Tag, Tag child, int) {
