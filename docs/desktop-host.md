@@ -39,9 +39,11 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   later a Paragraph's widget also implements `GtkAccessibleText` (`accessible-text.h`, added at
   run time), so a screen reader reads it by character, word, sentence, line and paragraph, with
   the spans worked out in the core's `text-units.h`; a field is GTK's own GtkText or GtkTextView,
-  which implement it themselves. Announcements go
-  through `gtk_accessible_announce`, found at run time on GTK 4.14 and later, and say nothing
-  below. `AccessibilityInfo`'s settings (`accessibility-settings.h`) come from the settings
+  which implement it themselves. Announcements, a live region's and `Accessibility.announce()`'s
+  through the front window, go through `gtk_accessible_announce`, found at run time on GTK 4.14
+  and later, and say nothing below. A view's press, increment, decrement and cancel are its
+  widget's `accessibility` actions, which GTK lists on AT-SPI's Action interface. GTK 4 answers
+  AT-SPI's `GrabFocus` with NotSupported, so a screen reader cannot move the keyboard focus. `AccessibilityInfo`'s settings (`accessibility-settings.h`) come from the settings
   portal (its reduced-motion and contrast), GTK's settings and libadwaita's high contrast, through
   the core's `linuxAccessibility`, and the screen reader from AT-SPI's `org.a11y.Status`.
   Orca's structural navigation finds no headings or landmarks in a GTK 4 app. It

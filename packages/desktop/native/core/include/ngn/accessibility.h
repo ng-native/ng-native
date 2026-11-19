@@ -4,9 +4,11 @@
 // maps the role and subrole to its own (NSAccessibility on macOS).
 #pragma once
 
+#include <react/renderer/components/view/ViewEventEmitter.h>
 #include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/mounting/ShadowView.h>
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -146,5 +148,14 @@ struct AxDispatch {
 };
 
 AxDispatch axDispatch(const facebook::react::ViewProps &props, AxVerb verb);
+
+// Sends what `verb` reaches on a view through its emitter, as axDispatch decides; a click goes to
+// `click`, which the host sends as a press, and needs no emitter. Whether anything was sent: what
+// AppKit's perform methods and GTK's accessible actions answer.
+bool performAxVerb(
+    const facebook::react::ViewProps &props,
+    const facebook::react::ViewEventEmitter *emitter,
+    AxVerb verb,
+    const std::function<bool()> &click);
 
 } // namespace ngn

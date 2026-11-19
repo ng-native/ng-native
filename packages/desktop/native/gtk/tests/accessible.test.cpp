@@ -352,6 +352,32 @@ TEST_CASE("a paragraph is read by word and line through GtkAccessibleText on GTK
   CHECK(at(0, word) == "Saved");
 }
 
+TEST_CASE("a view's press is an accessible action a screen reader invokes, enabled while the view offers it") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  std::vector<std::pair<SurfaceId, Tag>> pressed;
+  views.backend->hooks.activate = [&pressed](SurfaceId surface, Tag tag) {
+    pressed.emplace_back(surface, tag);
+    return true;
+  };
+  auto button = MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("role", "button")("accessible", true)("accessibilityLabel", "Save")), {{0, 0}, {50, 20}});
+  views.add(button);
+  views.add(MountedViews::shadow(3, "View", desktopViewProps(dynamic::object()), {{0, 30}, {50, 20}}));
+  // A button with no handler of its own is clicked, as Space on it is.
+  CHECK(gtk_widget_activate_action(views.view(2), "accessibility.press", nullptr));
+  CHECK(pressed == std::vector<std::pair<SurfaceId, Tag>>{{MountedViews::kSurface, 2}});
+  // A disabled action does nothing: the button has nothing to increment, and a plain view has no
+  // actions at all.
+  gtk_widget_activate_action(views.view(2), "accessibility.increment", nullptr);
+  CHECK_FALSE(gtk_widget_activate_action(views.view(3), "accessibility.press", nullptr));
+  CHECK(pressed.size() == 1);
+
+  // No longer an element: the press goes.
+  views.update(button, desktopViewProps(dynamic::object("accessibilityElementsHidden", true)));
+  gtk_widget_activate_action(views.view(2), "accessibility.press", nullptr);
+  CHECK(pressed.size() == 1);
+}
+
 TEST_CASE("an announcement is said through the window on GTK 4.14 and later, and nothing is said below") {
   REQUIRE(ngn::testing::gtkReady());
   MountedViews views;

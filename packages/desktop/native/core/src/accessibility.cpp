@@ -396,4 +396,21 @@ AxDispatch axDispatch(const ViewProps &props, AxVerb verb) {
   return {};
 }
 
+bool performAxVerb(const ViewProps &props, const ViewEventEmitter *emitter, AxVerb verb, const std::function<bool()> &click) {
+  auto dispatch = axDispatch(props, verb);
+  switch (dispatch.kind) {
+    case AxDispatch::Kind::None:
+      return false;
+    case AxDispatch::Kind::Tap:
+      return emitter && (emitter->onAccessibilityTap(), true);
+    case AxDispatch::Kind::Escape:
+      return emitter && (emitter->onAccessibilityEscape(), true);
+    case AxDispatch::Kind::Action:
+      return emitter && (emitter->onAccessibilityAction(dispatch.action), true);
+    case AxDispatch::Kind::Click:
+      return click && click();
+  }
+  return false;
+}
+
 } // namespace ngn
