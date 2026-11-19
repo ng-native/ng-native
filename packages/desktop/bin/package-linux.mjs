@@ -446,6 +446,29 @@ export function linuxMetadata(config, { format, appId, updatesCertificate }) {
 }
 
 /**
+ * What a `.deb` depends on: the floor the host is built for, and every other library the host
+ * links (the static libcurl's OpenSSL 3, nghttp2 and zlib, SQLite, libatomic and the C++ runtime),
+ * under the package names Debian 13 and Ubuntu 24.04 share. dpkg does not read the binary, so a
+ * library left out here is missing on a system without it: CI installs only these into a clean
+ * Ubuntu 24.04 and checks that every library the built host needs is found
+ * (`native/scripts/deb-depends-check.sh`).
+ */
+export const DEB_DEPENDS = [
+  `libc6 (>= ${LINUX_MINIMUMS.glibc})`,
+  `libgtk-4-1 (>= ${LINUX_MINIMUMS.gtk})`,
+  `libadwaita-1-0 (>= ${LINUX_MINIMUMS.libadwaita})`,
+  'libsecret-1-0',
+  `libgstreamer1.0-0 (>= ${LINUX_MINIMUMS.gstreamer})`,
+  `libgstreamer-plugins-base1.0-0 (>= ${LINUX_MINIMUMS.gstreamer})`,
+  'libssl3t64',
+  'libnghttp2-14',
+  'zlib1g',
+  'libsqlite3-0',
+  'libatomic1',
+  'libstdc++6',
+];
+
+/**
  * Why a `.deb` around a host built on this machine may not run where it installs: its `Depends`
  * floors are those of the prebuilt host, built on AlmaLinux 9, and a host built against a newer
  * distribution's libraries can need newer ones than they say. An rpm's own scanner reads what the
@@ -465,29 +488,19 @@ export function selfBuiltDebWarning(arch) {
 }
 
 /**
- * A `.deb`'s `control` file. `Depends` names the floor the host is built for, under the package
- * names Debian 13 and Ubuntu 24.04 share.
+ * A `.deb`'s `control` file, depending on `DEB_DEPENDS`.
  *
  * @param {LinuxApp} app
  * @param {{ arch: LinuxArch, installedKiB: number }} build
  */
 export function debControl(app, { arch, installedKiB }) {
-  const m = LINUX_MINIMUMS;
-  const depends = [
-    `libc6 (>= ${m.glibc})`,
-    `libgtk-4-1 (>= ${m.gtk})`,
-    `libadwaita-1-0 (>= ${m.libadwaita})`,
-    'libsecret-1-0',
-    `libgstreamer1.0-0 (>= ${m.gstreamer})`,
-    `libgstreamer-plugins-base1.0-0 (>= ${m.gstreamer})`,
-  ];
   const lines = [
     `Package: ${app.packageName}`,
     `Version: ${app.version}`,
     `Architecture: ${LINUX_ARCHES[arch].deb}`,
     `Maintainer: ${app.maintainer}`,
     `Installed-Size: ${installedKiB}`,
-    `Depends: ${depends.join(', ')}`,
+    `Depends: ${DEB_DEPENDS.join(', ')}`,
     'Section: misc',
     'Priority: optional',
     ...(app.homepage ? [`Homepage: ${app.homepage}`] : []),

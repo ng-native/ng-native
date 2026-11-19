@@ -527,7 +527,7 @@ describe('the files every Linux format installs', () => {
 });
 
 describe('the package formats', () => {
-  it('writes a deb control file that depends on the GTK 4.10 and libadwaita 1.4 floor', () => {
+  it('writes a deb control file that depends on the GTK 4.10 and libadwaita 1.4 floor and every library the host links', () => {
     const control = debControl(APP, { arch: 'x64', installedKiB: 20480 });
     assert.match(control, /^Package: notes$/m);
     assert.match(control, /^Version: 2\.0\.0$/m);
@@ -536,7 +536,7 @@ describe('the package formats', () => {
     assert.match(control, /^Installed-Size: 20480$/m);
     assert.match(
       control,
-      /^Depends: libc6 \(>= 2\.34\), libgtk-4-1 \(>= 4\.10\), libadwaita-1-0 \(>= 1\.4\), libsecret-1-0, libgstreamer1\.0-0 \(>= 1\.22\), libgstreamer-plugins-base1\.0-0 \(>= 1\.22\)$/m,
+      /^Depends: libc6 \(>= 2\.34\), libgtk-4-1 \(>= 4\.10\), libadwaita-1-0 \(>= 1\.4\), libsecret-1-0, libgstreamer1\.0-0 \(>= 1\.22\), libgstreamer-plugins-base1\.0-0 \(>= 1\.22\), libssl3t64, libnghttp2-14, zlib1g, libsqlite3-0, libatomic1, libstdc\+\+6$/m,
     );
     assert.match(control, /^Homepage: https:\/\/example\.com\/notes$/m);
     assert.match(

@@ -1,17 +1,38 @@
 // A view's accessibility through GTK's own: the role GTK makes its widget with, and the label,
-// description, level and states it updates as the props change.
+// description, level and states it updates as the props change. GTK fixes a role for good, so a
+// view whose role changes gets a new widget.
 #include "mounted-views.h"
 
 #include "../accessible.h"
+#include "../text-field.h"
 
 #include <doctest/doctest.h>
+
+#include <react/renderer/components/text/ParagraphState.h>
+#include <react/renderer/core/ConcreteState.h>
 
 using namespace facebook::react;
 using folly::dynamic;
 using ngn::testing::desktopViewProps;
 using ngn::testing::MountedViews;
+using ngn::testing::reddish;
+using ngn::testing::textInputProps;
 
 namespace {
+
+GtkAccessibleRole roleOf(GtkWidget *widget) {
+  return gtk_accessible_get_accessible_role(GTK_ACCESSIBLE(widget));
+}
+
+// A Paragraph's state, showing `text`.
+State::Shared paragraphState(const std::string &text) {
+  ParagraphState data;
+  TextAttributes attributes;
+  attributes.fontSize = 14;
+  data.attributedString.appendFragment({.string = text, .textAttributes = attributes, .parentShadowView = {}});
+  return std::make_shared<ConcreteState<ParagraphState>>(
+      std::make_shared<const ParagraphState>(std::move(data)), ShadowNodeFamily::Weak());
+}
 
 bool hasProperty(GtkWidget *widget, GtkAccessibleProperty property, const char *value) {
   char *error = gtk_test_accessible_check_property(GTK_ACCESSIBLE(widget), property, value);
@@ -76,4 +97,157 @@ TEST_CASE("a heading's level and a checkbox's checked and disabled states reach 
   // Not checkable any more: the state goes.
   views.update(box, desktopViewProps(dynamic::object("role", "checkbox")("accessible", true)));
   CHECK_FALSE(gtk_test_accessible_has_state(GTK_ACCESSIBLE(views.view(3)), GTK_ACCESSIBLE_STATE_CHECKED));
+}
+
+TEST_CASE("each ARIA role reaches GTK by its own name, and a landmark keeps its specific role") {
+  CHECK(ngn::gtk::gtkRole(ngn::AriaRole::Main) == GTK_ACCESSIBLE_ROLE_MAIN);
+  CHECK(ngn::gtk::gtkRole(ngn::AriaRole::Navigation) == GTK_ACCESSIBLE_ROLE_NAVIGATION);
+  CHECK(ngn::gtk::gtkRole(ngn::AriaRole::Table) == GTK_ACCESSIBLE_ROLE_TABLE);
+  CHECK(ngn::gtk::gtkRole(ngn::AriaRole::Grid) == GTK_ACCESSIBLE_ROLE_GRID);
+  CHECK(ngn::gtk::gtkRole(ngn::AriaRole::ToggleButton) == GTK_ACCESSIBLE_ROLE_TOGGLE_BUTTON);
+  CHECK(ngn::gtk::gtkRole(ngn::AriaRole::MenuItemRadio) == GTK_ACCESSIBLE_ROLE_MENU_ITEM_RADIO);
+  CHECK(ngn::gtk::gtkRole(ngn::AriaRole::None) == GTK_ACCESSIBLE_ROLE_NONE);
+  // Past the GTK the host builds against.
+  CHECK(ngn::gtk::gtkRole(ngn::AriaRole::Article) == GTK_ACCESSIBLE_ROLE_GROUP);
+
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  views.add(MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("role", "main")("accessibilityLabel", "Inbox")), {{0, 0}, {50, 20}}));
+  views.add(MountedViews::shadow(3, "View", desktopViewProps(dynamic::object("role", "complementary")), {{0, 30}, {50, 20}}));
+  views.add(MountedViews::shadow(4, "View", desktopViewProps(dynamic::object("accessibilityRole", "togglebutton")), {{0, 60}, {50, 20}}));
+  CHECK(roleOf(views.view(2)) == GTK_ACCESSIBLE_ROLE_MAIN);
+  CHECK(roleOf(views.view(3)) == GTK_ACCESSIBLE_ROLE_REGION);
+  CHECK(roleOf(views.view(4)) == GTK_ACCESSIBLE_ROLE_TOGGLE_BUTTON);
+}
+
+TEST_CASE("a view whose role changes gets a widget in the new role, in its place, with its children") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto card = MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("role", "button")("accessibilityLabel", "Open")), {{10, 10}, {100, 100}});
+  views.add(card);
+  views.add(MountedViews::shadow(3, "View", desktopViewProps(dynamic::object("backgroundColor", 0xffff0000)), {{0, 0}, {40, 40}}), 2);
+  views.add(MountedViews::shadow(4, "View", desktopViewProps(dynamic::object()), {{50, 50}, {40, 40}}), 2);
+  views.add(MountedViews::shadow(5, "View", desktopViewProps(dynamic::object()), {{0, 150}, {40, 40}}));
+  GtkWidget *before = views.view(2);
+  g_object_ref(before);
+  CHECK(roleOf(before) == GTK_ACCESSIBLE_ROLE_BUTTON);
+
+  // Only the label changes: the same widget.
+  views.update(card, desktopViewProps(dynamic::object("role", "button")("accessibilityLabel", "Open card")));
+  CHECK(views.view(2) == before);
+
+  views.update(card, desktopViewProps(dynamic::object("role", "heading")("accessibilityLabel", "Card")("accessibilityLevel", 3)));
+  GtkWidget *after = views.view(2);
+  CHECK(after != before);
+  CHECK(roleOf(after) == GTK_ACCESSIBLE_ROLE_HEADING);
+  char *level = gtk_test_accessible_check_property(GTK_ACCESSIBLE(after), GTK_ACCESSIBLE_PROPERTY_LEVEL, 3);
+  CHECK(level == nullptr);
+  g_free(level);
+  // The old widget is out of the tree and holds nothing.
+  CHECK(gtk_widget_get_parent(before) == nullptr);
+  CHECK(gtk_widget_get_first_child(before) == nullptr);
+  g_object_unref(before);
+  // Where the old one was, before its sibling, with its children in their order, drawn at their
+  // frames.
+  CHECK(gtk_widget_get_parent(after) == views.view(MountedViews::kSurface));
+  CHECK(gtk_widget_get_next_sibling(after) == views.view(5));
+  CHECK(gtk_widget_get_first_child(after) == views.view(3));
+  CHECK(gtk_widget_get_next_sibling(views.view(3)) == views.view(4));
+  CHECK(ngn::gtk::viewData(after)->tag == 2);
+  CHECK(reddish(views.pixel(20, 20)));
+}
+
+TEST_CASE("a view whose role changes keeps the focus, in itself or in a field inside it") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto group = MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("role", "group")), {{0, 0}, {180, 100}});
+  views.add(group);
+  views.add(MountedViews::shadow(3, "TextInput", textInputProps(dynamic::object()), {{10, 10}, {150, 40}}), 2);
+  GtkWidget *text = ngn::gtk::viewData(views.view(3))->field->text;
+  REQUIRE(gtk_widget_grab_focus(text));
+  views.update(group, desktopViewProps(dynamic::object("role", "form")));
+  CHECK(roleOf(views.view(2)) == GTK_ACCESSIBLE_ROLE_FORM);
+  CHECK(gtk_root_get_focus(gtk_widget_get_root(text)) == text);
+  CHECK(gtk_widget_is_ancestor(text, views.view(2)));
+  // The field still hears the user.
+  CHECK(ngn::gtk::viewData(views.view(3))->field->view == ngn::gtk::viewData(views.view(3)));
+
+  gtk_widget_set_focusable(views.view(2), TRUE);
+  REQUIRE(gtk_widget_grab_focus(views.view(2)));
+  views.update(group, desktopViewProps(dynamic::object("role", "region")));
+  CHECK(roleOf(views.view(2)) == GTK_ACCESSIBLE_ROLE_REGION);
+  CHECK(gtk_widget_get_focusable(views.view(2)));
+  CHECK(gtk_root_get_focus(gtk_widget_get_root(views.view(2))) == views.view(2));
+}
+
+TEST_CASE("a view whose role changes leaves a focused field's caret where it was, selecting nothing") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto group = MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("role", "group")), {{0, 0}, {180, 100}});
+  views.add(group);
+  views.add(MountedViews::shadow(3, "TextInput", textInputProps(dynamic::object("text", "draft")), {{10, 10}, {150, 40}}), 2);
+  GtkWidget *text = ngn::gtk::viewData(views.view(3))->field->text;
+  REQUIRE(gtk_text_grab_focus_without_selecting(GTK_TEXT(text)));
+  gtk_editable_set_position(GTK_EDITABLE(text), 2);
+  views.update(group, desktopViewProps(dynamic::object("role", "form")));
+  REQUIRE(gtk_root_get_focus(gtk_widget_get_root(text)) == text);
+  int start = 0, end = 0;
+  CHECK_FALSE(gtk_editable_get_selection_bounds(GTK_EDITABLE(text), &start, &end));
+  CHECK(gtk_editable_get_position(GTK_EDITABLE(text)) == 2);
+}
+
+TEST_CASE("a view whose role changes keeps a covered child hidden, and the others shown") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto stack = MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("role", "group")), {{0, 0}, {100, 100}});
+  views.add(stack);
+  views.add(MountedViews::shadow(3, "View", desktopViewProps(dynamic::object()), {{0, 0}, {100, 100}}), 2);
+  views.add(MountedViews::shadow(4, "View", desktopViewProps(dynamic::object()), {{0, 0}, {100, 100}}), 2);
+  views.backend->setCovered(MountedViews::kSurface, 3, true);
+  REQUIRE_FALSE(gtk_widget_get_child_visible(views.view(3)));
+  views.update(stack, desktopViewProps(dynamic::object("role", "region")));
+  CHECK(roleOf(views.view(2)) == GTK_ACCESSIBLE_ROLE_REGION);
+  CHECK_FALSE(gtk_widget_get_child_visible(views.view(3)));
+  CHECK(gtk_widget_get_child_visible(views.view(4)));
+}
+
+TEST_CASE("a paragraph that stops saying anything is read through, and is static text again when it does") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto paragraph = MountedViews::shadow(2, "Paragraph", desktopViewProps(dynamic::object()), {{0, 0}, {150, 20}});
+  paragraph.state = paragraphState("Saved");
+  views.add(paragraph);
+  CHECK(roleOf(views.view(2)) == GTK_ACCESSIBLE_ROLE_LABEL);
+  // Named by its text, which is what Orca speaks.
+  CHECK(hasProperty(views.view(2), GTK_ACCESSIBLE_PROPERTY_LABEL, "Saved"));
+  CHECK_FALSE(gtk_test_accessible_has_property(GTK_ACCESSIBLE(views.view(2)), GTK_ACCESSIBLE_PROPERTY_VALUE_TEXT));
+
+  auto setText = [&](const std::string &text) {
+    auto current = views.mounting->tree().find(2)->view;
+    auto next = current;
+    next.state = paragraphState(text);
+    views.mount({ShadowViewMutation::UpdateMutation(current, next, MountedViews::kSurface)});
+  };
+  setText("");
+  CHECK(roleOf(views.view(2)) == GTK_ACCESSIBLE_ROLE_GENERIC);
+  setText("Saved again");
+  CHECK(roleOf(views.view(2)) == GTK_ACCESSIBLE_ROLE_LABEL);
+  CHECK(hasProperty(views.view(2), GTK_ACCESSIBLE_PROPERTY_LABEL, "Saved again"));
+}
+
+TEST_CASE("a paragraph whose state alone changes its role keeps its opacity") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto paragraph = MountedViews::shadow(2, "Paragraph", desktopViewProps(dynamic::object("opacity", 0)), {{0, 0}, {150, 20}});
+  paragraph.state = paragraphState("");
+  views.add(paragraph);
+  GtkWidget *before = views.view(2);
+  CHECK(gtk_widget_get_opacity(before) == 0);
+  // A state update only, with the same props: the new widget is made with GTK's opacity of 1.
+  auto current = views.mounting->tree().find(2)->view;
+  auto next = current;
+  next.state = paragraphState("Hidden");
+  views.mount({ShadowViewMutation::UpdateMutation(current, next, MountedViews::kSurface)});
+  CHECK(views.view(2) != before);
+  CHECK(gtk_widget_get_opacity(views.view(2)) == 0);
 }

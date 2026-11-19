@@ -1,7 +1,12 @@
 #include "ngn/launch-settings.h"
 
+#include <folly/json.h>
+
 #include <cctype>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <system_error>
 
 namespace ngn {
 
@@ -82,6 +87,7 @@ std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources, 
     settings.module = plist("NGNModuleName").value_or("main");
     settings.title = plist("CFBundleName").value_or(settings.title);
     settings.appId = plist("CFBundleIdentifier").value_or("");
+    settings.capabilitiesJson = plist("NGNCapabilities").value_or("");
     return settings;
   }
 
@@ -121,6 +127,47 @@ std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources, 
     return usage(os);
   }
   return settings;
+}
+
+std::variant<LaunchSources::Lookup, std::string> packagedMetadata(const std::string &folder) {
+  auto path = std::filesystem::path(folder) / "metadata.json";
+  // Only a file that is not there makes a dev run: one that is there and cannot be read is a broken
+  // package, which must not fall back to argv and the environment.
+  std::error_code error;
+  bool there = std::filesystem::exists(path, error);
+  if (error) {
+    return path.string() + " cannot be read: " + error.message();
+  }
+  if (!there) {
+    return LaunchSources::Lookup();
+  }
+  std::ifstream file(path);
+  if (!file) {
+    return path.string() + " cannot be read";
+  }
+  std::stringstream text;
+  text << file.rdbuf();
+  folly::dynamic metadata;
+  try {
+    metadata = folly::parseJson(text.str());
+  } catch (const std::exception &error) {
+    return path.string() + " is not JSON: " + error.what();
+  }
+  if (!metadata.isObject()) {
+    return path.string() + " is not a JSON object";
+  }
+  // A package always names its bundle: without one the host would take argv's, as a dev run does.
+  if (auto bundle = metadata.find("NGNBundleFile"); bundle == metadata.items().end() || !bundle->second.isString() ||
+      bundle->second.getString().empty()) {
+    return path.string() + " names no NGNBundleFile";
+  }
+  return LaunchSources::Lookup([metadata = std::move(metadata)](const std::string &key) -> std::optional<std::string> {
+    auto it = metadata.find(key);
+    if (it == metadata.items().end() || it->second.isNull()) {
+      return std::nullopt;
+    }
+    return it->second.isString() ? it->second.getString() : folly::toJson(it->second);
+  });
 }
 
 UpdatesConfig updatesConfigFrom(

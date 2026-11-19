@@ -49,6 +49,10 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
 
  private:
   void drain();
+  // Replaces the view's widget when its GTK role is no longer the one the widget was made with,
+  // which GTK fixes for good: the new widget takes the old one's place, children, view data and
+  // focus. Making the view never replaces it.
+  void followRole(const ShadowView &view);
 
   std::thread::id uiThread_;
   std::mutex tasksMutex_;

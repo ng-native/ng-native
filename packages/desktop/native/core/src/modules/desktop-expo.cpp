@@ -344,10 +344,12 @@ const char *measurement(const std::string &system) {
 std::shared_ptr<NativeModule> makeLocalizationModule(std::shared_ptr<LocaleSource> source, std::string regionCode) {
   struct Localization : NativeModule {
     Localization(std::shared_ptr<LocaleSource> source, std::string region) : NativeModule("NgNativeLocalization") {
+      // A backend with no source yet (GTK's) answers as one that knows nothing: English in the
+      // system's region, on the Gregorian calendar.
       sync("getLocales", [source, region](const folly::dynamic &) {
-        auto locales = source->locales();
+        auto locales = source ? source->locales() : std::vector<LocaleFacts>();
         if (locales.empty()) {
-          locales.push_back({.languageTag = "en-" + region});
+          locales.push_back({.languageTag = region.empty() ? "en" : "en-" + region});
         }
         folly::dynamic out = folly::dynamic::array();
         for (const auto &locale : locales) {
@@ -363,7 +365,7 @@ std::shared_ptr<NativeModule> makeLocalizationModule(std::shared_ptr<LocaleSourc
         return out;
       });
       sync("getCalendars", [source](const folly::dynamic &) {
-        auto c = source->calendars();
+        auto c = source ? source->calendars() : CalendarFacts{.calendar = "gregorian"};
         return folly::dynamic::array(folly::dynamic::object("calendar", orNull(c.calendar))("timeZone", orNull(c.timeZone))(
             "uses24hourClock", c.uses24hourClock)("firstWeekday", c.firstWeekday));
       });

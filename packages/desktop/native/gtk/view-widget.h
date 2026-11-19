@@ -56,6 +56,9 @@ GtkWidget *makeSurfaceWidget(facebook::react::SurfaceId surfaceId, std::function
 
 // Null for a widget that is not an NgnView.
 ViewData *viewData(GtkWidget *widget);
+// Trades two views' data, for a widget that replaces another: each is freed with the widget that
+// holds it.
+void swapViewData(GtkWidget *a, GtkWidget *b);
 
 // Drops a Paragraph's laid-out text, to be laid out again on its next draw.
 void forgetText(ViewData &data);

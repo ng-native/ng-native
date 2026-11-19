@@ -201,16 +201,29 @@ jobs:
                 "$NGN_DESKTOP_CACHE"/*/hermes-$(uname -m)/bin/hermesc
             '
 
+      # A .deb depends on DEB_DEPENDS and nothing else: with only those installed in a clean Ubuntu
+      # 24.04, every library the built host loads must be found. (An rpm's requirements are
+      # rpmbuild's own, read from the binary.)
+      - name: Check the deb's dependencies against the host
+        working-directory: packages/desktop
+        run: |
+          packages=$(node -e "import('./bin/package-linux.mjs').then((m) => console.log(m.DEB_DEPENDS.map((d) => d.split(' ')[0]).join(' ')))")
+          test -n "$packages"
+          host="$(cat "$GITHUB_WORKSPACE/.linux-probe/build-dir")/gtk/ngn-linux"
+          docker run --rm -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" ubuntu:24.04 \
+            "$PWD/native/scripts/deb-depends-check.sh" "$host" $packages
+
       # The host launched on the notes example's release bundle to its first frame, under Xvfb (X11)
       # and headless Weston (Wayland), as launch-probe.sh checks it: a commit, a first frame, no crash
-      # and no JavaScript error. The bundle is the macOS one until Linux is an OS Metro knows. Each
-      # launch saves its window, drawn in-process, for the artifact below.
+      # and no JavaScript error, then read over AT-SPI (atspi-check.py). The bundle is the Linux one,
+      # as a Linux package carries it. Each launch saves its window, drawn in-process, for the
+      # artifact below.
       - name: Launch the GTK host on an app
         env:
           EXPO_NO_TELEMETRY: '1'
         run: |
           probe="$GITHUB_WORKSPACE/.linux-probe"
-          (cd examples/notes && pnpm exec expo export:embed --platform macos --dev false \
+          (cd examples/notes && pnpm exec expo export:embed --platform linux --dev false \
             --bundle-output "$probe/notes/main.js" --assets-dest "$probe/notes/assets")
           docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e NGN_DESKTOP_CACHE -e GITHUB_WORKSPACE \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
@@ -231,6 +244,16 @@ jobs:
               WAYLAND_DISPLAY=ngn-wayland GDK_BACKEND=wayland NGN_CAPTURE="$probe/wayland.png" \
                 native/scripts/launch-probe.sh "$host" "$probe/notes/main.js"
               kill $weston
+            '
+          # The same app read over AT-SPI as a screen reader reads it: its buttons and its text, each
+          # named. As root: dbus-daemon will not start for a user the image has no passwd entry for.
+          docker run --rm -e GITHUB_WORKSPACE \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
+            bash -euo pipefail -c '
+              probe="$GITHUB_WORKSPACE/.linux-probe"
+              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
+              DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
+                "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/notes/main.js" --role "push button" --role label
             '
 
       - if: always()

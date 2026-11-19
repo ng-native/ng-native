@@ -174,6 +174,10 @@ void makeTextField(GtkWidget *widget, ViewData &view) {
   applyTextFieldProps(view);
 }
 
+TextField *textFieldOf(GtkWidget *widget) {
+  return static_cast<TextField *>(g_object_get_data(G_OBJECT(widget), "ngn-text-field"));
+}
+
 void destroyTextField(ViewData &view) {
   if (view.field) {
     // The GtkText may still signal as it goes (its focus leaving): the field hears nothing more.
