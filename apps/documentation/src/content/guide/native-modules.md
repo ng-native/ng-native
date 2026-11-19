@@ -394,6 +394,9 @@ way, with `macos` among its `platforms` and a `macos` entry naming its CMake tar
 a `codegenConfig` gets its specs' codegen, so its C++ TurboModule and its Fabric components build
 for the Mac as they do for Android. See [Native code](/packages/desktop#native-code).
 
+On Linux a module's code lives in `modules/<name>/linux/`, and a library lists `linux` among its
+`platforms` with a `linux` entry, in the same way.
+
 `npm run macos` and `npm run package` list the dependencies with native code for iOS or Android
 and none for the Mac, leaving out `expo-*`, `@expo/*`, `@react-native/*` and `@ng-native/*`
 packages, which the host answers another way, and those the plugin's `deny` option lists. The

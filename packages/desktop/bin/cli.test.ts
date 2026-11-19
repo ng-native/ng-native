@@ -142,6 +142,7 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
     remove: () => {},
     copy: () => {},
     links: () => ({
+      os: 'macos',
       libraries: [],
       appModules: [],
       hostLibraries: [],
@@ -263,6 +264,7 @@ describe('run', () => {
             : (files[file] ?? ''),
       exists: (file) => file === host,
       links: () => ({
+        os: 'macos' as const,
         libraries: [],
         appModules: [],
         hostLibraries: [{ name: 'react-native-svg', dir: nested }],
@@ -279,6 +281,7 @@ describe('run', () => {
       readFile: (file) => files[file] ?? '',
       exists: (file) => file === host,
       links: () => ({
+        os: 'macos' as const,
         libraries: [],
         appModules: [{ name: 'Mine', dir: '/apps/demo/desktop' }] as never,
         hostLibraries: [],
@@ -373,6 +376,7 @@ describe('run', () => {
       resolvePackage: (_, name) =>
         name === 'react-native-screens' ? `/apps/demo/node_modules/${name}` : null,
       links: () => ({
+        os: 'macos' as const,
         libraries: [],
         appModules: [],
         hostLibraries: [{ name: 'react-native-svg', dir: nested }],
@@ -404,6 +408,7 @@ describe('run', () => {
       links: (appDir, options) => (
         asked.push({ appDir, options }),
         {
+          os: 'macos' as const,
           libraries: [library],
           appModules: [appModule],
           hostLibraries: [],
@@ -414,11 +419,12 @@ describe('run', () => {
     });
     await run({ module: 'main', universal: false }, sys);
     assert.deepEqual(asked, [
-      { appDir: '/apps/demo', options: { deny: [], builtIn: HOST_LIBRARIES } },
+      { appDir: '/apps/demo', options: { os: 'macos', deny: [], builtIn: HOST_LIBRARIES } },
     ]);
     assert.equal(linkFile('/apps/demo'), '/apps/demo/.expo/ng-native-desktop/link.json');
     assert.deepEqual(JSON.parse(written[linkFile('/apps/demo')]!), {
       version: 1,
+      os: 'macos',
       libraries: [library],
       appModules: [appModule],
     });
@@ -430,14 +436,100 @@ describe('run', () => {
     await run({ module: 'main', universal: false }, sys);
     assert.deepEqual(JSON.parse(written[linkFile('/apps/demo')]!), {
       version: 1,
+      os: 'macos',
       libraries: [],
       appModules: [],
     });
   });
 
+  it('autolinks for the OS it is asked to build for, and names it in the file', () => {
+    const asked: unknown[] = [];
+    const { sys, written } = fakeSystem({
+      platform: 'linux',
+      expoConfig: () => ({
+        name: 'Demo',
+        slug: 'demo',
+        platforms: ['ios', 'android', 'linux'],
+        experiments: { outOfTreePlatforms: true },
+      }),
+      links: (appDir, options) => (
+        asked.push({ appDir, options }),
+        {
+          os: 'linux' as const,
+          libraries: [],
+          appModules: [{ name: 'clock', dir: '/apps/demo/modules/clock/linux', cmakeTarget: null }],
+          hostLibraries: [],
+          withoutDesktop: [],
+          problems: [],
+        }
+      ),
+    });
+    prepareHost(sys, { universal: false, os: 'linux' });
+    assert.deepEqual(asked, [
+      { appDir: '/apps/demo', options: { os: 'linux', deny: [], builtIn: HOST_LIBRARIES } },
+    ]);
+    assert.equal(JSON.parse(written[linkFile('/apps/demo')]!).os, 'linux');
+  });
+
+  it('builds a Linux host from source, never taking a prebuilt one, which is a macOS host', () => {
+    const host = '/cache/rn-0.88.0/prebuilt/cccccccccccccccc/appkit/ngn-macos';
+    const files: Record<string, string> = {
+      [path.join(packageDir, 'prebuilt.json')]: JSON.stringify({
+        version: 1,
+        hosts: [
+          {
+            reactNative: '0.88.0',
+            flavour: 'debug',
+            url: 'https://e.com/h.tar.gz',
+            sha256: 'c'.repeat(64),
+            libraries: {},
+          },
+        ],
+      }),
+      '/apps/demo/node_modules/react-native/package.json': '{"version":"0.88.0"}',
+    };
+    const linux = fakeSystem({
+      platform: 'linux',
+      env: { NGN_DESKTOP_CACHE: '/cache' },
+      readFile: (file) => files[file] ?? '',
+      exists: (file) => file === host,
+      expoConfig: () => ({
+        name: 'Demo',
+        slug: 'demo',
+        platforms: ['ios', 'android', 'linux'],
+        experiments: { outOfTreePlatforms: true },
+      }),
+    });
+    const prebuiltDir = '/cache/rn-0.88.0/prebuilt/cccccccccccccccc';
+    assert.notEqual(
+      prepareHost(linux.sys, { universal: false, os: 'linux' }).buildDir,
+      prebuiltDir,
+    );
+    // The same app on a Mac takes it.
+    const mac = fakeSystem({
+      env: { NGN_DESKTOP_CACHE: '/cache' },
+      readFile: (file) => files[file] ?? '',
+      exists: (file) => file === host,
+    });
+    assert.equal(prepareHost(mac.sys, { universal: false }).buildDir, prebuiltDir);
+  });
+
+  it('checks the Expo config for the OS being built, and the machine it builds on', () => {
+    // A Mac config that does not list linux.
+    assert.throws(
+      () => prepareHost(fakeSystem({ platform: 'linux' }).sys, { universal: false, os: 'linux' }),
+      /does not list linux/,
+    );
+    assert.throws(
+      () => prepareHost(fakeSystem().sys, { universal: false, os: 'linux' }),
+      /The Linux desktop host builds on Linux only for now/,
+    );
+  });
+
   it('warns about dependencies whose native code the build leaves out', async () => {
     const { sys, warnings } = fakeSystem({
       links: () => ({
+        os: 'macos' as const,
         libraries: [],
         appModules: [],
         hostLibraries: [],
@@ -455,7 +547,14 @@ describe('run', () => {
       resolvePackage: (_, name) => `/apps/demo/node_modules/${name}`,
       links: (_, options) => (
         (deny = options?.deny),
-        { libraries: [], appModules: [], hostLibraries: [], withoutDesktop: [], problems: [] }
+        {
+          os: 'macos' as const,
+          libraries: [],
+          appModules: [],
+          hostLibraries: [],
+          withoutDesktop: [],
+          problems: [],
+        }
       ),
       expoConfig: () => ({
         platforms: ['macos'],
@@ -678,6 +777,18 @@ describe('run', () => {
 });
 
 describe('checkExpoConfig', () => {
+  it('asks for the OS it is checking, linux included', () => {
+    const config = { platforms: ['macos'], experiments: { outOfTreePlatforms: true } };
+    assert.throws(() => checkExpoConfig(config, 'linux'), /does not list linux/);
+    assert.doesNotThrow(() =>
+      checkExpoConfig({ ...config, platforms: ['macos', 'linux'] }, 'linux'),
+    );
+    assert.throws(
+      () => checkExpoConfig({ platforms: ['linux'] }, 'linux'),
+      /lists linux without expo.experiments.outOfTreePlatforms/,
+    );
+  });
+
   it('needs macos listed and the out-of-tree platforms experiment on', () => {
     assert.doesNotThrow(() =>
       checkExpoConfig({ platforms: ['macos'], experiments: { outOfTreePlatforms: true } }),
