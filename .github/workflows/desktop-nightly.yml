@@ -7,8 +7,11 @@ name: Desktop host nightly
 # the notes example's release bundle to its first frame under Xvfb and headless Weston
 # (launch-cell.sh). Fedora 45 also runs GNOME's mutter headless, and on x86_64 GTK's Vulkan
 # renderer over lavapipe, Mesa's software Vulkan. The build job also runs `pnpm bench:linux`, the
-# timed budget, in the image. A pull request runs it only when this workflow, the cell script or
-# the bench changed; it runs every night on main and by hand on any branch.
+# timed budget, in the image. A second job, tests (fedora), builds the host and runs the core and
+# GTK tests in the Fedora variant of that image (Dockerfile.fedora), which has the newer
+# libadwaita the AlmaLinux 9 image's 1.4 fallbacks stand in for. A pull request runs the workflow
+# only when this workflow, the cell script, the bench or the Fedora image changed; it runs every
+# night on main and by hand on any branch.
 on:
   schedule:
     - cron: '23 3 * * *'
@@ -18,6 +21,7 @@ on:
       - 'packages/desktop/native/scripts/launch-cell.sh'
       - 'scripts/bench-linux.mjs'
       - 'scripts/bench-linux-budget.json'
+      - 'packages/desktop/native/docker/Dockerfile.fedora'
   workflow_dispatch:
 
 permissions:
@@ -111,6 +115,60 @@ jobs:
           retention-days: 3
           include-hidden-files: true
           if-no-files-found: error
+
+  # The core, runtime and GTK tests, built and run in the Fedora image: the newer GTK and
+  # libadwaita the host runs on beside the AlmaLinux 9 image's, so the code a newer libadwaita takes
+  # in place of a 1.4 fallback runs. Nothing is shipped from here: the host the other jobs launch is
+  # the el9 build, whose glibc floor this image does not keep.
+  tests-fedora:
+    name: tests (fedora, ${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the Fedora image
+        run: docker build -f packages/desktop/native/docker/Dockerfile.fedora -t ngn-fedora packages/desktop/native/docker
+
+      - uses: actions/cache@v6
+        with:
+          path: ${{ env.NGN_DESKTOP_CACHE }}/*/src
+          key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
+
+      - name: Build the GTK host and run its tests
+        run: |
+          mkdir -p "$NGN_DESKTOP_CACHE" "$GITHUB_WORKSPACE/.linux-tests"
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -e NGN_DESKTOP_CACHE -e NGN_JOBS -e GITHUB_WORKSPACE \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-fedora \
+            bash -euo pipefail -c '
+              build=$(native/scripts/build.sh --backend gtk --no-debug-info | tail -n 1)
+              "$build/ngn_core_tests"
+              "$build/ngn_runtime_tests"
+              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
+              xvfb=$!
+              trap "kill $xvfb" EXIT
+              mkdir -p "$GITHUB_WORKSPACE/.linux-tests/gtk-tests"
+              pkg-config --modversion gtk4 libadwaita-1 | tee "$GITHUB_WORKSPACE/.linux-tests/versions"
+              DISPLAY=:99 GDK_BACKEND=x11 NGN_GTK_TEST_SHOTS="$GITHUB_WORKSPACE/.linux-tests/gtk-tests" \
+                "$build/gtk/ngn_gtk_tests"
+            '
+
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-tests-fedora-${{ matrix.arch }}
+          path: .linux-tests
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   # The built host on each distribution, as a person installs and runs it there.
   launch:

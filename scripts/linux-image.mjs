@@ -1,6 +1,7 @@
 /**
  * Runs a Node script of this repository in the AlmaLinux 9 image the GTK host is built in
- * (`ngn-el9`, from `packages/desktop/native/docker`), for a tool that measures or draws the Linux
+ * (`ngn-el9`, from `packages/desktop/native/docker`, or the image `NGN_LINUX_IMAGE` names, such as
+ * the Fedora variant `ngn-fedora`), for a tool that measures or draws the Linux
  * host from a Mac: `pnpm bench:linux` and the screens-check skill's `linux` mode. On Linux the tools
  * run directly and this is not used.
  *
@@ -13,7 +14,23 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/** The image the host is built and measured in; `NGN_LINUX_IMAGE` names another, such as `ngn-fedora`. */
 export const IMAGE = 'ngn-el9';
+
+/**
+ * The image to run in: `NGN_LINUX_IMAGE`, or the AlmaLinux 9 one. The Fedora variant
+ * (`Dockerfile.fedora`) is built as `ngn-fedora`. An empty value is a mistake, not the default.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function selectedImage(env = process.env) {
+  const named = env.NGN_LINUX_IMAGE;
+  if (named === undefined) return IMAGE;
+  if (!/^[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?$/.test(named)) {
+    throw new Error(`NGN_LINUX_IMAGE is not an image name: ${JSON.stringify(named)}.`);
+  }
+  return named;
+}
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -22,11 +39,12 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
  *
  * @param {string} script
  * @param {readonly string[]} args
- * @param {{ mounts?: readonly string[], image?: string, home?: string, uid?: number, gid?: number, cwd?: string }} [options]
+ * @param {{ mounts?: readonly string[], image?: string, env?: NodeJS.ProcessEnv, home?: string, uid?: number, gid?: number, cwd?: string }} [options]
  */
 export function imageArguments(script, args, options = {}) {
   const mounts = [...new Set([root, ...(options.mounts ?? [])].map((dir) => path.resolve(dir)))];
-  checkShared(mounts, options.home ?? homedir(), options.image ?? IMAGE);
+  const image = options.image ?? selectedImage(options.env);
+  checkShared(mounts, options.home ?? homedir(), image);
   return [
     'run',
     '--rm',
@@ -37,7 +55,7 @@ export function imageArguments(script, args, options = {}) {
     ...mounts.flatMap((dir) => ['-v', `${dir}:${dir}`]),
     '-w',
     path.resolve(options.cwd ?? process.cwd()),
-    options.image ?? IMAGE,
+    image,
     'node',
     path.resolve(script),
     ...args,
