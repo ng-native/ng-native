@@ -462,12 +462,12 @@ describe('virtual list sticky rows moved on the native side', () => {
     instance.sticky!.set([0, 20]);
     await settle();
     await measureAll(() => ESTIMATE);
-    const tag = row(0)!.reactTag;
     await scroll(25 * ESTIMATE);
     await measureAll(() => ESTIMATE);
     assert.equal(row(0), undefined);
-    assert.equal(drives().has(tag), false);
-    assert.ok(drives().has(row(20)!.reactTag));
+    // The only drive is row 20's, which may be in row 0's old view: a sticky row hands its slot
+    // on only to another.
+    assert.deepEqual([...drives().keys()], [row(20)!.reactTag]);
     unmount();
   });
 });

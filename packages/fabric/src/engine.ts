@@ -10152,9 +10152,10 @@ export class Engine implements HostEngine {
     axis: ScrollAxis,
     range: ScrollRange,
     statics: readonly StaticTransform[] = [],
+    from?: number,
   ): ScrollDrive | null {
     const property = axis === 'x' ? 'translateX' : 'translateY';
-    return this.driveByEvent(view, scroll, scrollFeed(axis), property, range, statics);
+    return this.composedDrive(view, scroll, scrollFeed(axis), property, range, statics, null, from);
   }
 
   /** See `HostEngine.driveByEvent`. */
@@ -10179,6 +10180,7 @@ export class Engine implements HostEngine {
     range: ScrollRange,
     statics: readonly StaticTransform[] = [],
     shift: number | null = null,
+    from?: number,
   ): ComposedDrive | null {
     if (!this.scrollDriver) return null;
     // As Animated does: Fabric flattens a view that only lays out, and then there is no native
@@ -10193,6 +10195,7 @@ export class Engine implements HostEngine {
       statics,
       (node) => (node as EngineNode).committed?.tag ?? null,
       shift,
+      from,
     );
   }
 

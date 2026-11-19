@@ -151,6 +151,9 @@ const PARK_LIMIT = 6;
 /** The style of a row that sizes itself and needs nothing else: in flow, where it falls. */
 const IN_FLOW: Record<string, unknown> = Object.freeze({});
 
+/** The recycling type of a sticky row, which hands its slot on only to another. */
+const STICKY = Symbol('sticky');
+
 /** Points of drift below which a held position is left alone, as UIKit rounds to half-points. */
 const HOLD_TOLERANCE = 0.5;
 
@@ -966,6 +969,10 @@ export class VirtualList<T> extends ScrollViewProps {
       .slice(this.measuring() ? 1 : 0);
     const axis = this.horizontal() ? 'x' : 'y';
     const live = new Set<HostNode>();
+    // Where the list scrolled itself to, until native has scrolled there: native draws a graph
+    // when its offset changes, and after a jump the offset of a drive just made may not. Only
+    // then, since mid-fling the offset here trails native's and would set it back a frame.
+    const from = this.jumped ? this.headerHeight() + this.lastOffset : undefined;
     this.window().forEach((row, at) => {
       const view = views[at];
       const next = this.stickyDrive(row);
@@ -973,9 +980,16 @@ export class VirtualList<T> extends ScrollViewProps {
       live.add(view);
       const statics = JSON.stringify(next.statics);
       const held = this.drives.get(view);
-      if (held?.statics === statics) return held.drive.update(next.range);
+      if (held?.statics === statics) return held.drive.update(next.range, from);
       held?.drive.stop();
-      const drive = this.engine.driveByScroll(view, this.node, axis, next.range, next.statics);
+      const drive = this.engine.driveByScroll(
+        view,
+        this.node,
+        axis,
+        next.range,
+        next.statics,
+        from,
+      );
       if (drive) this.drives.set(view, { drive, statics });
     });
     for (const [view, held] of this.drives) {
@@ -983,7 +997,13 @@ export class VirtualList<T> extends ScrollViewProps {
       held.drive.stop();
       this.drives.delete(view);
     }
+    if (this.landed) this.jumped = this.landed = false;
   }
+
+  /** The list scrolled itself, and native has not drawn its sticky rows there yet. */
+  private jumped = false;
+  /** A scroll event has come since, so the next pass's drives are the last to need telling. */
+  private landed = false;
 
   /** Which recycling slot each rendered item holds, by key: its type, and the row it last drew. */
   private readonly recycled = new Map<
@@ -1038,9 +1058,14 @@ export class VirtualList<T> extends ScrollViewProps {
   }
 
   private recycledSlot(key: unknown, item: T, index: number): number {
+    // A sticky row is a type of its own: native keeps the translate it moved one by, and a plain
+    // row taking its slot commits no transform to put it back. A row that stops or starts being
+    // sticky takes a new slot for the same reason.
+    const sticky = this.nextSticky().has(index);
     const held = this.recycled.get(key);
-    if (held) return held.slot;
-    const type = this.itemType()?.(item, index);
+    if (held && (held.type === STICKY) === sticky) return held.slot;
+    this.recycled.delete(key);
+    const type = sticky ? STICKY : this.itemType()?.(item, index);
     const slot = this.unpark(key, type) ?? this.parked.get(type)?.pop()?.slot ?? this.nextSlot++;
     this.recycled.set(key, { slot, type, row: null });
     return slot;
@@ -1279,6 +1304,8 @@ export class VirtualList<T> extends ScrollViewProps {
   scrollToOffset(options: { offset: number; animated?: boolean }): void {
     const { offset, animated = true } = options;
     const [x, y] = this.horizontal() ? [offset, 0] : [0, offset];
+    this.jumped = true;
+    this.landed = false;
     this.engine.dispatchCommand(this.node, 'scrollTo', [x, y, animated]);
   }
 
@@ -1330,6 +1357,7 @@ export class VirtualList<T> extends ScrollViewProps {
     const visible = this.indexAt(content);
     if (visible !== this.visible()) this.visible.set(visible);
     this.lastOffset = content;
+    if (this.jumped) this.landed = true;
     this.anchorAt(visible, content);
     // A pinned row follows the scroll continuously, so with sticky rows the offset has to be a
     // signal - and only then. Without them this stays a field, and a fling that moves no row in

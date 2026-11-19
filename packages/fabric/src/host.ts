@@ -200,7 +200,9 @@ export abstract class HostEngine {
 
   /**
    * Move `view` by `scroll`'s offset along `axis` on the native side, through `range`, keeping
-   * `statics` in its transform. Null when the host cannot, and the caller moves the view itself.
+   * `statics` in its transform. `from` is where the caller knows `scroll` to be, for native to
+   * start from until its next scroll event. Null when the host cannot, and the caller moves the
+   * view itself.
    */
   driveByScroll(
     _view: HostNode,
@@ -208,6 +210,7 @@ export abstract class HostEngine {
     _axis: ScrollAxis,
     _range: ScrollRange,
     _statics?: readonly StaticTransform[],
+    _from?: number,
   ): ScrollDrive | null {
     return null;
   }
