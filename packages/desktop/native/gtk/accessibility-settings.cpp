@@ -197,4 +197,12 @@ void AccessibilitySettingsWatcher::report() {
   }
 }
 
+WatchedHostState makeWatchedHostState() {
+  WatchedHostState made;
+  made.state = std::make_shared<HostState>();
+  // Heard at start, so the state is made before the watcher.
+  made.accessibility = std::make_unique<AccessibilitySettingsWatcher>([state = made.state](const AccessibilitySettings &settings) { state->accessibility.set(settings); });
+  return made;
+}
+
 } // namespace ngn::gtk
