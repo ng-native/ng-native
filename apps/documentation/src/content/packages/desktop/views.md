@@ -33,9 +33,9 @@ its outer shadows.
 `filter` is drawn as Core Image filters on the view's layer, which apply to the view and its
 children, in the order written in the `filter` value. It draws `blur()`, `brightness()`,
 `contrast()`, `grayscale()`, `hue-rotate()`, `invert()`, `opacity()`, `saturate()` and `sepia()`,
-with the colour functions working on sRGB values as Chrome's do. `drop-shadow()` is not drawn (use `box-shadow`). A
-`mix-blend-mode` blends the view with what is drawn under it, as React Native iOS does, in every
-mode but `plus-darker`.
+with the colour functions working on sRGB values as Chrome's do. `drop-shadow()` is not drawn (use
+`box-shadow`). A `mix-blend-mode` blends the view with what is drawn under it, as React Native iOS
+does, in every mode but `plus-darker`.
 
 ## Modals
 
