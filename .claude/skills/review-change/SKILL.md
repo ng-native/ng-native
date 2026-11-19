@@ -5,6 +5,11 @@ description: Review a pull request, branch or working diff in this repo the way 
 
 # Review a change
 
+This is a procedure, not a reference. Invoking the skill only loads it: the review is the steps
+below, run in order, and it is not done until the report in step 6 ends with its done list. A
+read-through of the diff and "looks fine" is not this review, and a report that says the skill was
+invoked without that list has not run it.
+
 Read [AGENTS.md](../../../AGENTS.md), [ARCHITECTURE.md](../../../docs/ARCHITECTURE.md),
 [CONTEXT.md](../../../docs/CONTEXT.md) and [.claude/rules/angular.md](../../rules/angular.md) first. A
 fresh worktree has no `node_modules`: run `pnpm install` before running anything.
@@ -20,6 +25,20 @@ GitHub rate-limits this repo's automation, so fetch once:
 Read every changed file in full, not just the hunks, and the callers of anything whose behaviour
 changed (`git grep`). Read the PR body: what it claims is what you check.
 
+Review the whole of each touched function, and its siblings (the other branch of the same switch,
+the matching `begin`/`end`, create beside update), not only the changed lines: a fix to one
+branch that leaves its sibling is what the next bot round finds.
+
+Run it again, on the new diff only, before each push that follows:
+
+- **A fix for a finding.** The fix is a change of its own, and the next bot round often lands in
+  it: a guard that restores `false` instead of the earlier value, a deferred value that loses its
+  selection, an idle callback holding a raw pointer. Check it against every section below, not just
+  the finding it answers.
+- **A merge** from main or the parent branch of a stack (`git diff <head before the merge>..HEAD`).
+  A merge brings code this branch never built with (a test target missing the rpath main's change
+  added), and each push is another bot review round, so merge and fix in one push.
+
 ## 2. Score the risk
 
 Before hunting for bugs, say what a mistake here could break and for whom.
@@ -29,6 +48,8 @@ Before hunting for bugs, say what a mistake here could break and for whom.
 | iOS (16.4+)                     | `fabric`, `platform`, `components`, `router`, `expo`, `device`, native targets |
 | Android (minSdk 24)             | the same, plus anything with an Android-only branch or Compose view            |
 | Web host                        | `web`, the web preset in `tailwind`, `*.web.*` files, `browser` exports        |
+| macOS desktop                   | `packages/desktop/native/core` and `appkit`, `desktop/bin`                     |
+| Linux desktop (GTK 4)           | `packages/desktop/native/core` and `gtk`, `desktop/bin`, Linux packaging       |
 | Build (Metro, Tailwind, Hermes) | `metro`, `tailwind`, the Angular transform, release bundles                    |
 | Workspaces (generators, update) | `nx`, `schematics`, `migrate`, `template`, `package.json` exports and peers    |
 | Repo only                       | tests, CI, scripts, `.claude`, `docs/`                                         |
@@ -94,6 +115,28 @@ does not.
 - OS floors: iOS 16.4 and Android API 24. An API newer than the floor is gated, and the docs say so.
 - Permissions: denied, restricted and never-asked all answer, and none throw.
 
+**Desktop hosts (`packages/desktop/native`).** Check:
+
+- every `g_signal_connect`, idle or timeout source, and callback that captures `this` or a raw
+  pointer is disconnected or cancelled when its widget, window or owner goes, on every way it goes
+  (close, destroy, unmount, reload, a widget replaced by a role change);
+- GTK work from another thread is queued with `g_idle_add`, never `g_main_context_invoke`, which
+  runs the function on the calling thread when the context is free;
+- a props update applies only what changed since the props last applied, so an unrelated prop does
+  not reset native state (a switch's slide, a calendar's browsed month, typed text), and state sent
+  back to Fabric is compared with the state the update is applied to, not the mounted one;
+- a value held back (during composition, before a mount, until layout) keeps the event count and
+  selection it came with, and only fresher props or commands replace it;
+- a replaced widget gets everything the old one had: props, signal handlers, scale, focus without
+  selecting its text, and each child's `child-visible`, which `gtk_widget_unparent` resets;
+- a cairo surface or matrix, and any library call that can fail, has its status checked, on each
+  of the sibling paths (a filter and a mask) and not only the one the change adds;
+- the floors the build accepts (GTK 4.10, libadwaita 1.4, EL9's versions): a call or behaviour
+  newer than the floor is gated, checked in GTK's or libadwaita's source at that tag, and the
+  version plan names the version. A test that returns early on the version CI has checks nothing
+  there;
+- a loop or queue fed by a peer (WebSocket frames, pings, retries of a failed load) has a bound.
+
 **Async ordering and errors.** Two events before the next change-detection pass (a signal `set`
 keeps only the last, so queue deliveries), a value that changes while a sync awaits (write the
 latest after it), a session not yet active, a rejected promise with no handler, one throwing
@@ -122,10 +165,20 @@ a second copy of `@angular/core` or a native module.
 and 3,000-file caps) or a rate limit must never read as "nothing to do". Bind merges to the checked
 head SHA. Concurrency groups must not let one event cancel another's run.
 
+A spawned process handles its `error` event, is stopped with SIGTERM then SIGKILL to its process
+group after a bounded wait, and is waited for (`close`, not just `exit`) before its state is
+removed. Output is split into lines across chunks. A path with spaces is quoted in every generated
+shell, CMake or spec line, a value written into metadata is validated whole (a newline, `MIT AND`),
+and a generated name is checked against the format's limit (ustar's 100 bytes).
+
 **Docs.** Every claim is checked against the code: docs that overstate (say "every" when the code
 covers some), drift from what the code does, or leave out a platform qualifier were the most common
 documentation findings. A version plan is docs too and draws the same findings, more than any other
 file in a PR: an overstated claim, a missing iOS or Android version, a sentence that is hard to parse.
+So check it sentence by sentence: name the line of code that makes each one true and the condition
+it holds under (a libadwaita version, a resizable window, `expo.icon` set, a signing key), and add
+that condition to the sentence. Its first body line becomes the changelog bullet, so it is one
+sentence with every detail below it.
 A code sample leaves state right when a call fails (a flag reset in `finally`) and has its imports.
 Docs describe present behaviour, in [CONTEXT.md](../../../docs/CONTEXT.md)'s
 words. A code sample in docs is covered by `docs-samples.test.ts`.
@@ -145,7 +198,10 @@ that reason. Reject tests that cannot fail:
 - the case runs in one mode only: left to right, streaming off, the first render but not an update;
 - the fixture lacks what makes the case (an image with no intrinsic size, a match that only comes
   through another alternative);
-- a wall-clock threshold (a 250 ms cutoff) that a busy CI worker misses;
+- a wall-clock threshold (a 250 ms cutoff) that a busy CI worker misses, or a wait for a number of
+  loop iterations or a fixed queue size instead of for the condition;
+- a result that depends on the machine: the locale (`localeCompare`, `%.3f`), a proxy, `GDK_SCALE`,
+  a temp path read as a regular expression, a Flatpak or portal session, PID 1 in a container;
 - a comment or title describing a different binding or case than the body.
 
 Then mutate the change one line at a time (negate a condition, delete a side effect or guard, move a
@@ -153,7 +209,9 @@ boundary) and rerun its test file; a mutation that survives is an assertion miss
 not needed.
 
 Tests that change globals, temp directories, CDP sessions or registered names restore them in
-`finally`. Run `pnpm coverage` (95% floor) when product code changed.
+`finally`. In C++ a failed `REQUIRE` throws, so a log handler, a fixture's child process or a
+callback's captured locals are released by a destructor, and recorders are declared before the
+network or loop that calls them. Run `pnpm coverage` (95% floor) when product code changed.
 
 **No regressions.** `pnpm affected` for lint, typecheck and test. For the CSS engine, also the Chrome
 oracle corpus and both Tailwind sweeps; for Metro, CSS or example styles, `pnpm export`. Read each
@@ -238,5 +296,12 @@ Report, in this order:
 3. **Checks run** and their results, including bench numbers and which tests were reverted to prove
    they bite. Say plainly what was not run.
 4. **Version plan and migration:** present and right, missing, or not needed, with the reason.
+5. **Done:** one line each, with what was run or read, or "not run" and why:
+   - every changed file read in full, and each touched function whole;
+   - each section of steps 3 and 4 that applies, named, and the ones skipped as not applying;
+   - each test reverted to prove it bites, by name;
+   - `pnpm affected` (and coverage, bench or the native suites the change needs);
+   - each version-plan sentence checked against the code;
+   - for a fix or a merge, the rerun on its own diff.
 
 Post to the PR only when asked. No em-dashes, and no AI attribution, in anything posted.
