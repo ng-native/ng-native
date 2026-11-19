@@ -42,6 +42,30 @@ Size viewportOf(const ScrollBox &box) {
   return {std::max<Float>(0, frame.width - gutter.right), std::max<Float>(0, frame.height - gutter.bottom)};
 }
 
+// Gives the view's state the content's offset now. React Native applies a state update later, on
+// the state it then holds, and a later update of the same view replaces one not yet applied: each
+// carries the offset GTK shows, compared with the state it is applied to, never with the one this
+// view last mounted. `relayout` sends it even when the offset is the state's, for a clone that
+// reads a new gutter, and so does each later update until one such clone is applied.
+void syncState(const ScrollBox &box, bool relayout) {
+  auto state = stateOf(*box.view);
+  if (!state) {
+    return;
+  }
+  if (relayout) {
+    box.relayoutOwed->store(true);
+  }
+  Point offset = offsetOf(box);
+  state->updateState([offset, owed = box.relayoutOwed](const ScrollViewState &old) -> StateData::Shared {
+    if (!owed->exchange(false) && old.contentOffset == offset) {
+      return nullptr;
+    }
+    auto data = std::make_shared<ScrollViewState>(old);
+    data->contentOffset = offset;
+    return data;
+  });
+}
+
 void scrolled(GtkAdjustment *, gpointer user) {
   auto *box = static_cast<ScrollBox *>(user);
   if (!box->view) {
@@ -51,11 +75,7 @@ void scrolled(GtkAdjustment *, gpointer user) {
   if (gOffsetChanged) {
     gOffsetChanged(box->view->tag, offset);
   }
-  if (auto state = stateOf(*box->view); state && state->getData().contentOffset != offset) {
-    auto data = state->getData();
-    data.contentOffset = offset;
-    state->updateState(std::move(data));
-  }
+  syncState(*box, false);
   if (auto emitter = std::dynamic_pointer_cast<const ScrollViewEventEmitter>(box->view->emitter)) {
     ScrollEvent event;
     event.contentOffset = offset;
@@ -334,15 +354,16 @@ void updateScrollers(ViewData &view) {
   auto gutter = scrollerGutter(style, style == ScrollerStyle::Legacy ? classicScrollerWidth(box->scrolled) : 0, visibility);
   // Recorded only once there is a state to update, so a gutter is never recorded that no layout
   // has asked for. A state update clones the scroll view's node, which reads its gutter.
-  auto state = stateOf(view);
-  if (state && ScrollerGutters::shared().set(view.tag, gutter)) {
-    state->updateState(ScrollViewState(state->getData()));
+  if (stateOf(view) && ScrollerGutters::shared().set(view.tag, gutter)) {
+    syncState(*box, true);
   }
 }
 
 void allocateScrollView(ViewData &view, int width, int height) {
   if (view.scroll) {
     gtk_widget_allocate(view.scroll->scrolled, width, height, -1, nullptr);
+    // A starting offset that waited for a view with a size is tried again once it has one.
+    applyPendingOffsetAfterMount(*view.scroll);
   }
 }
 

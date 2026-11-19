@@ -147,7 +147,7 @@ std::optional<std::pair<int, int>> newSelection(const DesktopTextInputProps *bef
     return std::nullopt;
   }
   int start = std::max(0, std::min(now.selection->start, now.selection->end));
-  int end = std::max(now.selection->start, now.selection->end);
+  int end = std::max(0, std::max(now.selection->start, now.selection->end));
   return std::make_pair(start, end);
 }
 

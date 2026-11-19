@@ -118,7 +118,7 @@ export function checkLinuxFlags({ format, license, homepage, categories, maintai
         'LicenseRef-proprietary), which the package and its metainfo state.',
     );
   }
-  if (license !== undefined && !/^[A-Za-z0-9.+\-:() ]+$/.test(license)) {
+  if (license !== undefined && !isSpdxExpression(license)) {
     throw new UsageError(`--license takes an SPDX license expression, not "${license}".`);
   }
   if (homepage !== undefined && !isWebUrl(homepage)) {
@@ -126,6 +126,48 @@ export function checkLinuxFlags({ format, license, homepage, categories, maintai
   }
   if (categories !== undefined) categoryList(categories);
   checkMaintainer(format, maintainer);
+}
+
+/**
+ * Whether `value` is an SPDX license expression: ids (a `LicenseRef-` one too), `WITH` an
+ * exception, `AND`, `OR` and parentheses, complete, so `MIT AND` is not.
+ *
+ * @param {string} value
+ */
+function isSpdxExpression(value) {
+  const tokens = value.match(/[()]|[^\s()]+/g) ?? [];
+  const id =
+    /^(?:(?:DocumentRef-[A-Za-z0-9.-]+:)?LicenseRef-[A-Za-z0-9.-]+|[A-Za-z0-9][A-Za-z0-9.-]*\+?)$/;
+  let at = 0;
+  const word = () => {
+    const token = tokens[at];
+    if (token === undefined || !id.test(token) || ['AND', 'OR', 'WITH'].includes(token)) {
+      return false;
+    }
+    at++;
+    return true;
+  };
+  const term = () => {
+    if (tokens[at] === '(') {
+      at++;
+      if (!compound() || tokens[at] !== ')') return false;
+      at++;
+      return true;
+    }
+    if (!word()) return false;
+    if (tokens[at] !== 'WITH') return true;
+    at++;
+    return word();
+  };
+  const compound = () => {
+    if (!term()) return false;
+    while (tokens[at] === 'AND' || tokens[at] === 'OR') {
+      at++;
+      if (!term()) return false;
+    }
+    return true;
+  };
+  return compound() && at === tokens.length;
 }
 
 /**
@@ -198,6 +240,22 @@ function idPart(slug) {
 }
 
 /**
+ * Throws a usage error for an id whose longest generated file name, `<id>.metainfo.xml`, is more
+ * than the 100 bytes a tar header holds. The id is the app's identity, so it is not shortened.
+ *
+ * @param {string} appId
+ */
+function checkIdLength(appId) {
+  if (Buffer.byteLength(`${appId}.metainfo.xml`) > 100) {
+    throw new UsageError(
+      `The application id "${appId}" is too long: its metainfo file, ${appId}.metainfo.xml, takes ` +
+        'more than the 100 bytes an archive holds. Shorten expo.ios.bundleIdentifier to 87 ' +
+        'bytes or fewer.',
+    );
+  }
+}
+
+/**
  * The application id `linuxNames` gives a package, checked for Linux and, for a Flatpak, Flathub.
  *
  * @param {string | null} bundleIdentifier
@@ -264,6 +322,7 @@ export function linuxNames(expo, config, format) {
     );
   }
   const appId = linuxAppId(config.bundleIdentifier, format, slug);
+  checkIdLength(appId);
   const version = config.version;
   if (!/^\d[A-Za-z0-9.+~]*$/.test(version)) {
     throw new UsageError(
@@ -441,6 +500,25 @@ export const DEB_DEPENDS = [
 ];
 
 /**
+ * Why a `.deb` around a host built on this machine may not run where it installs: its `Depends`
+ * floors are those of the prebuilt host, built on AlmaLinux 9, and a host built against a newer
+ * distribution's libraries can need newer ones than they say. An rpm's own scanner reads what the
+ * host links, and a Flatpak brings its runtime, so neither is warned.
+ *
+ * @param {LinuxArch} arch
+ */
+export function selfBuiltDebWarning(arch) {
+  const m = LINUX_MINIMUMS;
+  return (
+    `No prebuilt Linux ${arch} host fits this app, so the .deb holds one built on this machine. Its ` +
+    `dependencies (glibc ${m.glibc}, GTK ${m.gtk}, libadwaita ${m.libadwaita} and GStreamer ` +
+    `${m.gstreamer} or later) hold for the prebuilt host, built on AlmaLinux 9, and the one built ` +
+    "here may need newer libraries than they say. Package on AlmaLinux 9, or use the prebuilt host, " +
+    'for a .deb that installs only where it runs.'
+  );
+}
+
+/**
  * A `.deb`'s `control` file, depending on `DEB_DEPENDS`.
  *
  * @param {LinuxApp} app
@@ -537,7 +615,9 @@ export function finishArgs(config) {
   }
   for (const entry of config.options.capabilities?.paths ?? []) {
     const access = (entry.access ?? 'read') === 'read' ? ':ro' : '';
-    args.push(`--filesystem=${entry.path.replace(/\/$/, '')}${access}`);
+    // A colon starts the mode, so one in the path is escaped, with the backslash that escapes it.
+    const declared = entry.path.replace(/\/$/, '').replace(/[\\:]/g, '\\$&');
+    args.push(`--filesystem=${declared}${access}`);
   }
   return args;
 }
@@ -834,7 +914,12 @@ function packageTree(sys, plan, { arch, tree, archives }) {
     return plan.runner ? [buildRpm(sys, { ...plan, runner: plan.runner, arch, tree })] : [];
   }
   const base = `${app.packageName}-${app.version}-${LINUX_ARCHES[arch].rpm}`;
-  const archive = path.join(format === 'app' ? plan.output : plan.staging, `${base}.tar.gz`);
+  // A Flatpak's source is not the `app` archive of the same name: its metadata differs, and the
+  // output folder may hold the `app` one and its signature.
+  const archive =
+    format === 'app'
+      ? path.join(plan.output, `${base}.tar.gz`)
+      : path.join(plan.staging, `${base}-flatpak-source.tar.gz`);
   sys.writeFile(archive, tarGz(treeEntries(sys, tree, `${base}/`)));
   archives.push({ arch, file: archive, sha256: sys.sha256(archive) });
   return format === 'app' ? shipFolder(sys, plan, { tree, archive, base }) : [];
@@ -873,11 +958,11 @@ function planLinuxPackage(options, sys) {
   if (format === 'flatpak') for (const line of flatpakProblems(config)) sys.warn(line);
   const icons = expo.icon ? scaledIcons(sys, path.resolve(cwd, expo.icon)) : [];
 
-  const hosts = linuxArches(options.arch).map((arch) => ({
-    arch,
-    buildDir: prepareHost(sys, { os: 'linux', arch, release: true, universal: false, expo })
-      .buildDir,
-  }));
+  const hosts = linuxArches(options.arch).map((arch) => {
+    const host = prepareHost(sys, { os: 'linux', arch, release: true, universal: false, expo });
+    if (format === 'deb' && !host.prebuilt) sys.warn(selfBuiltDebWarning(arch));
+    return { arch, buildDir: host.buildDir };
+  });
   const app = {
     ...names,
     name: config.name,
