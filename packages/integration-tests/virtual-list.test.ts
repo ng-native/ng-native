@@ -898,6 +898,16 @@ describe('windowed list options', () => {
       assert.equal(sets().at(-1), 300 * ITEM_HEIGHT);
     });
 
+    it('stays armed for a jump back to where native was, while an earlier jump is on its way', async () => {
+      const { list, sets } = await jumpable([0, 200]);
+      list.scrollToOffset({ offset: 100 * ITEM_HEIGHT, animated: false });
+      list.scrollToOffset({ offset: 5 * ITEM_HEIGHT, animated: false });
+      await fireEvent.scroll(host, { contentOffset: { y: 5 * ITEM_HEIGHT } });
+      instance.sticky.set([0, 200, 400]);
+      await settle();
+      assert.equal(sets().at(-1), 5 * ITEM_HEIGHT);
+    });
+
     it('is not armed by a jump to where the list already is', async () => {
       const { list, sets } = await jumpable([0, 30, 60]);
       list.scrollToOffset({ offset: 5 * ITEM_HEIGHT, animated: false });

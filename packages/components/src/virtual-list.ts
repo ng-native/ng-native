@@ -1554,9 +1554,10 @@ export class VirtualList<T> extends ScrollViewProps {
 
   /** The list is scrolling itself, to `to` in the scroll view, where native has not drawn yet. */
   private jumping(to: number, animated: boolean): void {
-    // To where native last said it was: it moves nothing and reports nothing.
-    const still = Math.abs(to - this.nativeAt) <= 1;
-    this.jumped = !still;
+    // To where native last said it was, with no earlier jump on its way: it moves nothing and
+    // reports nothing. With one, native moves and comes back, and reports that.
+    const pending = this.jumped && !this.landed;
+    this.jumped = pending || Math.abs(to - this.nativeAt) > 1;
     this.landed = false;
     this.jumpedTo = to;
     this.jumpAnimated = animated;
