@@ -29,7 +29,8 @@ struct TextField {
   int eventCount{0};
   // A change the backend made, which JavaScript already knows of.
   bool settingText{false};
-  // Undo or redo putting back what the field had: the user's change, but not fitted again.
+  // Undo, redo or Backspace putting back what the field had: the user's change, but not fitted
+  // again.
   bool replaying{false};
   // Whether an input method is composing: its preedit text is not yet the field's.
   bool composing{false};
