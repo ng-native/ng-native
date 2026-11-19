@@ -26,6 +26,7 @@
 #include "status-notifier.h"
 #include "surface-input.h"
 #include "view-widget.h"
+#include "window-scale.h"
 
 #include "ngn/core-modules.h"
 #include "ngn/crash-report.h"
@@ -104,7 +105,7 @@ gboolean beatPrepare(GSource *, gint *timeout) {
 }
 GSourceFuncs gBeatFuncs = {beatPrepare, nullptr, nullptr, nullptr, nullptr, nullptr};
 
-ngn::SurfaceMetrics metricsFor(int width, int height, int scale) {
+ngn::SurfaceMetrics metricsFor(int width, int height, double scale) {
   return {.size = {static_cast<Float>(width), static_cast<Float>(height)}, .pointScale = static_cast<float>(scale), .fontScale = ngn::gtk::desktopFontScale()};
 }
 
@@ -122,7 +123,7 @@ void followFontScale() {
     GtkWidget *widget = surfaceWidgetOf(surface);
     if (widget && gHost.runtime) {
       gHost.runtime->updateSurface(
-          surface, metricsFor(gtk_widget_get_width(widget), gtk_widget_get_height(widget), gtk_widget_get_scale_factor(widget)));
+          surface, metricsFor(gtk_widget_get_width(widget), gtk_widget_get_height(widget), ngn::gtk::windowScale(widget)));
     }
   }
 }
@@ -130,7 +131,7 @@ void followFontScale() {
 // What Dimensions reports: the app window's content size and scale, and its monitor's size (the
 // first monitor's before the window is on one; the window's own size with no monitor at all).
 ngn::WindowMetrics windowMetrics(int width, int height) {
-  double scale = gtk_widget_get_scale_factor(gHost.appWindow);
+  double scale = ngn::gtk::windowScale(gHost.appWindow);
   double screenWidth = width, screenHeight = height;
   GdkDisplay *display = gtk_widget_get_display(gHost.appWindow);
   GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(gHost.appWindow));
@@ -554,7 +555,7 @@ int main(int argc, char *argv[]) {
       gHost.state->metrics.set(windowMetrics(w, h));
     }
     if (gHost.runtime) {
-      gHost.runtime->updateSurface(kAppSurface, metricsFor(w, h, gtk_widget_get_scale_factor(gHost.appWindow)));
+      gHost.runtime->updateSurface(kAppSurface, metricsFor(w, h, ngn::gtk::windowScale(gHost.appWindow)));
     }
   });
   adw_application_window_set_content(ADW_APPLICATION_WINDOW(gHost.appWindow), ngn::gtk::wrapInChrome(gHost.appSurface, {.menus = menuPlacement}));
@@ -565,18 +566,19 @@ int main(int argc, char *argv[]) {
   }), nullptr);
   gtk_widget_realize(gHost.appWindow);
   ngn::gtk::afterLayout(gHost.appWindow, [] { reportContainer(kAppSurface); });
-  // A move to a monitor of another scale changes no size, so the surface would not hear of it.
-  g_signal_connect(gHost.appWindow, "notify::scale-factor", G_CALLBACK(+[](GObject *, GParamSpec *, gpointer) {
-    // One declaration each: a comma here would split G_CALLBACK's argument.
-    int w = gtk_widget_get_width(gHost.appSurface);
-    int h = gtk_widget_get_height(gHost.appSurface);
+  // A move to a monitor of another scale, or a new fractional scale, changes no size, so the
+  // surface would not hear of it: the layout rounds to the new pixels, and Dimensions and
+  // PixelRatio report them.
+  ngn::gtk::followWindowScale(gHost.appWindow, [] {
+    int w = gtk_widget_get_width(gHost.appSurface), h = gtk_widget_get_height(gHost.appSurface);
     if (gHost.state) {
       gHost.state->metrics.set(windowMetrics(w, h));
     }
     if (gHost.runtime) {
-      gHost.runtime->updateSurface(kAppSurface, metricsFor(w, h, gtk_widget_get_scale_factor(gHost.appWindow)));
+      gHost.runtime->updateSurface(kAppSurface, metricsFor(w, h, ngn::gtk::windowScale(gHost.appWindow)));
     }
-  }), nullptr);
+    gHost.backend->windowRescaled(gHost.appWindow);
+  });
 
   // The app's folders: a test launch's own, else the XDG ones named for the app.
   std::string appData = settings.test ? settings.test->applicationSupport() : joined(g_get_user_data_dir(), appId);
@@ -654,14 +656,15 @@ int main(int argc, char *argv[]) {
 
   gHost.windows = std::make_shared<ngn::gtk::GtkWindows>(ngn::gtk::GtkWindows::Hooks{
       .addSurface = addSurface,
-      .startSurface = [](SurfaceId surface, int w, int h, int scale) { gHost.runtime->startSurface(surface, "", metricsFor(w, h, scale)); },
+      .startSurface = [](SurfaceId surface, int w, int h, double scale) { gHost.runtime->startSurface(surface, "", metricsFor(w, h, scale)); },
       .resizeSurface =
-          [](SurfaceId surface, int w, int h, int scale) {
+          [](SurfaceId surface, int w, int h, double scale) {
             reportContainer(surface);
             if (gHost.runtime) {
               gHost.runtime->updateSurface(surface, metricsFor(w, h, scale));
             }
           },
+      .rescaled = [](GtkWidget *window) { gHost.backend->windowRescaled(window); },
       .stopSurface =
           [](SurfaceId surface) {
             if (gHost.menus) {
@@ -816,7 +819,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "ngn-linux: could not load %s\n", bundle.c_str());
     return 1;
   }
-  gHost.runtime->startSurface(kAppSurface, settings.module, metricsFor(width, height, gtk_widget_get_scale_factor(gHost.appWindow)));
+  gHost.runtime->startSurface(kAppSurface, settings.module, metricsFor(width, height, ngn::gtk::windowScale(gHost.appWindow)));
 
   while (!gHost.quit) {
     g_main_context_iteration(nullptr, TRUE);

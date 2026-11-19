@@ -2,6 +2,7 @@
 
 #include "screens.h"
 #include "view-widget.h"
+#include "window-scale.h"
 
 #include <adwaita.h>
 
@@ -165,7 +166,7 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   }
   GtkWidget *widget = makeSurfaceWidget(surface, [this, surface, window](int w, int h) {
     if (hooks_.resizeSurface) {
-      hooks_.resizeSurface(surface, w, h, gtk_widget_get_scale_factor(window));
+      hooks_.resizeSurface(surface, w, h, windowScale(window));
     }
   });
   if (request.minWidth || request.minHeight) {
@@ -173,17 +174,6 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   }
   adw_application_window_set_content(ADW_APPLICATION_WINDOW(window), wrapInChrome(widget, {.titleBar = request.titleBar, .menus = menus_}));
   windows_[surface] = {.window = window, .surface = widget};
-  // A move to a monitor of another scale changes no size, so the surface widget does not report it.
-  g_signal_connect_data(
-      window, "notify::scale-factor", G_CALLBACK(+[](GtkWidget *scaled, GParamSpec *, gpointer data) {
-        auto *r = static_cast<CloseRequest *>(data);
-        GtkWidget *content = r->windows->surfaceWidget(r->surface);
-        if (content && r->windows->hooks_.resizeSurface) {
-          r->windows->hooks_.resizeSurface(
-              r->surface, gtk_widget_get_width(content), gtk_widget_get_height(content), gtk_widget_get_scale_factor(scaled));
-        }
-      }),
-      new CloseRequest{this, surface}, [](gpointer data, GClosure *) { delete static_cast<CloseRequest *>(data); }, GConnectFlags(0));
   auto *request_ = new CloseRequest{this, surface};
   g_signal_connect_data(
       window, "close-request", G_CALLBACK(+[](GtkWindow *, gpointer data) -> gboolean {
@@ -214,13 +204,25 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   }
   // Realized, so the surface knows its scale, but not shown until its first frame mounts.
   gtk_widget_realize(window);
+  // A move to a monitor of another scale, or a new fractional scale, changes no size, so the
+  // surface widget does not report it.
+  followWindowScale(window, [this, surface, window] {
+    GtkWidget *content = surfaceWidget(surface);
+    if (content && hooks_.resizeSurface) {
+      hooks_.resizeSurface(surface, gtk_widget_get_width(content), gtk_widget_get_height(content), windowScale(window));
+    }
+    if (hooks_.rescaled) {
+      hooks_.rescaled(window);
+    }
+    reportFrame(surface);
+  });
   afterLayout(window, [this, surface] {
     if (hooks_.laidOut) {
       hooks_.laidOut(surface);
     }
   });
   if (hooks_.startSurface) {
-    hooks_.startSurface(surface, width, height, gtk_widget_get_scale_factor(window));
+    hooks_.startSurface(surface, width, height, windowScale(window));
   }
   if (opened) {
     opened();
@@ -272,7 +274,7 @@ void GtkWindows::reportFrame(SurfaceId surface) {
     now.height = gtk_widget_get_height(it->second.surface);
   }
   if (width > 0 && height > 0) {
-    host->resized(surface, now, gtk_widget_get_scale_factor(it->second.window), saved);
+    host->resized(surface, now, windowScale(it->second.window), saved);
   }
 }
 

@@ -57,6 +57,9 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
   void unhostView(Tag tag);
   // Whether the view is still in the slot it was hosted in.
   bool isHosted(Tag tag) const;
+  // `window`'s scale changed (window-scale.h): each Image in it picks its source again, as one
+  // does on macOS when its window's backing scale changes.
+  void windowRescaled(GtkWidget *window);
   // A RNSSearchBar's field, or null.
   GtkWidget *searchEntry(Tag tag) const;
   Headers &headers() {

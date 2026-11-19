@@ -8,6 +8,7 @@
 #include "scroll-view.h"
 #include "text-field.h"
 #include "view-widget.h"
+#include "window-scale.h"
 
 #include "ngn/library-components.h"
 
@@ -153,6 +154,15 @@ bool GtkBackend::isHosted(Tag tag) const {
   auto it = hosted_.find(tag);
   GtkWidget *widget = view(tag);
   return it != hosted_.end() && widget && gtk_widget_get_parent(widget) == it->second.slot;
+}
+
+void GtkBackend::windowRescaled(GtkWidget *window) {
+  for (const auto &[tag, widget] : views_) {
+    ViewData *d = viewData(widget);
+    if (d && d->image && GTK_WIDGET(gtk_widget_get_root(widget)) == window) {
+      applyImageProps(*d, windowScale(widget));
+    }
+  }
 }
 
 GtkWidget *GtkBackend::searchEntry(Tag tag) const {
@@ -315,7 +325,7 @@ void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int ind
   hideSvgElement(c->second);
   // An Image's source was picked before it had a window, at the first monitor's scale.
   if (ViewData *d = viewData(c->second); d && d->image) {
-    applyImageProps(*d, gtk_widget_get_scale_factor(c->second));
+    applyImageProps(*d, windowScale(c->second));
   }
   if (viewData(c->second)->component == "ModalHostView") {
     modals_->mounted(surfaceId, child);
@@ -349,7 +359,7 @@ void GtkBackend::updateProps(const ShadowView &view) {
   applyScrollViewProps(*d);
   applyControlProps(*d);
   if (d->image) {
-    applyImageProps(*d, gtk_widget_get_scale_factor(it->second));
+    applyImageProps(*d, windowScale(it->second));
   }
   if (GtkWidget *entry = searchEntry(view.tag); entry && view.props) {
     applySearchBar(entry, *view.props);

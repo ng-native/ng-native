@@ -39,7 +39,8 @@ add_library(ngn_gtk OBJECT
     status-notifier.cpp
     surface-input.cpp
     text-field.cpp
-    view-widget.cpp)
+    view-widget.cpp
+    window-scale.cpp)
 target_link_libraries(ngn_gtk PUBLIC ngn_core_runtime ngn_curl ngn_libraries PkgConfig::NGN_GTK)
 if(NOT APPLE)
   target_link_libraries(ngn_gtk PUBLIC PkgConfig::NGN_X11)

@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import {
   Accessibility,
   AppState,
@@ -17,6 +17,7 @@ import {
   View,
 } from '@ng-native/components';
 import { NativeHeader } from '@ng-native/router';
+import { PixelRatio } from 'react-native';
 import { page } from '../screen-styles.ts';
 
 /**
@@ -44,7 +45,7 @@ import { page } from '../screen-styles.ts';
         <text class="heading" role="heading" aria-level="2">Screen</text>
         <text class="body">
           {{ screen.window().width }} x {{ screen.window().height }},
-          {{ screen.orientation() }}
+          {{ screen.orientation() }}, {{ scale() }} pixels a point
         </text>
         <text class="hint">
           The same numbers the engine answers media queries with. Reduced motion is
@@ -108,6 +109,12 @@ export class DevicePage {
   private readonly links = inject(DeepLinks);
 
   protected readonly page = page;
+
+  /** PixelRatio, read again on each `Dimensions` change, which a new scale is. */
+  protected readonly scale = computed(() => {
+    this.screen.display();
+    return Math.round(PixelRatio.get() * 1000) / 1000;
+  });
 
   protected on(value: boolean): string {
     return value ? 'on' : 'off';
