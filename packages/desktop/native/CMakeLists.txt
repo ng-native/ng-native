@@ -98,6 +98,7 @@ add_library(ngn_core STATIC
     core/src/glass.cpp
     core/src/header-bar.cpp
     core/src/host-os.cpp
+    core/src/host-reload.cpp
     core/src/host-state.cpp
     core/src/host-views.cpp
     core/src/image-source.cpp

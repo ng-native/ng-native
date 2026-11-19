@@ -243,6 +243,27 @@ void presentWithoutInitialFocus(GtkWindow *window) {
 
 void GtkWindows::didMount(SurfaceId surface) {
   auto it = windows_.find(surface);
+  if (it == windows_.end() || it->second.mounted) {
+    return;
+  }
+  it->second.mounted = true;
+  if (!hooks_.whenShown) {
+    show(surface);
+    return;
+  }
+  // Held past the splash screen, which may let it go after these windows are gone.
+  hooks_.whenShown([this, surface, alive = std::weak_ptr<void>(alive_)] {
+    onMainContext([this, surface, alive] {
+      if (!alive.expired()) {
+        show(surface);
+      }
+    });
+  });
+}
+
+void GtkWindows::show(SurfaceId surface) {
+  auto it = windows_.find(surface);
+  // A window closed while the splash held it is not shown.
   if (it == windows_.end() || it->second.shown) {
     return;
   }

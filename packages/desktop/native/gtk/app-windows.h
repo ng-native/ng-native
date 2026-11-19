@@ -56,6 +56,9 @@ class GtkWindows final : public WindowBackend {
     // The user closed the last of these windows, and no app listens to decide (the core's
     // WindowHost::lastWindowClosed). The host decides: the app's own window may still be open.
     std::function<void()> lastWindowClosed;
+    // Runs a window's first show, now or later (once the app hides its splash screen, splash-screen.h),
+    // on any thread. Without it a window shows as its first frame mounts.
+    std::function<void(std::function<void()> show)> whenShown;
   };
 
   // Windows of `application`, with the app's menus where `menus` says.
@@ -85,8 +88,11 @@ class GtkWindows final : public WindowBackend {
   struct Window {
     GtkWidget *window{nullptr};
     GtkWidget *surface{nullptr};
+    // Its first frame mounted, and it is shown, or held by whenShown until it may be.
+    bool mounted{false};
     bool shown{false};
   };
+  void show(SurfaceId surface);
   void open(SurfaceId surface, const WindowRequest &request, const WindowPlacement &placement, std::function<void()> opened);
   void close(SurfaceId surface);
   // The window's size, maximised and full-screen state changed: the app hears its size now, and
@@ -99,6 +105,8 @@ class GtkWindows final : public WindowBackend {
   MenuPlacement menus_;
   std::weak_ptr<WindowHost> host_;
   std::map<SurfaceId, Window> windows_;
+  // Gone with these windows: a show the splash let go after that does nothing.
+  std::shared_ptr<void> alive_ = std::make_shared<int>(0);
 };
 
 // Runs `task` on GLib's default main context, which is the UI thread.
