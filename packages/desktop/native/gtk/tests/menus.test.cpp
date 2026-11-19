@@ -390,6 +390,47 @@ TEST_CASE("the app's undo history runs its actions on the UI thread, whichever t
   CHECK(ran.size() == 1);
 }
 
+namespace {
+
+void collectShortcuts(GtkWidget *widget, std::vector<std::pair<std::string, std::string>> &out) {
+  for (GtkWidget *c = gtk_widget_get_first_child(widget); c; c = gtk_widget_get_next_sibling(c)) {
+    if (std::string(G_OBJECT_TYPE_NAME(c)) == "GtkShortcutsShortcut") {
+      gchar *title = nullptr;
+      gchar *accelerator = nullptr;
+      g_object_get(c, "title", &title, "accelerator", &accelerator, nullptr);
+      out.emplace_back(title ? title : "", accelerator ? accelerator : "");
+      g_free(title);
+      g_free(accelerator);
+    }
+    collectShortcuts(c, out);
+  }
+}
+
+} // namespace
+
+TEST_CASE("Keyboard Shortcuts is a window over the app's, listing each group's keys as GTK writes them") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkWidget *parent = gtk_window_new();
+  std::vector<ngn::ShortcutGroup> groups{
+      {.title = "File & Edit", .entries = {{.title = "Save <now>", .chord = {.key = "s", .modifiers = ngn::Control}},
+                                           {.title = "Redo", .chord = {.key = "z", .modifiers = ngn::Control | ngn::Shift}}}},
+      {.title = "Notes", .entries = {{.title = "Keyboard Shortcuts", .chord = {.key = "?", .modifiers = ngn::Control | ngn::Shift}}}},
+  };
+  GtkWidget *window = ngn::gtk::keyboardShortcutsWindow(groups, GTK_WINDOW(parent));
+  REQUIRE(window);
+  CHECK(std::string(G_OBJECT_TYPE_NAME(window)) == "GtkShortcutsWindow");
+  CHECK(gtk_window_get_transient_for(GTK_WINDOW(window)) == GTK_WINDOW(parent));
+  std::vector<std::pair<std::string, std::string>> shown;
+  collectShortcuts(window, shown);
+  // The section first; the window's search page lists them again after it.
+  REQUIRE(shown.size() >= 3);
+  shown.resize(3);
+  CHECK(shown == std::vector<std::pair<std::string, std::string>>{
+                     {"Save <now>", "<Control>s"}, {"Redo", "<Shift><Control>z"}, {"Keyboard Shortcuts", "<Shift><Control>question"}});
+  gtk_window_destroy(GTK_WINDOW(window));
+  gtk_window_destroy(GTK_WINDOW(parent));
+}
+
 TEST_CASE("the keypad's navigation keys reach the focus callback as the plain ones do, and no binding of the plain key hears them") {
   REQUIRE(ngn::testing::gtkReady());
   GtkWidget *window = gtk_window_new();

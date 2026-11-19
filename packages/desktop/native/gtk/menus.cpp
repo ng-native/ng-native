@@ -162,6 +162,38 @@ std::string acceleratorOf(const MenuItem &item) {
   return out;
 }
 
+GtkWidget *keyboardShortcutsWindow(const std::vector<ShortcutGroup> &groups, GtkWindow *parent) {
+  auto escaped = [](const std::string &text) {
+    gchar *out = g_markup_escape_text(text.c_str(), -1);
+    std::string result = out;
+    g_free(out);
+    return result;
+  };
+  std::string ui = "<interface><object class=\"GtkShortcutsWindow\" id=\"window\"><property name=\"modal\">1</property>"
+                   "<child><object class=\"GtkShortcutsSection\"><property name=\"section-name\">shortcuts</property>";
+  for (const auto &group : groups) {
+    ui += "<child><object class=\"GtkShortcutsGroup\"><property name=\"title\">" + escaped(group.title) + "</property>";
+    for (const auto &entry : group.entries) {
+      std::string accelerator = acceleratorOf(MenuItem{.key = entry.chord.key, .modifiers = entry.chord.modifiers});
+      if (accelerator.empty()) {
+        continue;
+      }
+      ui += "<child><object class=\"GtkShortcutsShortcut\"><property name=\"title\">" + escaped(entry.title) +
+          "</property><property name=\"accelerator\">" + escaped(accelerator) + "</property></object></child>";
+    }
+    ui += "</object></child>";
+  }
+  ui += "</object></child></object></interface>";
+  GtkBuilder *builder = gtk_builder_new_from_string(ui.c_str(), -1);
+  // GTK's list of toplevels keeps the window once the builder goes, until it is closed.
+  GtkWidget *window = GTK_WIDGET(gtk_builder_get_object(builder, "window"));
+  g_object_unref(builder);
+  if (parent) {
+    gtk_window_set_transient_for(GTK_WINDOW(window), parent);
+  }
+  return window;
+}
+
 GMenuModel *buildMenu(const std::vector<MenuItem> &items, GSimpleActionGroup *group, std::function<void(const MenuItem &)> chosen) {
   GMenu *menu = g_menu_new();
   int next = 0;

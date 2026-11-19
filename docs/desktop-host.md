@@ -91,7 +91,10 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   sheet, and a screen presented with `present()`, is an `AdwDialog` in a resizable window on
   libadwaita 1.5 and later, found at run time, and a drawn sheet on a dimmed overlay on 1.4 or over
   a window that is not resizable, where libadwaita would open a window of its own; a cover fills
-  the overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. A
+  the overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. While a
+  cover or a drawn sheet is shown, the rest of the window takes no pointer or focus: the header
+  bars' items, the menu bar or the main menu (and its F10), the content and any layer behind it.
+  The window controls still work. A
   `<split-view>` is an `AdwNavigationSplitView` in an `AdwBreakpointBin` (`split-view.h`), each
   pane in a page of its own as a container for input, its size going back to layout as state. The
   window's split view runs the window's full height, as libadwaita lays a window out: each pane is
@@ -101,7 +104,11 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   core owns collapse (`FoldingSplit`): the bin's breakpoint, at the core's `sidebarCompactWidth`,
   only reports the width, and the split view's `collapsed` and `show-content` show the result. The
   sections are a `GtkListBox` over their frames, drawn from the core's `sourceLists`, and Show
-  Sidebar (F9) and the header bar's sidebar button go to the window's split view. A
+  Sidebar (F9) and the sidebar button go to the window's split view. The button sits at the end of
+  the sidebar's own header bar while the sidebar shows beside the content, and in the window's
+  header bar once it folds away. A sidebar with an `autosave` name keeps whether it is collapsed in
+  the app's preferences, and that state wins over the app's prop on the next launch. A cover starts
+  below both header bars of a full-height split view. A
   presented screen's header is the sheet's own header bar, with Cancel at the start and bound to
   Escape and the last right item the default on Return. An alert (`alerts.h`) is an
   `AdwAlertDialog` in the active window on libadwaita 1.5 and later, and an `AdwMessageDialog` on

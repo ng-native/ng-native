@@ -75,3 +75,56 @@ TEST_CASE("a transform origin at the corner turns about the corner") {
   CHECK(apply(*t, {0, 0}).x == doctest::Approx(0));
   CHECK(apply(*t, {10, 10}).x == doctest::Approx(20));
 }
+
+namespace {
+
+// Where the steps put a point: scaled, skewed along x, rotated, then moved.
+Point applySteps(const ngn::PlaneSteps &s, Point p) {
+  constexpr double kRadians = 3.14159265358979323846 / 180.0;
+  double x = p.x * s.scaleX, y = p.y * s.scaleY;
+  x += std::tan(s.skewX * kRadians) * y;
+  double cosine = std::cos(s.rotate * kRadians), sine = std::sin(s.rotate * kRadians);
+  return {static_cast<Float>(cosine * x - sine * y + s.translateX), static_cast<Float>(sine * x + cosine * y + s.translateY)};
+}
+
+folly::dynamic transformOf(folly::dynamic operations) {
+  return folly::dynamic::object("transform", std::move(operations));
+}
+
+} // namespace
+
+TEST_CASE("a transform with no perspective draws the plane as 2D steps that put every point where it does") {
+  using folly::dynamic;
+  for (const auto &operations : {
+           dynamic::array(dynamic::object("translateX", 120)),
+           dynamic::array(dynamic::object("rotate", "30deg"), dynamic::object("scale", 1.5)),
+           dynamic::array(dynamic::object("skewX", "20deg"), dynamic::object("translateY", -8)),
+           dynamic::array(dynamic::object("scaleX", -1)),
+           dynamic::array(dynamic::object("rotate", "200deg"), dynamic::object("scaleY", 0.35), dynamic::object("skewY", "10deg")),
+           // Turned about x with no perspective: flattened onto the screen, still 2D.
+           dynamic::array(dynamic::object("rotateX", "40deg")),
+       }) {
+    CAPTURE(operations[0].items().begin()->first.asString());
+    auto layer = ngn::layerTransform(parse(transformOf(operations)), sized(72, 48));
+    REQUIRE(layer);
+    auto steps = ngn::planeSteps(*layer);
+    REQUIRE(steps);
+    for (Point p : {Point{0, 0}, Point{72, 0}, Point{0, 48}, Point{31, 17}}) {
+      Point want = apply(*layer, p);
+      Point got = applySteps(*steps, p);
+      CHECK(got.x == doctest::Approx(want.x).epsilon(1e-4));
+      CHECK(got.y == doctest::Approx(want.y).epsilon(1e-4));
+    }
+  }
+}
+
+TEST_CASE("perspective, or a plane flattened to a line, has no 2D steps") {
+  using folly::dynamic;
+  auto perspective = ngn::layerTransform(
+      parse(transformOf(dynamic::array(dynamic::object("perspective", 400), dynamic::object("rotateY", "30deg")))), sized(72, 48));
+  REQUIRE(perspective);
+  CHECK_FALSE(ngn::planeSteps(*perspective));
+  auto flat = ngn::layerTransform(parse(transformOf(dynamic::array(dynamic::object("scaleY", 0)))), sized(72, 48));
+  REQUIRE(flat);
+  CHECK_FALSE(ngn::planeSteps(*flat));
+}
