@@ -89,9 +89,10 @@ file chooser, as you cancelling it would, and opens a link; a test changes that 
 `portals/answers.json` in the run's state folder before the call, and reads what the host asked
 from `portals/calls.jsonl` beside it. Appending a line to `portals/signals.jsonl` sends a
 notification's click to the host. The folder's files are described at the top of
-`device/fake-portals.py` in the package. The fake needs `dbus-daemon` and `python3` with PyGObject
-where the host runs, which the image has, and a launch without them fails; `fakeSystemUi: false`
-runs the host against the session's own portals instead.
+`device/fake-portals.py` in the package. The fake needs `dbus-daemon` and `python3` with PyGObject where the host runs, which the image
+has. Its session bus takes only a user the system has a passwd entry for, so a container you start
+with `--user` needs one (the launcher's own container makes it). A launch without these fails;
+`fakeSystemUi: false` runs the host against the session's own portals instead.
 
 The windows go to the display you are using when `DISPLAY` or `WAYLAND_DISPLAY` is set. Without
 one, each launch starts a headless Weston of its own. `display: 'xvfb'` starts an X server instead.
