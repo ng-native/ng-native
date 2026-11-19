@@ -593,6 +593,34 @@ TEST_CASE("a single line's undo and redo keys work on a layout whose letters are
   CHECK(ngn::gtk::fieldText(*field).empty());
 }
 
+TEST_CASE("a single line's undo and redo keys follow the Latin letter the active layout made") {
+  REQUIRE(ngn::testing::gtkReady());
+  // GTK before 4.12.3 deletes on Backspace outside a change, which it cannot undo.
+  if (gtk_check_version(4, 12, 3)) {
+    return;
+  }
+  MountedViews views;
+  views.add(MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("autoCapitalize", "characters")("defaultValue", "\xC3\x9F")), {{10, 10}, {150, 80}}));
+  auto *field = ngn::gtk::viewData(views.view(2))->field;
+  gtk_editable_set_position(GTK_EDITABLE(field->text), -1);
+  g_signal_emit_by_name(field->text, "backspace");
+  REQUIRE(ngn::gtk::fieldText(*field).empty());
+  CHECK(pressKey(field->text, GDK_KEY_z, GDK_CONTROL_MASK));
+  REQUIRE(ngn::gtk::fieldText(*field) == "\xC3\x9F");
+  // The hardware key that makes a Latin z in the first group makes y on a German layout and w on a
+  // French one.
+  GdkKeymapKey *keys = nullptr;
+  int count = 0;
+  REQUIRE(gdk_display_map_keyval(gtk_widget_get_display(field->text), GDK_KEY_z, &keys, &count));
+  REQUIRE(count > 0);
+  guint keycode = keys[0].keycode;
+  g_free(keys);
+  CHECK_FALSE(pressKey(field->text, GDK_KEY_w, GDK_CONTROL_MASK, keycode));
+  CHECK(ngn::gtk::fieldText(*field) == "\xC3\x9F");
+  CHECK(pressKey(field->text, GDK_KEY_y, GDK_CONTROL_MASK, keycode));
+  CHECK(ngn::gtk::fieldText(*field).empty());
+}
+
 TEST_CASE("Backspace over a mark puts its base back as it was, not capitalized, one line or many") {
   REQUIRE(ngn::testing::gtkReady());
   for (bool multiline : {false, true}) {

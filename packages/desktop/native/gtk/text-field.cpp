@@ -174,12 +174,14 @@ void unfocused(GtkEventControllerFocus *, gpointer user) {
   }
 }
 
-// Whether a key press is the Latin letter `latin` the way GTK's shortcut triggers match it: by the
-// keyval it produced, or by what its hardware key makes in the first layout group, so that Ctrl+Z
-// still undoes on a Cyrillic or Greek layout.
+// Whether a key press is the Latin letter `latin`: by the keyval it produced when that is a Latin
+// letter, so that Ctrl+Y redoes on a German layout whose Y sits where the first group has Z, and
+// otherwise by what its hardware key makes in the first layout group, so that Ctrl+Z still undoes
+// on a Cyrillic or Greek layout.
 bool pressesLatin(GtkWidget *widget, guint keyval, guint keycode, guint latin) {
-  if (gdk_keyval_to_lower(keyval) == latin) {
-    return true;
+  guint produced = gdk_keyval_to_lower(keyval);
+  if (produced >= GDK_KEY_a && produced <= GDK_KEY_z) {
+    return produced == latin;
   }
   GdkKeymapKey *keys = nullptr;
   guint *keyvals = nullptr;
