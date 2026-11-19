@@ -26,9 +26,11 @@
 
 #include <gtk/gtk.h>
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace ngn::gtk {
@@ -53,8 +55,17 @@ class SplitViews {
   // After a transaction: each source list over its sections' frames.
   void layOut();
 
+  // The app's preferences, where a sidebar with an autosaveName keeps whether it is collapsed
+  // (sidebarCollapsedKey): set once by the host. Without them nothing is kept.
+  std::function<std::optional<folly::dynamic>(const std::string &key)> readPreference;
+  std::function<void(const std::string &key, const folly::dynamic &value)> writePreference;
+
   // The window split view of `surfaceId`'s window, if it has one.
   std::optional<Tag> windowSplit(SurfaceId surfaceId) const;
+  // The full-height sidebar's own header bar while the sidebar shows beside the content, where the
+  // sidebar button goes, as macOS puts it over the sidebar; null otherwise, when the button stays
+  // in the window's header bar.
+  GtkWidget *sidebarHeaderShown(SurfaceId surfaceId) const;
   // Show Sidebar (F9, the header bar's sidebar button) for the window's split view. Whether there
   // was one.
   bool toggle(SurfaceId surfaceId);
@@ -91,6 +102,8 @@ class SplitViews {
     Tag sidebar{-1};
     Tag content{-1};
     SidebarCollapse collapse;
+    // Where the sidebar button was last laid out: over the sidebar, or in the window's header bar.
+    bool buttonOverSidebar{false};
     FoldingSplit folding;
     SidebarWidths widths;
   };
@@ -112,6 +125,8 @@ class SplitViews {
   void refill(Tag parent);
   void applyWidths(Split &s);
   void show(Split &s);
+  // Saves the collapsed state under the sidebar's autosaveName.
+  void autosave(const Split &s);
   void fill(Tag parent, Lists &l, size_t index);
   void flushSizes();
   std::optional<Tag> splitOf(Tag pane) const;

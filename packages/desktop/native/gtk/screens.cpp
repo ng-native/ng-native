@@ -687,10 +687,10 @@ void Headers::forget(Tag tag) {
 
 namespace {
 
-// Takes a widget packed into the header bar back out, and lets it go.
-void unpack(GtkWidget *bar, GtkWidget *widget) {
-  if (bar && gtk_widget_is_ancestor(widget, bar)) {
-    adw_header_bar_remove(ADW_HEADER_BAR(bar), widget);
+// Takes a widget packed into a header bar (the window's, or the sidebar's) back out, and lets it go.
+void unpack(GtkWidget *widget) {
+  if (GtkWidget *owner = gtk_widget_get_ancestor(widget, ADW_TYPE_HEADER_BAR)) {
+    adw_header_bar_remove(ADW_HEADER_BAR(owner), widget);
   } else if (gtk_widget_get_parent(widget)) {
     gtk_widget_unparent(widget);
   }
@@ -703,7 +703,7 @@ void Headers::clear(SurfaceId surfaceId, Shown &shown, bool keepSearches) {
   GtkWidget *bar = headerBarOf(surfaceId);
   if (!keepSearches) {
     for (GtkWidget *entry : shown.searches) {
-      unpack(bar, entry);
+      unpack(entry);
     }
     shown.searches.clear();
   }
@@ -729,7 +729,7 @@ void Headers::clear(SurfaceId surfaceId, Shown &shown, bool keepSearches) {
   // What was packed into the bar comes out of it; the title's own children go with the title. A
   // search field is its search bar view's, which keeps it for the next header.
   for (GtkWidget *widget : shown.packed) {
-    unpack(bar, widget);
+    unpack(widget);
   }
   shown.packed.clear();
   shown.back = nullptr;
@@ -798,7 +798,12 @@ void Headers::layOutBar(SurfaceId surfaceId, Shown &shown) {
       auto *t = static_cast<ChevronTarget *>(data);
       t->headers->toggleSidebar(t->surfaceId);
     }), where, [](gpointer data, GClosure *) { delete static_cast<ChevronTarget *>(data); }, GConnectFlags(0));
-    adw_header_bar_pack_start(ADW_HEADER_BAR(bar), toggle);
+    // Over the sidebar, at its end, while the full-height sidebar shows beside the content.
+    if (GtkWidget *overSidebar = backend_.splitViews().sidebarHeaderShown(surfaceId)) {
+      adw_header_bar_pack_end(ADW_HEADER_BAR(overSidebar), toggle);
+    } else {
+      adw_header_bar_pack_start(ADW_HEADER_BAR(bar), toggle);
+    }
     shown.sidebarButton = toggle;
   }
   auto slotFor = [&](Tag tag) {
@@ -1318,6 +1323,23 @@ void Modals::dress(Tag tag, Presented &p) {
   p.size = {0, 0};
 }
 
+namespace {
+
+// Where a cover starts: below the top bars over the window's content, and below the header bars a
+// full-height split view has, the sidebar's beside the window's, which stay the window's as they do
+// over a cover on macOS.
+int coverTop(GtkWidget *surface) {
+  int top = static_cast<int>(chromeInsets(surface).insets.top);
+  const WindowChrome *chrome = chromeOf(surface);
+  graphene_rect_t bounds;
+  if (chrome && gtk_widget_is_ancestor(chrome->headerBar, surface) && gtk_widget_compute_bounds(chrome->headerBar, surface, &bounds)) {
+    top = std::max(top, static_cast<int>(std::lround(bounds.origin.y + bounds.size.height)));
+  }
+  return top;
+}
+
+} // namespace
+
 void Modals::fit(Tag tag, Presented &p) {
   GtkWidget *surface = backend_.surfaceWidget(p.surfaceId);
   const ViewData *d = backend_.data(tag);
@@ -1330,7 +1352,7 @@ void Modals::fit(Tag tag, Presented &p) {
   if (p.presentation == ModalPresentation::Cover) {
     // Below the header bar, which the window's content may run under: the cover starts where the
     // bar ends.
-    int top = static_cast<int>(chromeInsets(surface).insets.top);
+    int top = coverTop(surface);
     gtk_widget_set_margin_top(p.layer, top);
     size.height = std::max<Float>(0, window.height - static_cast<Float>(top));
   } else if (p.presentation == ModalPresentation::Sheet) {

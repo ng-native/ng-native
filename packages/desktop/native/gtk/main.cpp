@@ -574,6 +574,11 @@ int main(int argc, char *argv[]) {
   std::string caches = settings.test ? settings.test->caches() : joined(g_get_user_cache_dir(), appId);
   g_mkdir_with_parents(caches.c_str(), 0700);
   auto system = ngn::gtk::makeSystem(appId, appData);
+  // A sidebar's collapsed state autosaves among the app's preferences, as window frames do.
+  gHost.backend->splitViews().readPreference = [system](const std::string &key) { return system->preference(key); };
+  gHost.backend->splitViews().writePreference = [system](const std::string &key, const folly::dynamic &value) {
+    system->setPreference(key, value);
+  };
   gHost.state = std::make_shared<ngn::HostState>();
   gHost.state->metrics.set(windowMetrics(width, height));
   if (!settings.initialUrl.empty()) {

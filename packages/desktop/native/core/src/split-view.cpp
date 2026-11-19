@@ -325,6 +325,20 @@ bool SidebarCollapse::toolkitChanged(bool collapsed) {
   return collapsed != prop_;
 }
 
+std::optional<std::string> sidebarCollapsedKey(const std::string &autosaveName) {
+  if (autosaveName.empty()) {
+    return std::nullopt;
+  }
+  return "NgNativeSidebarCollapsed " + autosaveName;
+}
+
+std::optional<bool> savedSidebarCollapsed(const std::optional<folly::dynamic> &value) {
+  if (!value || !value->isBool()) {
+    return std::nullopt;
+  }
+  return value->asBool();
+}
+
 Float sidebarCompactWidth(const SidebarWidths &widths) {
   return widths.minimum + kSplitContentMinWidth;
 }

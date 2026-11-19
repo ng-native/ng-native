@@ -96,7 +96,11 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   core owns collapse (`FoldingSplit`): the bin's breakpoint, at the core's `sidebarCompactWidth`,
   only reports the width, and the split view's `collapsed` and `show-content` show the result. The
   sections are a `GtkListBox` over their frames, drawn from the core's `sourceLists`, and Show
-  Sidebar (F9) and the header bar's sidebar button go to the window's split view. A
+  Sidebar (F9) and the sidebar button go to the window's split view. The button sits at the end of
+  the sidebar's own header bar while the sidebar shows beside the content, and in the window's
+  header bar once it folds away. A sidebar with an `autosave` name keeps whether it is collapsed in
+  the app's preferences, and that state wins over the app's prop on the next launch. A cover starts
+  below both header bars of a full-height split view. A
   presented screen's header is the sheet's own header bar, with Cancel at the start and bound to
   Escape and the last right item the default on Return. An alert (`alerts.h`) is an
   `AdwAlertDialog` in the active window on libadwaita 1.5 and later, and an `AdwMessageDialog` on
