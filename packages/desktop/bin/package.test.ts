@@ -77,6 +77,7 @@ function fakeMac(
     remove: (file) => void removed.push(file),
     copy: (from, to) => void copied.push([from, to]),
     writeFile: (file, text) => void (written[file] = String(text)),
+    mkdir: () => {},
     readBytes: () => new Uint8Array(),
     files: () => [],
     symlink: () => {},
@@ -589,7 +590,10 @@ describe('packageApp', () => {
       '--assets-dest',
       `${app}/Contents/Resources`,
     ]);
-    assert.deepEqual(copied, [[`${BUILD}/appkit/ngn-macos`, `${app}/Contents/MacOS/Notes`]]);
+    assert.deepEqual(copied, [
+      [`${staging}/main.jsbundle`, `${app}/Contents/Resources/main.jsbundle`],
+      [`${BUILD}/appkit/ngn-macos`, `${app}/Contents/MacOS/Notes`],
+    ]);
     assert.deepEqual(
       calls.find((call) => call.command === 'strip'),
       { command: 'strip', args: ['-x', `${app}/Contents/MacOS/Notes`] },
@@ -600,10 +604,13 @@ describe('packageApp', () => {
     assert.deepEqual(calls.at(-1), { command: 'codesign', args: ['--force', '--sign', '-', app] });
   });
 
+  // Into the staging folder, which the bundle is already in: hermesc writes beside its output and
+  // makes no folder, and an app with no assets has no Resources until something is copied there.
   it('compiles the bundle to Hermes bytecode with the hermesc the host was built against', async () => {
-    const { sys, calls } = fakeMac();
+    const { sys, calls, copied } = fakeMac();
     await quiet(() => packageApp(macPackage([]), sys));
     const app = '/apps/notes/dist/macos/Notes.app';
+    const staging = '/apps/notes/.expo/ng-native-desktop/package';
     const hermesc = calls.find((call) => call.command === HERMESC);
     assert.deepEqual(hermesc?.args, [
       '-emit-binary',
@@ -611,9 +618,15 @@ describe('packageApp', () => {
       '-w',
       '-max-diagnostic-width=80',
       '-out',
-      `${app}/Contents/Resources/main.jsbundle`,
-      '/apps/notes/.expo/ng-native-desktop/package/main.js',
+      `${staging}/main.jsbundle`,
+      `${staging}/main.js`,
     ]);
+    assert.ok(
+      copied.some(
+        ([from, to]) =>
+          from === `${staging}/main.jsbundle` && to === `${app}/Contents/Resources/main.jsbundle`,
+      ),
+    );
     const order = calls.map((call) => call.command);
     assert.ok(order.indexOf('expo') < order.indexOf(HERMESC));
   });

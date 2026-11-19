@@ -3,6 +3,7 @@ import { SafeAreaProvider } from '@ng-native/components';
 import { StatusBar } from '@ng-native/device';
 import { NativeStackOutlet } from '@ng-native/router';
 import { ToastHost } from './overlays/toast-host.ts';
+import { Settings } from './settings/settings-model.ts';
 
 /**
  * The shell. Every feature lives on its own routed screen, so each can be exercised in
@@ -26,5 +27,7 @@ export class App {
     // Dark text on the light palette, light text on the dark one, following the scheme and the
     // theme switch. A page can still push its own.
     inject(StatusBar).set({ style: 'auto' });
+    // Applies the appearance kept from the last launch.
+    inject(Settings);
   }
 }
