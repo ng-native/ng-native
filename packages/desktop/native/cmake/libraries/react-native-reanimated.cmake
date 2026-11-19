@@ -40,6 +40,11 @@ target_compile_definitions(ngn_rnreanimated PUBLIC
 # react-native-worklets' recipe's, in either order of the libraries.
 target_link_libraries(ngn_rnreanimated PUBLIC ngn_rnworklets react_native)
 target_compile_options(ngn_rnreanimated PRIVATE -fexceptions -frtti -include cstdint -w)
+# Linux: the synchronous props function Reanimated declares for Android and Apple only
+# (shim/worklets/linux-reanimated-props.h).
+if(NOT APPLE)
+  target_compile_options(ngn_rnreanimated PRIVATE "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/shim/worklets/linux-reanimated-props.h")
+endif()
 list(APPEND _lib_targets ngn_rnreanimated)
 string(APPEND _lib_glue_decls "void installGlue_rnreanimated();\n")
 string(APPEND _lib_glue_calls "  installGlue_rnreanimated();\n")

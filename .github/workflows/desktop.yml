@@ -189,7 +189,11 @@ jobs:
             bash -euo pipefail -c '
               ccache --zero-stats > /dev/null
               start=$(date +%s)
-              build=$(native/scripts/build.sh --backend gtk --no-debug-info | tail -n 1)
+              # With worklets and Reanimated, whose shared C++ needs the Linux shims
+              # (native/shim/worklets), so a change that breaks them on glibc fails here.
+              lib=../../examples/canary/node_modules
+              build=$(native/scripts/build.sh --backend gtk --no-debug-info \
+                --library $lib/react-native-worklets --library $lib/react-native-reanimated | tail -n 1)
               echo "Built in $(( $(date +%s) - start ))s"
               ccache --show-stats
               echo "$build" > "$GITHUB_WORKSPACE/.linux-probe/build-dir"

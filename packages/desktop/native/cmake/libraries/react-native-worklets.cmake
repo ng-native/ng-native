@@ -41,6 +41,11 @@ target_compile_definitions(ngn_rnworklets PUBLIC
     HERMES_V1_ENABLED=1)
 target_link_libraries(ngn_rnworklets PUBLIC react_native hermes-engine::hermesvm)
 target_compile_options(ngn_rnworklets PRIVATE -fexceptions -frtti -include cstdint -w)
+# Linux: what the library takes from Apple's libc and libc++ that glibc and libstdc++ lack
+# (shim/worklets/linux-worklets.h).
+if(NOT APPLE)
+  target_compile_options(ngn_rnworklets PRIVATE "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/shim/worklets/linux-worklets.h")
+endif()
 list(APPEND _lib_targets ngn_rnworklets)
 string(APPEND _lib_glue_decls "void installGlue_rnworklets();\n")
 string(APPEND _lib_glue_calls "  installGlue_rnworklets();\n")
