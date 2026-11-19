@@ -144,6 +144,12 @@ if (linux) {
     process.exit(2);
   }
 }
+/**
+ * The host libraries a Linux host leaves out: their shared C++ does not compile for the GTK host
+ * yet (react-native-worklets 0.13 calls Apple's one-argument pthread_setname_np), so the entry
+ * says so and an app that has them builds its own.
+ */
+const LINUX_LEFT_OUT = ['react-native-worklets', 'react-native-reanimated'];
 /** @type {import('../../bin/prebuilt.mjs').HostPlatform} */
 const platform = linux ? { os, arch: process.arch === 'arm64' ? 'arm64' : 'x64' } : {};
 const baseUrl = values['base-url'];
@@ -190,7 +196,7 @@ const reactNative = versionOf(reactNativeDir);
 const libraries = Object.fromEntries(
   HOST_LIBRARIES.flatMap((name) => {
     const dir = installed(name);
-    return dir ? [[name, dir]] : [];
+    return dir && !(linux && LINUX_LEFT_OUT.includes(name)) ? [[name, dir]] : [];
   }),
 );
 
