@@ -395,7 +395,8 @@ void runMenuItem(const ngn::MenuItem &item, GtkWindow *window) {
       }
       return;
     case ngn::MenuCommand::KeyboardShortcuts:
-      gtk_window_present(GTK_WINDOW(ngn::gtk::keyboardShortcutsWindow(gHost.menus->keyboardShortcuts(gHost.gtkMenus->bar()), window)));
+      ngn::gtk::presentKeyboardShortcuts(
+          ngn::gtk::keyboardShortcutsWindow(gHost.menus->keyboardShortcuts(gHost.gtkMenus->bar()), window), window);
       return;
     case ngn::MenuCommand::About: {
       GtkWidget *about = adw_about_window_new();
@@ -504,7 +505,7 @@ std::string directoryOf(const std::string &path) {
 
 int main(int argc, char *argv[]) {
   gHost.launched = g_get_monotonic_time();
-  const ngn::HostOs os = ngn::linuxOs();
+  ngn::HostOs os = ngn::linuxOs();
   std::vector<std::string> args(argv + 1, argv + argc);
   // A package (bin/package-linux.mjs) puts metadata.json beside the host, which links from bin/ to
   // lib/<name>/: the folder of the executable itself, not of the link.
@@ -554,6 +555,9 @@ int main(int argc, char *argv[]) {
 
   gtk_init();
   adw_init();
+  // Back and forward swap arrows in a right-to-left locale, which GTK knows once it is initialised.
+  os = ngn::linuxOs(gtk_widget_get_default_direction() == GTK_TEXT_DIR_RTL);
+  gHost.os = os;
   // One instance of the app, as a Linux app has one: a test launch is its own, beside any other.
   gHost.application = ngn::gtk::startApplication(appId, !settings.test, settings.dbusService);
   if (g_application_get_is_remote(G_APPLICATION(gHost.application))) {
@@ -610,6 +614,7 @@ int main(int argc, char *argv[]) {
               gHost.input->removeContainer(static_cast<ngn::ContainerId>(tag));
             }
           },
+      .activate = [](SurfaceId surface, facebook::react::Tag tag) { return gHost.input && gHost.input->activate(surface, tag); },
   };
   gHost.backend->modals().setSheetNodes([](SurfaceId surface, facebook::react::Tag tag) -> std::optional<ngn::SheetNode> {
     return gHost.runtime ? gHost.runtime->sheetNode(surface, tag) : std::nullopt;

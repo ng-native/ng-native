@@ -583,23 +583,11 @@ static BOOL focusFromKeyboard() {
   if (!viewProps || !emitter) {
     return NO;
   }
-  auto dispatch = ngn::axDispatch(*viewProps, verb);
-  switch (dispatch.kind) {
-    case ngn::AxDispatch::Kind::None:
-      return NO;
-    case ngn::AxDispatch::Kind::Tap:
-      emitter->onAccessibilityTap();
-      return YES;
-    case ngn::AxDispatch::Kind::Escape:
-      emitter->onAccessibilityEscape();
-      return YES;
-    case ngn::AxDispatch::Kind::Action:
-      emitter->onAccessibilityAction(dispatch.action);
-      return YES;
-    case ngn::AxDispatch::Kind::Click:
-      return gViewInput != nullptr && gViewInput->activate(static_cast<SurfaceId>(_surfaceId), static_cast<Tag>(_reactTag));
-  }
-  return NO;
+  SurfaceId surface = static_cast<SurfaceId>(_surfaceId);
+  Tag tag = static_cast<Tag>(_reactTag);
+  return ngn::performAxVerb(*viewProps, emitter.get(), verb, [surface, tag] {
+    return gViewInput != nullptr && gViewInput->activate(surface, tag);
+  });
 }
 
 - (BOOL)accessibilityPerformPress {

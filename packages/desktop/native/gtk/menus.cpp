@@ -3,6 +3,8 @@
 #include "app-windows.h"
 #include "screens.h"
 
+#include <dlfcn.h>
+
 #include <algorithm>
 #include <cstring>
 #include <map>
@@ -155,6 +157,17 @@ std::string acceleratorOf(const MenuItem &item) {
   return out;
 }
 
+namespace {
+
+// Whether the libadwaita running has AdwShortcutsDialog (1.8), past the floor the host builds
+// against: GtkBuilder finds the type by the same function.
+bool haveShortcutsDialog() {
+  static bool have = dlsym(RTLD_DEFAULT, "adw_shortcuts_dialog_get_type") != nullptr;
+  return have;
+}
+
+} // namespace
+
 GtkWidget *keyboardShortcutsWindow(const std::vector<ShortcutGroup> &groups, GtkWindow *parent) {
   auto escaped = [](const std::string &text) {
     gchar *out = g_markup_escape_text(text.c_str(), -1);
@@ -162,29 +175,53 @@ GtkWidget *keyboardShortcutsWindow(const std::vector<ShortcutGroup> &groups, Gtk
     g_free(out);
     return result;
   };
-  std::string ui = "<interface><object class=\"GtkShortcutsWindow\" id=\"window\"><property name=\"modal\">1</property>"
-                   "<child><object class=\"GtkShortcutsSection\"><property name=\"section-name\">shortcuts</property>";
+  bool dialog = haveShortcutsDialog();
+  // A group is an AdwShortcutsSection of AdwShortcutsItems in the dialog, a GtkShortcutsGroup of
+  // GtkShortcutsShortcuts in the window's one section.
+  const char *groupClass = dialog ? "AdwShortcutsSection" : "GtkShortcutsGroup";
+  const char *itemClass = dialog ? "AdwShortcutsItem" : "GtkShortcutsShortcut";
+  std::string ui = dialog ? "<interface><object class=\"AdwShortcutsDialog\" id=\"window\">"
+                          : "<interface><object class=\"GtkShortcutsWindow\" id=\"window\"><property name=\"modal\">1</property>"
+                            "<child><object class=\"GtkShortcutsSection\"><property name=\"section-name\">shortcuts</property>";
   for (const auto &group : groups) {
-    ui += "<child><object class=\"GtkShortcutsGroup\"><property name=\"title\">" + escaped(group.title) + "</property>";
+    ui += std::string("<child><object class=\"") + groupClass + "\"><property name=\"title\">" + escaped(group.title) + "</property>";
     for (const auto &entry : group.entries) {
       std::string accelerator = acceleratorOf(MenuItem{.key = entry.chord.key, .modifiers = entry.chord.modifiers});
       if (accelerator.empty()) {
         continue;
       }
-      ui += "<child><object class=\"GtkShortcutsShortcut\"><property name=\"title\">" + escaped(entry.title) +
+      ui += std::string("<child><object class=\"") + itemClass + "\"><property name=\"title\">" + escaped(entry.title) +
           "</property><property name=\"accelerator\">" + escaped(accelerator) + "</property></object></child>";
     }
     ui += "</object></child>";
   }
-  ui += "</object></child></object></interface>";
+  ui += dialog ? "</object></interface>" : "</object></child></object></interface>";
   GtkBuilder *builder = gtk_builder_new_from_string(ui.c_str(), -1);
-  // GTK's list of toplevels keeps the window once the builder goes, until it is closed.
-  GtkWidget *window = GTK_WIDGET(gtk_builder_get_object(builder, "window"));
+  // The window stays in GTK's list of toplevels once the builder goes, until it is closed; the
+  // dialog is the caller's reference until presentKeyboardShortcuts shows it.
+  GtkWidget *window = GTK_WIDGET(g_object_ref(gtk_builder_get_object(builder, "window")));
   g_object_unref(builder);
-  if (parent) {
-    gtk_window_set_transient_for(GTK_WINDOW(window), parent);
+  if (!dialog) {
+    g_object_unref(window);
+    if (parent) {
+      gtk_window_set_transient_for(GTK_WINDOW(window), parent);
+    }
   }
   return window;
+}
+
+void presentKeyboardShortcuts(GtkWidget *shortcuts, GtkWindow *parent) {
+  if (GTK_IS_WINDOW(shortcuts)) {
+    gtk_window_present(GTK_WINDOW(shortcuts));
+    return;
+  }
+  // adw_dialog_present (libadwaita 1.5): the parent holds the dialog while it shows.
+  using Present = void (*)(GtkWidget *, GtkWidget *);
+  static auto present = reinterpret_cast<Present>(dlsym(RTLD_DEFAULT, "adw_dialog_present"));
+  if (present) {
+    present(shortcuts, parent ? GTK_WIDGET(parent) : nullptr);
+  }
+  g_object_unref(shortcuts);
 }
 
 GMenuModel *buildMenu(const std::vector<MenuItem> &items, GSimpleActionGroup *group, std::function<void(const MenuItem &)> chosen) {
