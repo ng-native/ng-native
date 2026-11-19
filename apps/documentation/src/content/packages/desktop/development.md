@@ -46,7 +46,9 @@ On Linux the GTK host plays a script in a dev run and in a test launch (`NGN_TES
 screens-check's Linux mode drives an exported bundle. It plays under X11 only, Xvfb included,
 posting each step to the X server through XTest (`libXtst.so.6`), so a step reaches GTK as a
 person's input does, native controls included. The pointer steps, `key` and `type` play, with the
-command modifier as Ctrl and option as Alt. A script with `scroll`, `magnify`, `rotate` or `choose`
+command modifier as Ctrl and option as Alt. A character is typed in the keyboard group that has it,
+the active group first, and the active group is put back after. A press the script has not
+released when it ends or its window closes is released then. A script with `scroll`, `magnify`, `rotate` or `choose`
 is refused, as is any script on an X server without the XTEST extension, with the reason in the
 host's log.
 
@@ -55,7 +57,10 @@ host's log.
 macOS keeps a report of each crash in `~/Library/Logs/DiagnosticReports`. On Linux the GTK host
 writes its own: on a fatal signal it writes `crash.txt`, naming the signal and the native stack, to
 the test launch's state folder, or to `$XDG_STATE_HOME/<app id>/crash.txt` (`~/.local/state` when
-XDG_STATE_HOME is unset), prints the same lines to its standard error, and dies of the signal.
+XDG_STATE_HOME is unset), prints the same lines to its standard error, and dies of the signal. When
+the report takes longer than two seconds, as when another thread holds a lock the stack's unwinder
+needs, the host says so on standard error, and in the report once it is open, and dies of the
+signal with what it has written.
 
 ## Logging
 
