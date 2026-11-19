@@ -151,9 +151,6 @@ const PARK_LIMIT = 6;
 /** The style of a row that sizes itself and needs nothing else: in flow, where it falls. */
 const IN_FLOW: Record<string, unknown> = Object.freeze({});
 
-/** The recycling type of a sticky row, which hands its slot on only to another. */
-const STICKY = Symbol('sticky');
-
 /** Points of drift below which a held position is left alone, as UIKit rounds to half-points. */
 const HOLD_TOLERANCE = 0.5;
 
@@ -1057,15 +1054,30 @@ export class VirtualList<T> extends ScrollViewProps {
     return { index: -1, slot, key, item: this.items()[0]!, style: PARKED };
   }
 
+  /** The recycling type of a sticky row of each `itemType`: apart from plain rows of it. */
+  private readonly stickyTypeOf = new Map<unknown, symbol>();
+  private readonly stickyTypes = new Set<unknown>();
+
+  private stickyType(kind: unknown): symbol {
+    let type = this.stickyTypeOf.get(kind);
+    if (!type) {
+      type = Symbol('sticky');
+      this.stickyTypeOf.set(kind, type);
+      this.stickyTypes.add(type);
+    }
+    return type;
+  }
+
   private recycledSlot(key: unknown, item: T, index: number): number {
     // A sticky row is a type of its own: native keeps the translate it moved one by, and a plain
     // row taking its slot commits no transform to put it back. A row that stops or starts being
     // sticky takes a new slot for the same reason.
     const sticky = this.nextSticky().has(index);
     const held = this.recycled.get(key);
-    if (held && (held.type === STICKY) === sticky) return held.slot;
+    if (held && this.stickyTypes.has(held.type) === sticky) return held.slot;
     this.recycled.delete(key);
-    const type = sticky ? STICKY : this.itemType()?.(item, index);
+    const kind = this.itemType()?.(item, index);
+    const type = sticky ? this.stickyType(kind) : kind;
     const slot = this.unpark(key, type) ?? this.parked.get(type)?.pop()?.slot ?? this.nextSlot++;
     this.recycled.set(key, { slot, type, row: null });
     return slot;

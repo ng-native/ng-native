@@ -687,6 +687,55 @@ describe('windowed list options', () => {
     assert.deepEqual(placed.at(-1), ['set', offset, 250 * ITEM_HEIGHT]);
   });
 
+  it('tells native where a jump landed when the row it pins was already moving', async () => {
+    // The same row pinned before and after the jump: its graph is not rebuilt, so only being told
+    // puts native where the jump landed.
+    const { native, named } = recorder();
+    await boot({ height: VIEWPORT }, { nativeAnimated: native });
+    instance.sticky.set([0]);
+    await settle();
+    await fireEvent.scroll(host, { contentOffset: { y: 5 * ITEM_HEIGHT } });
+    const offset = named('create').find(
+      ([, , config]) => (config as { offset?: number }).offset !== undefined,
+    )![1];
+    const list = (
+      instance as unknown as { list(): { scrollToIndex(options: { index: number }): void } }
+    ).list();
+    list.scrollToIndex({ index: 100 });
+    await settle();
+    await fireEvent.scroll(host, { contentOffset: { y: 100 * ITEM_HEIGHT } });
+    await settle();
+    assert.deepEqual(
+      named('set')
+        .filter(([, tag]) => tag === offset)
+        .at(-1),
+      ['set', offset, 100 * ITEM_HEIGHT],
+    );
+  });
+
+  it('does not tell native a jump s offset again once the scroll has moved on', async () => {
+    // A later change to a pinned row's range rebuilds its graph, which must not pull native back
+    // to where an earlier jump landed.
+    const { native, named } = recorder();
+    await boot({ height: VIEWPORT }, { nativeAnimated: native });
+    instance.sticky.set([0, 200]);
+    await settle();
+    await fireEvent.scroll(host, { contentOffset: { y: 5 * ITEM_HEIGHT } });
+    const list = (
+      instance as unknown as { list(): { scrollToIndex(options: { index: number }): void } }
+    ).list();
+    list.scrollToIndex({ index: 250 });
+    await settle();
+    await fireEvent.scroll(host, { contentOffset: { y: 250 * ITEM_HEIGHT } });
+    await settle();
+    await fireEvent.scroll(host, { contentOffset: { y: 260 * ITEM_HEIGHT } });
+    await settle();
+    const before = named('set').length;
+    instance.sticky.set([0, 200, 400]);
+    await settle();
+    assert.deepEqual(named('set').slice(before), []);
+  });
+
   it('leaves native s offset to native while the user scrolls', async () => {
     // Mid-fling the offset here trails native's: setting it as a new sticky row arrives would
     // pull every pinned row back by the difference for a frame.
