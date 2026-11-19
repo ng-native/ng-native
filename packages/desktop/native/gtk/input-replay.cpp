@@ -51,8 +51,14 @@ struct Replay {
   InputScript script;
   size_t at{0};
   std::function<void()> done;
+  // Set when the window unrealizes: a destroyed window a caller still holds is not a finished script.
+  bool closed{false};
+  gulong unrealizeHandler{0};
   ~Replay() {
     if (window) {
+      if (unrealizeHandler) {
+        g_signal_handler_disconnect(window, unrealizeHandler);
+      }
       g_object_remove_weak_pointer(G_OBJECT(window), reinterpret_cast<gpointer *>(&window));
     }
   }
@@ -156,7 +162,7 @@ void play(GtkWidget *window, const InputStep &step) {
 // Plays from `replay->at`: a wait waits, and every other step leaves the loop a moment to take
 // the event before the next, as a person's input arrives.
 void playNext(std::shared_ptr<Replay> replay) {
-  if (!replay->window) {
+  if (!replay->window || replay->closed) {
     fprintf(stderr, "[ngn] input script: the window closed before the script ended\n");
     return;
   }
@@ -219,6 +225,9 @@ bool replayInputScript(GtkWidget *window, InputScript script, std::function<void
   replay->script = std::move(script);
   replay->done = std::move(done);
   g_object_add_weak_pointer(G_OBJECT(window), reinterpret_cast<gpointer *>(&replay->window));
+  replay->unrealizeHandler = g_signal_connect(window, "unrealize", G_CALLBACK(+[](GtkWidget *, gpointer data) {
+    static_cast<Replay *>(data)->closed = true;
+  }), replay.get());
   playNext(std::move(replay));
   return true;
 #else

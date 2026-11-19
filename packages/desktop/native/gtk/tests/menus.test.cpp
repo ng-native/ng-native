@@ -270,3 +270,21 @@ TEST_CASE("the app's undo history runs its actions on the UI thread, whichever t
   settle();
   CHECK(ran.size() == 1);
 }
+
+TEST_CASE("an undo's own registration is the redo, so Redo is there after one Undo") {
+  REQUIRE(ngn::testing::gtkReady());
+  auto undo = ngn::gtk::makeUndoManager();
+  std::vector<std::string> ran;
+  std::function<void()> step = [&] {
+    ran.push_back(undo->undoing() ? "undo" : "redo");
+    // As an app's handler does: the inverse of what it just ran.
+    undo->registerAction("Add a Star", step);
+  };
+  undo->registerAction("Add a Star", step);
+  settle();
+  undo->undo();
+  settle();
+  undo->redo();
+  settle();
+  CHECK(ran == std::vector<std::string>{"undo", "redo"});
+}

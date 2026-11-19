@@ -87,3 +87,23 @@ TEST_CASE("an input script whose window closes stops there") {
   ngn::testing::runUntil([until] { return g_get_monotonic_time() > until; });
   CHECK_FALSE(done);
 }
+
+TEST_CASE("an input script whose window is destroyed while a caller still holds it stops there") {
+  REQUIRE(ngn::testing::gtkReady());
+  if (!onX11()) {
+    return;
+  }
+  GtkWidget *window = gtk_window_new();
+  gtk_window_set_default_size(GTK_WINDOW(window), 200, 100);
+  gtk_window_present(GTK_WINDOW(window));
+  ngn::testing::runUntil([window] { return gtk_widget_get_mapped(window); });
+  // The caller's own reference keeps the window object alive through its destruction.
+  g_object_ref(window);
+  bool done = false;
+  REQUIRE(ngn::gtk::replayInputScript(window, ngn::parseInputScript("wait 100\n"), [&done] { done = true; }));
+  gtk_window_destroy(GTK_WINDOW(window));
+  gint64 until = g_get_monotonic_time() + 400 * 1000;
+  ngn::testing::runUntil([until] { return g_get_monotonic_time() > until; });
+  CHECK_FALSE(done);
+  g_object_unref(window);
+}
