@@ -8,9 +8,11 @@
 #include <pango/pangocairo.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -115,8 +117,10 @@ PangoContext *measureContext() {
   return context;
 }
 
-// `text` laid out on one line in the font, as React Native's text would name it. The caller frees it.
-PangoLayout *lineOf(const std::string &text, double fontSize, const std::string &family, const std::string &weight) {
+// `text` laid out on one line in the font, as React Native's text would name it, a line break in it
+// a space as SVG's white space has it. The caller frees it.
+PangoLayout *lineOf(std::string text, double fontSize, const std::string &family, const std::string &weight) {
+  std::replace_if(text.begin(), text.end(), [](char c) { return c == '\n' || c == '\r'; }, ' ');
   facebook::react::TextAttributes attributes;
   attributes.fontSize = static_cast<facebook::react::Float>(fontSize);
   attributes.fontFamily = family;
@@ -152,8 +156,12 @@ struct ShapedGlyphs {
 struct SvgImages {
   std::map<std::string, cairo_surface_t *> loaded;
   std::map<std::string, std::vector<std::function<void()>>> waiting;
+  // The uris that failed to load or to become a cairo surface: not asked for again on each draw.
+  std::set<std::string> failed;
   // The loaded ones in the order they loaded.
   std::vector<std::pair<std::string, cairo_surface_t *>> order;
+  // How many svg views hold each uri held (SvgImageHold): a held image is not let go.
+  std::map<std::string, int> holders;
 };
 
 SvgImages &svgImages() {
@@ -161,9 +169,14 @@ SvgImages &svgImages() {
   return images;
 }
 
+// Null when cairo cannot hold the picture: larger than an image surface can be, or out of memory.
 cairo_surface_t *surfaceOf(GdkTexture *texture) {
   int width = gdk_texture_get_width(texture), height = gdk_texture_get_height(texture);
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+  if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+    cairo_surface_destroy(surface);
+    return nullptr;
+  }
   cairo_surface_flush(surface);
   gdk_texture_download(texture, cairo_image_surface_get_data(surface), static_cast<gsize>(cairo_image_surface_get_stride(surface)));
   cairo_surface_mark_dirty(surface);
@@ -172,8 +185,8 @@ cairo_surface_t *surfaceOf(GdkTexture *texture) {
 
 class CairoCanvas final : public SvgCanvas {
  public:
-  CairoCanvas(cairo_t *cr, double width, double height, double scale, std::function<void()> imageLoaded)
-      : cr_(cr), width_(width), height_(height), scale_(scale), imageLoaded_(std::move(imageLoaded)) {
+  CairoCanvas(cairo_t *cr, double width, double height, double scale, std::function<void()> imageLoaded, SvgImageHold *hold)
+      : cr_(cr), width_(width), height_(height), scale_(scale), imageLoaded_(std::move(imageLoaded)), hold_(hold) {
     cairo_get_matrix(cr_, &base_);
   }
 
@@ -191,9 +204,17 @@ class CairoCanvas final : public SvgCanvas {
     }
   }
 
+  // A transform that cannot be inverted, as scale(0), draws nothing until the restore: given to
+  // cairo it would put the context in an error state that no restore clears.
   void concat(const SvgMatrix &m) override {
-    cairo_matrix_t transform = cairoMatrix(m);
-    cairo_transform(cr_, &transform);
+    cairo_matrix_t transform = cairoMatrix(m), inverse = transform;
+    if (cairo_matrix_invert(&inverse) == CAIRO_STATUS_SUCCESS) {
+      cairo_transform(cr_, &transform);
+    } else {
+      cairo_new_path(cr_);
+      cairo_rectangle(cr_, 0, 0, 0, 0);
+      cairo_clip(cr_);
+    }
     matrix_ = matrix_ * m;
   }
 
@@ -293,17 +314,21 @@ class CairoCanvas final : public SvgCanvas {
     cairo_surface_set_device_scale(surface, width / tile.tile.width, height / tile.tile.height);
     {
       cairo_t *cr = cairo_create(surface);
-      CairoCanvas inner(cr, tile.tile.width, tile.tile.height, density, imageLoaded_);
+      CairoCanvas inner(cr, tile.tile.width, tile.tile.height, density, imageLoaded_, hold_);
       drawTile(inner);
       cairo_destroy(cr);
     }
-    cairo_save(cr_);
-    cairo_matrix_t transform = cairoMatrix(tile.transform);
-    cairo_transform(cr_, &transform);
-    cairo_translate(cr_, tile.tile.x, tile.tile.y);
-    cairo_set_source_surface(cr_, surface, 0, 0);
-    cairo_pattern_t *repeat = cairo_pattern_reference(cairo_get_source(cr_));
-    cairo_restore(cr_);
+    // The tile's place is in the pattern's own matrix, from user space to the tile's: a source takes
+    // the user space current where it is set, which is the outer one below.
+    cairo_pattern_t *repeat = cairo_pattern_create_for_surface(surface);
+    cairo_matrix_t toTile = cairoMatrix(tile.transform);
+    cairo_matrix_translate(&toTile, tile.tile.x, tile.tile.y);
+    if (cairo_matrix_invert(&toTile) != CAIRO_STATUS_SUCCESS) {
+      cairo_pattern_destroy(repeat);
+      cairo_surface_destroy(surface);
+      return;
+    }
+    cairo_pattern_set_matrix(repeat, &toTile);
     cairo_pattern_set_extend(repeat, CAIRO_EXTEND_REPEAT);
     cairo_save(cr_);
     if (strokeClip_) {
@@ -323,12 +348,16 @@ class CairoCanvas final : public SvgCanvas {
     cairo_surface_destroy(surface);
   }
 
-  // The source is drawn in a bitmap of the view's pixels, as a mask is, and the filter's result
-  // drawn back in its place.
+  // The source is drawn in a bitmap of the filter region's pixels, which can reach past the view's,
+  // so an offset brings in what is drawn outside the view; the filter's result is drawn back in its
+  // place.
   void beginFilter(const SvgFilter &filter) override {
-    cairo_surface_t *surface = viewSurface();
+    auto [x, y, width, height] = regionPixels(filter.region);
+    cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+    cairo_surface_set_device_scale(surface, scale_, scale_);
+    cairo_surface_set_device_offset(surface, -x, -y);
     cairo_t *cr = drawingInto(surface);
-    filters_.push_back({.parent = cr_, .cr = cr, .surface = surface, .saved = saved_, .filter = filter});
+    filters_.push_back({.parent = cr_, .cr = cr, .surface = surface, .saved = saved_, .filter = filter, .x = x, .y = y});
     cr_ = cr;
   }
 
@@ -358,7 +387,7 @@ class CairoCanvas final : public SvgCanvas {
         p[3] = row[x] >> 24;
       }
     }
-    auto result = runSvgFilter(frame.filter, source, SvgMatrix::scale(scale_, scale_) * matrix_);
+    auto result = runSvgFilter(frame.filter, source, SvgMatrix::translate(-frame.x, -frame.y) * SvgMatrix::scale(scale_, scale_) * matrix_);
     for (int y = 0; y < height && y < result.height; ++y) {
       auto *row = reinterpret_cast<uint32_t *>(data + static_cast<size_t>(y) * stride);
       for (int x = 0; x < width && x < result.width; ++x) {
@@ -377,9 +406,14 @@ class CairoCanvas final : public SvgCanvas {
 
   void image(const std::string &uri, const SvgRect &rect, const std::string &align, int meetOrSlice, double opacity) override {
     auto &images = svgImages();
+    if (hold_) {
+      hold_->use(uri);
+    }
     auto found = images.loaded.find(uri);
     if (found == images.loaded.end()) {
-      load(uri);
+      if (!images.failed.contains(uri)) {
+        load(uri);
+      }
       return;
     }
     cairo_surface_t *surface = found->second;
@@ -417,8 +451,13 @@ class CairoCanvas final : public SvgCanvas {
     double runX = 0;
     for (GSList *item = line ? line->runs : nullptr; item; item = item->next) {
       auto *run = static_cast<PangoGlyphItem *>(item->data);
+      // Where each glyph starts in the run.
+      std::vector<int> glyphX(static_cast<size_t>(run->glyphs->num_glyphs) + 1, 0);
+      for (int g = 0; g < run->glyphs->num_glyphs; ++g) {
+        glyphX[g + 1] = glyphX[g] + run->glyphs->glyphs[g].geometry.width;
+      }
       PangoGlyphItemIter iter;
-      for (bool more = pango_glyph_item_iter_init_start(&iter, run, text.c_str()); more; more = pango_glyph_item_iter_next_cluster(&iter)) {
+      for (bool more = pango_glyph_item_iter_init_start(&iter, run, pango_layout_get_text(layout)); more; more = pango_glyph_item_iter_next_cluster(&iter)) {
         auto shaped = std::make_shared<ShapedGlyphs>();
         shaped->font = PANGO_FONT(g_object_ref(run->item->analysis.font));
         int first = std::min(iter.start_glyph, iter.end_glyph), last = std::max(iter.start_glyph, iter.end_glyph);
@@ -429,17 +468,11 @@ class CairoCanvas final : public SvgCanvas {
         }
         shaped->glyphs = pango_glyph_string_new();
         pango_glyph_string_set_size(shaped->glyphs, last - first);
-        int start = 0, advance = 0;
-        for (int g = 0; g < run->glyphs->num_glyphs; ++g) {
-          if (g < first) {
-            start += run->glyphs->glyphs[g].geometry.width;
-          }
-        }
         for (int g = first; g < last; ++g) {
           shaped->glyphs->glyphs[g - first] = run->glyphs->glyphs[g];
           shaped->glyphs->log_clusters[g - first] = 0;
-          advance += run->glyphs->glyphs[g].geometry.width;
         }
+        int start = glyphX[first], advance = glyphX[last] - glyphX[first];
         starts.push_back(iter.start_index);
         out.push_back({
             .text = text.substr(static_cast<size_t>(iter.start_index), static_cast<size_t>(iter.end_index - iter.start_index)),
@@ -514,7 +547,33 @@ class CairoCanvas final : public SvgCanvas {
     cairo_surface_t *surface;
     std::vector<Saved> saved;
     SvgFilter filter;
+    // Where the bitmap's corner is in the view's pixels.
+    int x{0}, y{0};
   };
+
+  // The filter region's bounds in the view's pixels: x, y, width and height. A region of more pixels
+  // than the view and than 2048 by 2048 is cut to the view's: the filter's work grows with them.
+  std::array<int, 4> regionPixels(const SvgRect &region) const {
+    SvgMatrix toPixels = SvgMatrix::scale(scale_, scale_) * matrix_;
+    double minX = INFINITY, minY = INFINITY, maxX = -INFINITY, maxY = -INFINITY;
+    for (auto [rx, ry] : {std::pair{region.x, region.y}, {region.x + region.width, region.y}, {region.x, region.y + region.height},
+                          {region.x + region.width, region.y + region.height}}) {
+      auto [px, py] = toPixels.apply(rx, ry);
+      minX = std::min(minX, px);
+      minY = std::min(minY, py);
+      maxX = std::max(maxX, px);
+      maxY = std::max(maxY, py);
+    }
+    double viewWidth = std::ceil(width_ * scale_), viewHeight = std::ceil(height_ * scale_);
+    minX = std::floor(minX), minY = std::floor(minY), maxX = std::ceil(maxX), maxY = std::ceil(maxY);
+    if (!((maxX - minX) * (maxY - minY) <= std::max(viewWidth * viewHeight, 2048.0 * 2048.0) &&std::abs(minX) < 1e7 && std::abs(minY) < 1e7)) {
+      minX = std::max(minX, 0.0), minY = std::max(minY, 0.0), maxX = std::min(maxX, viewWidth), maxY = std::min(maxY, viewHeight);
+    }
+    if (!(maxX > minX && maxY > minY)) {
+      return {0, 0, 1, 1};
+    }
+    return {static_cast<int>(minX), static_cast<int>(minY), static_cast<int>(maxX - minX), static_cast<int>(maxY - minY)};
+  }
 
   // A transparent bitmap of the view's pixels, in the view's points.
   cairo_surface_t *viewSurface() const {
@@ -550,7 +609,7 @@ class CairoCanvas final : public SvgCanvas {
     cairo_surface_mark_dirty(surface);
   }
 
-  // Every canvas that asks for a uri while it loads is told when it has loaded.
+  // Every canvas that asks for a uri while it loads is told when it has loaded or failed to.
   void load(const std::string &uri) {
     auto &images = svgImages();
     bool started = images.waiting.contains(uri);
@@ -567,19 +626,29 @@ class CairoCanvas final : public SvgCanvas {
       auto &images = svgImages();
       auto waiters = std::move(images.waiting[uri]);
       images.waiting.erase(uri);
-      if (!texture) {
-        return;
+      cairo_surface_t *surface = texture ? surfaceOf(texture) : nullptr;
+      if (texture) {
+        g_object_unref(texture);
       }
-      // At most 64 kept, the first loaded going first, as macOS lets its image cache go.
-      if (images.loaded.size() >= 64) {
-        cairo_surface_destroy(images.order.front().second);
-        images.loaded.erase(images.order.front().first);
-        images.order.erase(images.order.begin());
+      if (!surface) {
+        images.failed.insert(uri);
+      } else {
+        // At most 64 kept, the first loaded going first, as macOS lets its image cache go; one an
+        // svg view holds stays, past 64 when need be.
+        while (images.loaded.size() >= 64) {
+          auto unheld = std::find_if(images.order.begin(), images.order.end(), [&images](const auto &entry) {
+            return !images.holders.contains(entry.first);
+          });
+          if (unheld == images.order.end()) {
+            break;
+          }
+          cairo_surface_destroy(unheld->second);
+          images.loaded.erase(unheld->first);
+          images.order.erase(unheld);
+        }
+        images.loaded[uri] = surface;
+        images.order.emplace_back(uri, surface);
       }
-      cairo_surface_t *surface = surfaceOf(texture);
-      images.loaded[uri] = surface;
-      images.order.emplace_back(uri, surface);
-      g_object_unref(texture);
       for (auto &waiter : waiters) {
         waiter();
       }
@@ -589,6 +658,7 @@ class CairoCanvas final : public SvgCanvas {
   cairo_t *cr_;
   double width_, height_, scale_;
   std::function<void()> imageLoaded_;
+  SvgImageHold *hold_;
   cairo_matrix_t base_;
   SvgMatrix matrix_;
   std::optional<std::pair<SvgPath, SvgStroke>> strokeClip_;
@@ -600,8 +670,32 @@ class CairoCanvas final : public SvgCanvas {
 
 } // namespace
 
-std::unique_ptr<SvgCanvas> makeCairoCanvas(cairo_t *cr, double width, double height, double scale, std::function<void()> imageLoaded) {
-  return std::make_unique<CairoCanvas>(cr, width, height, scale, std::move(imageLoaded));
+SvgImageHold::~SvgImageHold() {
+  next_.clear();
+  drawn();
+}
+
+void SvgImageHold::use(const std::string &uri) {
+  next_.insert(uri);
+}
+
+void SvgImageHold::drawn() {
+  auto &holders = svgImages().holders;
+  for (const auto &uri : next_) {
+    ++holders[uri];
+  }
+  for (const auto &uri : held_) {
+    if (auto found = holders.find(uri); found != holders.end() && --found->second <= 0) {
+      holders.erase(found);
+    }
+  }
+  held_ = std::move(next_);
+  next_.clear();
+}
+
+std::unique_ptr<SvgCanvas> makeCairoCanvas(
+    cairo_t *cr, double width, double height, double scale, std::function<void()> imageLoaded, SvgImageHold *hold) {
+  return std::make_unique<CairoCanvas>(cr, width, height, scale, std::move(imageLoaded), hold);
 }
 
 } // namespace ngn::gtk

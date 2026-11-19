@@ -43,6 +43,23 @@ const char *imageContentFit(ImageResizeMode mode) {
   }
 }
 
+namespace {
+
+// What a cacheable source is kept under: its uri, and its headers when it sends any, so a request
+// with other credentials never answers with another's bytes.
+std::string cacheKey(const ImageSource &source) {
+  std::string key = source.uri;
+  for (const auto &[name, value] : source.headers) {
+    key += '\n';
+    key += name;
+    key += ": ";
+    key += value;
+  }
+  return key;
+}
+
+} // namespace
+
 void loadImageSource(
     const std::shared_ptr<Http> &http,
     const std::shared_ptr<ImageCache> &cache,
@@ -68,8 +85,9 @@ void loadImageSource(
     return;
   }
   bool cacheable = cache && remote && (source.method.empty() || source.method == "GET") && source.body.empty();
+  std::string key = cacheable ? cacheKey(source) : "";
   if (cacheable && source.cache != Cache::Reload) {
-    if (auto found = cache->find(uri, "memory")) {
+    if (auto found = cache->find(key, "memory")) {
       done(std::move(found->first), "");
       return;
     }
@@ -87,13 +105,13 @@ void loadImageSource(
   }
   // The pick holding a file stays open until it is read.
   auto keep = cacheable ? cache : nullptr;
-  fetchBytes(http, std::move(request), [keep, uri, use, done](std::string body, const std::string &error) {
+  fetchBytes(http, std::move(request), [keep, key, uri, use, done](std::string body, const std::string &error) {
     if (!error.empty()) {
       done("", "Could not load the image at " + uri + " (" + error + ")");
       return;
     }
     if (keep) {
-      keep->store(uri, body, "memory");
+      keep->store(key, body, "memory");
     }
     done(std::move(body), "");
   });
