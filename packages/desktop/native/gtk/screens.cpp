@@ -1,6 +1,7 @@
 #include "screens.h"
 
 #include "gtk-backend.h"
+#include "menus.h"
 #include "view-widget.h"
 
 #include "ngn/screen-presentation.h"
@@ -333,7 +334,8 @@ GtkWidget *menuButton(GtkBackend &backend, Tag config, const BarButton &button) 
   GSimpleActionGroup *group = g_simple_action_group_new();
   int next = 0;
   fillMenu(menu, *button.menu, group, next, backend, config);
-  gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(widget), G_MENU_MODEL(menu));
+  // Nested, as the window's menus are, so two submenus with one title each open their own.
+  gtk_menu_button_set_popover(GTK_MENU_BUTTON(widget), nestedPopoverMenu(G_MENU_MODEL(menu)));
   gtk_widget_insert_action_group(widget, "ngn", G_ACTION_GROUP(group));
   // GTK 4.10 cannot read an inserted group back; tests read it here.
   g_object_set_data_full(G_OBJECT(widget), "ngn-menu-actions", g_object_ref(group), g_object_unref);

@@ -13,7 +13,6 @@
 
 #include <memory>
 #include <new>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -39,8 +38,7 @@ GMenuModel *shownModel(GtkWidget *slot) {
   if (GTK_IS_POPOVER_MENU_BAR(slot)) {
     return gtk_popover_menu_bar_get_menu_model(GTK_POPOVER_MENU_BAR(slot));
   }
-  GtkPopover *popover = gtk_menu_button_get_popover(GTK_MENU_BUTTON(slot));
-  return GTK_IS_POPOVER_MENU(popover) ? gtk_popover_menu_get_menu_model(GTK_POPOVER_MENU(popover)) : nullptr;
+  return ngn::testing::menuButtonModel(slot);
 }
 
 void settle() {
@@ -198,33 +196,6 @@ TEST_CASE("a window's primary menu or KDE menu bar shows the bar once it has one
 
 namespace {
 
-// Whether two pages of a stack in `widget` share a name. A sliding popover menu puts each
-// submenu on a page named for its label and opens it by that name, so the second opens the first.
-bool sharedPageName(GtkWidget *widget) {
-  if (GTK_IS_STACK(widget)) {
-    std::set<std::string> names;
-    GListModel *pages = G_LIST_MODEL(gtk_stack_get_pages(GTK_STACK(widget)));
-    bool shared = false;
-    for (guint i = 0; i < g_list_model_get_n_items(pages); ++i) {
-      auto *page = GTK_STACK_PAGE(g_list_model_get_item(pages, i));
-      if (const char *name = gtk_stack_page_get_name(page)) {
-        shared = shared || !names.insert(name).second;
-      }
-      g_object_unref(page);
-    }
-    g_object_unref(pages);
-    if (shared) {
-      return true;
-    }
-  }
-  for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
-    if (sharedPageName(child)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 // Two menus with one name, each with its own item.
 std::vector<MenuItem> twinMenus() {
   return {{.title = "File", .items = {{.title = "Open", .command = MenuCommand::AppItem, .id = "open"}}},
@@ -246,7 +217,7 @@ TEST_CASE("two menus with one name in the primary menu each open their own subme
   CHECK(gtk_widget_get_visible(slot));
   GtkPopover *popover = gtk_menu_button_get_popover(GTK_MENU_BUTTON(slot));
   REQUIRE(GTK_IS_POPOVER_MENU(popover));
-  CHECK_FALSE(sharedPageName(GTK_WIDGET(popover)));
+  CHECK_FALSE(ngn::testing::sharedPageName(GTK_WIDGET(popover)));
   gtk_window_destroy(GTK_WINDOW(window));
 }
 
@@ -363,7 +334,7 @@ TEST_CASE("a context menu shows its items at the click, and goes once closed, ev
   REQUIRE(ngn::gtk::popUpContextMenu(view, {10, 10}, twinMenus(), [](const MenuItem &) {}));
   GtkWidget *twins = gtk_widget_get_last_child(view);
   REQUIRE(GTK_IS_POPOVER_MENU(twins));
-  CHECK_FALSE(sharedPageName(twins));
+  CHECK_FALSE(ngn::testing::sharedPageName(twins));
   gtk_popover_popdown(GTK_POPOVER(twins));
   settle();
   REQUIRE(ngn::gtk::popUpContextMenu(view, {10, 10}, {{.title = "Rename", .command = MenuCommand::AppItem, .id = "rename"}},

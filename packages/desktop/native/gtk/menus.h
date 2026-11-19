@@ -33,6 +33,10 @@ std::string acceleratorOf(const MenuItem &item);
 // checked ones are stateful.
 GMenuModel *buildMenu(const std::vector<MenuItem> &items, GSimpleActionGroup *group, std::function<void(const MenuItem &)> chosen);
 
+// A popover menu drawing `model`, its submenus nested rather than sliding: a sliding menu opens a
+// submenu by its label, so of two submenus with one label the second opened the first.
+GtkWidget *nestedPopoverMenu(GMenuModel *model);
+
 class GtkMenus final : public MenuBackend {
  public:
   // `chosen` runs on the UI thread with each item chosen from a menu or by its key.

@@ -169,6 +169,10 @@ GMenuModel *buildMenu(const std::vector<MenuItem> &items, GSimpleActionGroup *gr
   return G_MENU_MODEL(menu);
 }
 
+GtkWidget *nestedPopoverMenu(GMenuModel *model) {
+  return gtk_popover_menu_new_from_model_full(model, GTK_POPOVER_MENU_NESTED);
+}
+
 GtkMenus::GtkMenus(std::function<void(const MenuItem &item)> chosen) : chosen_(std::move(chosen)) {}
 
 GtkMenus::~GtkMenus() {
@@ -223,9 +227,8 @@ void GtkMenus::show(GtkWidget *slot) {
   if (GTK_IS_POPOVER_MENU_BAR(slot)) {
     gtk_popover_menu_bar_set_menu_model(GTK_POPOVER_MENU_BAR(slot), model_);
   } else {
-    // Nested, as the menu bar's are: a sliding menu opens a submenu by its label, so of two
-    // menus with one name the second opened the first.
-    gtk_menu_button_set_popover(GTK_MENU_BUTTON(slot), model_ ? gtk_popover_menu_new_from_model_full(model_, GTK_POPOVER_MENU_NESTED) : nullptr);
+    // Nested, as the menu bar's are.
+    gtk_menu_button_set_popover(GTK_MENU_BUTTON(slot), model_ ? nestedPopoverMenu(model_) : nullptr);
   }
   // The items' actions are the window's `menu` group, so each window's slot reaches them.
   if (GtkRoot *root = gtk_widget_get_root(slot)) {
@@ -246,8 +249,7 @@ bool popUpContextMenu(GtkWidget *widget, facebook::react::Point point, const std
     g_object_unref(group);
     return false;
   }
-  // Nested, as the primary menu's are, so two submenus with one label each open their own.
-  GtkWidget *popover = gtk_popover_menu_new_from_model_full(model, GTK_POPOVER_MENU_NESTED);
+  GtkWidget *popover = nestedPopoverMenu(model);
   g_object_unref(model);
   gtk_widget_insert_action_group(popover, "menu", G_ACTION_GROUP(group));
   g_object_unref(group);

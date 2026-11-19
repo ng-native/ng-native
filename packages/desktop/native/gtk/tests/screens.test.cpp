@@ -407,7 +407,7 @@ TEST_CASE("a bar button's menu is a menu button, and the header's colours reach 
   // The bar button's, not the window's primary menu, hidden until the app has menus.
   auto menus = findAll(bar, [](GtkWidget *w) -> bool { return GTK_IS_MENU_BUTTON(w) && gtk_widget_get_visible(w); });
   REQUIRE(menus.size() == 1);
-  GMenuModel *model = gtk_menu_button_get_menu_model(GTK_MENU_BUTTON(menus[0]));
+  GMenuModel *model = ngn::testing::menuButtonModel(menus[0]);
   REQUIRE(model);
   REQUIRE(g_menu_model_get_n_items(model) == 2);
   // The disabled entry's action is off; the checked one's carries its state.
@@ -723,7 +723,7 @@ TEST_CASE("a disabled submenu leaves none of its entries to choose") {
 
   auto menus = findAll(bar, [](GtkWidget *w) -> bool { return GTK_IS_MENU_BUTTON(w) && gtk_widget_get_visible(w); });
   REQUIRE(menus.size() == 1);
-  GMenuModel *model = gtk_menu_button_get_menu_model(GTK_MENU_BUTTON(menus[0]));
+  GMenuModel *model = ngn::testing::menuButtonModel(menus[0]);
   auto *group = G_ACTION_GROUP(g_object_get_data(G_OBJECT(menus[0]), "ngn-menu-actions"));
   REQUIRE((model && group));
   auto enabled = [&](GMenuModel *menu, int index) {
@@ -743,6 +743,57 @@ TEST_CASE("a disabled submenu leaves none of its entries to choose") {
   g_object_unref(disabled);
   g_object_unref(deeper);
   g_object_unref(enabledSub);
+}
+
+TEST_CASE("two submenus with one title in a bar button's menu each open their own entries") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 400, 300);
+  GtkWidget *bar = ngn::gtk::chromeOf(views.surface)->headerBar;
+  auto props = std::make_shared<HeaderProps>();
+  props->bar.title = "Notes";
+  ngn::BarButton more = barButton("more", "More");
+  ngn::HeaderMenuItem open;
+  open.title = "Open";
+  open.menuId = "open";
+  ngn::HeaderMenuItem exportItem;
+  exportItem.title = "Export";
+  exportItem.menuId = "export";
+  ngn::HeaderMenuItem first;
+  first.title = "File";
+  first.items = {open};
+  ngn::HeaderMenuItem second;
+  second.title = "File";
+  second.items = {exportItem};
+  more.menu = ngn::HeaderMenuItem{};
+  more.menu->items = {first, second};
+  props->bar.right = {more};
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {400, 300}});
+  auto screen = shadow(3, "RNSScreen", nullptr, {{0, 0}, {400, 300}});
+  auto config = shadow(4, "RNSScreenStackHeaderConfig", props, {{0, 0}, {400, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {screen, 2}, {config, 3}});
+
+  auto menus = findAll(bar, [](GtkWidget *w) -> bool { return GTK_IS_MENU_BUTTON(w) && gtk_widget_get_visible(w); });
+  REQUIRE(menus.size() == 1);
+  GtkPopover *popover = gtk_menu_button_get_popover(GTK_MENU_BUTTON(menus[0]));
+  REQUIRE(GTK_IS_POPOVER_MENU(popover));
+  // A sliding menu would open both by the one title, so the second would show Open.
+  CHECK_FALSE(ngn::testing::sharedPageName(GTK_WIDGET(popover)));
+  GMenuModel *model = ngn::testing::menuButtonModel(menus[0]);
+  REQUIRE(model);
+  REQUIRE(g_menu_model_get_n_items(model) == 2);
+  auto entryOf = [model](int index) {
+    GMenuModel *submenu = g_menu_model_get_item_link(model, index, G_MENU_LINK_SUBMENU);
+    char *label = nullptr;
+    REQUIRE(submenu);
+    REQUIRE(g_menu_model_get_item_attribute(submenu, 0, G_MENU_ATTRIBUTE_LABEL, "s", &label));
+    std::string entry = label;
+    g_free(label);
+    g_object_unref(submenu);
+    return entry;
+  };
+  CHECK(entryOf(0) == "Open");
+  CHECK(entryOf(1) == "Export");
 }
 
 TEST_CASE("an anchor the stack has covered leaves a presentation a sheet, not a popover nobody sees") {
