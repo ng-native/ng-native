@@ -757,7 +757,7 @@ int main(int argc, char *argv[]) {
   updatesConfig.off = "Updates are off: the Linux host has no update checks yet.";
   auto updates = std::make_shared<ngn::UpdatesClient>(std::move(updatesConfig), network.http, nullptr);
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
-  // is left empty, and its module answers that it is unavailable.
+  // is left empty, and its module is not registered: JavaScript reads it as absent (NgNativeHost).
   auto desktopModules = ngn::addDesktopModules(
       *modules,
       {.os = os,

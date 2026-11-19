@@ -416,7 +416,8 @@ export class Notifications {
    */
   async getDevicePushToken(): Promise<DevicePushToken | null> {
     if (!this.native || !(await this.permission.ensure())) return null;
-    return this.native.getDevicePushTokenAsync();
+    // A desktop host with no push service (Linux's) has no such method, and answers nothing.
+    return (await this.native.getDevicePushTokenAsync()) ?? null;
   }
 
   /**

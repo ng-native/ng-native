@@ -63,6 +63,7 @@ describe('the platforms line on service pages', () => {
       for (const [os, cell] of Object.entries(row.on)) {
         const label = {
           macos: 'macOS',
+          linux: 'Linux',
           ipados: 'iPadOS',
           iphone: 'iPhone',
           android: 'Android',

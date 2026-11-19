@@ -1231,6 +1231,23 @@ describe('the OS and its version', () => {
     );
   });
 
+  it("is Linux and its distribution's major version on Linux, and no version on a rolling release", () => {
+    // The GTK host's Platform.Version is os-release's VERSION_ID, and empty where it has none.
+    const native = { Platform: { OS: 'linux', Version: '24.04' } };
+    assert.equal(
+      withNative(native, () => fromRoot(OS)),
+      'linux',
+    );
+    assert.equal(
+      withNative(native, () => fromRoot(OS_VERSION)),
+      24,
+    );
+    assert.equal(
+      withNative({ Platform: { OS: 'linux', Version: '' } }, () => fromRoot(OS_VERSION)),
+      null,
+    );
+  });
+
   it('follows the platform the engine renders as off a device, with no version', () => {
     assert.equal(fromRoot(OS), 'ios');
     assert.equal(fromRoot(OS_VERSION), null);

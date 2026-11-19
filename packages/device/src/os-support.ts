@@ -8,7 +8,7 @@
  */
 
 /** The OSes the table has a column for, iPadOS and iPhone apart. */
-export type SupportOs = 'macos' | 'ipados' | 'iphone' | 'android' | 'web';
+export type SupportOs = 'macos' | 'linux' | 'ipados' | 'iphone' | 'android' | 'web';
 
 export interface OsSupportRow {
   /** The row's name in the table, as Markdown. */
@@ -35,70 +35,108 @@ export interface OsSupportRow {
 
 export const SUPPORT_OSES: Readonly<Record<SupportOs, string>> = {
   macos: 'macOS',
+  linux: 'Linux',
   ipados: 'iPadOS',
   iphone: 'iPhone',
   android: 'Android',
   web: 'Web host',
 };
 
+/** A row's cells, in the order of `SUPPORT_OSES`. */
+type Cells = readonly [string, string, string, string, string, string];
+
 const row = (
   feature: string,
   covers: readonly string[],
-  [macos, ipados, iphone, android, web]: readonly [string, string, string, string, string],
+  [macos, linux, ipados, iphone, android, web]: Cells,
   services?: Readonly<Record<string, string>>,
   inert?: readonly string[],
 ): OsSupportRow => ({
   feature,
   covers,
-  on: { macos, ipados, iphone, android, web },
+  on: { macos, linux, ipados, iphone, android, web },
   ...(services && { services }),
   ...(inert && { inert }),
 });
 
-const MAC_ONLY = ['yes', 'absent', 'absent', 'absent', 'absent'] as const;
+/** On both desktop OSes, and nowhere else. */
+const DESKTOP_ONLY = ['yes', 'yes', 'absent', 'absent', 'absent', 'absent'] as const;
 
 /**
  * An Expo-backed service whose `available()` is whether its module is there: the Expo module on
- * iPadOS, iPhone and Android, the desktop host's module on macOS, and nothing on the web, where
- * the Expo module is not written for it.
+ * iPadOS, iPhone and Android, the desktop host's module on macOS and Linux, and nothing on the web,
+ * where the Expo module is not written for it.
  */
-const EXPO_MODULE = ['yes', 'yes', 'yes', 'yes', 'absent'] as const;
+const EXPO_MODULE = ['yes', 'yes', 'yes', 'yes', 'yes', 'absent'] as const;
 
-const expoRow = (
-  service: string,
-  hostModule: string,
-  cells: readonly [string, string, string, string, string] = EXPO_MODULE,
-): OsSupportRow => row(`\`${service}\``, [], cells, { [service]: hostModule });
+/** As `EXPO_MODULE`, where the Linux host has no source for the module, so it is absent there. */
+const NOT_ON_LINUX = ['yes', 'absent', 'yes', 'yes', 'yes', 'absent'] as const;
+
+const expoRow = (service: string, hostModule: string, cells: Cells = EXPO_MODULE): OsSupportRow =>
+  row(`\`${service}\``, [], cells, { [service]: hostModule });
 
 export const OS_SUPPORT: readonly OsSupportRow[] = [
   row(
     '`AppWindows.open`, `provideMainWindow`',
     ['AppWindows', 'CURRENT_WINDOW', 'provideMainWindow', 'provideRestorableWindows'],
-    ['yes', 'scenes, with `ios.multipleWindows`', 'absent', 'absent', 'absent'],
+    ['yes', 'yes', 'scenes, with `ios.multipleWindows`', 'absent', 'absent', 'absent'],
     { AppWindows: 'NgNativeWindows' },
   ),
   row(
     '`titleBar`, window size options',
     ['titleBar', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight', 'resizable', 'fullScreen'],
-    ['yes', 'ignored', 'ignored', 'ignored', 'ignored'],
+    [
+      'yes',
+      '`maxWidth` and `maxHeight` only as the window opens',
+      'ignored',
+      'ignored',
+      'ignored',
+      'ignored',
+    ],
   ),
   row(
     '`<menu-bar>`',
     ['MenuBar', 'MenuGroup', 'MenuItem', 'MenuSeparator', 'Menus'],
-    ['menu bar', 'menu bar', 'inert', 'inert', 'inert'],
+    [
+      'menu bar',
+      'menu bar on KDE Plasma, a menu button in the header bar elsewhere',
+      'menu bar',
+      'inert',
+      'inert',
+      'inert',
+    ],
   ),
   row(
     '`[shortcut]`, menu item shortcuts',
     ['Shortcut'],
-    ['yes', 'yes', 'hardware keyboard', 'hardware keyboard, Keyboard Shortcuts helper', 'yes'],
+    [
+      'yes',
+      'yes',
+      'yes',
+      'hardware keyboard',
+      'hardware keyboard, Keyboard Shortcuts helper',
+      'yes',
+    ],
   ),
   row(
     '`[contextMenu]`',
     ['ContextMenu'],
-    ['yes', 'long press or secondary click', 'long press', 'long press or right-click', 'inert'],
+    [
+      'yes',
+      'secondary click',
+      'long press or secondary click',
+      'long press',
+      'long press or right-click',
+      'inert',
+    ],
   ),
-  row('`<tray-icon>`, `Dock`', ['TrayIcon', 'Tray', 'Dock'], MAC_ONLY, {
-    Tray: 'NgNativeTray',
+  row(
+    '`<tray-icon>`',
+    ['TrayIcon', 'Tray'],
+    ['yes', 'while a StatusNotifierWatcher runs', 'absent', 'absent', 'absent', 'absent'],
+    { Tray: 'NgNativeTray' },
+  ),
+  row('`Dock`', ['Dock'], ['yes', 'absent', 'absent', 'absent', 'absent', 'absent'], {
     Dock: 'NgNativeDock',
   }),
   row(
@@ -106,141 +144,211 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
     ['SplitView', 'Sidebar', 'SidebarSection', 'SidebarItem', 'SidebarItemPath'],
     [
       'yes',
+      'AdwNavigationSplitView, a stack at compact widths',
       'UISplitViewController, a stack at compact widths',
       'stack root',
       'list pane from 840dp, a stack below',
       'two columns',
     ],
   ),
-  row('`Processes`, `Processes.env`', ['Processes'], MAC_ONLY, {
+  row('`Processes`, `Processes.env`', ['Processes'], DESKTOP_ONLY, {
     Processes: 'NgNativeProcesses',
   }),
-  row('`Shell`', ['Shell'], MAC_ONLY, { Shell: 'NgNativeShell' }),
+  row('`Shell`', ['Shell'], DESKTOP_ONLY, { Shell: 'NgNativeShell' }),
   row(
     '`FileSystem.paths.home`, `desktop`, `downloads`',
     ['home', 'desktop', 'downloads'],
-    MAC_ONLY,
+    DESKTOP_ONLY,
   ),
-  row('`UndoStack`', ['UndoStack'], ['yes', 'yes', 'yes', 'absent', 'absent'], {
+  row('`UndoStack`', ['UndoStack'], ['yes', 'yes', 'yes', 'yes', 'absent', 'absent'], {
     UndoStack: 'NgNativeUndo',
   }),
-  row('`Printing.print({ window })`, File > Print...', [], MAC_ONLY),
+  row('`Printing.print({ window })`, File > Print...', [], DESKTOP_ONLY),
   row(
     '`Updates.checkForAppUpdate()`, `appUpdateAvailable`',
     ['appUpdateAvailable'],
-    ['`dmg` builds', 'absent', 'absent', 'absent', 'absent'],
+    ['`dmg` builds', 'absent', 'absent', 'absent', 'absent', 'absent'],
   ),
   row(
     'Drag and drop: `(fileDrop)`, `[dragItem]`',
     ['FileDrop', 'DragItem', '(fileDrop)', '(fileDragEnter)', '(fileDragLeave)', 'dragItem'],
-    ['yes', 'yes', 'absent', 'absent', 'absent'],
+    ['yes', 'yes', 'yes', 'absent', 'absent', 'absent'],
   ),
   row(
     '`(mouseenter)`, `(mouseleave)`, `(mousemove)`, `(mouseover)`, `(mouseout)`',
     ['(mouseenter)', '(mouseleave)', '(mousemove)', '(mouseover)', '(mouseout)'],
-    ['yes', 'trackpad or mouse', 'ignored', 'mouse', 'yes'],
+    ['yes', 'yes', 'trackpad or mouse', 'ignored', 'mouse', 'yes'],
   ),
   row(
     '`(dblclick)`, `(contextmenu)`, `(wheel)`',
     ['(dblclick)', '(contextmenu)', '(wheel)'],
-    ['yes', 'ignored', 'ignored', 'ignored', 'ignored'],
+    ['yes', 'yes', 'ignored', 'ignored', 'ignored', 'ignored'],
   ),
   row(
     '`<native-button>`',
     ['NativeButton'],
-    ['AppKit button', 'UIKit button', 'UIKit button', 'drawn', 'HTML button'],
+    ['AppKit button', 'GTK button', 'UIKit button', 'UIKit button', 'drawn', 'HTML button'],
   ),
   row(
     '`controlSize`',
     ['controlSize'],
-    ['yes', '`<native-button>`', '`<native-button>`', 'ignored', 'ignored'],
+    ['yes', 'ignored', '`<native-button>`', '`<native-button>`', 'ignored', 'ignored'],
   ),
-  row('`anchor` on `<modal>`', ['anchor'], ['popover', 'popover', 'ignored', 'ignored', 'ignored']),
+  row(
+    '`anchor` on `<modal>`',
+    ['anchor'],
+    ['popover', 'popover', 'popover', 'ignored', 'ignored', 'ignored'],
+  ),
   row(
     '`accessibilityLevel`, `aria-level`',
     ['accessibilityLevel'],
-    ['macOS 26 and later', 'ignored', 'ignored', 'ignored', 'yes'],
+    ['macOS 26 and later', 'yes', 'ignored', 'ignored', 'ignored', 'yes'],
   ),
-  row('`<refresh-control>`', ['RefreshControl'], ['inert', 'yes', 'yes', 'yes', 'inert']),
+  row('`<refresh-control>`', ['RefreshControl'], ['inert', 'inert', 'yes', 'yes', 'yes', 'inert']),
   row(
     '`<keyboard-dock>`, `<keyboard-avoiding-view>`',
     ['KeyboardDock', 'KeyboardAvoidingView'],
-    ['plain view', 'yes', 'yes', 'yes', 'plain view'],
+    ['plain view', 'plain view', 'yes', 'yes', 'yes', 'plain view'],
   ),
   row(
     '`<input-accessory-view>`',
     ['InputAccessoryView'],
-    ['plain view', 'yes', 'yes', 'plain view', 'docked at the bottom'],
+    ['plain view', 'plain view', 'yes', 'yes', 'plain view', 'docked at the bottom'],
   ),
   row(
     '`<expo-glass>`, `<expo-glass-container>`',
     [],
-    ['yes', 'iOS 26 and later', 'iOS 26 and later', 'plain view', 'plain view'],
+    ['yes', 'plain view', 'iOS 26 and later', 'iOS 26 and later', 'plain view', 'plain view'],
   ),
   row(
     'Community `slider`, `picker`, `masked-view`',
     [],
-    ['absent: `ui-slider`, `ui-picker`', 'yes', 'yes', 'yes', 'plain view'],
+    ['absent: `ui-slider`, `ui-picker`', 'absent', 'yes', 'yes', 'yes', 'plain view'],
   ),
   row(
     '`HardwareBack`, `NavigationBar`',
     ['HardwareBack', 'NavigationBar'],
-    ['absent', 'absent', 'absent', 'yes', 'absent'],
+    ['absent', 'absent', 'absent', 'absent', 'yes', 'absent'],
     undefined,
     ['HardwareBack', 'NavigationBar'],
   ),
   row(
     '`StatusBar`, `Keyboard`',
     ['StatusBar', 'Keyboard'],
-    ['absent', 'yes', 'yes', 'yes', 'absent'],
+    ['absent', 'absent', 'yes', 'yes', 'yes', 'absent'],
     undefined,
     ['StatusBar', 'Keyboard'],
   ),
-  row('`Vibration`', ['Vibration'], ['absent', 'yes', 'yes', 'yes', 'yes'], undefined, [
+  row('`Vibration`', ['Vibration'], ['absent', 'absent', 'yes', 'yes', 'yes', 'yes'], undefined, [
     'Vibration',
   ]),
   row(
     '`BackgroundTask`, `Brightness`, `DeviceOrientation`',
     [],
-    ['absent', 'yes', 'yes', 'yes', 'absent'],
+    ['absent', 'absent', 'yes', 'yes', 'yes', 'absent'],
     undefined,
     ['BackgroundTask', 'Brightness', 'DeviceOrientation'],
   ),
-  expoRow('AppInfo', 'NgNativeApplication'),
-  expoRow('Battery', 'NgNativeBattery'),
-  expoRow('Browser', 'NgNativeWebBrowser'),
-  expoRow('Calendar', 'NgNativeCalendar'),
+  expoRow('AppInfo', 'NgNativeApplication', [
+    'yes',
+    'brand and manufacturer from the firmware, or null',
+    'yes',
+    'yes',
+    'yes',
+    'absent',
+  ]),
+  expoRow('Battery', 'NgNativeBattery', [
+    'yes',
+    'no battery without UPower',
+    'yes',
+    'yes',
+    'yes',
+    'absent',
+  ]),
+  expoRow('Browser', 'NgNativeWebBrowser', [
+    'yes',
+    'an auth session is always cancelled',
+    'yes',
+    'yes',
+    'yes',
+    'absent',
+  ]),
+  expoRow('Calendar', 'NgNativeCalendar', NOT_ON_LINUX),
   expoRow('Clipboard', 'NgNativeClipboard'),
-  expoRow('Crypto', 'NgNativeCrypto'),
+  expoRow('Crypto', 'NgNativeCrypto', ['yes', 'no MD2 or MD4', 'yes', 'yes', 'yes', 'absent']),
   expoRow('DocumentPicker', 'NgNativeDocumentPicker'),
   expoRow('FileSystem', 'NgNativeFileSystem'),
   expoRow('Fonts', 'NgNativeFont'),
-  expoRow('Haptics', 'NgNativeHaptics'),
-  expoRow('ImageEditor', 'NgNativeImageManipulator'),
-  expoRow('ImagePicker', 'NgNativeImagePicker'),
+  expoRow('Haptics', 'NgNativeHaptics', NOT_ON_LINUX),
+  expoRow('ImageEditor', 'NgNativeImageManipulator', [
+    'yes',
+    'WebP only where a WebP writer is installed',
+    'yes',
+    'yes',
+    'yes',
+    'absent',
+  ]),
+  expoRow('ImagePicker', 'NgNativeImagePicker', NOT_ON_LINUX),
   expoRow('KeepAwake', 'NgNativeKeepAwake'),
   expoRow('Locale', 'NgNativeLocalization'),
-  expoRow('Location', 'NgNativeLocation'),
-  expoRow('MediaLibrary', 'NgNativeMediaLibrary'),
-  expoRow('Network', 'NgNativeNetwork'),
-  expoRow('Notifications', 'NgNativeNotifications'),
-  expoRow('Printing', 'NgNativePrint'),
-  expoRow('SplashScreen', 'NgNativeSplashScreen'),
-  expoRow('TextRecognition', 'NgNativeTextRecognition', ['yes', 'yes', 'yes', 'absent', 'absent']),
-  expoRow('Updates', 'NgNativeUpdates'),
-  expoRow('AddressSearch', 'NgNativeAddressSearch'),
-  expoRow('AppleSignIn', 'NgNativeAppleAuthentication', [
-    'signed with the Sign in with Apple entitlement',
+  expoRow('Location', 'NgNativeLocation', [
+    'yes',
+    'no geocoding; restricted without the Location portal',
+    'yes',
+    'yes',
+    'yes',
+    'absent',
+  ]),
+  expoRow('MediaLibrary', 'NgNativeMediaLibrary', NOT_ON_LINUX),
+  expoRow('Network', 'NgNativeNetwork', [
+    'yes',
+    'type `OTHER` without NetworkManager',
+    'yes',
+    'yes',
+    'yes',
+    'absent',
+  ]),
+  expoRow('Notifications', 'NgNativeNotifications', [
+    'yes',
+    'no push token',
+    'yes',
+    'yes',
+    'yes',
+    'absent',
+  ]),
+  expoRow('Printing', 'NgNativePrint', ['yes', 'no HTML', 'yes', 'yes', 'yes', 'absent']),
+  expoRow('SplashScreen', 'NgNativeSplashScreen', NOT_ON_LINUX),
+  expoRow('TextRecognition', 'NgNativeTextRecognition', [
+    'yes',
+    'absent',
     'yes',
     'yes',
     'absent',
     'absent',
   ]),
-  expoRow('Biometrics', 'NgNativeLocalAuthentication'),
-  { ...expoRow('Camera', 'NgNativeCamera'), withoutAvailable: true },
+  expoRow('Updates', 'NgNativeUpdates', [
+    'yes',
+    'never fetches an update',
+    'yes',
+    'yes',
+    'yes',
+    'absent',
+  ]),
+  expoRow('AddressSearch', 'NgNativeAddressSearch', NOT_ON_LINUX),
+  expoRow('AppleSignIn', 'NgNativeAppleAuthentication', [
+    'signed with the Sign in with Apple entitlement',
+    'absent',
+    'yes',
+    'yes',
+    'absent',
+    'absent',
+  ]),
+  expoRow('Biometrics', 'NgNativeLocalAuthentication', NOT_ON_LINUX),
+  { ...expoRow('Camera', 'NgNativeCamera', NOT_ON_LINUX), withoutAvailable: true },
   {
     ...expoRow('MapView', 'NgNativeMaps', [
       'yes',
+      'absent',
       'iPadOS 17 and later, marker taps from 18',
       'iOS 17 and later, marker taps from 18',
       'yes',
@@ -250,6 +358,7 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   },
   expoRow('LanguageModel', 'NgNativeLocalLlm', [
     'macOS 26 and later, with Apple Intelligence on',
+    'absent',
     'iPadOS 26 and later, with Apple Intelligence on',
     'iOS 26 and later, with Apple Intelligence on',
     'Gemini Nano, on the phones that ship it',
@@ -257,6 +366,7 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   ]),
   expoRow('ScreenCapture', 'NgNativeScreenCapture', [
     '`prevent` and `allow`, no screenshot count',
+    'absent',
     'yes',
     'yes',
     'yes',
@@ -264,14 +374,23 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   ]),
   expoRow('StoreReview', 'NgNativeStoreReview', [
     'yes',
+    'absent',
     'yes',
     'yes',
     'with the Play Store',
     'absent',
   ]),
-  expoRow('Tracking', 'NgNativeTrackingTransparency'),
-  expoRow('Watch', 'WatchConnectivity', ['absent', 'no watch to pair', 'yes', 'absent', 'absent']),
+  expoRow('Tracking', 'NgNativeTrackingTransparency', NOT_ON_LINUX),
+  expoRow('Watch', 'WatchConnectivity', [
+    'absent',
+    'absent',
+    'no watch to pair',
+    'yes',
+    'absent',
+    'absent',
+  ]),
   expoRow('Foldable', 'ExpoHinge', [
+    'absent',
     'absent',
     'when a hinge is reported',
     'when a hinge is reported',
@@ -281,7 +400,7 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   row(
     '`Accelerometer`, `Gyroscope`, `Magnetometer`, `DeviceMotion`, `Barometer`',
     [],
-    ['absent', 'yes', 'yes', 'yes', 'absent'],
+    ['absent', 'absent', 'yes', 'yes', 'yes', 'absent'],
     {
       Accelerometer: 'expo-sensors',
       Gyroscope: 'expo-sensors',
@@ -290,25 +409,32 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
       Barometer: 'expo-sensors',
     },
   ),
-  row('`LightSensor`', [], ['absent', 'absent', 'absent', 'yes', 'absent'], {
+  row('`LightSensor`', [], ['absent', 'absent', 'absent', 'absent', 'yes', 'absent'], {
     LightSensor: 'expo-sensors',
   }),
   { ...row('`assets()`', [], EXPO_MODULE, { assets: 'NgNativeAsset' }), withoutAvailable: true },
   {
-    ...row('`database()`', [], ['yes', 'yes', 'yes', 'yes', 'yes'], { database: 'NgNativeSqlite' }),
+    ...row('`database()`', [], ['yes', 'yes', 'yes', 'yes', 'yes', 'yes'], {
+      database: 'NgNativeSqlite',
+    }),
     withoutAvailable: true,
   },
   {
-    ...row('`videoPlayer()`', [], ['yes', 'yes', 'yes', 'yes', 'yes'], {
+    ...row('`videoPlayer()`', [], ['yes', 'absent', 'yes', 'yes', 'yes', 'yes'], {
       videoPlayer: 'NgNativeVideo',
     }),
     withoutAvailable: true,
   },
   {
-    ...row('`audioPlayer()`, `audioRecorder()`', [], ['yes', 'yes', 'yes', 'yes', 'yes'], {
-      audioPlayer: 'NgNativeAudio',
-      audioRecorder: 'NgNativeAudio',
-    }),
+    ...row(
+      '`audioPlayer()`, `audioRecorder()`',
+      [],
+      ['yes', 'absent', 'yes', 'yes', 'yes', 'yes'],
+      {
+        audioPlayer: 'NgNativeAudio',
+        audioRecorder: 'NgNativeAudio',
+      },
+    ),
     withoutAvailable: true,
   },
 ];

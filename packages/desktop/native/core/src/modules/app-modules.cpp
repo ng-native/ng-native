@@ -64,7 +64,7 @@ std::shared_ptr<NativeModule> makePlatformConstants(const CoreModuleServices &s)
         auto facts = system->facts();
         return folly::dynamic::object("isTesting", false)("isDisableAnimations", false)("reactNativeVersion", rn)(
             "forceTouchAvailable", false)("osVersion", facts.osVersion)("systemName", facts.systemName)(
-            "interfaceIdiom", "mac")("isMacCatalyst", false);
+            "interfaceIdiom", facts.interfaceIdiom)("isMacCatalyst", false);
       });
     }
   };
