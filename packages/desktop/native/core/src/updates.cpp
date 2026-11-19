@@ -247,7 +247,9 @@ std::string fingerprintOf(const std::string &bundle) {
   if (error) {
     return "";
   }
-  return std::to_string(size) + ":" + std::to_string(time.time_since_epoch().count());
+  // libc++'s file clock counts in a 128-bit integer, which to_string has no overload for.
+  auto ticks = std::chrono::duration_cast<std::chrono::nanoseconds>(time.time_since_epoch()).count();
+  return std::to_string(size) + ":" + std::to_string(static_cast<long long>(ticks));
 }
 
 // The response body and status of one request, gathered from its callbacks.
