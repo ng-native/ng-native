@@ -10,7 +10,7 @@ import { inDocument } from './in-document.ts';
 type Texted = Reflecting & { textContent: string; localName?: string };
 
 /** The data of the texts directly in a node: HTML's "child text content". */
-const childText = (node: EngineNode): string =>
+export const childText = (node: EngineNode): string =>
   inDocument(node)
     .filter((child) => child.nodeKind === 'text')
     .map((child) => child.nodeText)

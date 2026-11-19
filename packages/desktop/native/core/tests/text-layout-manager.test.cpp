@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 #include <react/renderer/textlayoutmanager/TextLayoutManager.h>
+#include <react/renderer/textlayoutmanager/TextLayoutManagerExtended.h>
 
 using namespace facebook::react;
 using ngn::testing::FakeTextMeasurer;
@@ -86,4 +87,34 @@ TEST_CASE("a size measured before the measurer is installed is not kept for afte
   CHECK(manager.measure(AttributedStringBox{text("hello")}, {}, layoutContext, constraints).size.width == 0);
   ngn::installTextMeasurer(*context, std::make_shared<FakeTextMeasurer>());
   CHECK(manager.measure(AttributedStringBox{text("hello")}, {}, layoutContext, constraints).size.width == doctest::Approx(36.5));
+}
+
+namespace {
+// A measurer that knows its lines, as a backend's does.
+struct LinedMeasurer final : ngn::TextMeasurer {
+  Size measure(const AttributedString &, const ParagraphAttributes &, Float) const override {
+    return {40, 34};
+  }
+  LinesMeasurements lines(const AttributedString &text, const ParagraphAttributes &, Float width) const override {
+    return {LineMeasurement(text.getString(), {{0, 0}, {width, 17}}, 3, 9, 13, 6)};
+  }
+};
+} // namespace
+
+TEST_CASE("Lines come from the backend's measurer, so React Native reads a baseline and sends onTextLayout") {
+  static_assert(TextLayoutManagerExtended::supportsLineMeasurement());
+  auto context = std::make_shared<ContextContainer>();
+  ngn::installTextMeasurer(*context, std::make_shared<LinedMeasurer>());
+  TextLayoutManager manager{context};
+  auto lines = manager.measureLines(AttributedStringBox{text("hi")}, {}, {120, 40});
+  REQUIRE(lines.size() == 1);
+  CHECK(lines[0].text == "hi");
+  CHECK(lines[0].frame.size.width == 120);
+  CHECK(LineMeasurement::baseline(lines) == 13);
+
+  // A measurer that has no lines, and none installed, give none: a baseline at the top.
+  Fixture plain;
+  CHECK(plain.manager.measureLines(AttributedStringBox{text("hi")}, {}, {120, 40}).empty());
+  TextLayoutManager bare{std::make_shared<ContextContainer>()};
+  CHECK(bare.measureLines(AttributedStringBox{text("hi")}, {}, {120, 40}).empty());
 }
