@@ -45,8 +45,8 @@ describe('Printing', () => {
     ]);
   });
 
-  it('prints a window on macOS by its surface, and nothing for a window on any other OS', async () => {
-    const on = (os: 'macos' | 'ios' | 'android' | 'web') => {
+  it('prints a window on macOS and Linux by its surface, and nothing for a window on any other OS', async () => {
+    const on = (os: 'macos' | 'linux' | 'ios' | 'android' | 'web') => {
       const fake = platform();
       const printing = servicesWith(
         [
@@ -60,6 +60,9 @@ describe('Printing', () => {
     const mac = on('macos');
     await mac.printing.print({ window: { surface: 3 }, orientation: 'landscape' });
     assert.deepEqual(mac.calls, [['printAsync', { orientation: 'landscape', window: 3 }]]);
+    const linux = on('linux');
+    await linux.printing.print({ window: { surface: 2 } });
+    assert.deepEqual(linux.calls, [['printAsync', { window: 2 }]]);
     for (const os of ['ios', 'android', 'web'] as const) {
       const other = on(os);
       await other.printing.print({ window: { surface: 1 } });

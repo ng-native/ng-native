@@ -1,8 +1,11 @@
 #include "pango-text.h"
 
+#include "fonts.h"
+
 #include "ngn/surface-metrics.h"
 
 #include <gtk/gtk.h>
+#include <pango/pangofc-fontmap.h>
 
 #include <react/renderer/graphics/Color.h>
 
@@ -86,7 +89,23 @@ bool pangoHasLineHeight() {
 #endif
 }
 
+// The calling thread's font map looks again at fontconfig once fonts were added since it last did:
+// a Pango cairo font map is per thread, and caches what fontconfig had.
+void refreshFontMap() {
+  thread_local uint64_t seen = 0;
+  uint64_t added = fontsAdded();
+  if (added == seen) {
+    return;
+  }
+  seen = added;
+  PangoFontMap *map = pango_cairo_font_map_get_default();
+  if (PANGO_IS_FC_FONT_MAP(map)) {
+    pango_fc_font_map_config_changed(PANGO_FC_FONT_MAP(map));
+  }
+}
+
 PangoFontDescription *fontOf(const TextAttributes &a) {
+  refreshFontMap();
   PangoFontDescription *font = pango_font_description_new();
   const std::string &family = a.fontFamily;
   if (family.empty() || family == "System" || family == "system-ui" || family == "sans-serif") {
@@ -94,7 +113,10 @@ PangoFontDescription *fontOf(const TextAttributes &a) {
   } else if (family == "monospace" || family == "Menlo" || family == "ui-monospace") {
     pango_font_description_set_family(font, "monospace");
   } else {
-    pango_font_description_set_family(font, family.c_str());
+    // A name a font was loaded under stands for that font's family, as on macOS.
+    auto library = fontLibrary();
+    auto loaded = library ? library->fontOf(family) : std::nullopt;
+    pango_font_description_set_family(font, (loaded ? loaded->family : family).c_str());
   }
   double size = (std::isnan(a.fontSize) ? 14 : a.fontSize) * scaleOf(a);
   // Absolute: a React Native font size is in points, which are the surface's logical pixels.

@@ -702,3 +702,118 @@ TEST_CASE("setTextAndSelection's range applies to the text held while composing"
     CHECK(end == 3);
   }
 }
+
+namespace {
+
+std::pair<int, int> selectionOf(const ngn::gtk::TextField &field) {
+  int start = 0, end = 0;
+  if (GTK_IS_TEXT_VIEW(field.text)) {
+    GtkTextIter a, b;
+    gtk_text_buffer_get_selection_bounds(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field.text)), &a, &b);
+    start = gtk_text_iter_get_offset(&a);
+    end = gtk_text_iter_get_offset(&b);
+  } else {
+    gtk_editable_get_selection_bounds(GTK_EDITABLE(field.text), &start, &end);
+  }
+  return {start, end};
+}
+
+void settle() {
+  while (g_main_context_iteration(nullptr, false)) {
+  }
+}
+
+} // namespace
+
+TEST_CASE("a props update that repeats the shown text leaves a held setTextAndSelection") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    auto props = [multiline](dynamic extra) {
+      extra["multiline"] = multiline;
+      extra["text"] = "a";
+      return textInputProps(std::move(extra));
+    };
+    auto input = MountedViews::shadow(2, "TextInput", props(dynamic::object()), {{10, 10}, {150, 80}});
+    views.add(input);
+    auto *field = ngn::gtk::viewData(views.view(2))->field;
+    g_signal_emit_by_name(field->text, "preedit-changed", "ka");
+    views.backend->dispatchCommand(2, "setTextAndSelection", dynamic::array(0, "abcd", 1, 3));
+    views.update(input, props(dynamic::object("placeholder", "p")));
+    g_signal_emit_by_name(field->text, "preedit-changed", "");
+    settle();
+    CHECK(ngn::gtk::fieldText(*field) == "abcd");
+    CHECK(selectionOf(*field) == std::make_pair(1, 3));
+  }
+}
+
+TEST_CASE("a new selection prop applies to the text held with it") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    auto props = [multiline](dynamic extra) {
+      extra["multiline"] = multiline;
+      return textInputProps(std::move(extra));
+    };
+    auto input = MountedViews::shadow(2, "TextInput", props(dynamic::object("text", "a")), {{10, 10}, {150, 80}});
+    views.add(input);
+    auto *field = ngn::gtk::viewData(views.view(2))->field;
+    g_signal_emit_by_name(field->text, "preedit-changed", "ka");
+    views.update(input, props(dynamic::object("text", "abcd")("selection", dynamic::object("start", 1)("end", 3))));
+    g_signal_emit_by_name(field->text, "preedit-changed", "");
+    settle();
+    CHECK(ngn::gtk::fieldText(*field) == "abcd");
+    CHECK(selectionOf(*field) == std::make_pair(1, 3));
+  }
+}
+
+TEST_CASE("a selection-only command replaces the range held with a text") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    auto input = MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("multiline", multiline)("text", "a")), {{10, 10}, {150, 80}});
+    views.add(input);
+    auto *field = ngn::gtk::viewData(views.view(2))->field;
+    g_signal_emit_by_name(field->text, "preedit-changed", "ka");
+    views.backend->dispatchCommand(2, "setTextAndSelection", dynamic::array(0, "abcdefg", 1, 3));
+    views.backend->dispatchCommand(2, "setTextAndSelection", dynamic::array(0, nullptr, 4, 5));
+    g_signal_emit_by_name(field->text, "preedit-changed", "");
+    settle();
+    CHECK(ngn::gtk::fieldText(*field) == "abcdefg");
+    CHECK(selectionOf(*field) == std::make_pair(4, 5));
+  }
+}
+
+TEST_CASE("a multiline placeholder is aligned as the typed text is") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  dynamic props = dynamic::object("multiline", true)("placeholder", "MM")("placeholderTextColor", 0xffff0000)("textAlign", "center");
+  views.add(MountedViews::shadow(2, "TextInput", textInputProps(props), {{0, 0}, {200, 40}}));
+  int left = 0, middle = 0;
+  for (int x = 2; x < 198; x += 2) {
+    for (int y : {8, 12, 16, 20}) {
+      auto p = views.pixel(x, y);
+      if (p.a > 100 && p.r > 150 && p.g < 100) {
+        (x < 70 ? left : middle) += 1;
+      }
+    }
+  }
+  CHECK(middle > 0);
+  CHECK(left == 0);
+}
+
+TEST_CASE("explicit left alignment keeps a right-to-left paragraph on the left") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  dynamic props = dynamic::object("multiline", true)("textAlign", "left")("text", "\xD7\xA9\xD7\x9C\xD7\x95\xD7\x9D");
+  views.add(MountedViews::shadow(2, "TextInput", textInputProps(props), {{0, 0}, {200, 40}}));
+  auto *field = ngn::gtk::viewData(views.view(2))->field;
+  GtkTextIter start;
+  gtk_text_buffer_get_start_iter(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), &start);
+  GdkRectangle at;
+  gtk_text_view_get_iter_location(GTK_TEXT_VIEW(field->text), &start, &at);
+  CHECK(at.x < 100);
+}
