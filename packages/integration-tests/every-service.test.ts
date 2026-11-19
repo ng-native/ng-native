@@ -46,6 +46,7 @@ import {
   supportRowOf,
   type OsName,
 } from '@ng-native/device';
+import { DESKTOP_MODULES } from '@ng-native/expo';
 import { AddressSearch } from '@ng-native/expo/address-search';
 import { AppInfo } from '@ng-native/expo/app-info';
 import { AppleSignIn } from '@ng-native/expo/apple-sign-in';
@@ -134,7 +135,13 @@ const expo = (
 function absentInTable(name: string): Os[] {
   const row = supportRowOf(name);
   assert.ok(row, `${name} has a row in OS_SUPPORT`);
-  const os = { macos: 'macos', iphone: 'ios', android: 'android', web: 'web' } as const;
+  const os = {
+    macos: 'macos',
+    linux: 'linux',
+    iphone: 'ios',
+    android: 'android',
+    web: 'web',
+  } as const;
   return (Object.keys(os) as (keyof typeof os)[])
     .filter((column) => row.on[column] === 'absent')
     .map((column) => os[column]);
@@ -328,17 +335,29 @@ function publicMethods(file: string, cls: string): string[] {
   return names;
 }
 
+/** Every desktop module a service is made from, as `NgNativeHost` would name them. */
+const EVERY_DESKTOP_MODULE: readonly string[] = [
+  ...Object.values(DESKTOP_MODULES),
+  'NgNativeAddressSearch',
+  'NgNativeTextRecognition',
+  'NgNativeSharing',
+  'NgNativeUndo',
+  'NgNativeTray',
+  'NgNativeDock',
+];
+
 /**
- * A device on `os` with React Native and nothing else in the app. With `absentByDesign`, a desktop
- * host whose `NgNativeHost` names those modules as left out because the OS gives them no source.
+ * A device on `os` with React Native and nothing else in the app. On Linux, a desktop host whose
+ * `NgNativeHost` names as left out by design the modules in `absentByDesign`: every desktop module
+ * unless it says, as a GTK host with no source for any would.
  */
-function on(os: Os | null, absentByDesign?: readonly string[]): void {
+function on(os: Os | null, absentByDesign: readonly string[] = EVERY_DESKTOP_MODULE): void {
   const host = globalThis as Record<string, unknown>;
   if (os === null) {
     delete host['require'];
     return;
   }
-  const hostModule = absentByDesign && {
+  const hostModule = os === 'linux' && {
     getConstants: () => ({ absentModules: absentByDesign }),
   };
   host['require'] = (id: string) => {
