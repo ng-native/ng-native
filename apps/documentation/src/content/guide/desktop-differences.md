@@ -115,5 +115,5 @@ false })` keeps it running instead. There is no Dock to click: launching the app
   KWallet) running.
 - Orca reads the app and its focus, and has no structural navigation by heading or landmark. See
   [Focus and accessibility](/packages/desktop/accessibility#on-linux).
-- Updates reach the app as a new package, from the package manager or Flatpak. The Linux host does
-  not check an updates server yet.
+- A new version of the app's host reaches it as a new package, from the package manager or Flatpak;
+  JavaScript updates come from the app's own Expo Updates server, as on macOS.
