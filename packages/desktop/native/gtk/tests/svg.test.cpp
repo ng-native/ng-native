@@ -7,6 +7,8 @@
 
 #include <doctest/doctest.h>
 
+#include <optional>
+
 using namespace facebook::react;
 using folly::dynamic;
 using ngn::SvgBrush;
@@ -382,7 +384,8 @@ TEST_CASE("an svg that draws more images than the cache keeps loads each of them
       ngn::gtk::useImageLoading(nullptr, nullptr);
     }
   } restore;
-  MountedViews views;
+  std::optional<MountedViews> views;
+  views.emplace();
   // One past the cache's 64, in cells of 10 points, 9 to a row.
   constexpr int kImages = 65;
   auto uri = [](int i) { return "https://example.com/many-" + std::to_string(i) + ".png"; };
@@ -395,7 +398,7 @@ TEST_CASE("an svg that draws more images than the cache keeps loads each of them
     image.lengths = {{"x", len(i % 9 * 10)}, {"y", len(i / 9 * 10)}, {"width", len(10)}, {"height", len(10)}};
     images.push_back(node(image));
   }
-  mountSvg(views, node(root, std::move(images)));
+  mountSvg(*views, node(root, std::move(images)));
   REQUIRE(http->sent.size() == kImages);
   // A canvas beside the view's, told as each load ends.
   int ended = 0;
@@ -407,9 +410,19 @@ TEST_CASE("an svg that draws more images than the cache keeps loads each of them
     answer(*http, red, i);
   }
   ngn::testing::runUntil([&ended] { return ended == kImages; });
-  views.settle();
-  views.settle();
+  views->settle();
+  views->settle();
   CHECK(http->sent.size() == kImages);
-  CHECK(reddish(views.pixel(5, 5)));
-  CHECK(reddish(views.pixel(15, 75)));
+  CHECK(reddish(views->pixel(5, 5)));
+  CHECK(reddish(views->pixel(15, 75)));
+
+  // Gone, the view holds them no more: the next load lets the oldest go, back to 64.
+  views.reset();
+  drawImage(uri(kImages), &ended);
+  answer(*http, red);
+  ngn::testing::runUntil([&ended] { return ended == kImages + 1; });
+  for (int i = 0; i < kImages; ++i) {
+    drawImage(uri(i));
+  }
+  CHECK(http->sent.size() > kImages + 1);
 }

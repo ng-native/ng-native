@@ -551,8 +551,8 @@ class CairoCanvas final : public SvgCanvas {
     int x{0}, y{0};
   };
 
-  // The filter region's bounds in the view's pixels: x, y, width and height. A region of more than
-  // 4096 by 4096 pixels is cut to the view's.
+  // The filter region's bounds in the view's pixels: x, y, width and height. A region of more pixels
+  // than the view and than 2048 by 2048 is cut to the view's: the filter's work grows with them.
   std::array<int, 4> regionPixels(const SvgRect &region) const {
     SvgMatrix toPixels = SvgMatrix::scale(scale_, scale_) * matrix_;
     double minX = INFINITY, minY = INFINITY, maxX = -INFINITY, maxY = -INFINITY;
@@ -566,7 +566,7 @@ class CairoCanvas final : public SvgCanvas {
     }
     double viewWidth = std::ceil(width_ * scale_), viewHeight = std::ceil(height_ * scale_);
     minX = std::floor(minX), minY = std::floor(minY), maxX = std::ceil(maxX), maxY = std::ceil(maxY);
-    if (!((maxX - minX) * (maxY - minY) <= 4096.0 * 4096.0 && std::abs(minX) < 1e7 && std::abs(minY) < 1e7)) {
+    if (!((maxX - minX) * (maxY - minY) <= std::max(viewWidth * viewHeight, 2048.0 * 2048.0) &&std::abs(minX) < 1e7 && std::abs(minY) < 1e7)) {
       minX = std::max(minX, 0.0), minY = std::max(minY, 0.0), maxX = std::min(maxX, viewWidth), maxY = std::min(maxY, viewHeight);
     }
     if (!(maxX > minX && maxY > minY)) {
