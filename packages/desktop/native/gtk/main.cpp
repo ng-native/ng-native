@@ -113,6 +113,8 @@ struct Host {
   GtkApplication *application{nullptr};
   gint64 launched{0};
   bool firstFrame{false};
+  // NGN_LOG_COMMITS: each frame's time is logged too, with each commit's.
+  bool logFrames{false};
   bool quit{false};
   guint animationTimer{0};
   // The Expo Updates client (updates.h), and which launch owes its first frame on screen.
@@ -314,6 +316,28 @@ void reloadSameLaunch() {
   });
 }
 
+// With NGN_LOG_COMMITS, a window's frames, each logged as `[ngn] frame N ms`: the time from the start
+// of the frame clock's update, where animations and layout run, to the end of its paint, which GTK's
+// cairo renderer does in process. `pnpm bench:linux` reads them. The start is kept on the clock, which
+// the window's destruction takes with the handlers.
+void logFrameTimes(GtkWidget *window) {
+  GdkFrameClock *clock = window ? gtk_widget_get_frame_clock(window) : nullptr;
+  if (!clock || g_object_get_data(G_OBJECT(clock), "ngn-frame-start")) {
+    return;
+  }
+  g_object_set_data_full(G_OBJECT(clock), "ngn-frame-start", g_new0(gint64, 1), g_free);
+  g_signal_connect(clock, "update", G_CALLBACK(+[](GdkFrameClock *clock, gpointer) {
+    *static_cast<gint64 *>(g_object_get_data(G_OBJECT(clock), "ngn-frame-start")) = g_get_monotonic_time();
+  }), nullptr);
+  g_signal_connect(clock, "after-paint", G_CALLBACK(+[](GdkFrameClock *clock, gpointer) {
+    gint64 *start = static_cast<gint64 *>(g_object_get_data(G_OBJECT(clock), "ngn-frame-start"));
+    if (*start != 0) {
+      fprintf(stderr, "[ngn] frame %.1f ms\n", (g_get_monotonic_time() - *start) / 1000.0);
+      *start = 0;
+    }
+  }), nullptr);
+}
+
 // A surface's size and the safe area its window's chrome leaves it (chromeInsets), each time
 // either changes: as it resizes, and as the header bar or the window controls move over content
 // that runs under them.
@@ -474,6 +498,9 @@ void showAppSurfaceIfUsed() {
     gHost.appWindowShown = true;
     gtk_window_present(GTK_WINDOW(gHost.appWindow));
     watchFirstFrame(gHost.appWindow, gHost.appSurface);
+    if (gHost.logFrames) {
+      logFrameTimes(gHost.appWindow);
+    }
     launchFrameShown(kAppSurface, gHost.appWindow);
   });
 }
@@ -623,6 +650,7 @@ int main(int argc, char *argv[]) {
   gHost.backend->modals().setSheetNodes([](SurfaceId surface, facebook::react::Tag tag) -> std::optional<ngn::SheetNode> {
     return gHost.runtime ? gHost.runtime->sheetNode(surface, tag) : std::nullopt;
   });
+  gHost.logFrames = settings.logCommits;
   if (settings.logCommits) {
     gHost.mounting->onCommit = [](SurfaceId, double ms) { fprintf(stderr, "[ngn] commit %.1f ms\n", ms); };
   }
@@ -634,6 +662,9 @@ int main(int argc, char *argv[]) {
       gHost.windows->didMount(surfaceId);
       if (GtkWidget *window = gHost.windows->window(surfaceId)) {
         watchFirstFrame(window, gHost.windows->surfaceWidget(surfaceId));
+        if (gHost.logFrames) {
+          logFrameTimes(window);
+        }
         launchFrameShown(surfaceId, window);
       }
     }

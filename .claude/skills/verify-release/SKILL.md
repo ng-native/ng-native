@@ -165,7 +165,9 @@ When the release changes `packages/desktop` or the Linux host, also run `pnpm be
 that image itself), judged against `scripts/bench-linux-budget.json` the same way, and the Linux
 manual pass in [docs/linux-manual-pass.md](../../../docs/linux-manual-pass.md): the whole checklist,
 in the GNOME and the KDE Plasma session of the UTM VM. Report the VM's own numbers from
-`bench:linux` beside the gated ones, ungated.
+`bench:linux` beside the gated ones, ungated. Besides the launch, idle and memory numbers it judges
+a second launch on a workload (a 2,000-view mount, scrolling, a divider drag and a second window),
+which it exports itself from `examples/notes/bench/linux-bench.ts`.
 
 Upgrades of a desktop app (step 4) start from the second release that has `@ng-native/desktop`.
 
