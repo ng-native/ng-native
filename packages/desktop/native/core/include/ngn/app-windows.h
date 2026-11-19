@@ -141,8 +141,9 @@ class WindowHost {
   void moved(SurfaceId surface, const WindowFrame &frame);
   // The app was opened again, or its Dock icon clicked.
   void reopen(bool hasVisibleWindows);
-  // The OS closed the app's last window. True when the app should quit now, as Linux apps do with
-  // their last window: no app is listening to decide (`quitWhenLastWindowCloses`).
+  // The user closed the app's last window. True when the backend should quit now, as Linux apps do
+  // with their last window: no app is listening. An app that listens has decided already, by its
+  // `quitWhenLastWindowCloses`, when its AppWindows closed the window, as on macOS.
   bool lastWindowClosed();
 
   // --- reloads ---
