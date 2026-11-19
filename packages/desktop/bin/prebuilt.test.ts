@@ -317,6 +317,29 @@ describe('signing the prebuilt host', () => {
     ]);
   });
 
+  it('signs a framework unstripped, and adds the ad hoc entitlements to an ad hoc signature only', () => {
+    const adHoc = fakeRun();
+    signPrebuiltFiles(adHoc.run, ['/a/hermesvm.framework'], {});
+    assert.deepEqual(
+      adHoc.calls.map((call) => call.command),
+      ['codesign'],
+    );
+    signPrebuiltFiles(adHoc.run, ['/a/ngn-macos'], {}, '/s/host.entitlements');
+    assert.deepEqual(adHoc.calls.at(-1)!.args.slice(4, 6), [
+      '--entitlements',
+      '/s/host.entitlements',
+    ]);
+
+    const identity = fakeRun();
+    signPrebuiltFiles(
+      identity.run,
+      ['/a/ngn-macos'],
+      { NGN_SIGN_IDENTITY: 'Developer ID Application: X' },
+      '/s/host.entitlements',
+    );
+    assert.ok(!identity.calls.some((call) => call.args.includes('--entitlements')));
+  });
+
   it('treats an empty NGN_SIGN_IDENTITY as none', () => {
     const { run, calls } = fakeRun();
     signPrebuiltFiles(run, ['/a/ngn-macos'], { NGN_SIGN_IDENTITY: '' });
