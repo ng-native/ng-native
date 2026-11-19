@@ -19,7 +19,8 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   clipboard, preferences, image sizes and the app's data directory).
 - `native/appkit`: the AppKit backend and the `ngn-macos` binary.
 - `native/gtk`: the GTK 4 backend and the `ngn-linux` binary: a `GtkWidget` per view, painted as
-  GSK render nodes in its `snapshot`, Pango text, a `GtkText` per single-line text input, and the
+  GSK render nodes in its `snapshot`, Pango text, a `GtkText` per single-line text input and a
+  `GtkTextView` per multiline one (whose placeholder the view draws), and the
   pointer fed to the core's input dispatcher from a capture-phase controller on each surface. A
   ScrollView is a `GtkScrolledWindow` whose document holds the content, telling the core's hit
   test each offset, with classic scroll bars (`gtk-overlay-scrolling` off) taking their gutter from

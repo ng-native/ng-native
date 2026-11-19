@@ -62,7 +62,7 @@ void viewSizeAllocate(GtkWidget *widget, int width, int height, int) {
   ViewData *d = NGN_VIEW(widget)->data;
   for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
     if (!NGN_IS_VIEW(child)) {
-      if (d->field && child == d->field->text) {
+      if (d->field && child == ngn::gtk::fieldWidget(*d->field)) {
         ngn::gtk::allocateTextField(*d, width, height);
       } else if (d->scroll && child == d->scroll->scrolled) {
         ngn::gtk::allocateScrollView(*d, width, height);
@@ -156,6 +156,7 @@ void viewSnapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
       snapshotText(d, snapshot);
     }
     snapshotSvg(widget, d, snapshot);
+    ngn::gtk::snapshotPlaceholder(*d, snapshot);
     clipped = ngn::gtk::pushOverflowClip(snapshot, box);
   }
   for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {

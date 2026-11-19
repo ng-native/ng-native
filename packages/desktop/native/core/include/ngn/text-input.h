@@ -131,4 +131,9 @@ std::u16string fitReplacement(
 // composing.
 bool controlledTextIsCurrent(int mostRecentEventCount, int fieldEventCount, bool composing);
 
+// The `selection` prop as a field applies it, start before end in UTF-16 units, when it is new in
+// `now` against `before` (null for a field just made): React Native iOS applies it only then, so
+// the user moving the selection away is not undone by an unchanged prop.
+std::optional<std::pair<int, int>> newSelection(const DesktopTextInputProps *before, const DesktopTextInputProps &now);
+
 } // namespace ngn
