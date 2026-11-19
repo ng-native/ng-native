@@ -21,6 +21,7 @@
 #include "input-replay.h"
 #include "launcher-badge.h"
 #include "menus.h"
+#include "notifications.h"
 #include "pango-text.h"
 #include "scroll-view.h"
 #include "secret-store.h"
@@ -694,7 +695,12 @@ int main(int argc, char *argv[]) {
        .shell = ngn::gtk::makeShellOpener(),
        .secrets = ngn::gtk::makeSecretStore(appId, ngn::gtk::insideFlatpak()),
        .sleep = ngn::gtk::makeSleepPreventer(gHost.application),
-       .notifications = [appId](std::shared_ptr<ngn::NotificationEvents>) { return ngn::gtk::makeLauncherBadgeNotifications(appId); },
+       // Shown through the Notification portal, with the badge on the launcher.
+       .notifications =
+           [appData, badge = ngn::gtk::makeLauncherBadgeNotifications(appId)](std::shared_ptr<ngn::NotificationEvents> events) {
+             return ngn::gtk::makeNotificationCenter(G_APPLICATION(gHost.application), appData, std::move(events), raiseApp,
+                                                     [badge](int count) { badge->setBadge(count); });
+           },
        .undo = gHost.undo,
        .fileWatcher = ngn::gtk::makeFileWatcher(),
        .pathMonitor = ngn::gtk::makePathMonitor(),

@@ -105,6 +105,7 @@ add_library(ngn_core STATIC
     core/src/input-dispatcher.cpp
     core/src/input-script.cpp
     core/src/key-value-store.cpp
+    core/src/notification-schedule.cpp
     core/src/launch-settings.cpp
     core/src/live-regions.cpp
     core/src/library-glue.cpp
