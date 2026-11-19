@@ -239,6 +239,10 @@ void GtkBackend::followRole(const ShadowView &view) {
   swapViewData(old, next);
   // A state update replaces a Paragraph's widget with no props update to follow.
   applyViewProps(next, *viewData(next));
+  // An Image hears a new scale through its widget: the new one listens too, and keeps the load.
+  if (viewData(next)->image) {
+    makeImageView(next, *viewData(next));
+  }
   // A focused field's GtkText loses the focus as it moves and takes it back after: the app hears
   // neither.
   TextField *field = focus ? textFieldOf(focus) : nullptr;
