@@ -9,9 +9,6 @@
 #include <doctest/doctest.h>
 
 #include <react/renderer/components/textinput/TextInputEventEmitter.h>
-#include <react/renderer/core/EventBeat.h>
-#include <react/renderer/core/EventDispatcher.h>
-#include <react/renderer/runtimescheduler/RuntimeScheduler.h>
 
 #include <algorithm>
 #include <chrono>
@@ -36,29 +33,6 @@ AttributedString paragraph(const std::string &text, float lineHeight) {
 }
 
 const std::string kWords = "one two three four five six seven eight nine ten";
-
-// The events a view's field sends, by type, kept by a dispatcher's listener before any queue.
-struct SentEvents {
-  RuntimeScheduler scheduler{[](auto &&) {}};
-  std::shared_ptr<EventDispatcher> dispatcher;
-  std::vector<std::string> types;
-
-  explicit SentEvents(ngn::gtk::ViewData &view) {
-    EventQueueProcessor processor([](auto &&...) {}, [](auto &&...) {}, [](auto &&...) {}, {});
-    dispatcher = std::make_shared<EventDispatcher>(
-        processor, std::make_unique<EventBeat>(std::make_shared<EventBeat::OwnerBox>(), scheduler), [](auto &&...) {},
-        std::weak_ptr<EventLogger>());
-    dispatcher->addListener(std::make_shared<const EventListener>([this](const RawEvent &event) {
-      types.push_back(event.type);
-      return true;
-    }));
-    view.emitter = std::make_shared<TextInputEventEmitter>(nullptr, dispatcher);
-  }
-
-  long count(const std::string &type) const {
-    return std::count(types.begin(), types.end(), type);
-  }
-};
 
 // Presses a key through the field's own key controller, which GTK gives a key before the editor.
 bool pressKey(GtkWidget *editor, guint keyval, GdkModifierType state) {
@@ -405,7 +379,7 @@ TEST_CASE("a multiline text input sends a selection change when an edit moves it
   MountedViews views;
   views.add(MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("multiline", true)), {{10, 10}, {150, 80}}));
   auto *data = ngn::gtk::viewData(views.view(2));
-  SentEvents sent(*data);
+  ngn::testing::SentEvents<TextInputEventEmitter> sent(*data);
   GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(data->field->text));
   // Typing moves the cursor without setting its mark.
   gtk_text_buffer_insert_interactive_at_cursor(buffer, "a", -1, TRUE);
@@ -561,6 +535,39 @@ TEST_CASE("undo and redo put back what the field had, not capitalized again, one
       gtk_editable_insert_text(GTK_EDITABLE(field->text), "a", -1, &position);
     }
     CHECK(ngn::gtk::fieldText(*field) == "A");
+  }
+}
+
+TEST_CASE("Backspace over a mark puts its base back as it was, not capitalized, one line or many") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    // Armenian small ayb and a combining acute: Pango lets Backspace delete the acute alone, which
+    // GTK does by deleting both and putting the ayb back.
+    views.add(MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("multiline", multiline)("autoCapitalize", "characters")("defaultValue", "\xD5\xA1\xCC\x81")), {{10, 10}, {150, 80}}));
+    auto *field = ngn::gtk::viewData(views.view(2))->field;
+    if (multiline) {
+      GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text));
+      GtkTextIter end;
+      gtk_text_buffer_get_end_iter(buffer, &end);
+      gtk_text_buffer_place_cursor(buffer, &end);
+    } else {
+      gtk_editable_set_position(GTK_EDITABLE(field->text), -1);
+    }
+    int before = field->eventCount;
+    g_signal_emit_by_name(field->text, "backspace");
+    CHECK(ngn::gtk::fieldText(*field) == "\xD5\xA1");
+    // Still the user's change, which JavaScript hears of.
+    CHECK(field->eventCount > before);
+    // What is typed afterwards is capitalized as before.
+    if (multiline) {
+      gtk_text_buffer_insert_at_cursor(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), "\xD5\xA1", -1);
+    } else {
+      int position = gtk_editable_get_position(GTK_EDITABLE(field->text));
+      gtk_editable_insert_text(GTK_EDITABLE(field->text), "\xD5\xA1", -1, &position);
+    }
+    CHECK(ngn::gtk::fieldText(*field) == "\xD5\xA1\xD4\xB1");
   }
 }
 
