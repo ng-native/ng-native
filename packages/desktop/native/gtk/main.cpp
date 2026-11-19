@@ -82,7 +82,22 @@ gboolean beatPrepare(GSource *, gint *timeout) {
 GSourceFuncs gBeatFuncs = {beatPrepare, nullptr, nullptr, nullptr, nullptr, nullptr};
 
 ngn::SurfaceMetrics metricsFor(int width, int height, int scale) {
-  return {.size = {static_cast<Float>(width), static_cast<Float>(height)}, .pointScale = static_cast<float>(scale), .fontScale = 1};
+  return {.size = {static_cast<Float>(width), static_cast<Float>(height)}, .pointScale = static_cast<float>(scale), .fontScale = ngn::gtk::desktopFontScale()};
+}
+
+// The text scaling changed: every surface lays out again at it, and Dimensions reports it.
+void followFontScale() {
+  float fontScale = ngn::gtk::desktopFontScale();
+  auto metrics = gHost.state->metrics.get();
+  metrics.window.fontScale = metrics.screen.fontScale = fontScale;
+  gHost.state->metrics.set(metrics);
+  for (SurfaceId surface : gHost.surfaces) {
+    GtkWidget *widget = surface == kAppSurface ? gHost.appSurface : gHost.windows->surfaceWidget(surface);
+    if (widget && gHost.runtime) {
+      gHost.runtime->updateSurface(
+          surface, metricsFor(gtk_widget_get_width(widget), gtk_widget_get_height(widget), gtk_widget_get_scale_factor(widget)));
+    }
+  }
 }
 
 // What Dimensions reports: the app window's content size and scale, and its monitor's size (the
@@ -105,8 +120,8 @@ ngn::WindowMetrics windowMetrics(int width, int height) {
     g_object_unref(first);
   }
   return {
-      .window = {.width = static_cast<double>(width), .height = static_cast<double>(height), .scale = scale, .fontScale = 1},
-      .screen = {.width = screenWidth, .height = screenHeight, .scale = scale, .fontScale = 1},
+      .window = {.width = static_cast<double>(width), .height = static_cast<double>(height), .scale = scale, .fontScale = ngn::gtk::desktopFontScale()},
+      .screen = {.width = screenWidth, .height = screenHeight, .scale = scale, .fontScale = ngn::gtk::desktopFontScale()},
   };
 }
 
@@ -474,6 +489,8 @@ int main(int argc, char *argv[]) {
       }
     });
   });
+
+  ngn::gtk::watchFontScale(followFontScale);
 
   GSource *beat = g_source_new(&gBeatFuncs, sizeof(GSource));
   g_source_set_priority(beat, G_PRIORITY_LOW);

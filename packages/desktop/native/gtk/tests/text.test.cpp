@@ -388,6 +388,30 @@ TEST_CASE("a text input's border and background are its view's, painted under th
   CHECK(bounds.size.width == doctest::Approx(128));
 }
 
+TEST_CASE("the text size follows the desktop's text scaling, and a change to it is heard") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkSettings *settings = gtk_settings_get_default();
+  REQUIRE(settings);
+  int saved = 0;
+  g_object_get(settings, "gtk-xft-dpi", &saved, nullptr);
+  struct Restore {
+    GtkSettings *settings;
+    int dpi;
+    ~Restore() {
+      g_object_set(settings, "gtk-xft-dpi", dpi, nullptr);
+    }
+  } restore{settings, saved};
+  auto heard = std::make_shared<int>(0);
+  ngn::gtk::watchFontScale([heard] { ++*heard; });
+
+  g_object_set(settings, "gtk-xft-dpi", 120 * 1024, nullptr);
+  CHECK(ngn::gtk::desktopFontScale() == doctest::Approx(1.25));
+  CHECK(*heard == 1);
+  g_object_set(settings, "gtk-xft-dpi", 96 * 1024, nullptr);
+  CHECK(ngn::gtk::desktopFontScale() == doctest::Approx(1));
+  CHECK(*heard == 2);
+}
+
 TEST_CASE("a multiline text input sends a selection change when an edit moves its cursor, and when the user does") {
   REQUIRE(ngn::testing::gtkReady());
   MountedViews views;
