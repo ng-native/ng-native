@@ -51,8 +51,9 @@ apps have it. Linux's default bar is File (Close Window on Ctrl+W, Print...), Ed
 Forward, Show Sidebar on F9, Full Screen on F11), the app's own menus, then a menu named for the app
 with Preferences (Ctrl+comma, shown only when the app handles `settings`), Keyboard Shortcuts
 (Ctrl+Shift+?), Help (F1, shown only when the app handles `help`), About and Quit (Ctrl+Q).
-Keyboard Shortcuts opens a window listing every key the menus take, then each `[shortcut]` given a
-`shortcutLabel` under the app's name, unless the app handles `keyboardShortcuts` itself.
+Keyboard Shortcuts lists every key the menus take, then each `[shortcut]` given a `shortcutLabel`
+under the app's name, unless the app handles `keyboardShortcuts` itself: in libadwaita's shortcuts
+dialog with libadwaita 1.8 or later, and in GTK's shortcuts window below it.
 `mod` is Ctrl. A key press goes to the app's `[shortcut]` first, then the back and forward keys
 (Alt+Left and Alt+Right, the other way round in a right-to-left locale as GTK's own apps have
 them, a keyboard's Back and Forward keys, and mouse buttons 8 and 9), then the

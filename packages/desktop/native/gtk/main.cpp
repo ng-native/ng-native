@@ -393,7 +393,8 @@ void runMenuItem(const ngn::MenuItem &item, GtkWindow *window) {
       }
       return;
     case ngn::MenuCommand::KeyboardShortcuts:
-      gtk_window_present(GTK_WINDOW(ngn::gtk::keyboardShortcutsWindow(gHost.menus->keyboardShortcuts(gHost.gtkMenus->bar()), window)));
+      ngn::gtk::presentKeyboardShortcuts(
+          ngn::gtk::keyboardShortcutsWindow(gHost.menus->keyboardShortcuts(gHost.gtkMenus->bar()), window), window);
       return;
     case ngn::MenuCommand::About: {
       GtkWidget *about = adw_about_window_new();
