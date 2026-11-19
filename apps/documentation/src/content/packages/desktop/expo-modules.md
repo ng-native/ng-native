@@ -1,9 +1,9 @@
 ---
-title: Expo modules on macOS
-summary: The desktop host's modules behind @ng-native/expo's services, and what each does on a Mac.
+title: Expo modules on the desktop
+summary: The desktop host's modules behind @ng-native/expo's services, what each does on a Mac and on Linux, and the portals Linux uses.
 ---
 
-# Expo modules on macOS
+# Expo modules on the desktop
 
 Some of `@ng-native/expo`'s services answer from modules of the host's own, named `NgNative` and
 the package's name after `expo-`, each with the methods the service calls on the Expo package:

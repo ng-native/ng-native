@@ -30,6 +30,25 @@ Expo is the build tool here, not the runtime: its CLI, config, autolinking and M
 app, and the desktop host runs it. To add macOS to an app you have, see
 [Desktop setup](/packages/desktop#setup), which also covers Nx and the Angular CLI.
 
+The template runs on Linux too, with `npm run linux` on a Linux machine: see
+[Build for Linux](/guide/desktop-linux).
+
+## Linux
+
+The same app runs on Linux, with GTK 4 and libadwaita views. [Build for Linux](/guide/desktop-linux)
+has the setup and packaging. The distributions the host is checked on:
+
+| Distribution            | Checked                                                                           |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| Ubuntu 24.04 and 26.04  | launched every night in CI                                                        |
+| Debian 13               | launched every night in CI                                                        |
+| Fedora 44 and 45        | launched every night in CI                                                        |
+| RHEL 9 and its rebuilds | the host is built on AlmaLinux 9 on every pull request (GTK 4.12, libadwaita 1.4) |
+
+The floor is GTK 4.10 and libadwaita 1.4 with glibc 2.34. A `deb` is made for Debian 13 and Ubuntu
+24.04 or later, an `rpm` for Fedora and the RHEL family 9 or later, and a Flatpak brings its own
+runtime.
+
 ## What a Mac app has
 
 - **Windows.** The root component renders in the main window, and `AppWindows` opens more: a
@@ -60,10 +79,12 @@ from](/guide/desktop-imports), [what each OS has](/guide/desktop-support), and h
 fakes of the windows, menus, Dock and tray. See
 [Testing on another OS](/packages/testing/testing-other-os).
 
-An app from the desktop template, or from the generators' desktop-only option, has two Vitest
-projects. `node-macos` runs in Node, and is what `npm test` (`vitest run --project node-macos`)
-and the app's `test` target run. `macos` runs `src/**/*.device.ts`, such as
-`src/app/app.device.ts`, inside the app on real AppKit views, and opens the app itself:
+An app from the desktop template, or from the generators' desktop-only option, has a Vitest
+project for each OS in Node and one for each inside the app. `node-macos` and `node-linux` run in
+Node, and are what `npm test` (`vitest run --project node-macos --project node-linux`) and the
+app's `test` target run. `macos` runs `src/**/*.device.ts`, such as `src/app/app.device.ts`,
+inside the app on real AppKit views, and opens the app itself; `linux` does the same in GTK (see
+[Test Linux from a Mac](/guide/desktop-linux#test-linux-from-a-mac)):
 
 ```sh
 EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start   # in one terminal
