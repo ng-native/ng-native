@@ -3,7 +3,7 @@
  * `stop` ends the whole host, and that a crash report holds the host's last output.
  */
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -85,7 +85,12 @@ describe('linuxLauncher crashReport', () => {
   });
 });
 
-/** Whether process `pid` is gone within two seconds. */
+/** A file's text, or an empty string while it is missing or empty. */
+function readFileIfAny(file: string): string {
+  return existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
+}
+
+/** Whether process `pid` (a group, when negative) is gone within two seconds. */
 async function gone(pid: number): Promise<boolean> {
   for (let i = 0; i < 100; i++) {
     try {
@@ -142,6 +147,73 @@ describe('linuxLauncher stop', () => {
         }
         rmSync(dir, { recursive: true, force: true });
       }
+    }
+  });
+
+  // A scan of /proc misses a process forked after its listing whose parent exits before the scan
+  // reads it. This host is only ever that: each process forks the next and exits at once. Idle
+  // processes started first lengthen the scan before it reaches the host's, so a scan all but
+  // always misses it, and the host is launched and stopped several times.
+  it('kills a host that keeps forking a successor and exiting', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ngn-linux-launcher-'));
+    const ready = path.join(dir, 'padding');
+    const padding = spawn(
+      'bash',
+      ['-c', `for _ in $(seq 300); do sleep 60 & done; touch ${ready}; wait`],
+      { detached: true, stdio: 'ignore' },
+    );
+    try {
+      for (let i = 0; i < 200 && !existsSync(ready); i++) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      const groupFile = path.join(dir, 'group');
+      const host = path.join(dir, 'host.sh');
+      writeFileSync(
+        host,
+        `#!/bin/bash\ntrap '' TERM\nps -o pgid= -p $$ > ${groupFile}\nhop() { hop & exit 0; }\nhop\n`,
+        { mode: 0o755 },
+      );
+      const launcher = linuxLauncher({
+        host,
+        container: false,
+        display: 'inherit',
+        stopGraceMs: 300,
+      });
+      for (let launch = 0; launch < 5; launch++) {
+        rmSync(groupFile, { force: true });
+        const stateDir = path.join(dir, `state-${launch}`);
+        mkdirSync(stateDir);
+        const app = await launcher.start({ port: 1, runId: `hop-test-${launch}`, stateDir });
+        let group = 0;
+        try {
+          for (let i = 0; i < 100 && !readFileIfAny(groupFile); i++) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          group = Number(readFileSync(groupFile, 'utf8'));
+          assert.ok(group > 0);
+          await app.stop();
+          assert.equal(await gone(-group), true, `the host outlived stop on launch ${launch}`);
+        } finally {
+          try {
+            await app.stop();
+          } finally {
+            if (group) {
+              try {
+                process.kill(-group, 'SIGKILL');
+              } catch {
+                // Already gone.
+              }
+            }
+          }
+        }
+      }
+    } finally {
+      try {
+        if (padding.pid) process.kill(-padding.pid, 'SIGKILL');
+      } catch {
+        // Already gone.
+      }
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
