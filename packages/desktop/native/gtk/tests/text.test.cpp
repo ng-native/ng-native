@@ -14,6 +14,7 @@
 #include <react/renderer/runtimescheduler/RuntimeScheduler.h>
 
 #include <algorithm>
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -58,6 +59,21 @@ struct SentEvents {
     return std::count(types.begin(), types.end(), type);
   }
 };
+
+// Presses a key through the field's own key controller, which GTK gives a key before the editor.
+bool pressKey(GtkWidget *editor, guint keyval, GdkModifierType state) {
+  GListModel *controllers = gtk_widget_observe_controllers(editor);
+  gboolean handled = FALSE;
+  for (guint i = 0; i < g_list_model_get_n_items(controllers) && !handled; ++i) {
+    auto *controller = GTK_EVENT_CONTROLLER(g_list_model_get_item(controllers, i));
+    if (GTK_IS_EVENT_CONTROLLER_KEY(controller) && gtk_event_controller_get_propagation_phase(controller) == GTK_PHASE_CAPTURE) {
+      g_signal_emit_by_name(controller, "key-pressed", keyval, 0u, state, &handled);
+    }
+    g_object_unref(controller);
+  }
+  g_object_unref(controllers);
+  return handled;
+}
 
 } // namespace
 

@@ -219,11 +219,11 @@ void GtkBackend::createView(const ShadowView &view) {
       applySearchBar(entry, *view.props);
     }
   }
+  hideSvgElement(widget);
   makeControl(widget, *d);
   if (auto accessibility = accessibilityOf(view)) {
     applyAccessibility(accessibleWidget(*d), *accessibility);
   }
-  hideSvgElement(widget);
   applyViewProps(widget, *d);
   views_[view.tag] = widget;
   if (view.tag == view.surfaceId) {

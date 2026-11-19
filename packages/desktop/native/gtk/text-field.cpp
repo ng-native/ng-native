@@ -150,6 +150,19 @@ void unfocused(GtkEventControllerFocus *, gpointer user) {
 // `onKeyPress`, before the key changes the text, with the key as React Native iOS names it.
 gboolean keyPressed(GtkEventControllerKey *, guint keyval, guint, GdkModifierType state, gpointer user) {
   auto *field = static_cast<TextField *>(user);
+  // GtkText's own undo and redo keys, run here so that its replay is known (a multiline field's
+  // buffer signals its own).
+  if (!field->scroll && (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) == GDK_CONTROL_MASK) {
+    guint key = gdk_keyval_to_lower(keyval);
+    bool shift = state & GDK_SHIFT_MASK;
+    const char *action = key == GDK_KEY_z ? (shift ? "text.redo" : "text.undo") : key == GDK_KEY_y && !shift ? "text.redo" : nullptr;
+    if (action) {
+      field->replaying = true;
+      gtk_widget_activate_action(field->text, action, nullptr);
+      field->replaying = false;
+      return TRUE;
+    }
+  }
   if (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) {
     return FALSE;
   }
@@ -209,23 +222,30 @@ struct GlibCharacters final : TextCharacters {
       c = text[at];
       return 1;
     };
-    std::size_t start = 0;
-    while (start < text.size()) {
-      gunichar c;
-      std::size_t end = start + codePoint(start, c);
-      while (end < text.size()) {
-        std::size_t size = codePoint(end, c);
-        if (!g_unichar_ismark(c)) {
-          break;
-        }
-        end += size;
-      }
-      if (index < end) {
-        return {start, end - start};
-      }
-      start = end;
+    if (index >= text.size()) {
+      return {text.size(), 0};
     }
-    return {text.size(), 0};
+    auto isHigh = [&text](std::size_t at) { return text[at] >= 0xD800 && text[at] < 0xDC00; };
+    auto isLow = [&text](std::size_t at) { return text[at] >= 0xDC00 && text[at] < 0xE000; };
+    // Back from `index` to the start of its code point, then over the marks before it to their
+    // base: only the text around `index` is read, so fitting a long paste one character at a time
+    // stays linear.
+    std::size_t start = index > 0 && isLow(index) && isHigh(index - 1) ? index - 1 : index;
+    gunichar c;
+    codePoint(start, c);
+    while (start > 0 && g_unichar_ismark(c)) {
+      start -= start > 1 && isLow(start - 1) && isHigh(start - 2) ? 2 : 1;
+      codePoint(start, c);
+    }
+    std::size_t end = start + codePoint(start, c);
+    while (end < text.size()) {
+      std::size_t size = codePoint(end, c);
+      if (!g_unichar_ismark(c)) {
+        break;
+      }
+      end += size;
+    }
+    return {start, end - start};
   }
 };
 
@@ -233,7 +253,7 @@ struct GlibCharacters final : TextCharacters {
 // `autoCapitalize` asks and cut to `maxLength` (text-input.h). Nothing when it goes in as it is.
 std::optional<std::string> fittedInsertion(const TextField &field, const char *text, int length, int position) {
   auto props = field.view ? propsOf(*field.view) : nullptr;
-  if (field.settingText || !props) {
+  if (field.settingText || field.replaying || !props) {
     return std::nullopt;
   }
   std::string inserted(text, length < 0 ? strlen(text) : static_cast<size_t>(length));
@@ -436,6 +456,11 @@ void makeTextField(GtkWidget *widget, ViewData &view) {
     g_signal_connect_swapped(buffer, "changed", G_CALLBACK(changed), field);
     g_signal_connect_after(buffer, "changed", G_CALLBACK(restyle), field);
     g_signal_connect(buffer, "insert-text", G_CALLBACK(insertingText), field);
+    for (const char *signal : {"undo", "redo"}) {
+      g_signal_connect_swapped(buffer, signal, G_CALLBACK(+[](TextField *f) { f->replaying = true; }), field);
+      g_signal_connect_data(buffer, signal, G_CALLBACK(+[](TextField *f) { f->replaying = false; }), field, nullptr,
+                            static_cast<GConnectFlags>(G_CONNECT_SWAPPED | G_CONNECT_AFTER));
+    }
     // The cursor, whether set or moved by an edit, and the selection's other end, which only a set moves.
     g_signal_connect_swapped(buffer, "notify::cursor-position", G_CALLBACK(selectionMoved), field);
     g_signal_connect(buffer, "mark-set", G_CALLBACK(+[](GtkTextBuffer *buffer, GtkTextIter *, GtkTextMark *mark, gpointer user) {
