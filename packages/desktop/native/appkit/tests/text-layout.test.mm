@@ -292,3 +292,19 @@ TEST_CASE("The measurer's lines give each line's box and the first baseline the 
   }
   CHECK(joined == kWords);
 }
+
+TEST_CASE("A centred or right-aligned line reports where the drawing puts it") {
+  ngn::CoreTextMeasurer measurer;
+  ParagraphAttributes paragraph;
+  for (auto alignment : {TextAlignment::Center, TextAlignment::Right}) {
+    auto f = fragment("short", 16);
+    f.textAttributes.alignment = alignment;
+    auto lines = measurer.lines(stringOf({f}), paragraph, 300);
+    REQUIRE(lines.size() == 1);
+    // Ink starts where the line is reported to start, give or take the glyph's side bearing.
+    int ink = leftmostInk(ngn::layoutText(stringOf({f}), paragraph, 300.5), 300, 40);
+    CHECK(lines[0].frame.origin.x > 50);
+    CHECK(std::abs(ink - lines[0].frame.origin.x) < 3);
+  }
+}
+

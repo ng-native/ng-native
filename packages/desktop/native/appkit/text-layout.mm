@@ -442,30 +442,36 @@ TextLayout layoutText(
   return layout;
 }
 
+// How far right of the box's left edge a line starts: its paragraph's alignment in a box this wide.
+static CGFloat lineOffset(const TextLayout &layout, const TextLine &l, CGFloat boxWidth) {
+  CFRange r = CTLineGetStringRange(l.line);
+  CTTextAlignment alignment = kCTTextAlignmentNatural;
+  CTParagraphStyleRef style = r.length > 0
+      ? (CTParagraphStyleRef)CFAttributedStringGetAttribute(
+            layout.string, r.location, kCTParagraphStyleAttributeName, nullptr)
+      : nullptr;
+  if (style != nullptr) {
+    CTParagraphStyleGetValueForSpecifier(style, kCTParagraphStyleSpecifierAlignment, sizeof(alignment), &alignment);
+  }
+  CGFloat x = 0;
+  if (alignment == kCTTextAlignmentCenter) {
+    x = (boxWidth - l.width) / 2;
+  } else if (alignment == kCTTextAlignmentRight) {
+    x = boxWidth - l.width;
+  } else if (alignment == kCTTextAlignmentJustified && l.rightToLeft) {
+    // A justified paragraph's last line follows the paragraph's direction.
+    x = boxWidth - l.width;
+  }
+  return x;
+}
+
 void drawText(const TextLayout &layout, CGContextRef context, CGPoint origin, CGFloat boxWidth) {
   CGContextSaveGState(context);
   // The view is flipped; glyphs are drawn with an inverted text matrix rather than by flipping
   // the whole context, so line origins stay top-down.
   CGContextSetTextMatrix(context, CGAffineTransformMakeScale(1, -1));
   for (const auto &l : layout.lines) {
-    CFRange r = CTLineGetStringRange(l.line);
-    CTTextAlignment alignment = kCTTextAlignmentNatural;
-    CTParagraphStyleRef style = r.length > 0
-        ? (CTParagraphStyleRef)CFAttributedStringGetAttribute(
-              layout.string, r.location, kCTParagraphStyleAttributeName, nullptr)
-        : nullptr;
-    if (style != nullptr) {
-      CTParagraphStyleGetValueForSpecifier(style, kCTParagraphStyleSpecifierAlignment, sizeof(alignment), &alignment);
-    }
-    CGFloat x = 0;
-    if (alignment == kCTTextAlignmentCenter) {
-      x = (boxWidth - l.width) / 2;
-    } else if (alignment == kCTTextAlignmentRight) {
-      x = boxWidth - l.width;
-    } else if (alignment == kCTTextAlignmentJustified && l.rightToLeft) {
-      // A justified paragraph's last line follows the paragraph's direction.
-      x = boxWidth - l.width;
-    }
+    CGFloat x = lineOffset(layout, l, boxWidth);
     CGContextSetTextPosition(context, origin.x + x, origin.y + l.origin.y);
     CTLineDraw(l.line, context);
   }
@@ -509,7 +515,7 @@ LinesMeasurements CoreTextMeasurer::lines(
       }
       lines.emplace_back(
           std::string(lineText.UTF8String),
-          facebook::react::Rect{{0, static_cast<Float>(l.top)}, {static_cast<Float>(l.width), static_cast<Float>(l.height)}},
+          facebook::react::Rect{{static_cast<Float>(lineOffset(layout, l, width)), static_cast<Float>(l.top)}, {static_cast<Float>(l.width), static_cast<Float>(l.height)}},
           static_cast<Float>(descent),
           static_cast<Float>(capHeight),
           static_cast<Float>(l.origin.y - l.top),
