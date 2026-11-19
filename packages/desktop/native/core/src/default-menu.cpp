@@ -85,6 +85,44 @@ std::vector<MenuItem> macOSMenuBar(const DefaultMenuOptions &options) {
   return bar;
 }
 
+std::vector<MenuItem> linuxMenuBar(const DefaultMenuOptions &options) {
+  const std::string &app = options.appName;
+  std::vector<MenuItem> bar{
+      menu("File", {item("Close Window", MenuCommand::CloseWindow, "w", Control), separator(), item("Print...", MenuCommand::Print, "p", Control)}),
+      menu(
+          "Edit",
+          {
+              item("Undo", MenuCommand::Undo, "z", Control),
+              item("Redo", MenuCommand::Redo, "z", Control | Shift),
+              separator(),
+              item("Cut", MenuCommand::Cut, "x", Control),
+              item("Copy", MenuCommand::Copy, "c", Control),
+              item("Paste", MenuCommand::Paste, "v", Control),
+              item("Delete", MenuCommand::Delete),
+              item("Select All", MenuCommand::SelectAll, "a", Control),
+          }),
+      menu(
+          "View",
+          {
+              item("Back", MenuCommand::Back, options.os.back.key, options.os.back.modifiers),
+              item("Forward", MenuCommand::Forward, options.os.forward.key, options.os.forward.modifiers),
+              separator(),
+              item("Show Sidebar", MenuCommand::ToggleSidebar, "F9", 0),
+              item("Full Screen", MenuCommand::ToggleFullScreen, "F11", 0),
+          }),
+  };
+  if (options.developer) {
+    bar.push_back(menu(
+        "Developer",
+        {
+            item("Reload", MenuCommand::Reload, "r", Control),
+            item("Open DevTools", MenuCommand::OpenDevTools, "i", Control | Shift),
+        }));
+  }
+  bar.push_back(menu(app, {item("About " + app, MenuCommand::About), separator(), item("Quit", MenuCommand::Quit, "q", Control)}));
+  return bar;
+}
+
 const MenuItem *findMenuItem(const std::vector<MenuItem> &menus, MenuCommand command) {
   for (const auto &m : menus) {
     if (m.command == command && !m.separator) {

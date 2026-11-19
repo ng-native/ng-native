@@ -41,5 +41,7 @@ struct HostOs {
 };
 
 HostOs macOS();
+// Linux, under GTK. Not `linux()`: GNU C++ predefines `linux` as a macro on Linux.
+HostOs linuxOs();
 
 } // namespace ngn

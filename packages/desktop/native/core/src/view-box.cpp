@@ -669,12 +669,28 @@ std::vector<SvgRect> backgroundTiles(
   return tiles;
 }
 
+BoxDescription describeBox(const ViewProps &props, const LayoutMetrics &layout) {
+  auto metrics = props.resolveBorderMetrics(layout);
+  const auto &colors = metrics.borderColors;
+  return {
+      .bounds = {0, 0, layout.frame.size.width, layout.frame.size.height},
+      .background = argbOf(props.backgroundColor),
+      .radii = cornerRadiiOf(metrics.borderRadii),
+      .borderWidths = widthsOf(metrics.borderWidths),
+      .borderColors = {.top = argbOf(colors.top), .right = argbOf(colors.right), .bottom = argbOf(colors.bottom), .left = argbOf(colors.left)},
+      .borderStyle = metrics.borderStyles.isUniform() ? metrics.borderStyles.left : BorderStyle::Solid,
+      .clips = props.yogaStyle.overflow() != facebook::yoga::Overflow::Visible,
+      .shadows = props.boxShadow,
+  };
+}
+
 ViewBox viewBox(const ViewProps &props, const LayoutMetrics &layout) {
   ViewBox box;
   auto metrics = props.resolveBorderMetrics(layout);
-  auto radii = cornerRadiiOf(metrics.borderRadii);
-  auto widths = widthsOf(metrics.borderWidths);
-  bool clips = props.yogaStyle.overflow() != facebook::yoga::Overflow::Visible;
+  auto described = describeBox(props, layout);
+  const auto &radii = described.radii;
+  const auto &widths = described.borderWidths;
+  bool clips = described.clips;
   auto borderColor = argbOf(metrics.borderColors.left);
   bool circular = radii.circular();
   // RCTViewComponentView's useCoreAnimationBorderRendering.

@@ -2,19 +2,22 @@
 # Builds the desktop host (or only the core and its tests) in the per-user cache, fetching the
 # pinned sources and building Hermes first when they are missing. Prints the build directory.
 #
-#   build.sh [node_modules/react-native] [--backend appkit|none] [--runtime] [--universal]
+#   build.sh [node_modules/react-native] [--backend appkit|gtk|none] [--runtime] [--universal]
 #            [--debug|--release] [--test | --no-tests] [--no-debug-info]
 #            [--library <node_modules/library>]... [--build-dir <dir>]
 #
 # Without a path, react-native is resolved from the current directory.
 #
 #   --backend none  the toolkit-free core and its tests only: any OS, no Hermes
+#   --backend gtk   the GTK 4 host, ngn-linux: Linux's, and on a Mac a dev loop over Homebrew's GTK
+#                   (brew install gtk4 libadwaita)
 #   --runtime       with --backend none, the core's runtime half too: Hermes, ReactHost and the
 #                   runtime tests, still with no toolkit (what Linux builds until it has a backend)
 #   --universal     arm64 and x86_64 in one binary (default: this machine's architecture)
 #   --debug         a Debug build (default: RelWithDebInfo)
 #   --release       a Release build without the core tests, as a packaged app ships it
-#   --test          run the core tests after building, and the AppKit view tests when it built them
+#   --test          run the core tests after building, and the AppKit or GTK view tests when it
+#                   built them (the GTK ones need a display: xvfb-run on a Linux machine without one)
 #   --no-tests      leave the core tests out, as an app's build does: the published package has
 #                   none of their sources
 #   --no-debug-info the default RelWithDebInfo build without its debug info, for a host that is
@@ -202,6 +205,10 @@ if [ "$run_tests" = 1 ]; then
   # The AppKit view tests, which a build with the AppKit backend has.
   if [ -x "$BUILD/appkit/ngn_appkit_tests" ]; then
     "$BUILD/appkit/ngn_appkit_tests" >&2
+  fi
+  # The GTK view tests, which a build with the GTK backend has.
+  if [ -x "$BUILD/gtk/ngn_gtk_tests" ]; then
+    "$BUILD/gtk/ngn_gtk_tests" >&2
   fi
 fi
 echo "$BUILD"

@@ -18,6 +18,17 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   interfaces: `network.h` (HTTP and WebSocket) and `system.h` (URLs, alerts, appearance,
   clipboard, preferences, image sizes and the app's data directory).
 - `native/appkit`: the AppKit backend and the `ngn-macos` binary.
+- `native/gtk`: the GTK 4 backend and the `ngn-linux` binary: a `GtkWidget` per view, painted as
+  GSK render nodes in its `snapshot`, Pango text, a `GtkText` per single-line text input, and the
+  pointer fed to the core's input dispatcher from a capture-phase controller on each surface.
+  Accessibility is GTK's own: each widget is made with the GTK role for the view's `role`, and
+  its label, description, level and states follow the props. GTK fixes a role when it makes the
+  widget, so a role that changes later is not followed yet, and Orca's structural navigation
+  finds no headings or landmarks in a GTK 4 app. It
+  builds on Linux against GTK 4.10 or later and libadwaita 1.4 or later, and on a Mac against
+  Homebrew's (`brew install gtk4 libadwaita`) as a dev loop. Linux is not yet an app target: the
+  bundle it runs is exported for `macos`, and networking, scroll views, images, menus and the
+  libadwaita chrome come in later steps.
 - `native/scripts`: fetching the pinned sources, building Hermes and building the host.
   `NGN_DESKTOP_CACHE` moves the cache and `NGN_JOBS` caps parallel compiles. `build.sh --library
   <dir>` compiles a library's component codegen and its own C++ in, as React Native's Android
@@ -32,15 +43,19 @@ pnpm --filter @ng-native/desktop test:native   # the core and its tests, no Herm
 pnpm --filter @ng-native/desktop build:host     # the macOS host
 ```
 
-Linux has no backend yet. There `build.sh --backend none --runtime --test` builds the core, Hermes
-and the runtime half and runs the core and runtime tests. Off macOS, Hermes links ICU 77.1, which
-`fetch.sh` pins and `build-icu.sh` builds statically, with only English data
-(`icu-filter.json`). The build runs in `native/docker/Dockerfile`, an AlmaLinux 9 image with clang
-and lld from `llvm-toolset`. Building against el9 keeps the glibc it needs at 2.34, which
-`native/docker/glibc-floor.sh` checks. CI's `host-linux` job runs this on x86_64 and arm64. On a
-Mac, run the same image with Docker, as a user other than root, since root reads a file whatever
-its mode and so fails the core tests that make one unreadable. The commands are in the
-Dockerfile's header.
+On Linux, `build.sh --backend gtk` builds `ngn-linux` over the core, Hermes and the runtime half,
+and `--test` runs the core, runtime and GTK view tests (`ngn_gtk_tests`, which need a display:
+Xvfb on a machine without one). `build.sh --backend none --runtime --test` still builds the
+toolkit-free half alone. Off macOS, Hermes links ICU 77.1, which `fetch.sh` pins and `build-icu.sh`
+builds statically, with only English data (`icu-filter.json`). The build runs in
+`native/docker/Dockerfile`, an AlmaLinux 9 image with clang and lld from `llvm-toolset`, GTK 4.12
+and libadwaita 1.4, and Xvfb and Weston for launching the host headless. Building against el9
+keeps the glibc it needs at 2.34, which `native/docker/glibc-floor.sh` checks. CI's `host-linux`
+job builds the GTK host on x86_64 and arm64, runs its tests, and launches it on the notes example
+to its first frame under Xvfb and headless Weston, keeping each window's in-process capture
+(`NGN_CAPTURE`) as an artifact. On a Mac, run the same image with Docker, as a user other than
+root, since root reads a file whatever its mode and so fails the core tests that make one
+unreadable. The commands are in the Dockerfile's header.
 
 `ng-native-desktop run` builds the host with `--no-tests` and `package` with `--release`: the
 published package has none of the core tests' sources, so only `test:native` and `build:host` in
