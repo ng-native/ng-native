@@ -53,8 +53,9 @@ NSImage *tintedImage(NSImage *image, const SharedColor &tint) {
   std::optional<ImageSource> _source;
   NSURLSessionDataTask *_task;
   NSImage *_image;
-  // The `tintColor` the image is shown in, if it has one.
-  SharedColor _tint;
+  // The `tintColor` the image is shown in, if it has one. Present and transparent black (0, which
+  // converts to false) still tints: the picture goes clear, as it does in React Native iOS.
+  std::optional<SharedColor> _tint;
   // Holds the image under the view's children. The view's own layer is no place for it: NGNView
   // draws its box in drawRect:, and each redraw (every layout asks for one) replaces the layer's
   // contents, so an image that loaded before the redraw was wiped.
@@ -112,9 +113,8 @@ NSImage *tintedImage(NSImage *image, const SharedColor &tint) {
   }
   self.layer.masksToBounds = YES;
   _imageLayer.contentsGravity = self.layer.contentsGravity;
-  SharedColor tint = p->tintColor.value_or(SharedColor{});
-  if (tint != _tint) {
-    _tint = tint;
+  if (p->tintColor != _tint) {
+    _tint = p->tintColor;
     [self showImage];
   }
   // The source whose scale is nearest the screen's, as React Native iOS picks.
@@ -193,7 +193,7 @@ NSImage *tintedImage(NSImage *image, const SharedColor &tint) {
   }
   CALayer *layer = [self imageLayer];
   layer.contentsGravity = self.layer.contentsGravity;
-  layer.contents = _image != nil && _tint ? tintedImage(_image, _tint) : _image;
+  layer.contents = _image != nil && _tint.has_value() ? tintedImage(_image, *_tint) : _image;
 }
 
 - (void)loaded:(NSImage *)image {

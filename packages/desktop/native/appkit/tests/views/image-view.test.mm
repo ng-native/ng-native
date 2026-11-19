@@ -140,3 +140,31 @@ TEST_CASE("An image with a tintColor shows its shape in the tint, and takes a ch
   auto plain = drawnPixels(view, 200, 24);
   CHECK(near(pixel(plain, 200, 50, 10), {255, 0, 0, 255}));
 }
+
+TEST_CASE("An image with a transparent tintColor draws nothing, and shows its picture again when the tint goes") {
+  MountedViews mounted;
+  auto uri = redAndClearUri();
+  // 0 is transparent black, the one colour React Native's SharedColor converts to false.
+  auto image = MountedViews::shadow(5, "Image", parsedProps<ImageComponentDescriptor>(tintedProps(uri, 0)));
+  mounted.add(image);
+  NSView *view = mounted.view(5);
+  waitForImage(view);
+  [view displayIfNeeded];
+  auto clear = drawnPixels(view, 200, 24);
+  CHECK(near(pixel(clear, 200, 50, 10), {0, 0, 0, 0}));
+
+  mounted.update(image, parsedProps<ImageComponentDescriptor>(tintedProps(uri, 0xff0000ff)));
+  [view displayIfNeeded];
+  auto blue = drawnPixels(view, 200, 24);
+  CHECK(near(pixel(blue, 200, 50, 10), {0, 0, 255, 255}));
+
+  mounted.update(image, parsedProps<ImageComponentDescriptor>(tintedProps(uri, 0)));
+  [view displayIfNeeded];
+  auto cleared = drawnPixels(view, 200, 24);
+  CHECK(near(pixel(cleared, 200, 50, 10), {0, 0, 0, 0}));
+
+  mounted.update(image, parsedProps<ImageComponentDescriptor>(tintedProps(uri, std::nullopt)));
+  [view displayIfNeeded];
+  auto plain = drawnPixels(view, 200, 24);
+  CHECK(near(pixel(plain, 200, 50, 10), {255, 0, 0, 255}));
+}
