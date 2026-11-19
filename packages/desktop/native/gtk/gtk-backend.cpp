@@ -174,6 +174,29 @@ void GtkBackend::serviceUiThread() {
   g_main_context_iteration(nullptr, FALSE);
 }
 
+namespace {
+
+// react-native-svg's elements draw nothing of their own: the svg draws them. A foreignObject's
+// views stay hidden with them.
+void hideSvgElement(GtkWidget *widget) {
+  const std::string &component = viewData(widget)->component;
+  if (component.starts_with("RNSVG") && component != "RNSVGSvgView") {
+    gtk_widget_set_child_visible(widget, FALSE);
+  }
+}
+
+// Takes `widget` out of its parent, if it has one. GTK makes an unparented widget visible again:
+// one setCovered or hideSvgElement hid stays hidden where it is inserted next.
+void unparentStayingHidden(GtkWidget *widget) {
+  if (gtk_widget_get_parent(widget)) {
+    gboolean childVisible = gtk_widget_get_child_visible(widget);
+    gtk_widget_unparent(widget);
+    gtk_widget_set_child_visible(widget, childVisible);
+  }
+}
+
+} // namespace
+
 void GtkBackend::createView(const ShadowView &view) {
   GtkWidget *widget = makeViewWidget(accessibleRole(view));
   g_object_ref_sink(widget);
@@ -190,11 +213,7 @@ void GtkBackend::createView(const ShadowView &view) {
     makeScrollView(widget, *d);
     applyScrollViewState(*d);
   } else if (d->component == "Image") {
-    applyImageProps(*d, gtk_widget_get_scale_factor(widget));
-  } else if (d->component.starts_with("RNSVG") && d->component != "RNSVGSvgView") {
-    // react-native-svg's elements draw nothing of their own: the svg draws them. A foreignObject's
-    // views stay hidden with them.
-    gtk_widget_set_child_visible(widget, FALSE);
+    makeImageView(widget, *d);
   } else if (d->component == "RNSScreenStackHeaderConfig") {
     // What of a header shows is in the window's header bar: its subtree is neither drawn nor hit
     // in the content.
@@ -210,6 +229,7 @@ void GtkBackend::createView(const ShadowView &view) {
       applySearchBar(entry, *view.props);
     }
   }
+  hideSvgElement(widget);
   makeControl(widget, *d);
   if (auto accessibility = accessibilityOf(view)) {
     applyAccessibility(accessibleWidget(*d), *accessibility);
@@ -255,9 +275,7 @@ void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int ind
     return;
   }
   unhostView(child);
-  if (gtk_widget_get_parent(c->second)) {
-    gtk_widget_unparent(c->second);
-  }
+  unparentStayingHidden(c->second);
   // Fabric's order is the drawing order. The index counts views only: a TextInput's field is a
   // child of its own, after them.
   GtkWidget *parentWidget = contentWidget(p->second);
@@ -268,6 +286,12 @@ void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int ind
     }
   }
   gtk_widget_insert_before(c->second, parentWidget, sibling);
+  // An svg element's view stays hidden, however it came here.
+  hideSvgElement(c->second);
+  // An Image's source was picked before it had a window, at the first monitor's scale.
+  if (ViewData *d = viewData(c->second); d && d->image) {
+    applyImageProps(*d, gtk_widget_get_scale_factor(c->second));
+  }
   if (viewData(c->second)->component == "ModalHostView") {
     modals_->mounted(surfaceId, child);
   }
@@ -277,8 +301,8 @@ void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int ind
 void GtkBackend::removeChild(SurfaceId, Tag, Tag child, int) {
   modals_->unmounted(child);
   unhostView(child);
-  if (auto c = views_.find(child); c != views_.end() && gtk_widget_get_parent(c->second)) {
-    gtk_widget_unparent(c->second);
+  if (auto c = views_.find(child); c != views_.end()) {
+    unparentStayingHidden(c->second);
   }
 }
 
@@ -354,6 +378,10 @@ void GtkBackend::followRole(const ShadowView &view) {
   g_object_set_data(G_OBJECT(old), "ngn-replaced-by", next);
   // A state update replaces a Paragraph's widget with no props update to follow.
   applyViewProps(next, *viewData(next));
+  // An Image hears a new scale through its widget: the new one listens too, and keeps the load.
+  if (viewData(next)->image) {
+    makeImageView(next, *viewData(next));
+  }
   // A focused field's GtkText loses the focus as it moves and takes it back after: the app hears
   // neither.
   TextField *field = focus ? textFieldOf(focus) : nullptr;
