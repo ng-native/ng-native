@@ -21,6 +21,7 @@
 #include <react/utils/ContextContainer.h>
 
 #include <optional>
+#include <string_view>
 #include <string>
 #include <vector>
 
@@ -149,6 +150,14 @@ class NativeControlShadowNode final : public facebook::react::ConcreteViewShadow
 template <const char *Name, ControlKind Kind>
 using NativeControlComponentDescriptor =
     facebook::react::ConcreteComponentDescriptor<NativeControlShadowNode<Name, Kind>>;
+
+// Whether a strftime time format, as the C library's locale gives it (nl_langinfo(T_FMT)), writes a
+// 12-hour clock: it has %I, %l, %r, %p or %P. A date picker's time follows it on Linux.
+bool twelveHourClock(std::string_view timeFormat);
+// The hour of the day, 0 to 23, for an hour on a 12-hour clock (1 to 12) in the morning or after
+// noon; and the 12-hour clock's hour for an hour of the day.
+int dayHour(int clockHour, bool afterNoon);
+int clockHour(int dayHour);
 
 using NativeButtonComponentDescriptor = NativeControlComponentDescriptor<NativeButtonComponentName, ControlKind::Button>;
 using SwitchControlComponentDescriptor =

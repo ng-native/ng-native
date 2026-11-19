@@ -87,9 +87,11 @@ later and a `GtkSpinner` before it (or whenever it stays shown while stopped), `
 an `AdwToggleGroup` on libadwaita 1.7 and later and a linked row of toggle buttons before it, and
 `<search-field>` a `GtkSearchEntry`, which sends each change as it is typed. `<date-time-picker>`
 is a button showing the date that opens a `GtkCalendar`, keeping the time of day and the picker's
-bounds. A `datetime` picker picks its day the same way and shows its time, and the `time` and
-`countdown` modes show the time and pick nothing yet. `controlSize`, `sfSymbol` and the search
-field's font props do nothing there.
+bounds. A `time` picker opens an hour and a minute in spin buttons, as GNOME Clocks and Calendar
+pick a time, on the picker's day and within its bounds; the hour runs 1 to 12 beside an AM and PM
+button where the locale's time format is a 12-hour clock. A `datetime` picker opens both, and a
+`countdown` one shows the time and picks nothing. `controlSize`, `sfSymbol` and the search field's
+font props do nothing there.
 
 ## Text inputs
 

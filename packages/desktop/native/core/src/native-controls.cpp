@@ -126,4 +126,25 @@ std::optional<ControlKind> controlKind(std::string_view componentName) {
   return std::nullopt;
 }
 
+bool twelveHourClock(std::string_view timeFormat) {
+  for (size_t i = 0; i + 1 < timeFormat.size(); ++i) {
+    if (timeFormat[i] != '%') {
+      continue;
+    }
+    char conversion = timeFormat[++i];
+    if (conversion == 'I' || conversion == 'l' || conversion == 'r' || conversion == 'p' || conversion == 'P') {
+      return true;
+    }
+  }
+  return false;
+}
+
+int dayHour(int clockHour, bool afterNoon) {
+  return clockHour % 12 + (afterNoon ? 12 : 0);
+}
+
+int clockHour(int dayHour) {
+  return dayHour % 12 == 0 ? 12 : dayHour % 12;
+}
+
 } // namespace ngn

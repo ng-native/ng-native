@@ -435,3 +435,26 @@ TEST_CASE("a button's kind is empty until the element sets one") {
   CHECK(c.props(folly::dynamic::object("title", "Save"))->kind.empty());
   CHECK(c.props(folly::dynamic::object("kind", "default"))->kind == "default");
 }
+
+TEST_CASE("a time format writes a 12-hour clock when it has the hour of 12 or the AM and PM") {
+  CHECK(ngn::twelveHourClock("%r"));
+  CHECK(ngn::twelveHourClock("%I:%M:%S %p"));
+  CHECK(ngn::twelveHourClock("%l:%M %P"));
+  CHECK_FALSE(ngn::twelveHourClock("%T"));
+  CHECK_FALSE(ngn::twelveHourClock("%H:%M:%S"));
+  CHECK_FALSE(ngn::twelveHourClock(""));
+  // A literal percent sign is not a conversion.
+  CHECK_FALSE(ngn::twelveHourClock("%H%%p"));
+}
+
+TEST_CASE("an hour on a 12-hour clock and its half of the day give the hour of the day, and back") {
+  CHECK(ngn::dayHour(12, false) == 0);
+  CHECK(ngn::dayHour(1, false) == 1);
+  CHECK(ngn::dayHour(11, false) == 11);
+  CHECK(ngn::dayHour(12, true) == 12);
+  CHECK(ngn::dayHour(1, true) == 13);
+  CHECK(ngn::dayHour(11, true) == 23);
+  CHECK(ngn::clockHour(0) == 12);
+  CHECK(ngn::clockHour(13) == 1);
+  CHECK(ngn::clockHour(12) == 12);
+}

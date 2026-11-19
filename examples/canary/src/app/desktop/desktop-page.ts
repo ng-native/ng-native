@@ -16,6 +16,7 @@ import {
   type FileDropEvent,
 } from '@ng-native/components';
 import { AppWindows, OS, Tray, UndoStack } from '@ng-native/device';
+import { DateTimePicker } from '@ng-native/expo';
 import { Notifications } from '@ng-native/expo/notifications';
 import { NativeHeader } from '@ng-native/router';
 import { page } from '../screen-styles.ts';
@@ -31,6 +32,7 @@ import { TitleBarWindow } from './title-bar-window.ts';
   selector: 'x-desktop',
   imports: [
     ContextMenu,
+    DateTimePicker,
     DragItem,
     FileDrop,
     MenuBar,
@@ -71,6 +73,19 @@ import { TitleBarWindow } from './title-bar-window.ts';
         Edit > Undo takes a star back while no text field has focus.
         {{ undo.available() ? '' : 'This OS has no undo manager, so undo does nothing here.' }}
       </text>
+
+      <text class="heading">Time</text>
+      <view class="desktop-row">
+        <date-time-picker
+          testID="time"
+          mode="time"
+          [date]="time()"
+          [minimumDate]="opens"
+          [maximumDate]="closes"
+          (change)="time.set($event.nativeEvent.timestamp)"
+        />
+      </view>
+      <text class="hint">A time between 9:00 and 17:30, which the picker keeps it within.</text>
 
       <text class="heading">Tray and badge</text>
       <view class="desktop-row">
@@ -156,6 +171,9 @@ export class DesktopPage {
   protected readonly page = page;
 
   protected readonly stars = signal(0);
+  protected readonly opens = new Date(2026, 2, 14, 9, 0).getTime();
+  protected readonly closes = new Date(2026, 2, 14, 17, 30).getTime();
+  protected readonly time = signal(new Date(2026, 2, 14, 14, 45).getTime());
   protected readonly chosen = signal('Nothing chosen yet.');
   /** The card's own nativeID, renamed and taken away in turn: its menu follows each. */
   protected readonly cardName = signal<string | undefined>(undefined);
