@@ -4,6 +4,14 @@
 
 namespace ngn {
 
+AccessibilitySettings linuxAccessibility(const LinuxAccessibilitySources &sources) {
+  return {
+      .screenReader = sources.screenReader,
+      .reduceMotion = sources.portalReducedMotion || sources.gtkReducedMotion || !sources.animations,
+      .increaseContrast = sources.highContrast,
+  };
+}
+
 void HostState::setInitialUrl(std::string url) {
   std::lock_guard lock(mutex_);
   initialUrl_ = std::move(url);

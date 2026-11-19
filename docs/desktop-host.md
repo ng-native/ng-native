@@ -34,7 +34,12 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   Accessibility is GTK's own: each widget is made with the GTK role for the view's ARIA role,
   which the core's `aria-role.h` reads from its `role` or `accessibilityRole`, and its label,
   description, level and states follow the props. GTK fixes a role when it makes the widget, so
-  a view whose role changes gets a new widget in its place, with its children and the focus.
+  a view whose role changes gets a new widget in its place, with its children and the focus. A
+  text input's field is the text box with its label, and its view is generic. Announcements go
+  through `gtk_accessible_announce`, found at run time on GTK 4.14 and later, and say nothing
+  below. `AccessibilityInfo`'s settings (`accessibility-settings.h`) come from the settings
+  portal, GTK's settings and libadwaita's high contrast, through the core's `linuxAccessibility`,
+  and the screen reader from AT-SPI's `org.a11y.Status`.
   Orca's structural navigation finds no headings or landmarks in a GTK 4 app. It
   builds on Linux against GTK 4.10 or later and libadwaita 1.4 or later, and on a Mac against
   Homebrew's (`brew install gtk4 libadwaita openssl@3 libnghttp2`) as a dev loop. Its HTTP and
@@ -64,25 +69,27 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   its last active window, or sends `reopen` when it has none shown. `--gapplication-service` starts
   it as the D-Bus service a packaged app's `DBusActivatable` desktop entry names. A window reports
   its size, maximised and full-screen state and focus to the core's `WindowHost`, which saves the
-  size and state but no place. An app that listens decides whether closing its last window quits
-  it, by `provideAppLifecycle`'s `quitWhenLastWindowCloses`, as on macOS. With no app listening,
-  the host quits when the user closes the last window and the app's own window is not shown
-  (`WindowHost::lastWindowClosed`); a reload closing a window never quits it. The app's menu bar is
-  a `GMenu` built from the core's items (`menus.h`), each item an action of the window's `menu`
-  group, shown in the chrome's menu bar or primary menu. GTK's popover menus take no keys, so a
-  window's capture-phase key controller looks a press up in order: the app's shortcuts
-  (`MenuHost::keyDown`), the back and forward keys (`navigationFor`), then the bar (`findMenuItem`
-  by chord), leaving a focused text input its editing keys; a bubble-phase controller gives an
-  unused Return or Escape to the `default` or `cancel` native button. Mouse buttons 8 and 9 go back
-  and forward, and a secondary click on a view with a `contextMenu` shows a `GtkPopoverMenu` there.
-  A window shows with nothing focused, as on macOS, so a header's search field does not take the
-  focus at launch. A `<modal>`
+  size and state but no place. An app that listens decides whether closing its last window quits it, by `provideAppLifecycle`'s `quitWhenLastWindowCloses`, as on macOS. With no app listening, the host quits when the user closes the last window and the app's own window is not shown (`WindowHost::lastWindowClosed`); a reload closing a window never quits it. The app's menu bar is a `GMenu` built from the core's items
+  (`menus.h`), each item an action of the window's `menu` group, shown in the chrome's menu bar or
+  primary menu. GTK's popover menus take no keys, so a window's capture-phase key controller looks a
+  press up in order: the app's shortcuts (`MenuHost::keyDown`), the focus keys (`focus.h`: Tab and
+  Shift-Tab over the core's `nextInTabOrder` in the focus's container, arrows over `compositeMove`,
+  each grabbing real GTK focus), the back and forward keys (`navigationFor`), then the bar
+  (`findMenuItem` by chord), leaving a focused text input its
+  editing keys; a bubble-phase controller gives an unused Return or Escape to the `default` or
+  `cancel` native button. Mouse buttons 8 and 9 go back and forward, and a secondary click on a
+  view with a `contextMenu` shows a `GtkPopoverMenu` there. A window shows with nothing
+  focused, as on macOS, so a header's search field does not take the focus at launch. A `<modal>`
   sheet, and a screen presented with `present()`, is an `AdwDialog` in a resizable window on
   libadwaita 1.5 and later, found at run time, and a drawn sheet on a dimmed overlay on 1.4 or over
   a window that is not resizable, where libadwaita would open a window of its own; a cover fills
   the overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. A
   `<split-view>` is an `AdwNavigationSplitView` in an `AdwBreakpointBin` (`split-view.h`), each
   pane in a page of its own as a container for input, its size going back to layout as state. The
+  window's split view runs the window's full height, as libadwaita lays a window out: each pane is
+  under a header bar of its own in an `AdwToolbarView`, and the window's header bar moves over the
+  content pane while the split view is there (not in a title-bar mode whose content runs under the
+  header bar, where it already spans the window). A menu bar stays across the top, above both panes. The
   core owns collapse (`FoldingSplit`): the bin's breakpoint, at the core's `sidebarCompactWidth`,
   only reports the width, and the split view's `collapsed` and `show-content` show the result. The
   sections are a `GtkListBox` over their frames, drawn from the core's `sourceLists`, and Show

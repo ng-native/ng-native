@@ -68,13 +68,15 @@ class GtkMenus final : public MenuBackend {
 bool popUpContextMenu(GtkWidget *widget, facebook::react::Point point, const std::vector<MenuItem> &items, std::function<void(const MenuItem &)> chosen);
 
 // The window's key handling, in the order AppKit's has it, for a window holding the app's
-// surfaces: the app's shortcuts (`shortcut`, true when one took the press), then the back and
+// surfaces: the app's shortcuts (`shortcut`, true when one took the press), then the focus keys
+// (`focus`: Tab, Shift-Tab and a composite widget's arrows, focus.h), then the back and
 // forward keys (`navigate`), then a menu item's key (`menuKey`, the item for the press or null).
 // A text input that has the focus keeps its own editing keys: an editing command's item's, and any
 // item's on a key `editingKey` names (app-menus.h's editingChord). Then, as the press bubbles back up
 // unused, Return presses the window's `default` native button and Escape its `cancel` one.
 struct KeyRouting {
   std::function<bool(const KeyChord &chord, bool textInputFocused)> shortcut;
+  std::function<bool(GtkWindow *window, guint keyval, GdkModifierType state)> focus;
   std::function<std::optional<NavigationDirection>(const KeyChord &chord)> navigation;
   std::function<bool(const KeyChord &chord)> editingKey;
   std::function<void(NavigationDirection direction, GtkWindow *window)> navigate;

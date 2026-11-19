@@ -134,3 +134,18 @@ TEST_CASE("Watched leaves out of a new listener's calls the values set before it
   value.set(4);
   CHECK(changes == std::vector<std::pair<int, int>>{{3, 4}});
 }
+
+TEST_CASE("Linux's accessibility settings: any source reducing motion reduces it, and the rest stay off") {
+  ngn::LinuxAccessibilitySources sources;
+  CHECK(ngn::linuxAccessibility(sources) == ngn::AccessibilitySettings{});
+  sources.animations = false;
+  CHECK(ngn::linuxAccessibility(sources).reduceMotion);
+  sources.animations = true;
+  sources.portalReducedMotion = true;
+  CHECK(ngn::linuxAccessibility(sources).reduceMotion);
+  sources.portalReducedMotion = false;
+  sources.gtkReducedMotion = true;
+  CHECK(ngn::linuxAccessibility(sources).reduceMotion);
+  sources = {.highContrast = true, .screenReader = true};
+  CHECK(ngn::linuxAccessibility(sources) == ngn::AccessibilitySettings{.screenReader = true, .increaseContrast = true});
+}

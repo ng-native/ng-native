@@ -1,6 +1,7 @@
 #include "gtk-backend.h"
 
 #include "accessible.h"
+#include "focus.h"
 #include "image-view.h"
 #include "native-controls.h"
 #include "scroll-view.h"
@@ -11,6 +12,7 @@
 
 #include <react/renderer/components/view/ViewProps.h>
 
+#include <algorithm>
 #include <utility>
 
 namespace ngn::gtk {
@@ -217,11 +219,7 @@ void unparentStayingHidden(GtkWidget *widget) {
 } // namespace
 
 void GtkBackend::createView(const ShadowView &view) {
-  auto accessibility = accessibilityOf(view);
   GtkWidget *widget = makeViewWidget(accessibleRole(view));
-  if (accessibility) {
-    applyAccessibility(widget, *accessibility);
-  }
   g_object_ref_sink(widget);
   ViewData *d = viewData(widget);
   d->tag = view.tag;
@@ -254,6 +252,9 @@ void GtkBackend::createView(const ShadowView &view) {
   }
   hideSvgElement(widget);
   makeControl(widget, *d);
+  if (auto accessibility = accessibilityOf(view)) {
+    applyAccessibility(accessibleWidget(*d), *accessibility);
+  }
   applyViewProps(widget, *d);
   views_[view.tag] = widget;
   if (view.tag == view.surfaceId) {
@@ -270,6 +271,7 @@ void GtkBackend::deleteView(SurfaceId, Tag tag) {
   }
   modals_->unmounted(tag);
   headers_->forget(tag);
+  relations_.erase(tag);
   splitViews_->deleted(tag);
   unhostView(tag);
   if (viewData(it->second)->component == "RNSScreenStackHeaderConfig") {
@@ -337,7 +339,7 @@ void GtkBackend::updateProps(const ShadowView &view) {
   followRole(view);
   applyViewProps(it->second, *d);
   if (auto accessibility = accessibilityOf(view)) {
-    applyAccessibility(it->second, *accessibility);
+    applyAccessibility(accessibleWidget(*d), *accessibility);
   }
   applyTextFieldProps(*d);
   applyScrollViewProps(*d);
@@ -362,7 +364,7 @@ void GtkBackend::updateState(const ShadowView &view) {
     // or no element at all.
     followRole(view);
     if (auto accessibility = accessibilityOf(view)) {
-      applyAccessibility(it->second, *accessibility);
+      applyAccessibility(accessibleWidget(*d), *accessibility);
     }
     gtk_widget_queue_draw(it->second);
   }
@@ -394,6 +396,8 @@ void GtkBackend::followRole(const ShadowView &view) {
   // The view's data (its props, state, layout and text field) goes with it; the old widget keeps
   // the new one's empty data to free.
   swapViewData(old, next);
+  // The focus moving to its replacement is no focus change for the view (focus.h).
+  g_object_set_data(G_OBJECT(old), "ngn-replaced-by", next);
   // A state update replaces a Paragraph's widget with no props update to follow.
   applyViewProps(next, *viewData(next));
   // A focused field's GtkText loses the focus as it moves and takes it back after: the app hears
@@ -420,6 +424,14 @@ void GtkBackend::followRole(const ShadowView &view) {
     makeImageView(next, *viewData(next));
   }
   it->second = next;
+  // GTK's relations point at widgets: the view's own go onto its new widget, and those of the views
+  // that name it move to it.
+  auto names = [&](const std::vector<Tag> &tags) { return std::find(tags.begin(), tags.end(), view.tag) != tags.end(); };
+  for (const auto &[source, relations] : relations_) {
+    if (source == view.tag || names(relations.labelledBy) || names(relations.describedBy)) {
+      applyRelations(source);
+    }
+  }
   if (field && GTK_IS_TEXT(focus)) {
     // Focusing a GtkText selects all of it: the caret stays where the user left it.
     gtk_text_grab_focus_without_selecting(GTK_TEXT(focus));
@@ -472,6 +484,8 @@ void GtkBackend::setCovered(SurfaceId, Tag tag, bool covered) {
     gtk_widget_set_child_visible(it->second, !covered);
     // A child shown again has no allocation until its parent allocates it.
     relayout(it->second);
+    // A window split view in it is no longer shown, or shown again: the header bar follows.
+    splitViews_->placeHeaders();
   }
 }
 
@@ -483,9 +497,53 @@ void GtkBackend::setFrontHeader(SurfaceId surfaceId, const std::optional<ScreenS
   headers_->show(surfaceId, header);
 }
 
+void GtkBackend::setAccessibilityRelations(SurfaceId, Tag tag, const AxRelations &relations) {
+  if (relations.empty()) {
+    relations_.erase(tag);
+  } else {
+    relations_[tag] = relations;
+  }
+  applyRelations(tag);
+}
+
+void GtkBackend::applyRelations(Tag tag) {
+  GtkWidget *widget = view(tag);
+  if (!widget) {
+    return;
+  }
+  auto it = relations_.find(tag);
+  AxRelations relations = it == relations_.end() ? AxRelations{} : it->second;
+  GtkAccessible *source = GTK_ACCESSIBLE(relationWidget(*viewData(widget)));
+  auto point = [&](GtkAccessibleRelation relation, const std::vector<Tag> &tags) {
+    GList *targets = nullptr;
+    for (Tag target : tags) {
+      if (GtkWidget *w = view(target)) {
+        targets = g_list_append(targets, relationWidget(*viewData(w)));
+      }
+    }
+    if (targets) {
+      // A list of references goes in a GValue as a GList, which GTK keeps: the varargs form takes
+      // them one by one, up to a null.
+      GValue value = G_VALUE_INIT;
+      g_value_init(&value, G_TYPE_POINTER);
+      g_value_set_pointer(&value, targets);
+      // GTK compares two lists of references by membership, so one in another order is "the same"
+      // and would keep the old order: the old value goes first.
+      gtk_accessible_reset_relation(source, relation);
+      gtk_accessible_update_relation_value(source, 1, &relation, &value);
+      g_value_unset(&value);
+    } else {
+      gtk_accessible_reset_relation(source, relation);
+    }
+  };
+  point(GTK_ACCESSIBLE_RELATION_LABELLED_BY, relations.labelledBy);
+  point(GTK_ACCESSIBLE_RELATION_DESCRIBED_BY, relations.describedBy);
+}
+
 void GtkBackend::didMount(SurfaceId surfaceId) {
   modals_->settle();
   splitViews_->layOut();
+  splitViews_->placeHeaders();
   headers_->refresh();
   if (onMount) {
     onMount(surfaceId);
@@ -496,6 +554,7 @@ void GtkBackend::updateDesktopProps(SurfaceId, Tag tag, const DesktopProps &prop
   if (auto it = views_.find(tag); it != views_.end()) {
     ViewData *d = viewData(it->second);
     d->desktop = props;
+    applyFocusable(it->second, *d);
     updateScrollers(*d);
   }
 }
@@ -506,6 +565,10 @@ void GtkBackend::setSplitView(SurfaceId surfaceId, Tag split, bool window) {
 
 void GtkBackend::setSourceLists(SurfaceId, Tag parent, const std::vector<SourceList> &lists) {
   splitViews_->setSourceLists(parent, lists);
+}
+
+void GtkBackend::announce(SurfaceId surfaceId, const Announcement &announcement) {
+  announceOn(surfaceWidget(surfaceId), announcement);
 }
 
 void GtkBackend::setSvgDrawing(SurfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) {

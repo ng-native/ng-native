@@ -84,6 +84,8 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
   void updateDesktopProps(SurfaceId surfaceId, Tag tag, const DesktopProps &props) override;
   void setSplitView(SurfaceId surfaceId, Tag split, bool window) override;
   void setSourceLists(SurfaceId surfaceId, Tag parent, const std::vector<SourceList> &lists) override;
+  void announce(SurfaceId surfaceId, const Announcement &announcement) override;
+  void setAccessibilityRelations(SurfaceId surfaceId, Tag tag, const AxRelations &relations) override;
   void setSvgDrawing(SurfaceId surfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) override;
   std::vector<facebook::react::ComponentDescriptorProvider> componentProviders() const override;
 
@@ -93,12 +95,18 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
   // which GTK fixes for good: the new widget takes the old one's place, children, view data and
   // focus. Making the view never replaces it.
   void followRole(const ShadowView &view);
+  // Points the accessible widget of `tag` at the accessible widgets of the views it is labelled
+  // and described by, as relations_ has them.
+  void applyRelations(Tag tag);
 
   std::thread::id uiThread_;
   std::mutex tasksMutex_;
   std::deque<std::function<void()>> tasks_;
   guint drainSource_{0};
   std::unordered_map<Tag, GtkWidget *> views_;
+  // Each view's relations while it has any: set again on its new widget, and on the widgets that
+  // point at it, when a role change replaces a widget.
+  std::unordered_map<Tag, AxRelations> relations_;
   static void surfaceGone(gpointer self, GObject *surface);
   std::unordered_map<SurfaceId, GtkWidget *> surfaces_;
   struct Hosted {

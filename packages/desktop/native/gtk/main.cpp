@@ -10,8 +10,11 @@
 // NGN_CAPTURE=<file.png> saves the first window's content, drawn in-process (capture.h), a second
 // after its first frame, or with an input script (NGN_INPUT_SCRIPT) a second after the script has
 // played.
+#include "accessibility-settings.h"
+#include "animation-frames.h"
 #include "app-windows.h"
 #include "capture.h"
+#include "focus.h"
 #include "gtk-backend.h"
 #include "host-sources.h"
 #include "image-view.h"
@@ -65,6 +68,8 @@ struct Host {
   std::unique_ptr<ngn::InputDispatcher> input;
   std::unique_ptr<ngn::Runtime> runtime;
   std::shared_ptr<ngn::HostState> state;
+  // The desktop's accessibility settings, into the host state as they change.
+  std::unique_ptr<ngn::gtk::AccessibilitySettingsWatcher> accessibility;
   std::shared_ptr<ngn::gtk::GtkWindows> windows;
   std::shared_ptr<ngn::MenuHost> menus;
   std::shared_ptr<ngn::gtk::GtkMenus> gtkMenus;
@@ -327,9 +332,13 @@ void routeWindow(GtkWidget *surfaceWidget) {
     return;
   }
   g_object_set_data(G_OBJECT(window), "ngn-keys", GINT_TO_POINTER(1));
+  ngn::gtk::trackFocus(window);
   gHost.gtkMenus->attach(surfaceWidget);
   ngn::gtk::routeKeys(window, std::make_shared<ngn::gtk::KeyRouting>(ngn::gtk::KeyRouting{
       .shortcut = [](const ngn::KeyChord &chord, bool text) { return gHost.menus->keyDown(chord, text); },
+      .focus = [](GtkWindow *window, guint keyval, GdkModifierType state) {
+        return ngn::gtk::moveFocusByKey(window, keyval, state, *gHost.backend, gHost.mounting->tree());
+      },
       .navigation = [](const ngn::KeyChord &chord) { return ngn::navigationFor(chord, gHost.os); },
       .editingKey = [](const ngn::KeyChord &chord) { return ngn::editingChord(chord, gHost.os); },
       .navigate = navigate,
@@ -464,6 +473,7 @@ int main(int argc, char *argv[]) {
   });
   gHost.mounting = views.mounting;
   gHost.input = std::move(views.input);
+  ngn::gtk::installWorkletHost(gHost.mounting, gHost.backend);
   gHost.backend->hooks = {
       .containerRoot =
           [](facebook::react::Tag tag, bool root) {
@@ -560,7 +570,10 @@ int main(int argc, char *argv[]) {
   std::string caches = settings.test ? settings.test->caches() : joined(g_get_user_cache_dir(), appId);
   g_mkdir_with_parents(caches.c_str(), 0700);
   auto system = ngn::gtk::makeSystem(appId, appData);
-  gHost.state = std::make_shared<ngn::HostState>();
+  // The state and the watcher of the desktop's accessibility settings, which only the running app has.
+  auto watched = ngn::gtk::makeWatchedHostState();
+  gHost.state = std::move(watched.state);
+  gHost.accessibility = std::move(watched.accessibility);
   gHost.state->metrics.set(windowMetrics(width, height));
   if (!settings.initialUrl.empty()) {
     gHost.state->setInitialUrl(settings.initialUrl);

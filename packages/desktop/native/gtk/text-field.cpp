@@ -587,7 +587,10 @@ void makeTextField(GtkWidget *widget, ViewData &view) {
       }
     }), field);
   } else {
-    field->text = gtk_text_new();
+    // A GtkText is no accessible element (its role is none: it is made to be the delegate of a
+    // GtkEditable that is one, as a GtkEntry is), so it is made a text box, which takes the label
+    // and relations and exposes the text.
+    field->text = GTK_WIDGET(g_object_new(GTK_TYPE_TEXT, "accessible-role", GTK_ACCESSIBLE_ROLE_TEXT_BOX, nullptr));
     g_signal_connect_swapped(field->text, "changed", G_CALLBACK(changed), field);
     g_signal_connect_swapped(field->text, "notify::cursor-position", G_CALLBACK(selectionMoved), field);
     g_signal_connect_swapped(field->text, "notify::selection-bound", G_CALLBACK(selectionMoved), field);

@@ -140,3 +140,63 @@ TEST_CASE("hidden and presentational views are no elements") {
     CHECK_FALSE(m.view(tag).isAccessibilityElement);
   }
 }
+
+TEST_CASE("a view is labelled and described by the views its props name, ahead of its own label and hint") {
+  MountedViews m;
+  m.add(MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("nativeID", "name")("accessibilityLabel", "Name"))));
+  m.add(MountedViews::shadow(3, "View", viewProps(folly::dynamic::object("nativeID", "hint")("accessibilityLabel", "As on your passport"))));
+  auto field = MountedViews::shadow(4, "View", viewProps(folly::dynamic::object("accessible", true)("role", "button")(
+      "accessibilityLabel", "Own")("accessibilityHint", "Own hint")("accessibilityLabelledBy", folly::dynamic::array("name"))(
+      "accessibilityDescribedBy", folly::dynamic::array("hint"))));
+  m.add(field);
+  NGNView *view = m.view(4);
+  CHECK([view.accessibilityLabel isEqualToString:@"Name"]);
+  CHECK([view.accessibilityHelp isEqualToString:@"As on your passport"]);
+  CHECK((view.accessibilityTitleUIElement == m.view(2)));
+
+  // The view named goes: the view's own hint is read again.
+  auto hint = m.mounting->tree().find(3)->view;
+  m.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, hint, 1), ShadowViewMutation::DeleteMutation(hint)});
+  CHECK([view.accessibilityHelp isEqualToString:@"Own hint"]);
+  // The props stop naming the label: the view's own label is read again.
+  m.update(field, viewProps(folly::dynamic::object("accessible", true)("role", "button")("accessibilityLabel", "Own")));
+  CHECK([view.accessibilityLabel isEqualToString:@"Own"]);
+  CHECK((view.accessibilityTitleUIElement == nil));
+}
+
+TEST_CASE("a native control is labelled and described by the views its props name, on the control that is the element") {
+  MountedViews m;
+  auto name = MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("nativeID", "name")("accessibilityLabel", "Notifications")));
+  m.add(name);
+  m.add(MountedViews::shadow(3, "View", viewProps(folly::dynamic::object("nativeID", "hint")("accessibilityLabel", "Sent by email"))));
+  auto props = [](bool related) {
+    folly::dynamic raw = folly::dynamic::object("title", "Go");
+    if (related) {
+      raw["accessibilityLabelledBy"] = folly::dynamic::array("name");
+      raw["accessibilityDescribedBy"] = folly::dynamic::array("hint");
+    }
+    return ngn::testing::nativeButtonProps(std::move(raw));
+  };
+  auto button = MountedViews::shadow(4, "NgNativeButton", props(true));
+  m.add(button);
+  NGNView *view = m.view(4);
+  NSView *control = [view accessibilityControl];
+  REQUIRE((control != nil));
+  CHECK_FALSE(view.isAccessibilityElement);
+  CHECK([control.accessibilityLabel isEqualToString:@"Notifications"]);
+  CHECK([control.accessibilityHelp isEqualToString:@"Sent by email"]);
+  CHECK((control.accessibilityTitleUIElement == m.view(2)));
+
+  // The text of the view named changes: the control reads the new one.
+  m.update(name, viewProps(folly::dynamic::object("nativeID", "name")("accessibilityLabel", "Alerts")));
+  CHECK([control.accessibilityLabel isEqualToString:@"Alerts"]);
+  // The control's own props applied again keep what the relations say.
+  m.update(button, props(true));
+  CHECK([control.accessibilityLabel isEqualToString:@"Alerts"]);
+
+  // The props stop naming them: the label and help they gave go.
+  m.update(button, props(false));
+  CHECK_FALSE([control.accessibilityLabel isEqualToString:@"Alerts"]);
+  CHECK((control.accessibilityHelp == nil));
+  CHECK((control.accessibilityTitleUIElement == nil));
+}
