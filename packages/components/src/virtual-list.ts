@@ -951,7 +951,9 @@ export class VirtualList<T> extends ScrollViewProps {
      * then the rows added below happened to be worth exactly the rows wasted above. With mixed
      * heights they are not, and the list clips short of its own bottom.
      */
-    const ahead = this.velocityLead() ? this.ahead() : 0;
+    // Within three viewports of the viewport as it is now, which may have shrunk since.
+    const reach = 3 * Math.max(0, viewport);
+    const ahead = this.velocityLead() ? Math.max(-reach, Math.min(reach, this.ahead())) : 0;
     const top = this.topOf(visible);
     const first = Math.max(
       0,
@@ -1446,9 +1448,9 @@ export class VirtualList<T> extends ScrollViewProps {
       this.eased = 0;
     } else {
       const reach = 3 * viewport;
-      const lead = Math.max(-reach, Math.min(reach, (moved / elapsed) * ms));
+      const clamp = (value: number) => Math.max(-reach, Math.min(reach, value));
       // Halfway to the new speed, so one late event does not throw the window around.
-      this.eased = (this.eased + lead) / 2;
+      this.eased = clamp((this.eased + clamp((moved / elapsed) * ms)) / 2);
     }
     const step = viewport / 4;
     const ahead = step ? Math.round(this.eased / step) * step : 0;

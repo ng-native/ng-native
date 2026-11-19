@@ -155,8 +155,9 @@ describe('feed', () => {
     fabric.reset();
     for (let y = 2000; y < 30000; y += 250) await scroll(y);
     // About a hundred posts pass through the window; a row torn down and rebuilt for each would
-    // be twenty-odd nodes apiece.
-    expect(fabric.calls.createNode).toBeLessThan(250);
+    // be twenty-odd nodes apiece. Events this close together read as a hard fling, so the window
+    // holds about six rows more ahead of it, and those rows' nodes are made once.
+    expect(fabric.calls.createNode).toBeLessThan(400);
   });
 
   test('removes and edits a post in place', async () => {

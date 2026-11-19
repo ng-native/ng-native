@@ -135,6 +135,15 @@ describe('windowed list reaching ahead of the scroll', () => {
     assert.ok(last >= row + 10 + 20, `rows to ${last}, past the viewport ending at ${row + 10}`);
   });
 
+  it('keeps the reach within three of the viewports the list has now, when it shrinks', async () => {
+    const at = await fling(100, 1, 10);
+    // A keyboard or a rotation halves the viewport mid-fling, with no scroll event yet.
+    await fireEvent(host, 'layout', { layout: { height: VIEWPORT / 2 } });
+    // Five rows on screen, the overscan of 2, and at most three viewports of five rows past them.
+    const last = edges(fabric)[1];
+    assert.ok(last <= at + 5 + 2 + 15 + 1, `rows to ${last}, within three viewports of 200`);
+  });
+
   it('follows a turn the other way', async () => {
     const at = await fling(300, 1, 10);
     await fling(at, -1, 6);
