@@ -118,6 +118,10 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
   NSEventPhase phase = event.phase, momentum = event.momentumPhase;
   BOOL wheel = phase == NSEventPhaseNone && momentum == NSEventPhaseNone;
   BOOL still = event.scrollingDeltaX == 0 && event.scrollingDeltaY == 0;
+  if (phase == NSEventPhaseBegan) {
+    // A mouse's wheel may have queued a settling: the gesture now beginning has its own.
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(settleOnPage) object:nil];
+  }
   if (phase == NSEventPhaseMayBegin) {
     _passing = NO;
     _heldStart = nil;
@@ -168,8 +172,6 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
   }
   [super scrollWheel:scroll];
   if (phase == NSEventPhaseBegan) {
-    // A mouse's wheel may have queued a settling: the drag now under way has its own.
-    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(settleOnPage) object:nil];
     _velocity = NSZeroPoint;
     _dragging = YES;
     [self report:NGNScrollPhaseDragBegan];

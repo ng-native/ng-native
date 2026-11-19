@@ -265,3 +265,17 @@ TEST_CASE("a drag that begins after a mouse's wheel turned cancels the settling 
   CHECK((pager.phases.count == 1));
   CHECK(pager.phases[0].integerValue == NGNScrollPhaseDragBegan);
 }
+
+TEST_CASE("a drag whose start has no deltas, after a mouse's wheel turned, cancels the wheel's settling too") {
+  Nested pager(NSMakeSize(600, 300));
+  pager.scroll.pagingEnabled = YES;
+  CGEventRef cg = CGEventCreateScrollWheelEvent(nullptr, kCGScrollEventUnitLine, 2, 0, -1);
+  NSEvent *wheel = [NSEvent eventWithCGEvent:cg];
+  CFRelease(cg);
+  pager.send(@[ wheel, trackpad(0, 0, kCGScrollPhaseBegan) ]);
+  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.4]];
+  pager.send(@[ trackpad(-20, 0, kCGScrollPhaseChanged) ]);
+  CHECK((pager.phases.count == 1));
+  CHECK(pager.phases[0].integerValue == NGNScrollPhaseDragBegan);
+}
+
