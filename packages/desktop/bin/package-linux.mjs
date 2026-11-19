@@ -89,6 +89,15 @@ const MAIN_CATEGORIES = [
   'Utility',
 ];
 
+/**
+ * The longest package name. `bin/<name>` links to `../lib/<name>/ngn-app`, which a tar header holds
+ * at 100 bytes or fewer, and this keeps it well within.
+ */
+const MAX_SLUG = 64;
+
+/** The host's file in `lib/<name>/`, named the same for every app so that no slug can name another file there. */
+const HOST_FILE = 'ngn-app';
+
 /** The file the bundle is in, beside the host, as on macOS. */
 const BUNDLE_FILE = 'main.jsbundle';
 
@@ -112,11 +121,27 @@ export function checkLinuxFlags({ format, license, homepage, categories, maintai
   if (license !== undefined && !/^[A-Za-z0-9.+\-:() ]+$/.test(license)) {
     throw new UsageError(`--license takes an SPDX license expression, not "${license}".`);
   }
-  if (homepage !== undefined && !/^https?:\/\/[^\s/]+/.test(homepage)) {
+  if (homepage !== undefined && !isWebUrl(homepage)) {
     throw new UsageError(`--homepage takes the URL of the app's page, not "${homepage}".`);
   }
   if (categories !== undefined) categoryList(categories);
   checkMaintainer(format, maintainer);
+}
+
+/**
+ * Whether `value` is, all of it, an http or https URL with a host: no whitespace or control
+ * character, which would end the field it is written into and start another.
+ *
+ * @param {string} value
+ */
+function isWebUrl(value) {
+  if (/[\u0000-\u0020\u007f-\u009f]/.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return (url.protocol === 'https:' || url.protocol === 'http:') && url.hostname !== '';
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -162,6 +187,17 @@ export function categoryList(categories) {
 }
 
 /**
+ * The last part of the id made up for an `app` build: the slug's letters and digits, and `app` before
+ * a first digit, which a part of an id cannot start with (`2048` is `app2048`).
+ *
+ * @param {string} slug
+ */
+function idPart(slug) {
+  const letters = slug.replace(/[^a-z0-9]/g, '') || 'app';
+  return /^\d/.test(letters) ? `app${letters}` : letters;
+}
+
+/**
  * The application id `linuxNames` gives a package, checked for Linux and, for a Flatpak, Flathub.
  *
  * @param {string | null} bundleIdentifier
@@ -175,7 +211,7 @@ function linuxAppId(bundleIdentifier, format, slug) {
         'sets none. Set expo.ios.bundleIdentifier, which the desktop OSes share with iOS.',
     );
   }
-  const appId = bundleIdentifier ?? `dev.ngnative.${slug.replace(/[^a-z0-9]/g, '') || 'app'}`;
+  const appId = bundleIdentifier ?? `dev.ngnative.${idPart(slug)}`;
   const part = /^[A-Za-z_][A-Za-z0-9_-]*$/;
   const parts = appId.split('.');
   if (parts.length < 2 || !parts.every((each) => part.test(each)) || appId.length > 255) {
@@ -219,6 +255,12 @@ export function linuxNames(expo, config, format) {
     throw new UsageError(
       `The slug "${expo.slug ?? config.name}" makes no package name, which needs two letters or ` +
         'digits. Set expo.slug in app.json.',
+    );
+  }
+  if (slug.length > MAX_SLUG) {
+    throw new UsageError(
+      `The slug "${slug}" makes a package name of ${slug.length} characters, and a Linux package ` +
+        `takes ${MAX_SLUG} at most. Shorten expo.slug in app.json.`,
     );
   }
   const appId = linuxAppId(config.bundleIdentifier, format, slug);
@@ -455,10 +497,11 @@ export function rpmSpec(app, { tree }) {
     text(app.description),
     '',
     '%install',
-    'mkdir -p %{buildroot}/usr',
-    `cp -a ${text(shellQuote(`${tree}/.`))} %{buildroot}/usr/`,
+    // The build root is under the project, so its path may have a space: quoted in each command.
+    'mkdir -p "$RPM_BUILD_ROOT/usr"',
+    `cp -a ${text(shellQuote(`${tree}/.`))} "$RPM_BUILD_ROOT/usr/"`,
     // Read by everyone and written by root, whatever the copy kept: a mount can lose the modes.
-    'chmod -R u+rwX,go+rX,go-w %{buildroot}/usr',
+    'chmod -R u+rwX,go+rX,go-w "$RPM_BUILD_ROOT/usr"',
     '',
     '%files',
     `/usr/bin/${app.packageName}`,
@@ -470,6 +513,9 @@ export function rpmSpec(app, { tree }) {
   ];
   return `${lines.join('\n')}\n`;
 }
+
+/** The top folders a Flatpak's sandbox takes from its runtime, which `--filesystem` cannot give the host's. */
+const RESERVED_PATHS = /^\/(?:app|bin|etc|lib|lib32|lib64|sbin|usr)(?:\/|$)/;
 
 /**
  * The Flatpak permissions the app is built with, kept to what it uses: the display, GL and the
@@ -514,6 +560,13 @@ export function flatpakProblems(config) {
     problems.push(
       'capabilities.paths: each declared path becomes a --filesystem permission, which Flathub reviews; the sandbox reaches no other file but those the user picks.',
     );
+    for (const { path: declared } of capabilities.paths ?? []) {
+      if (RESERVED_PATHS.test(declared)) {
+        problems.push(
+          `capabilities.paths: ${declared} is a path a Flatpak's sandbox keeps for its own runtime, so --filesystem does not expose the host's.`,
+        );
+      }
+    }
   }
   return problems;
 }
@@ -690,16 +743,30 @@ function gpgSetup(native) {
 }
 
 /**
- * The owner of what a container wrote, given back to this user: Docker on Linux writes as root.
+ * The shell function `ngn_restore`, which gives what a container wrote back to this user: Docker on
+ * Linux writes as root. Rootless Podman needs none, since container root is already this user, and
+ * a host UID given to `chown` there would be read as a container one. Scripts run it on exit, so a
+ * failed build leaves nothing this user cannot remove, and it never changes the exit status.
  *
  * @param {System} sys
- * @param {boolean} native
+ * @param {ReturnType<typeof linuxToolRunner>} runner
  * @param {string[]} paths
+ * @returns {string[]}
  */
-function chownLines(sys, native, paths) {
-  if (native || sys.platform !== 'linux' || typeof process.getuid !== 'function') return [];
+function restoreOwnerLines(sys, runner, paths) {
+  const rootless = !runner.native && runner.engine === 'podman';
+  if (
+    runner.native ||
+    rootless ||
+    sys.platform !== 'linux' ||
+    typeof process.getuid !== 'function'
+  ) {
+    return [];
+  }
   const owner = `${process.getuid()}:${process.getgid?.() ?? process.getuid()}`;
-  return [`chown -R ${owner} ${paths.map(shellQuote).join(' ')}`];
+  return [
+    `ngn_restore() { chown -R ${owner} ${paths.map(shellQuote).join(' ')} 2>/dev/null || true; }`,
+  ];
 }
 
 /**
@@ -905,9 +972,9 @@ function assembleTree(sys, { config, app, format, staging, icons }, built, { arc
   // The assets, where React Native's resolver looks beside the bundle; an app may have none.
   if (sys.exists(built.assets)) sys.copy(built.assets, lib);
   sys.copy(built.bytecode, path.join(lib, BUNDLE_FILE));
-  sys.copy(path.join(buildDir, 'gtk', 'ngn-linux'), path.join(lib, app.packageName));
+  sys.copy(path.join(buildDir, 'gtk', 'ngn-linux'), path.join(lib, HOST_FILE));
   sys.symlink(
-    path.join('..', 'lib', app.packageName, app.packageName),
+    path.join('..', 'lib', app.packageName, HOST_FILE),
     path.join(tree, 'bin', app.packageName),
   );
   sys.writeFile(
@@ -948,6 +1015,8 @@ function shipFolder(sys, { output, signing }, { tree, archive, base }) {
   const folder = path.join(output, base);
   sys.remove(folder);
   sys.copy(tree, folder);
+  // An earlier signed build's signature does not belong to this archive.
+  if (!signing) sys.remove(`${archive}.asc`);
   return signing ? [folder, archive, signDetached(sys, signing.key, archive)] : [folder, archive];
 }
 
@@ -1077,8 +1146,11 @@ function buildRpm(sys, { app, arch, tree, staging, output, runner, signing }) {
   const file = `${app.packageName}-${app.version}-1.${target}.rpm`;
   const built = path.join(top, 'RPMS', target, file);
   const rpm = path.join(output, file);
+  const restore = restoreOwnerLines(sys, runner, [top, rpm]);
   const lines = [
     'set -e',
+    ...restore,
+    ...(restore.length > 0 ? ['trap ngn_restore EXIT'] : []),
     `rpmbuild -bb --target ${target} --define ${shellQuote(`_topdir ${top}`)} ${shellQuote(spec)}`,
     ...(signing
       ? [
@@ -1088,7 +1160,6 @@ function buildRpm(sys, { app, arch, tree, staging, output, runner, signing }) {
       : []),
     `mkdir -p ${shellQuote(output)}`,
     `cp ${shellQuote(built)} ${shellQuote(rpm)}`,
-    ...chownLines(sys, runner.native, [top, rpm]),
   ];
   runScript(sys, runner, {
     lines,
@@ -1128,14 +1199,16 @@ function buildFlatpak(sys, { app, config, archives, staging, output, runner, sig
   const bundles = placed.map(({ arch }) =>
     path.join(output, `${app.packageName}-${app.version}-${LINUX_ARCHES[arch].flatpak}.flatpak`),
   );
+  const restore = restoreOwnerLines(sys, runner, [repo, ...bundles]);
   const lines = [
     'set -e',
+    ...restore,
     ...(signing ? gpgSetup(runner.native) : []),
     `flatpak remote-add --user --if-not-exists flathub ${flathub}`,
     // flatpak-builder's own folders on the machine's disk, not a mount, which cannot always take
     // the links it makes.
     'work="$(mktemp -d)"',
-    'trap \'rm -rf "$work" 2>/dev/null || true\' EXIT',
+    `trap 'rm -rf "$work" 2>/dev/null || true${restore.length > 0 ? '; ngn_restore' : ''}' EXIT`,
     ...placed.flatMap(({ arch }, index) => {
       const target = LINUX_ARCHES[arch].flatpak;
       return [
@@ -1147,7 +1220,6 @@ function buildFlatpak(sys, { app, config, archives, staging, output, runner, sig
       ];
     }),
     `flatpak build-update-repo --generate-static-deltas${sign} ${shellQuote(repo)}`,
-    ...chownLines(sys, runner.native, [repo, ...bundles]),
   ];
   runScript(sys, runner, {
     lines,
@@ -1170,6 +1242,9 @@ function buildFlatpak(sys, { app, config, archives, staging, output, runner, sig
 function runScript(sys, runner, { lines, staging, output, signing, tool, name }) {
   const script = path.join(staging, `${name}.sh`);
   sys.writeFile(script, `${lines.join('\n')}\n`);
+  // The container mounts the output folder, which an engine will not make (Podman) or will make as
+  // root (a rootful Docker).
+  sys.mkdir(output);
   const result = runner.native
     ? sys.run('sh', [script])
     : inContainer(sys, runner.engine, {

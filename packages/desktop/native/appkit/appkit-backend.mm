@@ -78,7 +78,7 @@ void AppKitBackend::deleteView(SurfaceId, Tag tag) {
   [sourceLists_ removeObjectForKey:@(tag)];
 }
 
-void AppKitBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
+void AppKitBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int index) {
   NGNView *parentView = views_[@(parent)];
   NGNView *childView = views_[@(child)];
   if (parentView == nil || childView == nil) {
@@ -86,7 +86,16 @@ void AppKitBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
   }
   // The index counts Fabric children only: a TextInput holds an NSTextField of its own.
   if ([childView isKindOfClass:NGNModalHostView.class] && ![childView isKindOfClass:NGNPresentedScreenView.class]) {
-    [(NGNModalHostView *)childView presentOver:parentView];
+    // A view beside a split view at the root has no window: the split view's controller took the
+    // window's content, surface and all. The modal goes over the surface's window all the same.
+    NSView *over = parentView;
+    if (over.window == nil) {
+      // A surface already removed (a mount queued before it went) has no window to give.
+      NGNSurfaceView *surface = surfaces_[@(surfaceId)];
+      NSView *content = surface != nil ? NGNWindowOfSplit(surface).contentView : nil;
+      over = content != nil ? content : parentView;
+    }
+    [(NGNModalHostView *)childView presentOver:over];
     return;
   }
   if ([parentView conformsToProtocol:@protocol(NGNMountsChildren)]) {
@@ -155,7 +164,23 @@ void AppKitBackend::dispatchCommand(Tag tag, const std::string &name, const foll
 }
 
 void AppKitBackend::setCovered(SurfaceId, Tag tag, bool covered) {
-  views_[@(tag)].covered = covered;
+  NGNView *screen = views_[@(tag)];
+  if (screen == nil) {
+    return;
+  }
+  screen.covered = covered;
+  // A window's split view on the covered screen gives the window back to the screen in front.
+  // ponytail: walks the screen's views on each push and pop; keep a registry if that shows up.
+  NSMutableArray<NSView *> *queue = [NSMutableArray arrayWithObject:screen];
+  while (queue.count > 0) {
+    NSView *view = queue.firstObject;
+    [queue removeObjectAtIndex:0];
+    if ([view isKindOfClass:NGNSplitView.class]) {
+      [(NGNSplitView *)view setScreenCovered:covered];
+      continue;
+    }
+    [queue addObjectsFromArray:view.subviews];
+  }
 }
 
 NGNHeaderToolbar *AppKitBackend::toolbarFor(SurfaceId surfaceId) {
