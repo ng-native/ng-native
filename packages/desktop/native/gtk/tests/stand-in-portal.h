@@ -1,5 +1,5 @@
 // A portal of our own for the GTK tests: org.freedesktop.portal.Desktop's OpenURI, Inhibit,
-// Notification, FileChooser and Print over
+// Notification, FileChooser, Print and Location over
 // a peer-to-peer connection, so no session bus is needed. The portal helper is pointed at it while
 // it lasts.
 #pragma once
@@ -73,6 +73,14 @@ inline const char *kPortalIntrospection = R"(<node>
     <method name="PreparePrint"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="a{sv}" direction="in"/><arg type="a{sv}" direction="in"/><arg type="a{sv}" direction="in"/><arg type="o" direction="out"/></method>
     <method name="Print"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="h" direction="in"/><arg type="a{sv}" direction="in"/><arg type="o" direction="out"/></method>
   </interface>
+  <interface name="org.freedesktop.portal.Location">
+    <method name="CreateSession"><arg type="a{sv}" direction="in"/><arg type="o" direction="out"/></method>
+    <method name="Start"><arg type="o" direction="in"/><arg type="s" direction="in"/><arg type="a{sv}" direction="in"/><arg type="o" direction="out"/></method>
+    <signal name="LocationUpdated"><arg type="o"/><arg type="a{sv}"/></signal>
+  </interface>
+  <interface name="org.freedesktop.portal.Session">
+    <method name="Close"/>
+  </interface>
   <interface name="org.freedesktop.portal.Request">
     <method name="Close"/>
   </interface>
@@ -115,6 +123,17 @@ struct StandInPortal {
   bool offersPrint{true};
   // What a FileChooser's Response chooses.
   std::vector<std::string> uris;
+  bool offersLocation{true};
+  // A Location session: its path and the options it was made with.
+  struct Session {
+    std::string path;
+    unsigned accuracy{0};
+    unsigned distance{0};
+  };
+  std::vector<Session> sessions;
+  std::vector<std::string> closedSessions;
+  // The LocationUpdated a session gets as it starts, none when empty.
+  std::vector<std::pair<std::string, double>> fix;
 
   StandInPortal() {
     std::tie(server, client) = peerToPeer();
@@ -124,6 +143,7 @@ struct StandInPortal {
     add("org.freedesktop.portal.Notification", "/org/freedesktop/portal/desktop");
     add("org.freedesktop.portal.FileChooser", "/org/freedesktop/portal/desktop");
     add("org.freedesktop.portal.Print", "/org/freedesktop/portal/desktop");
+    add("org.freedesktop.portal.Location", "/org/freedesktop/portal/desktop");
     ngn::gtk::portal::useConnection(client);
   }
 
@@ -149,6 +169,29 @@ struct StandInPortal {
   void called(const std::string &path, const std::string &interface, const std::string &method, GVariant *parameters,
               GDBusMethodInvocation *invocation) {
     Call call{.path = path, .method = method};
+    if (interface == "org.freedesktop.portal.Session") {
+      closedSessions.push_back(path);
+      g_dbus_method_invocation_return_value(invocation, nullptr);
+      return;
+    }
+    if (interface == "org.freedesktop.portal.Location" && !offersLocation) {
+      g_dbus_method_invocation_return_error(invocation, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_METHOD, "not offered here");
+      return;
+    }
+    if (method == "CreateSession") {
+      GVariant *options = g_variant_get_child_value(parameters, 0);
+      Session session;
+      const gchar *token = "none";
+      g_variant_lookup(options, "session_handle_token", "&s", &token);
+      g_variant_lookup(options, "accuracy", "u", &session.accuracy);
+      g_variant_lookup(options, "distance-threshold", "u", &session.distance);
+      g_variant_unref(options);
+      session.path = "/org/freedesktop/portal/desktop/session/test/" + std::string(token);
+      sessions.push_back(session);
+      add("org.freedesktop.portal.Session", session.path);
+      g_dbus_method_invocation_return_value(invocation, g_variant_new("(o)", session.path.c_str()));
+      return;
+    }
     if (method == "Close") {
       calls.push_back(call);
       g_dbus_method_invocation_return_value(invocation, nullptr);
@@ -242,6 +285,21 @@ struct StandInPortal {
     }
     g_dbus_connection_emit_signal(server, nullptr, handle.c_str(), "org.freedesktop.portal.Request", "Response",
                                   g_variant_new("(ua{sv})", response, &results), nullptr);
+    if (method == "Start" && response == 0 && !fix.empty()) {
+      update(call.first, fix);
+    }
+  }
+
+  // GeoClue has a new fix for the session at `path`.
+  void update(const std::string &path, const std::vector<std::pair<std::string, double>> &values) {
+    GVariantBuilder location;
+    g_variant_builder_init(&location, G_VARIANT_TYPE_VARDICT);
+    for (const auto &[key, value] : values) {
+      g_variant_builder_add(&location, "{sv}", key.c_str(), g_variant_new_double(value));
+    }
+    g_variant_builder_add(&location, "{sv}", "Timestamp", g_variant_new("(tt)", guint64{1700000000}, guint64{0}));
+    g_dbus_connection_emit_signal(server, nullptr, "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Location", "LocationUpdated",
+                                  g_variant_new("(oa{sv})", path.c_str(), &location), nullptr);
   }
 
   // AddNotification(id, notification) and RemoveNotification(id), which return at once.

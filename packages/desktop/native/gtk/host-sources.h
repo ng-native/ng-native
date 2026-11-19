@@ -7,7 +7,6 @@
 #include "ngn/app-menus.h"
 #include "ngn/app-windows.h"
 #include "ngn/native-controls.h"
-#include "ngn/network-state.h"
 #include "ngn/system.h"
 #include "ngn/tray-and-dock.h"
 
@@ -35,9 +34,6 @@ std::shared_ptr<StringStore> makeKeyFileStore(const std::string &path);
 std::shared_ptr<MenuBackend> makeNoMenus();
 std::shared_ptr<TrayBackend> makeNoTray();
 std::shared_ptr<DockBackend> makeNoDock();
-
-// Whether the network is reachable, from GLib's GNetworkMonitor.
-std::shared_ptr<PathMonitor> makePathMonitor();
 
 // How big GTK draws each native control (native-controls.h).
 std::shared_ptr<ControlMeasurer> makeControlMeasurer();

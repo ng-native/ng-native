@@ -281,28 +281,6 @@ class NoDock final : public DockBackend {
   void cancelBounce(int) override {}
 };
 
-// GLib's network monitor: whether a route exists, its interface types unknown (`other`).
-class GioPathMonitor final : public PathMonitor {
- public:
-  std::function<void()> watch(std::function<void(const NetworkPath &)> changed) override {
-    auto *heap = new std::function<void(const NetworkPath &)>(std::move(changed));
-    GNetworkMonitor *monitor = g_network_monitor_get_default();
-    (*heap)(pathOf(g_network_monitor_get_network_available(monitor)));
-    gulong handler = g_signal_connect_data(
-        monitor, "network-changed", G_CALLBACK(networkChanged), heap,
-        [](gpointer data, GClosure *) { delete static_cast<std::function<void(const NetworkPath &)> *>(data); }, GConnectFlags(0));
-    return [monitor, handler] { g_signal_handler_disconnect(monitor, handler); };
-  }
-
- private:
-  static NetworkPath pathOf(bool available) {
-    return {.satisfied = available, .other = available};
-  }
-  static void networkChanged(GNetworkMonitor *, gboolean available, gpointer data) {
-    (*static_cast<std::function<void(const NetworkPath &)> *>(data))(pathOf(available));
-  }
-};
-
 } // namespace
 
 bool canOpenUri(const std::string &uri, bool sandboxed, const std::function<bool(const std::string &scheme)> &hasHandler) {
@@ -333,10 +311,6 @@ std::shared_ptr<TrayBackend> makeNoTray() {
 
 std::shared_ptr<DockBackend> makeNoDock() {
   return std::make_shared<NoDock>();
-}
-
-std::shared_ptr<PathMonitor> makePathMonitor() {
-  return std::make_shared<GioPathMonitor>();
 }
 
 std::shared_ptr<ControlMeasurer> makeControlMeasurer() {
