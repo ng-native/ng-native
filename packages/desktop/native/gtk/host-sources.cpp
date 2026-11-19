@@ -104,16 +104,29 @@ std::string systemScheme() {
 
 class GtkSystem final : public System {
  public:
-  GtkSystem(const std::string &appId, std::string appData)
+  GtkSystem(const std::string &appId, std::string appData, std::function<void(int64_t)> clipboardChanged)
       : appData_(std::move(appData)),
         preferences_(makeKeyFileStore(appData_ + "/preferences.ini"), appId, false),
-        scheme_(systemScheme()) {
+        scheme_(systemScheme()),
+        clipboardChanged_(std::move(clipboardChanged)) {
     g_signal_connect(adw_style_manager_get_default(), "notify::dark", G_CALLBACK(+[](GObject *, GParamSpec *, gpointer self) {
       static_cast<GtkSystem *>(self)->scheme_.systemChanged(systemScheme());
     }), this);
+    if (GdkDisplay *display = gdk_display_get_default()) {
+      clipboard_ = GDK_CLIPBOARD(g_object_ref(gdk_display_get_clipboard(display)));
+      g_signal_connect(clipboard_, "changed", G_CALLBACK(+[](GdkClipboard *, gpointer self) {
+        static_cast<GtkSystem *>(self)->readClipboard(true);
+      }), this);
+      readClipboard(false);
+    }
   }
   ~GtkSystem() override {
     g_signal_handlers_disconnect_by_data(adw_style_manager_get_default(), this);
+    if (clipboard_) {
+      g_signal_handlers_disconnect_by_data(clipboard_, this);
+      g_object_unref(clipboard_);
+    }
+    *alive_ = false;
   }
 
   DeviceFacts facts() override {
@@ -164,14 +177,23 @@ class GtkSystem final : public System {
     fprintf(stderr, "[ngn] alert (no dialogs yet): %s: %s\n", request.title.c_str(), request.message.c_str());
     done(request.cancelIndex, "", "");
   }
+  // What the clipboard held as it last changed: GDK reads it asynchronously, which System's
+  // callers do not, so another app's change counts once its text has been read.
   std::optional<std::string> clipboardText() override {
     std::lock_guard lock(mutex_);
-    return clipboard_;
+    return text_;
   }
   void setClipboardText(const std::string &text) override {
-    std::lock_guard lock(mutex_);
-    clipboard_ = text;
-    ++changes_;
+    {
+      std::lock_guard lock(mutex_);
+      text_ = text;
+      ++changes_;
+    }
+    onMainContext([this, alive = alive_, text] {
+      if (*alive && clipboard_) {
+        gdk_clipboard_set_text(clipboard_, text.c_str());
+      }
+    });
   }
   int64_t clipboardChangeCount() override {
     return changes_;
@@ -198,11 +220,51 @@ class GtkSystem final : public System {
   }
 
  private:
+  // Another app's text, read as the clipboard changes (`announce`), or at launch. Text the app set
+  // itself is already kept and counted. Only the latest read counts: one change can come as more
+  // than one signal, and reads can finish out of order.
+  void readClipboard(bool announce) {
+    if (gdk_clipboard_is_local(clipboard_)) {
+      return;
+    }
+    struct Read {
+      GtkSystem *self;
+      std::shared_ptr<bool> alive;
+      bool announce;
+      uint64_t number;
+    };
+    gdk_clipboard_read_text_async(clipboard_, nullptr, +[](GObject *source, GAsyncResult *result, gpointer data) {
+      std::unique_ptr<Read> read(static_cast<Read *>(data));
+      GError *error = nullptr;
+      gchar *text = gdk_clipboard_read_text_finish(GDK_CLIPBOARD(source), result, &error);
+      g_clear_error(&error);
+      if (!*read->alive || read->number != read->self->reads_) {
+        g_free(text);
+        return;
+      }
+      int64_t count = 0;
+      {
+        std::lock_guard lock(read->self->mutex_);
+        read->self->text_ = text ? std::optional<std::string>(text) : std::nullopt;
+        count = read->announce ? ++read->self->changes_ : read->self->changes_.load();
+      }
+      g_free(text);
+      if (read->announce && read->self->clipboardChanged_) {
+        read->self->clipboardChanged_(count);
+      }
+    }, new Read{this, alive_, announce, ++reads_});
+  }
+
   std::string appData_;
   JsonPreferences preferences_;
   ColorSchemeOverride scheme_;
+  std::function<void(int64_t)> clipboardChanged_;
+  GdkClipboard *clipboard_{nullptr};
+  std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
+  // Reads started, on the main context.
+  uint64_t reads_{0};
   std::mutex mutex_;
-  std::optional<std::string> clipboard_;
+  std::optional<std::string> text_;
   std::atomic<int64_t> changes_{1};
 };
 
@@ -257,8 +319,8 @@ bool canOpenUri(const std::string &uri, bool sandboxed, const std::function<bool
   return sandboxed || hasHandler(name);
 }
 
-std::shared_ptr<System> makeSystem(const std::string &appId, const std::string &appDataDirectory) {
-  return std::make_shared<GtkSystem>(appId, appDataDirectory);
+std::shared_ptr<System> makeSystem(const std::string &appId, const std::string &appDataDirectory, std::function<void(int64_t)> clipboardChanged) {
+  return std::make_shared<GtkSystem>(appId, appDataDirectory, std::move(clipboardChanged));
 }
 
 std::shared_ptr<StringStore> makeKeyFileStore(const std::string &path) {

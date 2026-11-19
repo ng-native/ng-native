@@ -1,5 +1,5 @@
-// A portal of our own for the GTK tests: org.freedesktop.portal.Desktop's OpenURI, Inhibit and
-// Notification over
+// A portal of our own for the GTK tests: org.freedesktop.portal.Desktop's OpenURI, Inhibit,
+// Notification, FileChooser and Print over
 // a peer-to-peer connection, so no session bus is needed. The portal helper is pointed at it while
 // it lasts.
 #pragma once
@@ -65,6 +65,14 @@ inline const char *kPortalIntrospection = R"(<node>
     <method name="RemoveNotification"><arg type="s" direction="in"/></method>
     <signal name="ActionInvoked"><arg type="s"/><arg type="s"/><arg type="av"/></signal>
   </interface>
+  <interface name="org.freedesktop.portal.FileChooser">
+    <method name="OpenFile"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="a{sv}" direction="in"/><arg type="o" direction="out"/></method>
+    <method name="SaveFile"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="a{sv}" direction="in"/><arg type="o" direction="out"/></method>
+  </interface>
+  <interface name="org.freedesktop.portal.Print">
+    <method name="PreparePrint"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="a{sv}" direction="in"/><arg type="a{sv}" direction="in"/><arg type="a{sv}" direction="in"/><arg type="o" direction="out"/></method>
+    <method name="Print"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="h" direction="in"/><arg type="a{sv}" direction="in"/><arg type="o" direction="out"/></method>
+  </interface>
   <interface name="org.freedesktop.portal.Request">
     <method name="Close"/>
   </interface>
@@ -85,6 +93,13 @@ struct StandInPortal {
     std::string action;
     std::string target;
     bool token{false};
+    // A file chooser's options, and the bytes of a file given to Print with the token it came with.
+    bool multiple{false};
+    bool directory{false};
+    std::string name;
+    std::vector<std::string> types;
+    std::string printed;
+    unsigned printToken{0};
   };
 
   GDBusConnection *server{nullptr};
@@ -96,6 +111,10 @@ struct StandInPortal {
   // Interfaces the stand-in does not offer: their calls fail as a missing portal's do.
   bool offersOpenUri{true};
   bool offersNotification{true};
+  bool offersFileChooser{true};
+  bool offersPrint{true};
+  // What a FileChooser's Response chooses.
+  std::vector<std::string> uris;
 
   StandInPortal() {
     std::tie(server, client) = peerToPeer();
@@ -103,6 +122,8 @@ struct StandInPortal {
     add("org.freedesktop.portal.OpenURI", "/org/freedesktop/portal/desktop");
     add("org.freedesktop.portal.Inhibit", "/org/freedesktop/portal/desktop");
     add("org.freedesktop.portal.Notification", "/org/freedesktop/portal/desktop");
+    add("org.freedesktop.portal.FileChooser", "/org/freedesktop/portal/desktop");
+    add("org.freedesktop.portal.Print", "/org/freedesktop/portal/desktop");
     ngn::gtk::portal::useConnection(client);
   }
 
@@ -137,11 +158,43 @@ struct StandInPortal {
       notified(method, parameters, invocation);
       return;
     }
-    if (interface == "org.freedesktop.portal.OpenURI" && !offersOpenUri) {
-      g_dbus_method_invocation_return_error(invocation, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_METHOD, "no OpenURI here");
+    if ((interface == "org.freedesktop.portal.OpenURI" && !offersOpenUri) ||
+        (interface == "org.freedesktop.portal.FileChooser" && !offersFileChooser) || (interface == "org.freedesktop.portal.Print" && !offersPrint)) {
+      g_dbus_method_invocation_return_error(invocation, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_METHOD, "not offered here");
       return;
     }
-    GVariant *options = g_variant_get_child_value(parameters, 2);
+    // The options come last.
+    GVariant *options = g_variant_get_child_value(parameters, g_variant_n_children(parameters) - 1);
+    g_variant_lookup(options, "multiple", "b", &call.multiple);
+    g_variant_lookup(options, "directory", "b", &call.directory);
+    g_variant_lookup(options, "token", "u", &call.printToken);
+    if (const gchar *name = nullptr; g_variant_lookup(options, "current_name", "&s", &name)) {
+      call.name = name;
+    }
+    if (GVariant *filter = g_variant_lookup_value(options, "current_filter", G_VARIANT_TYPE("(sa(us))"))) {
+      GVariantIter *patterns = nullptr;
+      g_variant_get(filter, "(&sa(us))", nullptr, &patterns);
+      guint32 kind = 0;
+      const gchar *pattern = nullptr;
+      while (g_variant_iter_next(patterns, "(u&s)", &kind, &pattern)) {
+        call.types.emplace_back(pattern);
+      }
+      g_variant_iter_free(patterns);
+      g_variant_unref(filter);
+    }
+    if (method == "Print") {
+      GVariant *handle = g_variant_get_child_value(parameters, 2);
+      GUnixFDList *fds = g_dbus_message_get_unix_fd_list(g_dbus_method_invocation_get_message(invocation));
+      int fd = fds ? g_unix_fd_list_get(fds, g_variant_get_handle(handle), nullptr) : -1;
+      char buffer[4096];
+      for (ssize_t n; fd >= 0 && (n = read(fd, buffer, sizeof buffer)) > 0;) {
+        call.printed.append(buffer, n);
+      }
+      if (fd >= 0) {
+        close(fd);
+      }
+      g_variant_unref(handle);
+    }
     const gchar *token = "none";
     g_variant_lookup(options, "handle_token", "&s", &token);
     auto handle = "/org/freedesktop/portal/desktop/request/test/" + std::string(token);
@@ -176,6 +229,17 @@ struct StandInPortal {
     // After the reply, as xdg-desktop-portal answers once the user has chosen.
     GVariantBuilder results;
     g_variant_builder_init(&results, G_VARIANT_TYPE_VARDICT);
+    if (interface == "org.freedesktop.portal.FileChooser" && !uris.empty()) {
+      GVariantBuilder chosen;
+      g_variant_builder_init(&chosen, G_VARIANT_TYPE_STRING_ARRAY);
+      for (const auto &uri : uris) {
+        g_variant_builder_add(&chosen, "s", uri.c_str());
+      }
+      g_variant_builder_add(&results, "{sv}", "uris", g_variant_builder_end(&chosen));
+    }
+    if (method == "PreparePrint") {
+      g_variant_builder_add(&results, "{sv}", "token", g_variant_new_uint32(7));
+    }
     g_dbus_connection_emit_signal(server, nullptr, handle.c_str(), "org.freedesktop.portal.Request", "Response",
                                   g_variant_new("(ua{sv})", response, &results), nullptr);
   }

@@ -34,7 +34,11 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   holds the session idle through the Inhibit portal (`system-access.h`). Notifications show through
   the Notification portal, or GNotification where none answers, and fire from the core's
   `notification-schedule.h`, a schedule kept in a file and run from a timer in the app, since Linux
-  has no scheduler (`notifications.h`). FileSystem's `watch` is a
+  has no scheduler (`notifications.h`). DocumentPicker's dialogs are the FileChooser portal's,
+  falling back to `GtkFileDialog` (`file-dialogs.h`). Printing draws a window or an image through
+  `GtkPrintOperation`, and sends a PDF to the Print portal (`printing.h`). The clipboard is the
+  display's `GdkClipboard`, whose text the system keeps as it changes, since GDK reads it
+  asynchronously (`host-sources.h`). FileSystem's `watch` is a
   `GFileMonitor` (inotify), and its desktop and downloads folders come from the XDG user-dirs file,
   absent when it names none (`file-system.h`). A `GtkDropTarget` on each surface hands a drag's
   file list or text to the core's input dispatcher, and a drag out the dispatcher starts from a

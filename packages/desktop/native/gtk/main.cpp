@@ -11,6 +11,7 @@
 // in-process (capture.h).
 #include "app-windows.h"
 #include "capture.h"
+#include "file-dialogs.h"
 #include "file-system.h"
 #include "gtk-backend.h"
 #include "host-sources.h"
@@ -19,6 +20,7 @@
 #include "menus.h"
 #include "notifications.h"
 #include "pango-text.h"
+#include "printing.h"
 #include "scroll-view.h"
 #include "secret-store.h"
 #include "surface-input.h"
@@ -486,7 +488,12 @@ int main(int argc, char *argv[]) {
   std::string appData = settings.test ? settings.test->applicationSupport() : joined(g_get_user_data_dir(), appId);
   std::string caches = settings.test ? settings.test->caches() : joined(g_get_user_cache_dir(), appId);
   g_mkdir_with_parents(caches.c_str(), 0700);
-  auto system = ngn::gtk::makeSystem(appId, appData);
+  // Another app's copy reaches Clipboard's listeners once its text has been read.
+  auto system = ngn::gtk::makeSystem(appId, appData, [](int64_t count) {
+    if (gHost.state) {
+      gHost.state->clipboardChangeCount.set(count);
+    }
+  });
   gHost.state = std::make_shared<ngn::HostState>();
   gHost.state->metrics.set({
       .window = {.width = static_cast<double>(width), .height = static_cast<double>(height), .scale = 1, .fontScale = ngn::gtk::desktopFontScale()},
@@ -570,6 +577,23 @@ int main(int argc, char *argv[]) {
   auto menus = std::make_shared<ngn::MenuHost>(
       gHost.gtkMenus, ngn::DefaultMenuOptions{.appName = settings.title, .developer = ngn::DevServer::fromBundleUrl(bundle).has_value(), .os = os});
   gHost.menus = menus;
+  // File > Print with no print item of the app's: what the window shows (printing.h).
+  menus->printWindow = [](std::optional<SurfaceId> surface) {
+    GtkWidget *widget = surface ? surfaceWidgetOf(*surface) : nullptr;
+    if (!widget) {
+      auto *active = gtk_application_get_active_window(gHost.application);
+      auto found = active ? surfaceOfWindow(active) : std::nullopt;
+      widget = found ? surfaceWidgetOf(*found) : nullptr;
+    }
+    if (!widget) {
+      return;
+    }
+    ngn::gtk::printWidget(widget, false, [](const std::string &error) {
+      if (!error.empty()) {
+        fprintf(stderr, "[ngn] print: %s\n", error.c_str());
+      }
+    });
+  };
   routeWindow(gHost.appSurface);
   // A view's context menu (its `contextMenu` prop), drawn where the secondary click was.
   ngn::gtk::setContextMenuShower([](GtkWidget *widget, const ngn::PointerInput &input) {
@@ -619,8 +643,10 @@ int main(int argc, char *argv[]) {
            [appData](std::shared_ptr<ngn::NotificationEvents> events) {
              return ngn::gtk::makeNotificationCenter(G_APPLICATION(gHost.application), appData, std::move(events), raiseApp);
            },
+       .fileDialogs = ngn::gtk::makeFileDialogs(),
        .fileWatcher = ngn::gtk::makeFileWatcher(),
        .pathMonitor = ngn::gtk::makePathMonitor(),
+       .printSystem = ngn::gtk::makePrintSystem(surfaceWidgetOf),
        .regionCode = [system] {
          auto locale = system->facts().locale;
          auto dash = locale.find('-');
