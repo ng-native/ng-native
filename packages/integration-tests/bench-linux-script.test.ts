@@ -14,7 +14,7 @@ const bench = (await import(new URL('../../scripts/bench-linux.mjs', import.meta
   cpuSeconds(stat: string, ticksPerSecond: number): number | null;
   contextSwitches(status: string): number | null;
   pssMb(rollup: string): number | null;
-  switchesBetween(before: Map<string, number>, after: Map<string, number>): number;
+  switchesBetween(before: Map<string, number>, after: Map<string, number>): number | null;
   bytecode(host: string, bundle: string, dir: string): string;
   benchEnv(env: Record<string, string | undefined>): Record<string, string | undefined>;
   measure(
@@ -64,17 +64,21 @@ describe('reading /proc', () => {
     assert.equal(bench.contextSwitches('voluntary_ctxt_switches:\t120\n'), null);
   });
 
-  it('counts switches per thread, so a thread that ends or starts in the window takes none away', () => {
-    const before = new Map([
-      ['1', 100],
-      ['2', 50],
-    ]);
-    // Thread 2 ended, thread 3 started.
+  it('counts switches per thread, a thread that starts in the window from zero', () => {
+    const before = new Map([['1', 100]]);
     const after = new Map([
       ['1', 103],
       ['3', 2],
     ]);
     assert.equal(bench.switchesBetween(before, after), 5);
+  });
+
+  it('reads nothing when a thread ended in the window, rather than a total missing its switches', () => {
+    const before = new Map([
+      ['1', 100],
+      ['2', 50],
+    ]);
+    assert.equal(bench.switchesBetween(before, new Map([['1', 103]])), null);
   });
 
   it('reads the proportional set size, not the resident one', () => {

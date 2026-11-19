@@ -41,6 +41,7 @@ export function captureEnv(env, state, file, input) {
     NGN_TESTS_FAKE_SYSTEM_UI: '1',
     NGN_CAPTURE: file,
     GSK_RENDERER: 'cairo',
+    GDK_SCALE: '1',
     GTK_A11Y: 'none',
   };
 }

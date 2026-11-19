@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
-import { linuxLaunchCommand, linuxLauncher } from './linux-launcher.ts';
+import { CRASH_MARKER, linuxLaunchCommand, linuxLauncher } from './linux-launcher.ts';
 
 const request = { port: 1234, runId: 'abc', stateDir: '/unused' };
 
@@ -79,6 +79,48 @@ describe('linuxLauncher stop', () => {
           // Already gone.
         }
       }
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('linuxLauncher crashReport', () => {
+  it('recognises the crash marker when two chunks split it, and keeps a last unfinished line', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ngn-linux-launcher-'));
+    try {
+      const host = path.join(dir, 'host.sh');
+      const half = CRASH_MARKER.length - 8;
+      writeFileSync(
+        host,
+        [
+          '#!/bin/bash',
+          'echo before >&2',
+          `printf '%s' '${CRASH_MARKER.slice(0, half)}' >&2`,
+          'sleep 0.3',
+          `printf '%s\n' '${CRASH_MARKER.slice(half)}' >&2`,
+          'echo frame-1 >&2',
+          "printf 'last-without-newline' >&2",
+          '',
+        ].join('\n'),
+        { mode: 0o755 },
+      );
+      const launcher = linuxLauncher({ host, container: false, display: 'inherit' });
+      const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir: dir });
+      try {
+        await app.exited;
+        let report = '';
+        for (let i = 0; i < 100 && !report.includes('last-without-newline'); i++) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          report = String(await launcher.crashReport?.(0));
+        }
+        assert.equal(
+          report,
+          "The host's crash report:\nframe-1\nlast-without-newline\n\nThe host's last output:\nbefore",
+        );
+      } finally {
+        await app.stop();
+      }
+    } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });

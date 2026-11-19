@@ -348,15 +348,25 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
         // display with it even when the script's own cleanup cannot run.
         detached: true,
       });
-      const keep = (chunk: Buffer) => {
-        for (const line of chunk.toString().split('\n').filter(Boolean)) {
-          if (crash) crash.push(line);
-          else if (line === CRASH_MARKER) crash = [];
-          else tail = [...tail, line].slice(-TAIL_LINES);
-        }
+      const keep = (line: string) => {
+        if (crash) crash.push(line);
+        else if (line === CRASH_MARKER) crash = [];
+        else tail = [...tail, line].slice(-TAIL_LINES);
       };
-      child.stdout?.on('data', keep);
-      child.stderr?.on('data', keep);
+      // A chunk need not end on a line break, so each stream keeps its unfinished line until the
+      // rest arrives, and gives it up at the end of the stream.
+      for (const stream of [child.stdout, child.stderr]) {
+        let pending = '';
+        stream?.on('data', (chunk: Buffer) => {
+          const lines = (pending + chunk.toString()).split('\n');
+          pending = lines.pop() ?? '';
+          for (const line of lines) if (line) keep(line);
+        });
+        stream?.on('end', () => {
+          if (pending) keep(pending);
+          pending = '';
+        });
+      }
       const exited = new Promise<string>((resolve) => {
         child.once('error', (error) => resolve(`it could not be started: ${error.message}`));
         child.once('exit', (code, signal) => {
