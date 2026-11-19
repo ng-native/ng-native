@@ -44,8 +44,8 @@ import { page } from '../screen-styles.ts';
 
         <text class="heading" role="heading" aria-level="2">Screen</text>
         <text class="body">
-          {{ screen.window().width }} x {{ screen.window().height }},
-          {{ screen.orientation() }}, {{ scale() }} pixels a point
+          {{ screen.window().width }} x {{ screen.window().height }}, {{ screen.orientation() }},
+          {{ scale() }} pixels a point
         </text>
         <text class="hint">
           The same numbers the engine answers media queries with. Reduced motion is
