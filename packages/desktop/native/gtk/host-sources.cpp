@@ -1,8 +1,11 @@
 #include "host-sources.h"
 
 #include "app-windows.h"
+#include "locales.h"
 #include "native-controls.h"
 #include "system-access.h"
+
+#include "ngn/posix-locale.h"
 
 #include <adwaita.h>
 #if __has_include(<gio/gdesktopappinfo.h>)
@@ -132,16 +135,9 @@ class GtkSystem final : public System {
   DeviceFacts facts() override {
     struct utsname name {};
     uname(&name);
-    const char *const *languages = g_get_language_names();
-    std::string locale = languages && languages[0] ? languages[0] : "en";
-    // "en_GB.UTF-8" to "en-GB".
-    locale = locale.substr(0, locale.find_first_of(".@"));
-    for (auto &c : locale) {
-      c = c == '_' ? '-' : c;
-    }
-    if (locale == "C" || locale == "POSIX") {
-      locale = "en";
-    }
+    // The most preferred language, as Localization's first locale.
+    auto languages = preferredLanguageTags(getenv("LANGUAGE") ? getenv("LANGUAGE") : "", localeOf("LC_MESSAGES"));
+    std::string locale = languages.empty() ? "en" : languages.front();
     return {.osVersion = name.release, .systemName = "Linux", .locale = locale, .rightToLeft = gtk_widget_get_default_direction() == GTK_TEXT_DIR_RTL};
   }
   void openUrl(const std::string &url, std::function<void(bool)> done) override {

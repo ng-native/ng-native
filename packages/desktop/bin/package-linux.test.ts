@@ -386,6 +386,7 @@ describe('the files every Linux format installs', () => {
   it('gives the host the Info.plist keys a macOS app has, and the format it was packaged as', () => {
     const config = desktopAppConfig({
       ...EXPO,
+      ios: { ...EXPO.ios, buildNumber: '17' },
       runtimeVersion: '2',
       updates: { url: 'https://updates.example.com', codeSigningCertificate: './cert.pem' },
       plugins: [['@ng-native/desktop', { capabilities: { paths: [{ path: '~/Notes' }] } }]],
@@ -401,6 +402,7 @@ describe('the files every Linux format installs', () => {
       CFBundleName: 'Notes',
       CFBundleIdentifier: 'com.example.notes',
       CFBundleShortVersionString: '2.0.0',
+      CFBundleVersion: '17',
       NGNBundleFile: 'main.jsbundle',
       NGNModuleName: 'main',
       NGNDistribution: 'deb',
@@ -416,6 +418,7 @@ describe('the files every Linux format installs', () => {
       'CFBundleName',
       'CFBundleIdentifier',
       'CFBundleShortVersionString',
+      'CFBundleVersion',
       'NGNBundleFile',
       'NGNModuleName',
       'NGNDistribution',

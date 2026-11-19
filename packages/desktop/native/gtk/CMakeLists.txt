@@ -24,10 +24,12 @@ pkg_check_modules(NGN_UNIX_PRINT IMPORTED_TARGET gtk4-unix-print)
 
 add_library(ngn_gtk OBJECT
     accessible.cpp
+    app-info.cpp
     app-windows.cpp
     box-paint.cpp
     cairo-canvas.cpp
     capture.cpp
+    crypto.cpp
     drag-and-drop.cpp
     file-dialogs.cpp
     file-system.cpp
@@ -35,6 +37,7 @@ add_library(ngn_gtk OBJECT
     host-sources.cpp
     image-view.cpp
     input-replay.cpp
+    locales.cpp
     menus.cpp
     native-controls.cpp
     notifications.cpp
@@ -80,7 +83,7 @@ add_custom_command(TARGET ngn-linux POST_BUILD
 # The GTK view tests: views mounted from Fabric mutations into a window GTK draws, through the
 # backend the binary uses. Built with the core tests, and run beside them.
 if(NGN_TESTS)
-  set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accessible.test.cpp tests/app-windows.test.cpp tests/chrome.test.cpp tests/controls.test.cpp tests/drag-and-drop.test.cpp tests/image-view.test.cpp tests/input.test.cpp tests/input-replay.test.cpp tests/linking.test.cpp tests/menus.test.cpp tests/notifications.test.cpp tests/system-modules.test.cpp
+  set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accessible.test.cpp tests/app-windows.test.cpp tests/chrome.test.cpp tests/controls.test.cpp tests/drag-and-drop.test.cpp tests/image-view.test.cpp tests/input.test.cpp tests/input-replay.test.cpp tests/linking.test.cpp tests/locales.test.cpp tests/machine.test.cpp tests/menus.test.cpp tests/notifications.test.cpp tests/system-modules.test.cpp
       tests/screens.test.cpp tests/scroll-view.test.cpp tests/secret-store.test.cpp tests/svg.test.cpp tests/system-access.test.cpp tests/text.test.cpp tests/views.test.cpp)
   add_executable(ngn_gtk_tests ${ngn_gtk_test_SRC} ../core/testing/fake-network.cpp ../core/testing/fake-system.cpp)
   target_include_directories(ngn_gtk_tests PRIVATE ../core/tests ../core/testing)

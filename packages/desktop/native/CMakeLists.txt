@@ -120,6 +120,7 @@ add_library(ngn_core STATIC
     core/src/safe-areas.cpp
     core/src/scrollers.cpp
     core/src/posix-launcher.cpp
+    core/src/posix-locale.cpp
     core/src/processes.cpp
     core/src/screen-presentation.cpp
     core/src/screen-stacks.cpp

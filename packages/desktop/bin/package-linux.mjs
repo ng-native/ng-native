@@ -363,6 +363,7 @@ export function linuxMetadata(config, { format, appId, updatesCertificate }) {
     CFBundleName: config.name,
     CFBundleIdentifier: appId,
     CFBundleShortVersionString: config.version,
+    CFBundleVersion: config.buildNumber,
     NGNBundleFile: BUNDLE_FILE,
     NGNModuleName: 'main',
     NGNDistribution: format,

@@ -9,14 +9,17 @@
 //
 // NGN_CAPTURE=<file.png> saves the first window's content a second after its first frame, drawn
 // in-process (capture.h).
+#include "app-info.h"
 #include "app-windows.h"
 #include "capture.h"
+#include "crypto.h"
 #include "file-dialogs.h"
 #include "file-system.h"
 #include "gtk-backend.h"
 #include "host-sources.h"
 #include "image-view.h"
 #include "input-replay.h"
+#include "locales.h"
 #include "menus.h"
 #include "notifications.h"
 #include "pango-text.h"
@@ -645,13 +648,13 @@ int main(int argc, char *argv[]) {
            },
        .fileDialogs = ngn::gtk::makeFileDialogs(),
        .fileWatcher = ngn::gtk::makeFileWatcher(),
+       .bundle = ngn::bundleFactsOf(settings.plist),
+       .machine = ngn::gtk::machineFacts(),
        .pathMonitor = ngn::gtk::makePathMonitor(),
        .printSystem = ngn::gtk::makePrintSystem(surfaceWidgetOf),
-       .regionCode = [system] {
-         auto locale = system->facts().locale;
-         auto dash = locale.find('-');
-         return dash == std::string::npos ? std::string() : locale.substr(dash + 1);
-       },
+       .crypto = ngn::gtk::makeCryptoSource(),
+       .locales = ngn::gtk::makeLocaleSource(),
+       .regionCode = ngn::gtk::systemRegionCode,
        .updates = updates,
        .reload = [](const std::string &next, std::function<void(bool)> done) { gHost.runtime->reload(next, std::move(done)); }});
 

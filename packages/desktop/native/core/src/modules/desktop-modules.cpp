@@ -61,7 +61,7 @@ DesktopModules addDesktopModules(ModuleRegistry &registry, const DesktopModuleSo
   addModule(registry, "NgNativeApplication", [bundle = s.bundle, appId = s.appId, appName = s.appName] {
     return makeApplicationModule(bundle, appId, appName);
   });
-  addModule(registry, "NgNativeDevice", [machine = s.machine, os = s.os.name] { return makeDeviceModule(machine, os); });
+  addModule(registry, "NgNativeDevice", [machine = s.machine, os = s.os] { return makeDeviceModule(machine, os); });
   addModule(registry, "NgNativeNetwork", [monitor = s.pathMonitor] { return makeNetworkModule(monitor); });
   addModule(registry, "NgNativeBattery", [power = s.power] { return makeBatteryModule(power); });
   addModule(registry, "NgNativeFont", [registrar = s.fontRegistrar, fonts = made.fonts, http = s.http, caches = s.caches, files = s.files] {
