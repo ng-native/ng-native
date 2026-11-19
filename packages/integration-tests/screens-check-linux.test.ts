@@ -68,6 +68,21 @@ describe('the Linux screens mode', () => {
     }
   });
 
+  it('fails a route when the host cannot start', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'screens-linux-'));
+    try {
+      await assert.rejects(
+        shoot(
+          { host: path.join(dir, 'missing'), bundle: '/b.js', scheme: 'notes', out: dir },
+          '/settings',
+        ),
+        /ENOENT/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('reads whether the host wrote its capture', () => {
     assert.equal(captureResult('[ngn] first frame 90 ms\n[ngn] captured /o/a.png\n'), 'captured');
     assert.equal(captureResult('[ngn] could not capture /o/a.png\n'), 'failed');
