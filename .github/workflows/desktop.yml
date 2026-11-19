@@ -189,9 +189,9 @@ jobs:
             bash -euo pipefail -c '
               ccache --zero-stats > /dev/null
               start=$(date +%s)
-              # With the canary's libraries: worklets and Reanimated, whose shared C++ needs the
-              # Linux shims (native/shim/worklets), so a change that breaks them on glibc fails here,
-              # and svg, screens and safe area, for the canary's AT-SPI run below.
+              # With the libraries the canary uses: worklets and Reanimated, whose shared C++ needs
+              # the Linux shims (native/shim/worklets), so a change that breaks them on glibc fails
+              # here, and svg, screens and safe area, for the AT-SPI run on the canary below.
               lib=../../examples/canary/node_modules
               build=$(native/scripts/build.sh --backend gtk --no-debug-info \
                 --library $lib/react-native-svg --library $lib/react-native-screens \
