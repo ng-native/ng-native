@@ -134,6 +134,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
+      # The build resolves React Native's headers from node_modules.
+      - uses: ./.github/actions/setup
 
       - name: Build the Fedora image
         run: docker build -f packages/desktop/native/docker/Dockerfile.fedora -t ngn-fedora packages/desktop/native/docker
