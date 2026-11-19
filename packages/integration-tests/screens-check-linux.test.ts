@@ -28,6 +28,7 @@ const { captureEnv, captureResult, shoot } = (await import(script.href)) as {
       out: string;
       input?: string;
       limitSeconds?: number;
+      stopGraceMs?: number;
     },
     route: string,
   ): Promise<string>;
@@ -130,6 +131,39 @@ describe('the Linux screens mode', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it(
+    'kills a host that ignores SIGTERM, rather than waiting on it',
+    { timeout: 20_000 },
+    async () => {
+      const dir = mkdtempSync(path.join(tmpdir(), 'screens-linux-'));
+      const pidFile = path.join(dir, 'pid');
+      let pid: number | undefined;
+      try {
+        const host = standIn(
+          dir,
+          [
+            "trap '' TERM",
+            `echo $$ > '${pidFile}'`,
+            'echo png > "$NGN_CAPTURE"',
+            'echo "[ngn] captured $NGN_CAPTURE" >&2',
+            'exec sleep 600',
+          ].join('\n'),
+        );
+        const out = path.join(dir, 'out');
+        await shoot({ host, bundle: '/b.js', scheme: 'notes', out, stopGraceMs: 300 }, '/settings');
+        pid = Number(readFileSync(pidFile, 'utf8'));
+        assert.throws(() => process.kill(pid!, 0), { code: 'ESRCH' });
+      } finally {
+        try {
+          if (pid) process.kill(pid, 'SIGKILL');
+        } catch {
+          // Already gone.
+        }
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('fails a route when the host cannot start', async () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'screens-linux-'));

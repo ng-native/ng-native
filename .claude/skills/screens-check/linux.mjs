@@ -24,7 +24,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deepLink, screenshotName } from './macos.mjs';
-import { runInLinuxImage, startXvfb } from '../../../scripts/linux-image.mjs';
+import { runInLinuxImage, startXvfb, stopHost } from '../../../scripts/linux-image.mjs';
 
 /**
  * The host's environment for one capture: a test launch, cairo, where the capture goes, and the
@@ -68,7 +68,7 @@ export function captureResult(log, scripted = false) {
 /**
  * Launch the host on `route`, wait for its capture, and stop it.
  *
- * @param {{ host: string, bundle: string, scheme: string, out: string, input?: string, limitSeconds?: number }} target
+ * @param {{ host: string, bundle: string, scheme: string, out: string, input?: string, limitSeconds?: number, stopGraceMs?: number }} target
  * @param {string} route
  */
 export async function shoot(target, route) {
@@ -87,10 +87,6 @@ export async function shoot(target, route) {
   // A host that never starts emits `error` and no `exit`.
   let spawnError;
   child.once('error', (error) => (spawnError = error));
-  const exited = new Promise((resolve) => {
-    child.once('exit', resolve);
-    child.once('error', resolve);
-  });
   try {
     const scripted = Boolean(target.input);
     const limit = (target.limitSeconds ?? (scripted ? 90 : 30)) * 1000;
@@ -104,8 +100,7 @@ export async function shoot(target, route) {
     }
     return file;
   } finally {
-    child.kill('SIGTERM');
-    await exited;
+    await stopHost(child, target.stopGraceMs);
     rmSync(state, { recursive: true, force: true });
   }
 }
