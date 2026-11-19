@@ -17,9 +17,12 @@
 namespace ngn::gtk {
 
 // Preferences in `<appData>/preferences.ini`, the colour scheme from libadwaita's style manager,
-// the clipboard in memory (GDK's is asynchronous, which System's is not), alerts logged and
-// cancelled until the dialogs come.
-std::shared_ptr<System> makeSystem(const std::string &appId, const std::string &appDataDirectory);
+// the display's GdkClipboard, alerts logged and cancelled until the dialogs come. GDK reads the
+// clipboard asynchronously and System does not, so the system keeps its text as it changes:
+// `clipboardChanged` hears the new change count once another app's text has been read, on the main
+// context. With no display, the clipboard is the app's own, in memory.
+std::shared_ptr<System> makeSystem(const std::string &appId, const std::string &appDataDirectory,
+                                   std::function<void(int64_t count)> clipboardChanged = {});
 
 // Whether Linking can open `uri`: one with a scheme the desktop has an app for. Inside a sandbox the
 // desktop portal decides as it opens it, so any scheme can be tried there.
