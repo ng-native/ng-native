@@ -983,8 +983,11 @@ TEST_CASE("a cover or a drawn sheet holds the rest of the window still, its wind
   views.settle();
   GtkWidget *add = buttonLabelled(bar, "Add");
   REQUIRE(add);
+  // GTK's macOS backend (the Mac's dev loop) draws the window's own buttons, not GTK ones.
   auto controls = findAll(bar, isWindowControlButton);
-  REQUIRE_FALSE(controls.empty());
+  if (std::string(G_OBJECT_TYPE_NAME(gdk_display_get_default())) != "GdkMacosDisplay") {
+    REQUIRE_FALSE(controls.empty());
+  }
   CHECK(takesPointer(window, add));
   CHECK(reachedByTab(window, add));
   CHECK(reachedByTab(window, views.view(5)));
@@ -1000,7 +1003,9 @@ TEST_CASE("a cover or a drawn sheet holds the rest of the window still, its wind
   CHECK_FALSE(reachedByTab(window, views.view(5)));
   CHECK(reachedByTab(window, views.view(7)));
   // The window still closes, moves and resizes.
-  CHECK(takesPointer(window, controls.front()));
+  for (GtkWidget *control : controls) {
+    CHECK(takesPointer(window, control));
+  }
   // An item the header gains while the sheet is up is held too.
   auto more = std::make_shared<HeaderProps>(*notes);
   more->bar.right = {barButton("add", "Add"), barButton("share", "Share")};
@@ -1047,4 +1052,28 @@ TEST_CASE("a cover or a drawn sheet holds the rest of the window still, its wind
   views.settle();
   CHECK(takesPointer(window, share));
   CHECK(reachedByTab(window, views.view(5)));
+}
+
+TEST_CASE("a cover holds the menus still: the menu bar takes nothing, and F10 opens no primary menu") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (auto placement : {ngn::MenuPlacement::MenuBar, ngn::MenuPlacement::PrimaryMenu}) {
+    CAPTURE(static_cast<int>(placement));
+    MountedViews views(true, 800, 600, {.menus = placement});
+    const auto *chrome = ngn::gtk::chromeOf(views.surface);
+    auto cover = shadow(3, "ModalHostView", nullptr, {{0, 0}, {800, 600}});
+    views.mount({ShadowViewMutation::CreateMutation(cover)});
+    ngn::DesktopProps asCover;
+    asCover.presentation = ngn::ModalPresentation::Cover;
+    views.backend->updateDesktopProps(MountedViews::kSurface, 3, asCover);
+    views.mount({ShadowViewMutation::InsertMutation(MountedViews::kSurface, cover, 0)});
+    views.backend->modals().settle();
+    REQUIRE(views.backend->modals().slotOf(3));
+    auto menusTakeInput = [chrome] {
+      return chrome->menuBar ? gtk_widget_get_sensitive(chrome->menuBar) != FALSE
+                             : gtk_menu_button_get_primary(GTK_MENU_BUTTON(chrome->primaryMenu)) != FALSE;
+    };
+    CHECK_FALSE(menusTakeInput());
+    views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, cover, 0), ShadowViewMutation::DeleteMutation(cover)});
+    CHECK(menusTakeInput());
+  }
 }

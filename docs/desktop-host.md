@@ -85,8 +85,8 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   a window that is not resizable, where libadwaita would open a window of its own; a cover fills
   the overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. While a
   cover or a drawn sheet is shown, the rest of the window takes no pointer or focus: the header
-  bars' items, the menus (F10 too), the content and any layer behind it. The window controls still
-  work. A
+  bars' items, the menu bar or the main menu (and its F10), the content and any layer behind it.
+  The window controls still work. A
   `<split-view>` is an `AdwNavigationSplitView` in an `AdwBreakpointBin` (`split-view.h`), each
   pane in a page of its own as a container for input, its size going back to layout as state. The
   window's split view runs the window's full height, as libadwaita lays a window out: each pane is
