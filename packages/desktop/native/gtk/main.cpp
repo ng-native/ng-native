@@ -254,7 +254,9 @@ int main(int argc, char *argv[]) {
   gtk_widget_realize(gHost.appWindow);
   // A move to a monitor of another scale changes no size, so the surface would not hear of it.
   g_signal_connect(gHost.appWindow, "notify::scale-factor", G_CALLBACK(+[](GObject *, GParamSpec *, gpointer) {
-    int w = gtk_widget_get_width(gHost.appSurface), h = gtk_widget_get_height(gHost.appSurface);
+    // One declaration each: a comma here would split G_CALLBACK's argument.
+    int w = gtk_widget_get_width(gHost.appSurface);
+    int h = gtk_widget_get_height(gHost.appSurface);
     if (gHost.state) {
       gHost.state->metrics.set(windowMetrics(w, h));
     }
