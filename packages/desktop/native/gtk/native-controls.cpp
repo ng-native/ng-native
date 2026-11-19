@@ -243,6 +243,13 @@ void dayChosen(Control *c) {
   // The offset at the instant sent, which a bound can move across a daylight-saving change.
   GDateTime *sent = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(ms / 1000)));
   double offset = sent ? static_cast<double>(g_date_time_get_utc_offset(sent)) / G_TIME_SPAN_MINUTE : 0;
+  // The calendar shows the day sent: a bound's day, not the rejected one, when the app's date
+  // stays the same and so moves nothing.
+  if (sent) {
+    c->applying = true;
+    gtk_calendar_select_day(GTK_CALENDAR(c->calendar), sent);
+    c->applying = false;
+  }
   if (was) {
     g_date_time_unref(was);
   }

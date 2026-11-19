@@ -9,6 +9,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 using facebook::react::ShadowView;
@@ -510,6 +511,36 @@ TEST_CASE("a date picker keeps the month the user browses to through an update t
   views.update(view, controlProps<Descriptor>(folly::dynamic::object("mode", "date")));
   views.update(view, controlProps<Descriptor>(folly::dynamic::object("date", juneMs)("mode", "date")));
   CHECK(month() == 6);
+}
+
+TEST_CASE("a date picker shows the bound it sends for a day picked past it, when the app keeps its date") {
+  REQUIRE(ngn::testing::gtkReady());
+  using Descriptor = ngn::DatePickerComponentDescriptor;
+  Events events;
+  MountedViews views(false, 300, 100);
+  GDateTime *noon = g_date_time_new_local(2026, 3, 14, 12, 30, 0);
+  double ms = static_cast<double>(g_date_time_to_unix(noon)) * 1000;
+  g_date_time_unref(noon);
+  auto props = [ms] { return controlProps<Descriptor>(folly::dynamic::object("date", ms)("maximumDate", ms)("mode", "date")); };
+  auto view = control(7, "RNDateTimePicker", props());
+  views.add(view);
+  GtkWidget *calendar = gtk_popover_get_child(gtk_menu_button_get_popover(GTK_MENU_BUTTON(controlOf(views, 7))));
+  REQUIRE(GTK_IS_CALENDAR(calendar));
+  auto shown = [calendar] {
+    GDateTime *at = gtk_calendar_get_date(GTK_CALENDAR(calendar));
+    std::pair<int, int> day{g_date_time_get_month(at), g_date_time_get_day_of_month(at)};
+    g_date_time_unref(at);
+    return day;
+  };
+  GDateTime *past = g_date_time_new_local(2026, 4, 16, 0, 0, 0);
+  gtk_calendar_select_day(GTK_CALENDAR(calendar), past);
+  g_date_time_unref(past);
+  REQUIRE(events.sent.size() == 1);
+  CHECK(events.sent[0].payload["timestamp"].asDouble() == doctest::Approx(ms));
+  // The app takes the bound, its date already: nothing else moves the calendar back.
+  views.update(view, props());
+  CHECK(shown() == std::pair{3, 14});
+  CHECK(events.sent.size() == 1);
 }
 
 TEST_CASE("a date picker holding a date GLib cannot represent sends a picked day at its start, without GLib criticals") {
