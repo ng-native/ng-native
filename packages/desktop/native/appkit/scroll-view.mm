@@ -65,6 +65,9 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
                                              object:_scrollView.contentView];
     [self addSubview:_scrollView];
     __weak NGNScrollView *weakSelf = self;
+    _scrollView.phaseChanged = ^(NGNScrollPhase phase, NSPoint velocity) {
+      [weakSelf report:phase velocity:velocity];
+    };
     _styleObserver = [[NGNScrollerStyleObserver alloc] initWithChanged:^{
       [weakSelf updateScrollers];
     }];
@@ -94,6 +97,7 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
   _scrollView.horizontalScrollElasticity = _scrollView.verticalScrollElasticity;
   // The inner scroll view takes the wheel before this view does.
   _scrollView.scrollingDisabled = !p->scrollEnabled;
+  _scrollView.pagingEnabled = p->pagingEnabled;
   if (_offsetProp != p->contentOffset) {
     bool first = !_offsetProp;
     _offsetProp = p->contentOffset;
@@ -198,15 +202,6 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
   [self applyPendingOffsetAfterMount];
 }
 
-- (void)scrollWheel:(NSEvent *)event {
-  auto p = std::dynamic_pointer_cast<const ScrollViewProps>(self.props);
-  if (p && !p->scrollEnabled) {
-    [self.nextResponder scrollWheel:event];
-    return;
-  }
-  [_scrollView scrollWheel:event];
-}
-
 - (void)boundsDidChange:(NSNotification *)note {
   NSPoint origin = _scrollView.contentView.bounds.origin;
   if (gOffsetChanged) {
@@ -220,13 +215,45 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
   }
   auto emitter = std::dynamic_pointer_cast<const ScrollViewEventEmitter>(self.eventEmitter);
   if (emitter) {
-    ScrollEvent event;
-    event.contentOffset = {static_cast<Float>(origin.x), static_cast<Float>(origin.y)};
-    event.contentSize = {static_cast<Float>(_document.frame.size.width), static_cast<Float>(_document.frame.size.height)};
-    event.containerSize = {static_cast<Float>(self.bounds.size.width), static_cast<Float>(self.bounds.size.height)};
-    event.zoomScale = 1;
-    event.timestamp = NSProcessInfo.processInfo.systemUptime;
-    emitter->onScroll(event);
+    emitter->onScroll([self scrollEvent]);
+  }
+}
+
+- (ScrollEvent)scrollEvent {
+  NSPoint origin = _scrollView.contentView.bounds.origin;
+  ScrollEvent event;
+  event.contentOffset = {static_cast<Float>(origin.x), static_cast<Float>(origin.y)};
+  event.contentSize = {static_cast<Float>(_document.frame.size.width), static_cast<Float>(_document.frame.size.height)};
+  event.containerSize = {static_cast<Float>(self.bounds.size.width), static_cast<Float>(self.bounds.size.height)};
+  event.zoomScale = 1;
+  event.timestamp = NSProcessInfo.processInfo.systemUptime;
+  return event;
+}
+
+// A trackpad gesture's drag and momentum, as onScrollBeginDrag, onScrollEndDrag,
+// onMomentumScrollBegin and onMomentumScrollEnd report a touch's on iOS.
+- (void)report:(NGNScrollPhase)phase velocity:(NSPoint)velocity {
+  auto emitter = std::dynamic_pointer_cast<const ScrollViewEventEmitter>(self.eventEmitter);
+  if (!emitter) {
+    return;
+  }
+  switch (phase) {
+    case NGNScrollPhaseDragBegan:
+      emitter->onScrollBeginDrag([self scrollEvent]);
+      break;
+    case NGNScrollPhaseDragEnded: {
+      ScrollEndDragEvent event([self scrollEvent]);
+      event.velocity = {static_cast<Float>(velocity.x), static_cast<Float>(velocity.y)};
+      event.targetContentOffset = event.contentOffset;
+      emitter->onScrollEndDrag(event);
+      break;
+    }
+    case NGNScrollPhaseMomentumBegan:
+      emitter->onMomentumScrollBegin([self scrollEvent]);
+      break;
+    case NGNScrollPhaseMomentumEnded:
+      emitter->onMomentumScrollEnd([self scrollEvent]);
+      break;
   }
 }
 
@@ -242,6 +269,20 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
       target.x = clip.bounds.origin.x;
     }
   } else {
+    return;
+  }
+  // scrollTo's third argument, and scrollToEnd's only one, is whether it animates.
+  const auto &animated = name == "scrollTo" ? (args.size() >= 3 ? args[2] : folly::dynamic()) : (args.isArray() && !args.empty() ? args[0] : folly::dynamic());
+  if (animated.isBool() && animated.asBool()) {
+    NGNWheelScrollView *scroll = _scrollView;
+    [NSAnimationContext
+        runAnimationGroup:^(NSAnimationContext *context) {
+          context.duration = 0.3;
+          clip.animator.boundsOrigin = target;
+        }
+        completionHandler:^{
+          [scroll reflectScrolledClipView:clip];
+        }];
     return;
   }
   [clip scrollToPoint:target];

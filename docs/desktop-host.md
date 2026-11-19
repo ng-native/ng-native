@@ -49,13 +49,13 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   Orca's structural navigation finds no headings or landmarks in a GTK 4 app. It
   builds on Linux against GTK 4.10 or later, libadwaita 1.4 or later and libsecret 0.20 or later
   (SecureStore's, `secret-store.h`), and on a Mac against Homebrew's (`brew install gtk4
-libadwaita`) as a dev loop, without libsecret, so SecureStore is absent there. Its HTTP and WebSocket client is the
+  libadwaita openssl@3 libnghttp2`) as a dev loop, without libsecret, so SecureStore is absent
+  there. Its HTTP and WebSocket client is the
   core's libcurl one (`curl-network.h`), which the GTK build turns on (`NGN_CURL`): one thread
   drives every request through `curl_multi`, behaving as NSURLSession does on macOS for redirects,
   timeouts (the longest silence), decoded bodies and `file:` and `data:` urls, and opening a
   WebSocket's `http` or `https` url as `ws` or `wss`, as React Native's HMR client asks. Unlike
-  macOS, its cookies last only as long as the process, and it takes a proxy only from the `http_proxy`,
-  `https_proxy` and `no_proxy` environment variables, not the desktop's settings. It runs a `linux`
+  macOS, its cookies last only as long as the process, and it takes a proxy only from libcurl's environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY`, `NO_PROXY` and the rest), not the desktop's settings. It runs a `linux`
   bundle, which `expo export` makes once the app's `app.config.js` registers the platform
   (`@ng-native/metro/linux.cjs`). A window is an
   `AdwApplicationWindow` of the app's `AdwApplication`, holding an `AdwToolbarView` with an
@@ -75,8 +75,9 @@ libadwaita`) as a dev loop, without libsecret, so SecureStore is absent there. I
   its last active window, or sends `reopen` when it has none shown. `--gapplication-service` starts
   it as the D-Bus service a packaged app's `DBusActivatable` desktop entry names. A window reports
   its size, maximised and full-screen state and focus to the core's `WindowHost`, which saves the
-  size and state but no place, and the host quits with the last window only when no app listens
-  (`WindowHost::lastWindowClosed`). The app's menu bar is a `GMenu` built from the core's items
+  size and state but no place. The host quits when the user closes the last window only when no
+  app listens and the app's own window is not shown; an app or a reload closing a window never
+  quits it. The app's menu bar is a `GMenu` built from the core's items
   (`menus.h`), each item an action of the window's `menu` group, shown in the chrome's menu bar or
   primary menu. GTK's popover menus take no keys, so a window's capture-phase key controller looks a
   press up in order: the app's shortcuts (`MenuHost::keyDown`), the back and forward keys
@@ -112,7 +113,8 @@ builds statically, with only English data (`icu-filter.json`). The GTK host link
 which `fetch.sh` also pins and `cmake/curl.cmake` builds statically with HTTP/1.1, HTTP/2,
 WebSockets and nothing else, over the system's OpenSSL 3, nghttp2 and zlib. The CA certificates
 are found when the host starts: `SSL_CERT_FILE` or `SSL_CERT_DIR` when set, else the bundle or
-directory the distribution keeps. On a Mac the GTK build takes Homebrew's OpenSSL through
+directory the distribution keeps. On a Mac the GTK build takes Homebrew's OpenSSL and nghttp2
+(`brew install openssl@3 libnghttp2`) through
 `PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig"`. The build runs in
 `native/docker/Dockerfile`, an AlmaLinux 9 image with clang and lld from `llvm-toolset`, GTK 4.12
 and libadwaita 1.4, and Xvfb and Weston for launching the host headless. Building against el9
