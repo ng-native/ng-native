@@ -211,10 +211,7 @@ function linuxAppId(bundleIdentifier, format, slug) {
  * @param {LinuxFormat} format
  */
 export function linuxNames(expo, config, format) {
-  const slug = String(expo.slug ?? config.name)
-    .toLowerCase()
-    .replace(/[^a-z0-9+.-]+/g, '-')
-    .replace(/^[^a-z0-9]+|[-.]+$/g, '');
+  const slug = linuxSlug(expo, config);
   if (slug.length < 2) {
     throw new UsageError(
       `The slug "${expo.slug ?? config.name}" makes no package name, which needs two letters or ` +
@@ -230,6 +227,32 @@ export function linuxNames(expo, config, format) {
     );
   }
   return { appId, packageName: slug, version };
+}
+
+/**
+ * The slug a Linux package and its command are named for, lowercased into the letters a package
+ * name takes.
+ *
+ * @param {ExpoConfig} expo
+ * @param {DesktopAppConfig} config
+ */
+function linuxSlug(expo, config) {
+  return String(expo.slug ?? config.name)
+    .toLowerCase()
+    .replace(/[^a-z0-9+.-]+/g, '-')
+    .replace(/^[^a-z0-9]+|[-.]+$/g, '');
+}
+
+/**
+ * The GApplication id a dev run (`ng-native-desktop run --os linux`) gives the host: the one an
+ * `app` package of the same app has. Throws a usage error for a bundle identifier Linux cannot
+ * take.
+ *
+ * @param {ExpoConfig} expo
+ * @param {DesktopAppConfig} config
+ */
+export function linuxRunAppId(expo, config) {
+  return linuxAppId(config.bundleIdentifier, 'app', linuxSlug(expo, config));
 }
 
 /**

@@ -52,8 +52,14 @@ describe('the desktop commands', () => {
   it('runs ng-native-desktop for macos, linux and package, which the Expo CLI has no command for', () => {
     assert.deepEqual(desktopArgs({ command: 'macos' }), ['run']);
     assert.deepEqual(desktopArgs({ command: 'macos', port: 8082 }), ['run', '--port', '8082']);
-    assert.deepEqual(desktopArgs({ command: 'linux' }), ['run']);
-    assert.deepEqual(desktopArgs({ command: 'linux', port: 8082 }), ['run', '--port', '8082']);
+    assert.deepEqual(desktopArgs({ command: 'linux' }), ['run', '--os', 'linux']);
+    assert.deepEqual(desktopArgs({ command: 'linux', port: 8082 }), [
+      'run',
+      '--os',
+      'linux',
+      '--port',
+      '8082',
+    ]);
     assert.deepEqual(desktopArgs({ command: 'package', port: 8082 }), ['package']);
     assert.deepEqual(desktopArgs({ command: 'package', args: ['--format', 'dmg'] }), [
       'package',

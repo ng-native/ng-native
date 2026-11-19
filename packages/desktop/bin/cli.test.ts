@@ -11,6 +11,7 @@ import {
   checkExpoConfig,
   devServerBundleUrl,
   HOST_LIBRARIES,
+  hostExecutable,
   linkFile,
   main,
   parseCommand,
@@ -19,7 +20,12 @@ import {
   UsageError,
 } from './cli.mjs';
 import { prepareHost } from './host.mjs';
-import { FIRST_BUILD_NOTE } from './toolchain.mjs';
+import {
+  FIRST_BUILD_NOTE,
+  LINUX_FIRST_BUILD_NOTE,
+  LINUX_LIBRARIES,
+  LINUX_TOOLS,
+} from './toolchain.mjs';
 
 const packageDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -67,23 +73,22 @@ describe('cacheDir', () => {
 
 describe('parseCommand', () => {
   it('reads run with its bundle and options', () => {
-    assert.deepEqual(parseCommand(['run', 'dist/main.hbc']), {
+    assert.deepEqual(parseCommand(['run', 'dist/main.hbc'], 'darwin'), {
       command: 'run',
+      os: 'macos',
       bundle: 'dist/main.hbc',
       module: 'main',
       port: 8081,
       universal: false,
     });
     assert.deepEqual(
-      parseCommand([
-        'run',
-        'http://localhost:8081/index.bundle',
-        '--module',
-        'other',
-        '--universal',
-      ]),
+      parseCommand(
+        ['run', 'http://localhost:8081/index.bundle', '--module', 'other', '--universal'],
+        'darwin',
+      ),
       {
         command: 'run',
+        os: 'macos',
         bundle: 'http://localhost:8081/index.bundle',
         module: 'other',
         port: 8081,
@@ -98,8 +103,9 @@ describe('parseCommand', () => {
   });
 
   it('reads run with no bundle, which loads from the dev server, and its port', () => {
-    assert.deepEqual(parseCommand(['run', '--port', '8082']), {
+    assert.deepEqual(parseCommand(['run', '--port', '8082'], 'darwin'), {
       command: 'run',
+      os: 'macos',
       bundle: undefined,
       module: 'main',
       port: 8082,
@@ -113,6 +119,249 @@ describe('parseCommand', () => {
     assert.throws(() => parseCommand(['run', '--port', 'eighty']), /--port takes a port number/);
     assert.throws(() => parseCommand(['run', '--port', '70000']), UsageError);
   });
+
+  it('reads the OS to run on, this machine’s unless --os says, and keeps --universal to macOS', () => {
+    assert.equal((parseCommand(['run'], 'linux') as { os: string }).os, 'linux');
+    assert.equal((parseCommand(['run'], 'darwin') as { os: string }).os, 'macos');
+    assert.equal((parseCommand(['run', '--os', 'linux'], 'darwin') as { os: string }).os, 'linux');
+    assert.equal((parseCommand(['run', '--os', 'macos'], 'linux') as { os: string }).os, 'macos');
+    assert.throws(() => parseCommand(['run', '--os', 'windows']), /--os takes macos or linux/);
+    assert.throws(
+      () => parseCommand(['run', '--os', 'linux', '--universal']),
+      /--universal is for --os macos only/,
+    );
+  });
+});
+
+describe('run --os linux', () => {
+  const listsLinux = () => ({
+    name: 'Demo',
+    slug: 'demo',
+    platforms: ['macos', 'linux'],
+    experiments: { outOfTreePlatforms: true },
+    ios: { bundleIdentifier: 'com.example.demo' },
+  });
+  /** A Linux x64 machine whose build of the GTK host lands in the cache; its calls, of its own. */
+  const linuxBuild = (
+    overrides: (
+      calls: { command: string; args: string[]; env?: Record<string, string> }[],
+    ) => Partial<typeof system> = () => ({}),
+  ) => {
+    const calls: { command: string; args: string[]; env?: Record<string, string> }[] = [];
+    const fake = fakeSystem({
+      platform: 'linux',
+      arch: 'x64',
+      expoConfig: listsLinux,
+      run(command, args, options) {
+        const probe = TOOLCHAIN[[command, ...args].join(' ')];
+        if (probe !== undefined) return { status: 0, stdout: probe };
+        calls.push({ command, args, ...(options?.env && { env: options.env }) });
+        return command.endsWith('build.sh')
+          ? { status: 0, stdout: '/cache/rn-0.88.0/host/gtk-x86_64-RelWithDebInfo\n' }
+          : { status: 0, stdout: '' };
+      },
+      ...overrides(calls),
+    });
+    return { ...fake, linuxCalls: calls };
+  };
+
+  it('builds the GTK host without the core tests and opens the dev server’s Linux bundle in it', async () => {
+    const { sys, linuxCalls } = linuxBuild();
+    const status = await run({ os: 'linux', module: 'main', port: 8082, universal: false }, sys);
+    assert.equal(status, 0);
+    assert.deepEqual(linuxCalls, [
+      {
+        command: path.join(packageDir, 'native', 'scripts', 'build.sh'),
+        args: ['/apps/demo/node_modules/react-native', '--backend', 'gtk', '--no-tests'],
+        env: { NGN_DESKTOP_LINK: '/apps/demo/.expo/ng-native-desktop/link.json' },
+      },
+      {
+        command: '/cache/rn-0.88.0/host/gtk-x86_64-RelWithDebInfo/gtk/ngn-linux',
+        args: [
+          'http://localhost:8082/.expo/.virtual-metro-entry.bundle?platform=linux&dev=true',
+          '--module',
+          'main',
+          '--title',
+          'Demo',
+          '--app-id',
+          'com.example.demo',
+        ],
+      },
+    ]);
+    assert.equal(devServerBundleUrl(8082, 'linux'), linuxCalls[1]!.args[0]);
+  });
+
+  it('runs on the prebuilt debug Linux host for this machine’s architecture, compiling nothing', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      hosts: [
+        {
+          reactNative: '0.88.0',
+          flavour: 'debug',
+          url: 'https://e.com/m.tar.gz',
+          sha256: 'c'.repeat(64),
+          libraries: {},
+        },
+        {
+          reactNative: '0.88.0',
+          flavour: 'debug',
+          os: 'linux',
+          arch: 'arm64',
+          url: 'https://e.com/a.tar.gz',
+          sha256: 'a'.repeat(64),
+          libraries: {},
+        },
+        {
+          reactNative: '0.88.0',
+          flavour: 'debug',
+          os: 'linux',
+          arch: 'x64',
+          url: 'https://e.com/x.tar.gz',
+          sha256: 'b'.repeat(64),
+          libraries: {},
+        },
+      ],
+    });
+    const host = '/cache/rn-0.88.0/prebuilt/bbbbbbbbbbbbbbbb/gtk/ngn-linux';
+    const { sys, linuxCalls } = linuxBuild(() => ({
+      env: { NGN_DESKTOP_CACHE: '/cache' },
+      readFile: (file) =>
+        file === path.join(packageDir, 'prebuilt.json')
+          ? manifest
+          : file.endsWith('react-native/package.json')
+            ? '{"version":"0.88.0"}'
+            : '',
+      exists: (file) => file === host,
+    }));
+    await run({ os: 'linux', module: 'main', universal: false }, sys);
+    assert.deepEqual(
+      linuxCalls.map((call) => call.command),
+      [host],
+    );
+  });
+
+  it('names the app with the id its Linux app package has, made up from the slug without one', async () => {
+    const { sys, linuxCalls } = linuxBuild(() => ({
+      expoConfig: () => ({ ...listsLinux(), slug: 'my-demo', ios: {} }),
+    }));
+    await run({ os: 'linux', module: 'main', universal: false }, sys);
+    const args = linuxCalls[1]!.args;
+    assert.equal(args[args.indexOf('--app-id') + 1], 'dev.ngnative.mydemo');
+    // The macOS host takes the slug as it is.
+    const mac = fakeSystem({ expoConfig: () => ({ ...listsLinux(), slug: 'my-demo', ios: {} }) });
+    await run({ module: 'main', universal: false }, mac.sys);
+    const macArgs = mac.calls[1]!.args;
+    assert.equal(macArgs[macArgs.indexOf('--app-id') + 1], 'my-demo');
+  });
+
+  it('checks the Linux toolchain before it builds, naming the package for this distribution', async () => {
+    const asked: string[] = [];
+    const { sys, linuxCalls } = linuxBuild((calls) => ({
+      readFile: (file) => (file === '/etc/os-release' ? 'ID=ubuntu\nID_LIKE=debian\n' : ''),
+      run(command, args) {
+        const line = [command, ...args].join(' ');
+        asked.push(line);
+        if (line === 'pkg-config --modversion libadwaita-1')
+          return { status: 0, stdout: '1.2.1\n' };
+        if (line === 'pkg-config --modversion gtk4') return { status: 1, stdout: '' };
+        const probe = TOOLCHAIN[line];
+        if (probe !== undefined) return { status: 0, stdout: probe };
+        calls.push({ command, args });
+        return { status: 0, stdout: '/b\n' };
+      },
+    }));
+    await assert.rejects(
+      run({ os: 'linux', module: 'main', universal: false }, sys),
+      (error: unknown) =>
+        error instanceof UsageError &&
+        /cannot be built from source on this machine/.test(error.message) &&
+        /pkg-config finds no gtk4\. Install its headers: sudo apt install libgtk-4-dev/.test(
+          error.message,
+        ) &&
+        /libadwaita-1 1\.2\.1 is older than 1\.4/.test(error.message),
+    );
+    assert.deepEqual(linuxCalls, []);
+    assert.ok(asked.includes('ld.lld --version'));
+  });
+
+  it('says the first Linux build takes a while, before building for a version the cache lacks', async () => {
+    const { sys, warnings } = linuxBuild(() => ({
+      env: { NGN_DESKTOP_CACHE: '/cache' },
+      readFile: (file) =>
+        file.endsWith('react-native/package.json') ? '{"version":"0.88.0"}' : '',
+    }));
+    await run({ os: 'linux', module: 'main', universal: false }, sys);
+    assert.deepEqual(warnings, [LINUX_FIRST_BUILD_NOTE]);
+  });
+
+  it('prints the debug host’s executable with host, taking a prebuilt Linux host on a Mac', async () => {
+    const manifest = JSON.stringify({
+      version: 1,
+      hosts: [
+        {
+          reactNative: '0.88.0',
+          flavour: 'debug',
+          os: 'linux',
+          arch: 'arm64',
+          url: 'https://e.com/a.tar.gz',
+          sha256: 'a'.repeat(64),
+          libraries: {},
+        },
+      ],
+    });
+    const prebuilt = '/cache/rn-0.88.0/prebuilt/aaaaaaaaaaaaaaaa/gtk/ngn-linux';
+    const files = (file: string) =>
+      file === path.join(packageDir, 'prebuilt.json')
+        ? manifest
+        : file.endsWith('react-native/package.json')
+          ? '{"version":"0.88.0"}'
+          : '';
+    const mac = fakeSystem({
+      expoConfig: listsLinux,
+      env: { NGN_DESKTOP_CACHE: '/cache' },
+      readFile: files,
+      exists: (file) => file === prebuilt,
+    });
+    const printed: string[] = [];
+    const log = console.log;
+    console.log = (line: string) => void printed.push(line);
+    try {
+      assert.equal(await main(['host', '--os', 'linux'], mac.sys), 0);
+    } finally {
+      console.log = log;
+    }
+    assert.deepEqual(printed, [prebuilt]);
+    assert.deepEqual(mac.calls, [], 'nothing built or launched');
+    assert.deepEqual(parseCommand(['host'], 'linux'), { command: 'host', os: 'linux' });
+
+    // With no prebuilt host for it, a Mac cannot build one, and says so.
+    assert.throws(
+      () =>
+        hostExecutable(
+          { os: 'linux' },
+          fakeSystem({ expoConfig: listsLinux, env: { NGN_DESKTOP_CACHE: '/cache' } }).sys,
+        ),
+      /builds on Linux only for now/,
+    );
+    // On Linux it builds as run does.
+    const { sys } = linuxBuild();
+    assert.equal(
+      hostExecutable({ os: 'linux' }, sys),
+      '/cache/rn-0.88.0/host/gtk-x86_64-RelWithDebInfo/gtk/ngn-linux',
+    );
+  });
+
+  it('refuses to run the Linux host off Linux before fetching or building anything', async () => {
+    const { sys, calls } = fakeSystem({ expoConfig: listsLinux });
+    await assert.rejects(
+      run({ os: 'linux', module: 'main', universal: false }, sys),
+      (error: unknown) =>
+        error instanceof UsageError &&
+        /runs on Linux only for now/.test(error.message) &&
+        /npm run package -- --os linux/.test(error.message),
+    );
+    assert.deepEqual(calls, []);
+  });
 });
 
 /** What the toolchain check (toolchain.mjs) asks, answered by a Mac that has every tool. */
@@ -121,6 +370,11 @@ const TOOLCHAIN: Record<string, string> = {
   'xcrun swiftc --version': 'Apple Swift version 6.2 (swiftlang-6.2.0.19.9 clang-1700.3.19.1)\n',
   'cmake --version': 'cmake version 3.31.6\n',
   'ninja --version': '1.12.1\n',
+  // Linux's: the other tools and the libraries the GTK host links.
+  ...Object.fromEntries(LINUX_TOOLS.map((tool) => [`${tool.command} --version`, '1.0\n'])),
+  ...Object.fromEntries(
+    LINUX_LIBRARIES.map((library) => [`pkg-config --modversion ${library.module}`, '9.0\n']),
+  ),
 };
 
 /** A system that records what run() asks of it. */
@@ -542,7 +796,7 @@ describe('run', () => {
           os: 'linux',
           arch: 'x64',
         }),
-      /no prebuilt Linux x64 host fits this app[\s\S]*Package on Linux on x64/,
+      /no prebuilt Linux x64 host fits this app[\s\S]*Run this on Linux on x64/,
     );
   });
 
@@ -667,8 +921,9 @@ describe('run', () => {
   });
 
   it('opens the app on a link given with --url, as its initial URL', async () => {
-    assert.deepEqual(parseCommand(['run', '--url', 'demo://settings']), {
+    assert.deepEqual(parseCommand(['run', '--url', 'demo://settings'], 'darwin'), {
       command: 'run',
+      os: 'macos',
       bundle: undefined,
       module: 'main',
       port: 8081,

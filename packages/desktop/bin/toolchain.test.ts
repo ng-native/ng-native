@@ -2,7 +2,16 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { UsageError } from './host.mjs';
-import { atLeast, checkToolchain, TOOLCHAIN_MINIMUMS, toolchainProblems } from './toolchain.mjs';
+import {
+  atLeast,
+  checkToolchain,
+  LINUX_LIBRARIES,
+  LINUX_LIBRARY_MINIMUMS,
+  LINUX_TOOLS,
+  linuxFamily,
+  TOOLCHAIN_MINIMUMS,
+  toolchainProblems,
+} from './toolchain.mjs';
 
 type Answer = { status: number; stdout: string } | 'missing' | 'denied';
 
@@ -131,6 +140,159 @@ describe('checkToolchain', () => {
         /cannot be built from source on this Mac:\n- Ninja is not installed/.test(error.message),
     );
     assert.doesNotThrow(() => checkToolchain(mac(EVERYTHING)));
+  });
+});
+
+/** A Linux whose tools answer from `answers`, with `osRelease` as its /etc/os-release. */
+function linux(answers: Record<string, Answer>, osRelease = '') {
+  return {
+    ...mac(answers),
+    readFile(file: string) {
+      if (file !== '/etc/os-release' || !osRelease) throw new Error(`ENOENT ${file}`);
+      return osRelease;
+    },
+  };
+}
+
+const LINUX_EVERYTHING: Record<string, Answer> = {
+  'cmake --version': ok('cmake version 3.25.0\n'),
+  'ninja --version': ok('1.10.2\n'),
+  ...Object.fromEntries(LINUX_TOOLS.map((tool) => [`${tool.command} --version`, ok('x\n')])),
+  ...Object.fromEntries(
+    LINUX_LIBRARIES.map((library) => [
+      `pkg-config --modversion ${library.module}`,
+      ok(`${LINUX_LIBRARY_MINIMUMS[library.module] ?? '1.0'}\n`),
+    ]),
+  ),
+};
+
+const FEDORA = 'NAME="Fedora Linux"\nID=fedora\n';
+const ALMA = 'NAME="AlmaLinux"\nID="almalinux"\nID_LIKE="rhel centos fedora"\n';
+const UBUNTU = 'NAME="Ubuntu"\nID=ubuntu\nID_LIKE=debian\n';
+
+describe('toolchainProblems on Linux', () => {
+  it('finds nothing wrong with every tool there and each library at its minimum', () => {
+    assert.deepEqual(toolchainProblems(linux(LINUX_EVERYTHING, UBUNTU), 'linux'), []);
+  });
+
+  it('names the package to install for this distribution’s family', () => {
+    const missing = { ...LINUX_EVERYTHING, 'ld.lld --version': 'missing' as const };
+    assert.deepEqual(toolchainProblems(linux(missing, UBUNTU), 'linux'), [
+      'lld is not installed. Install it: sudo apt install lld',
+    ]);
+    assert.deepEqual(toolchainProblems(linux(missing, FEDORA), 'linux'), [
+      'lld is not installed. Install it: sudo dnf install lld',
+    ]);
+    // Without an os-release it knows, both families' names.
+    assert.match(
+      toolchainProblems(linux(missing), 'linux')[0]!,
+      /install lld on Debian or Ubuntu, lld on Fedora or RHEL/,
+    );
+  });
+
+  it('says where RHEL keeps Ninja and the GTK headers, only when something is missing there', () => {
+    const problems = toolchainProblems(
+      linux({ ...LINUX_EVERYTHING, 'ninja --version': 'missing' }, ALMA),
+      'linux',
+    );
+    assert.deepEqual(problems, [
+      'Ninja is not installed. Install it: sudo dnf install ninja-build',
+      'On RHEL and its rebuilds, Ninja and the GTK and libadwaita headers are in the CRB repository: enable it first with sudo dnf config-manager --set-enabled crb',
+    ]);
+    assert.deepEqual(toolchainProblems(linux(LINUX_EVERYTHING, ALMA), 'linux'), []);
+  });
+
+  it('names each library pkg-config misses or finds too old, and skips them without pkg-config', () => {
+    const problems = toolchainProblems(
+      linux(
+        {
+          ...LINUX_EVERYTHING,
+          'pkg-config --modversion gtk4': { status: 1, stdout: '' },
+          'pkg-config --modversion libadwaita-1': ok('1.3.6\n'),
+          'pkg-config --modversion openssl': ok('\n'),
+        },
+        UBUNTU,
+      ),
+      'linux',
+    );
+    assert.deepEqual(problems, [
+      'pkg-config finds no gtk4. Install its headers: sudo apt install libgtk-4-dev',
+      'libadwaita-1 1.3.6 is older than 1.4, the oldest the GTK host builds with. Update it (sudo apt install --only-upgrade libadwaita-1-dev), or build on a newer distribution.',
+      'pkg-config printed no version for openssl. Reinstall its headers: sudo apt install --reinstall libssl-dev',
+    ]);
+    const noPkgConfig = linux({ ...LINUX_EVERYTHING, 'pkg-config --version': 'missing' }, UBUNTU);
+    assert.deepEqual(toolchainProblems(noPkgConfig, 'linux'), [
+      'pkg-config is not installed. Install it: sudo apt install pkg-config',
+    ]);
+    assert.ok(!noPkgConfig.asked.some((line) => line.includes('--modversion')));
+  });
+
+  it('says a tool that cannot run failed, and takes one whose --version exits nonzero as there', () => {
+    const problems = toolchainProblems(
+      linux(
+        {
+          ...LINUX_EVERYTHING,
+          'clang --version': 'denied',
+          'unzip --version': { status: 10, stdout: '' },
+        },
+        FEDORA,
+      ),
+      'linux',
+    );
+    assert.deepEqual(problems, [
+      'clang is installed but clang --version could not run (EACCES). Check it runs, or reinstall it: sudo dnf reinstall clang',
+    ]);
+  });
+
+  it('keeps the library minimums in step with what the GTK host and libcurl ask pkg-config for', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const gtk = await readFile(new URL('../native/gtk/CMakeLists.txt', import.meta.url), 'utf8');
+    const curl = await readFile(new URL('../native/cmake/curl.cmake', import.meta.url), 'utf8');
+    const asked = [
+      ...`${gtk}\n${curl}`.matchAll(
+        /pkg_check_modules\(\w+ REQUIRED(?: IMPORTED_TARGET)? ([^)]*)\)/g,
+      ),
+    ]
+      .flatMap((match) => match[1]!.split(/\s+/))
+      .filter(Boolean);
+    const floors = Object.fromEntries(
+      asked.flatMap((each) => {
+        const [module, version] = each.split('>=');
+        return version ? [[module!, version]] : [];
+      }),
+    );
+    assert.deepEqual(floors, LINUX_LIBRARY_MINIMUMS);
+    const modules = asked.map((each) => each.split('>=')[0]);
+    for (const module of modules) {
+      assert.ok(
+        LINUX_LIBRARIES.some((library) => library.module === module),
+        `${module} is checked`,
+      );
+    }
+  });
+});
+
+describe('checkToolchain on Linux', () => {
+  it('stops with every problem, naming this machine rather than a Mac', () => {
+    assert.throws(
+      () =>
+        checkToolchain(linux({ ...LINUX_EVERYTHING, 'git --version': 'missing' }, UBUNTU), 'linux'),
+      (error: unknown) =>
+        error instanceof UsageError &&
+        /cannot be built from source on this machine:\n- Git is not installed/.test(error.message),
+    );
+  });
+});
+
+describe('linuxFamily', () => {
+  it('reads Debian’s and Fedora’s families from ID and ID_LIKE, and RHEL’s rebuilds as el', () => {
+    assert.deepEqual(linuxFamily(UBUNTU), { family: 'apt', el: false });
+    assert.deepEqual(linuxFamily('ID=debian\n'), { family: 'apt', el: false });
+    assert.deepEqual(linuxFamily(FEDORA), { family: 'dnf', el: false });
+    assert.deepEqual(linuxFamily(ALMA), { family: 'dnf', el: true });
+    assert.deepEqual(linuxFamily('ID="rhel"\n'), { family: 'dnf', el: true });
+    assert.equal(linuxFamily('ID=arch\n'), null);
+    assert.equal(linuxFamily(''), null);
   });
 });
 

@@ -90,6 +90,11 @@ describe('the published package', () => {
     assert.deepEqual(missing, []);
   });
 
+  it('has the AlmaLinux 9 image, which a Mac builds to run the Linux host in a container', () => {
+    // The desktop template's README builds it from node_modules for `vitest --project linux`.
+    assert.ok(files.has('native/docker/Dockerfile'));
+  });
+
   it('leaves out the core tests and their fakes, which only the repo builds', () => {
     const testsOnly = configured(true).filter((source) => !configured(false).includes(source));
     assert.ok(testsOnly.includes('native/core/testing/fake-backend.cpp'), 'the tests are found');

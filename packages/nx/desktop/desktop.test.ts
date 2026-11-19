@@ -68,10 +68,13 @@ describe('the desktop generator', () => {
     const tree = await app();
     await run(tree);
     const { targets } = readProjectConfiguration(tree, 'mobile');
-    for (const os of ['macos', 'linux']) {
+    for (const [os, command] of [
+      ['macos', 'ng-native-desktop run'],
+      ['linux', 'ng-native-desktop run --os linux'],
+    ] as const) {
       assert.deepEqual(targets![os], {
         executor: 'nx:run-commands',
-        options: { cwd: 'apps/mobile', command: 'ng-native-desktop run' },
+        options: { cwd: 'apps/mobile', command },
         continuous: true,
       });
     }
@@ -87,7 +90,7 @@ describe('the desktop generator', () => {
     await run(tree, 'second');
     const { targets } = readProjectConfiguration(tree, 'second');
     assert.equal(targets!['macos'].options.command, 'ng-native-desktop run --port 8082');
-    assert.equal(targets!['linux'].options.command, 'ng-native-desktop run --port 8082');
+    assert.equal(targets!['linux'].options.command, 'ng-native-desktop run --os linux --port 8082');
   });
 
   it('loads from a port its start target names in commands, as a string or an object', async () => {
@@ -137,7 +140,7 @@ describe('the desktop generator', () => {
     assert.deepEqual(expo.experiments, { typedRoutes: true, outOfTreePlatforms: true });
     const { targets } = readProjectConfiguration(tree, 'mobile');
     assert.deepEqual(targets!['macos'], macos, 'keeps its own macos target');
-    assert.equal(targets!['linux'].options.command, 'ng-native-desktop run');
+    assert.equal(targets!['linux'].options.command, 'ng-native-desktop run --os linux');
     assert.match(tree.read('apps/mobile/.gitignore', 'utf-8')!, /^\/dist\/linux$/m);
   });
 

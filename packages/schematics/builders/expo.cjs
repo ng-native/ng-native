@@ -14,8 +14,8 @@
 const { createBuilder } = require('@angular-devkit/architect');
 const { spawnBin } = require('./spawn-bin.cjs');
 
-/** The commands `ng-native-desktop` runs in place of the Expo CLI, by its subcommand. */
-const DESKTOP_COMMANDS = { macos: 'run', linux: 'run', package: 'package' };
+/** What `ng-native-desktop` runs in place of the Expo CLI: its subcommand, and the OS for `linux`. */
+const DESKTOP_COMMANDS = { macos: ['run'], linux: ['run', '--os', 'linux'], package: ['package'] };
 
 /**
  * The Expo CLI's arguments for a target's options.
@@ -38,7 +38,7 @@ function expoArgs(options) {
  * @param {{ command: 'macos' | 'linux' | 'package', args?: string[], port?: number }} options
  */
 function desktopArgs(options) {
-  const args = [DESKTOP_COMMANDS[options.command], ...(options.args ?? [])];
+  const args = [...DESKTOP_COMMANDS[options.command], ...(options.args ?? [])];
   if (options.port && options.command !== 'package') args.push('--port', String(options.port));
   return args;
 }

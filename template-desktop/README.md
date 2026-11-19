@@ -17,13 +17,18 @@ npm run package -- --format dmg   # a signed, notarised .dmg; --format mas for t
 npm run package -- --os linux --format deb   # a .deb; --format app, rpm or flatpak too
 ```
 
-To run tests inside the app, on real AppKit views, start Metro for them and run the `macos` Vitest
-project, which opens the app itself (`src/app/app.device.ts` is the example):
+To run tests inside the app, on real native views, start Metro for them and run the `macos` or
+`linux` Vitest project, which opens the app itself (`src/app/app.device.ts` is the example):
 
 ```sh
 EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start
-npx vitest --project macos
+npx vitest --project macos   # on a Mac, in AppKit
+npx vitest --project linux   # in GTK: on Linux, or on a Mac in the ngn-el9 container
 ```
+
+The `linux` project runs the debug host `npm run linux` uses. On a Mac it runs the prebuilt Linux
+host for the Mac's architecture in the `ngn-el9` image, which you build once with Docker or Colima:
+`docker build -t ngn-el9 node_modules/@ng-native/desktop/native/docker`.
 
 `npm test` runs the two Node projects, `node-macos` and `node-linux`, alone.
 

@@ -201,7 +201,7 @@ const mobileDependencies = Object.fromEntries(
  */
 const DESKTOP_SCRIPTS = {
   macos: 'ng-native-desktop run',
-  linux: 'ng-native-desktop run',
+  linux: 'ng-native-desktop run --os linux',
   package: 'ng-native-desktop package',
 };
 
