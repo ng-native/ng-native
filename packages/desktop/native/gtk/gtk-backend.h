@@ -84,6 +84,7 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
   void updateDesktopProps(SurfaceId surfaceId, Tag tag, const DesktopProps &props) override;
   void setSplitView(SurfaceId surfaceId, Tag split, bool window) override;
   void setSourceLists(SurfaceId surfaceId, Tag parent, const std::vector<SourceList> &lists) override;
+  void announce(SurfaceId surfaceId, const Announcement &announcement) override;
   void setSvgDrawing(SurfaceId surfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) override;
   std::vector<facebook::react::ComponentDescriptorProvider> componentProviders() const override;
 

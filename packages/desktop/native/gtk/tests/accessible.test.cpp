@@ -225,3 +225,25 @@ TEST_CASE("a paragraph whose state alone changes its role keeps its opacity") {
   CHECK(views.view(2) != before);
   CHECK(gtk_widget_get_opacity(views.view(2)) == 0);
 }
+
+TEST_CASE("a text input's wrapper is generic, its field the text box with the label") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto field = MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("accessibilityLabel", "Title")), {{10, 10}, {150, 40}});
+  views.add(field);
+  GtkWidget *text = ngn::gtk::viewData(views.view(2))->field->text;
+  CHECK(roleOf(views.view(2)) == GTK_ACCESSIBLE_ROLE_GENERIC);
+  CHECK_FALSE(gtk_test_accessible_has_property(GTK_ACCESSIBLE(views.view(2)), GTK_ACCESSIBLE_PROPERTY_LABEL));
+  CHECK(hasProperty(text, GTK_ACCESSIBLE_PROPERTY_LABEL, "Title"));
+  // And it follows the props.
+  views.update(field, textInputProps(dynamic::object("accessibilityLabel", "Name")));
+  CHECK(hasProperty(text, GTK_ACCESSIBLE_PROPERTY_LABEL, "Name"));
+}
+
+TEST_CASE("an announcement is said through the window on GTK 4.14 and later, and nothing is said below") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  bool said = ngn::gtk::announceOn(views.surface, {.text = "Saved", .priority = ngn::AnnouncementPriority::Medium});
+  CHECK(said == (gtk_get_minor_version() >= 14));
+  CHECK_FALSE(ngn::gtk::announceOn(views.surface, {.text = ""}));
+}

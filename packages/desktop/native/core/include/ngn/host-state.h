@@ -202,6 +202,27 @@ struct AccessibilitySettings {
   bool operator==(const AccessibilitySettings &) const = default;
 };
 
+// What a Linux desktop says about those settings, each from wherever it is said: the settings
+// portal, GTK's own settings, and AT-SPI's status (the GTK host's accessibility-settings.h).
+struct LinuxAccessibilitySources {
+  // The portal's org.freedesktop.appearance reduced-motion, set to reduce.
+  bool portalReducedMotion{false};
+  // GTK 4.22's gtk-interface-reduced-motion, set to reduce.
+  bool gtkReducedMotion{false};
+  // gtk-enable-animations, which GNOME's Animations switch turns off.
+  bool animations{true};
+  // High contrast: the portal's contrast (libadwaita's high-contrast), or GTK 4.20's
+  // gtk-interface-contrast set to more.
+  bool highContrast{false};
+  // org.a11y.Status ScreenReaderEnabled.
+  bool screenReader{false};
+  bool operator==(const LinuxAccessibilitySources &) const = default;
+};
+// Reduce motion when any source asks for it, increase contrast when any does, a screen reader as
+// AT-SPI says; Linux has no reduce-transparency, invert-colours, bold-text or grayscale setting an
+// app can read, so those stay off.
+AccessibilitySettings linuxAccessibility(const LinuxAccessibilitySources &sources);
+
 struct WindowMetrics {
   Dimensions window;
   Dimensions screen;

@@ -10,6 +10,7 @@
 // NGN_CAPTURE=<file.png> saves the first window's content, drawn in-process (capture.h), a second
 // after its first frame, or with an input script (NGN_INPUT_SCRIPT) a second after the script has
 // played.
+#include "accessibility-settings.h"
 #include "app-windows.h"
 #include "capture.h"
 #include "file-system.h"
@@ -68,6 +69,8 @@ struct Host {
   std::unique_ptr<ngn::InputDispatcher> input;
   std::unique_ptr<ngn::Runtime> runtime;
   std::shared_ptr<ngn::HostState> state;
+  // The desktop's accessibility settings, into the host state as they change.
+  std::unique_ptr<ngn::gtk::AccessibilitySettingsWatcher> accessibility;
   std::shared_ptr<ngn::gtk::GtkWindows> windows;
   std::shared_ptr<ngn::MenuHost> menus;
   std::shared_ptr<ngn::gtk::GtkMenus> gtkMenus;
@@ -421,7 +424,9 @@ int main(int argc, char *argv[]) {
   gHost.application = ngn::gtk::startApplication(appId, !settings.test, settings.dbusService);
   if (g_application_get_is_remote(G_APPLICATION(gHost.application))) {
     auto args = settings.openArgs;
-    if (!settings.initialUrl.empty()) {
+    gHost.accessibility = std::make_unique<ngn::gtk::AccessibilitySettingsWatcher>(
+      [](const ngn::AccessibilitySettings &settings) { gHost.state->accessibility.set(settings); });
+  if (!settings.initialUrl.empty()) {
       args.push_back(settings.initialUrl);
     }
     ngn::gtk::forwardLaunch(gHost.application, args);

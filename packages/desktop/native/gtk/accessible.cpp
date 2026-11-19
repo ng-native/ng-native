@@ -1,8 +1,15 @@
 #include "accessible.h"
 
+#include "text-field.h"
+#include "view-widget.h"
+
 #include "ngn/native-controls.h"
 
 #include <react/renderer/components/view/ViewProps.h>
+
+#include <dlfcn.h>
+
+#include <string_view>
 
 namespace ngn::gtk {
 
@@ -21,8 +28,9 @@ GtkAccessibleRole accessibleRole(const facebook::react::ShadowView &view) {
   auto props = std::dynamic_pointer_cast<const facebook::react::ViewProps>(view.props);
   auto info = accessibilityOf(view);
   // A native control's GTK widget is the accessible element, with its own role and state, as
-  // AppKit's control is on macOS: the view holding it is not one too.
-  if (!props || !info || controlKind(view.componentName)) {
+  // AppKit's control is on macOS: the view holding it is not one too. So is a text input's field,
+  // a text box with the label.
+  if (!props || !info || controlKind(view.componentName) || std::string_view(view.componentName) == "TextInput") {
     return GTK_ACCESSIBLE_ROLE_GENERIC;
   }
   return gtkRole(ariaRole(roleName(*props), *info));
@@ -97,6 +105,22 @@ GtkAccessibleRole gtkRole(AriaRole role) {
     case AriaRole::Article: return GTK_ACCESSIBLE_ROLE_GROUP;
   }
   return GTK_ACCESSIBLE_ROLE_GENERIC;
+}
+
+GtkWidget *accessibleWidget(const ViewData &view) {
+  return view.field ? fieldWidget(*view.field) : view.widget;
+}
+
+bool announceOn(GtkWidget *widget, const Announcement &announcement) {
+  using Announce = void (*)(GtkAccessible *, const char *, int);
+  static auto announce = reinterpret_cast<Announce>(dlsym(RTLD_DEFAULT, "gtk_accessible_announce"));
+  if (!announce || !widget || announcement.text.empty()) {
+    return false;
+  }
+  // GtkAccessibleAnnouncementPriority: LOW, MEDIUM, HIGH, one to one.
+  int priority = announcement.priority == AnnouncementPriority::Low ? 0 : announcement.priority == AnnouncementPriority::Medium ? 1 : 2;
+  announce(GTK_ACCESSIBLE(widget), announcement.text.c_str(), priority);
+  return true;
 }
 
 void applyAccessibility(GtkWidget *widget, const AxInfo &info) {
