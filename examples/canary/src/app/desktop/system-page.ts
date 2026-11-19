@@ -1,9 +1,11 @@
 import { Component, inject, input, signal } from '@angular/core';
-import { NativeButton, ScrollView, Text, View } from '@ng-native/components';
+import { Image, NativeButton, ScrollView, Text, View } from '@ng-native/components';
 import { Processes, Shell } from '@ng-native/device';
 import { AppInfo } from '@ng-native/expo/app-info';
 import { Crypto, CryptoDigestAlgorithm } from '@ng-native/expo/crypto';
 import { FileSystem, type FolderName } from '@ng-native/expo/file-system';
+import { Fonts } from '@ng-native/expo/fonts';
+import { FlipType, ImageEditor, SaveFormat } from '@ng-native/expo/image-editor';
 import { KeepAwake } from '@ng-native/expo/keep-awake';
 import { Locale } from '@ng-native/expo/locale';
 import { NativeHeader } from '@ng-native/router';
@@ -26,11 +28,12 @@ const wait = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
  * while a file there is written twice and removed, KeepAwake's hold, and Shell opening a file
  * and showing it in its folder; then what the device modules answer. Each step logs on screen and
  * to the console as `[system] ...`; a launch link, `canary://desktop-system?run=watch` (or
- * `shell`, `awake`, `modules`), runs one.
+ * `shell`, `awake`, `modules`, `media`), runs one. `media` loads a system font file under a name
+ * of its own and turns, flips and shrinks an image with ImageEditor.
  */
 @Component({
   selector: 'x-system',
-  imports: [NativeButton, NativeHeader, ScrollView, Text, View],
+  imports: [Image, NativeButton, NativeHeader, ScrollView, Text, View],
   template: `
     <native-header title="System" />
     <scroll-view class="screen" [contentContainerStyle]="page.content">
@@ -48,10 +51,18 @@ const wait = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
         <native-button (press)="runShell()">Shell</native-button>
         <native-button (press)="runAwake()">Keep awake</native-button>
         <native-button (press)="runModules()">Modules</native-button>
+        <native-button (press)="runMedia()">Media</native-button>
       </view>
       <text class="heading">Device modules</text>
       @for (row of modules(); track row) {
         <text class="system-row">{{ row }}</text>
+      }
+      @if (fontLoaded()) {
+        <text class="system-sample">CanaryMono: iiii mmmm 0123</text>
+        <text class="system-row">The system font: iiii mmmm 0123</text>
+      }
+      @if (edited(); as edited) {
+        <image class="system-image" [source]="{ uri: edited }" />
       }
       <text class="heading">Log</text>
       @for (line of log(); track $index) {
@@ -63,6 +74,16 @@ const wait = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
     .system-row {
       font-size: 13px;
       margin-bottom: 4px;
+    }
+    .system-sample {
+      font-family: CanaryMono;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+    .system-image {
+      width: 120px;
+      height: 60px;
+      margin: 8px 0;
     }
     .system-buttons {
       flex-direction: row;
@@ -80,10 +101,14 @@ export class SystemPage {
   private readonly appInfo = inject(AppInfo);
   private readonly crypto = inject(Crypto);
   private readonly locale = inject(Locale);
+  private readonly fonts = inject(Fonts);
+  private readonly editor = inject(ImageEditor);
   protected readonly folders = FOLDERS;
   protected readonly page = page;
   protected readonly log = signal<readonly string[]>([]);
   protected readonly modules = signal<readonly string[]>([]);
+  protected readonly fontLoaded = signal(false);
+  protected readonly edited = signal<string | null>(null);
 
   constructor() {
     queueMicrotask(() => {
@@ -92,6 +117,7 @@ export class SystemPage {
       if (run === 'shell') void this.runShell();
       if (run === 'awake') void this.runAwake();
       if (run === 'modules') void this.runModules();
+      if (run === 'media') void this.runMedia();
     });
   }
 
@@ -162,7 +188,44 @@ export class SystemPage {
     this.modules.set(rows);
     for (const row of rows) this.note(row);
   }
+
+  /**
+   * Fonts loading a monospaced font file the system has under the name CanaryMono, and ImageEditor
+   * turning a 2 by 1 image (red, then blue) a quarter, flipping it and sizing it to 120 by 60.
+   */
+  protected async runMedia(): Promise<void> {
+    try {
+      await this.fonts.load({ CanaryMono: MONO_FONT });
+      this.fontLoaded.set(this.fonts.has('CanaryMono'));
+      this.note(`font CanaryMono loaded ${this.fonts.has('CanaryMono')}`);
+    } catch (error) {
+      this.note(`font failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    try {
+      const result = await this.editor.edit(
+        RED_BLUE,
+        [
+          { rotate: 90 },
+          { flip: FlipType.Vertical },
+          { resize: { width: 60, height: 120 } },
+          { rotate: -90 },
+        ],
+        { format: SaveFormat.PNG },
+      );
+      this.edited.set(result?.uri ?? null);
+      this.note(`edited ${result ? `${result.width}x${result.height}` : 'absent'}`);
+    } catch (error) {
+      this.note(`edit failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 }
+
+/** A monospaced font file the Linux build image (AlmaLinux 9) has. */
+const MONO_FONT = '/usr/share/fonts/adobe-source-code-pro/SourceCodePro-Regular.otf';
+
+/** A 2 by 1 PNG: a red pixel, then a blue one. */
+const RED_BLUE =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAADUlEQVR4nGP4zwAE/wEHAAH/4iOeWQAAAABJRU5ErkJggg==';
 
 function tail(uri: string): string {
   return uri.slice(uri.lastIndexOf('/') + 1);
