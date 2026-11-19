@@ -67,6 +67,7 @@ void GtkBackend::addSurface(SurfaceId surfaceId, GtkWidget *surface) {
 }
 
 void GtkBackend::removeSurface(SurfaceId surfaceId) {
+  headers_->removeSurface(surfaceId);
   surfaces_.erase(surfaceId);
 }
 

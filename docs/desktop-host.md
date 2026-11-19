@@ -55,8 +55,9 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   holds where the app's menus will go, hidden until it has them: a `GtkPopoverMenuBar` under the
   header bar when `XDG_CURRENT_DESKTOP` names KDE, else a primary `GtkMenuButton` in it. The
   front screen's header goes into the header bar as macOS puts it into the toolbar, in the core's
-  `headerLayout` order, with the header's subviews moved into slots of their own, each a container
-  for input, a bar button's menu as a `GtkMenuButton`, the header's tint, title and background
+  `headerLayout` order, led by a back and forward pair that follows the window's history
+  (`historyButtons`, with a secondary click or a long press listing `historyMenu`), with the
+  header's subviews moved into slots of their own, each a container for input, a bar button's menu as a `GtkMenuButton`, the header's tint, title and background
   colours as CSS classes, and a search bar as a `GtkSearchEntry`. The `AdwApplication` is unique
   by the app id, except in a test launch, and handles open: a second launch finds the first on the
   session bus and hands it its links and files (`forwardLaunch`), then exits, and the first raises
