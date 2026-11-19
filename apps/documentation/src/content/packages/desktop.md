@@ -51,13 +51,16 @@ npm run macos    # gets the host the first time, then opens the app from the dev
 
 The first `npm run macos` for a React Native version downloads the prebuilt debug host, which
 carries React Native's debugger, when `@ng-native/desktop` has one for that version and the app
-links no native desktop code of its own (see
-[Prebuilt hosts](/packages/desktop/packaging#prebuilt-hosts)). Otherwise it builds the host
-from source, React Native and Hermes included, against the app's own `react-native` (0.88), into
-`~/Library/Caches/ng-native/desktop/rn-<version>`: about 4 minutes on an Apple silicon Mac, and
-about 6 for a universal release build, which the command says before it starts. `run` builds it
-without the core tests, whose sources the published package leaves out. Later runs reuse it. The
-host runs on macOS 14 and later.
+links no native desktop code of its own (see [Prebuilt
+hosts](/packages/desktop/packaging#prebuilt-hosts)). Otherwise it builds the host from source, React
+Native included, against the app's own `react-native` (0.88), into
+`~/Library/Caches/ng-native/desktop/rn-<version>`, with the prebuilt Hermes React Native's iOS apps
+run: `hermesvm.framework` and `hermesc` for the Hermes that `react-native` names, downloaded from
+Maven Central and checked against the SHA-1 published there, with the debugger for `run` and without
+it for a Release build. That takes about 4 minutes on an Apple silicon Mac, and about 6 for a
+universal release build, which the command says before it starts. `run` builds it without the core
+tests, whose sources the published package leaves out. Later runs reuse it. The host runs on macOS
+14 and later.
 
 The Expo CLI has no `run:macos`: its `run` commands are a fixed list, so `npm run macos` is
 `ng-native-desktop run`. It takes a bundle path or URL in place of the dev server, and these
@@ -78,12 +81,11 @@ given instead. A bundle's images and other assets are read beside it as React Na
 for an embedded bundle, so make it with `npx expo export:embed --platform macos --dev false
 --bundle-output <dir>/main.jsbundle --assets-dest <dir>`; `npx expo export` puts them elsewhere.
 
-For a host built from source, adding or removing one of the
-[libraries it compiles in](/packages/desktop/views#libraries-compiled-in) builds it again: in a
-folder of its own for that set of libraries when the app links no native desktop code, reusing the
-Hermes built before, and in the app's own folder, recompiling what changed, when it links some.
-The host is built for macOS 14 and later (`native/CMakeLists.txt`, which `scripts/macos-target.sh`
-reads for Hermes too; a cached Hermes built for another macOS is built again).
+For a host built from source, adding or removing one of the [libraries it compiles
+in](/packages/desktop/views#libraries-compiled-in) builds it again: in a folder of its own for that
+set of libraries when the app links no native desktop code, reusing the Hermes downloaded before,
+and in the app's own folder, recompiling what changed, when it links some. The host is built for
+macOS 14 and later (`native/CMakeLists.txt`).
 
 Building from source needs Xcode 16 or its Command Line Tools (Swift 6.0 or later), CMake 3.25 or
 later and Ninja 1.10 or later. Before it builds, the command checks the toolchain
