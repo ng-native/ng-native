@@ -412,7 +412,7 @@ function hostBuildDir(sys, reactNative, build) {
   if (os === 'linux' && (sys.platform !== 'linux' || arch !== linuxArch(sys))) {
     throw new UsageError(
       `The Linux desktop host builds on Linux only for now, on the architecture it is for, and no ` +
-        `prebuilt Linux ${arch} host fits this app (${prebuilt.reason}). Package on Linux on ${arch}.`,
+        `prebuilt Linux ${arch} host fits this app (${prebuilt.reason}). Run this on Linux on ${arch}.`,
     );
   }
   return buildHost(

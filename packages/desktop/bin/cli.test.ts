@@ -796,7 +796,7 @@ describe('run', () => {
           os: 'linux',
           arch: 'x64',
         }),
-      /no prebuilt Linux x64 host fits this app[\s\S]*Package on Linux on x64/,
+      /no prebuilt Linux x64 host fits this app[\s\S]*Run this on Linux on x64/,
     );
   });
 
