@@ -292,7 +292,6 @@ interface Span {
     // where it would have ended up.
     '[transform]': 'flip()',
     '[scrollEventThrottle]': 'scrollEventThrottle()',
-    '(scroll)': 'onScroll($event)',
     '(scrollBeginDrag)': 'onDragBegin()',
     '(momentumScrollEnd)': 'onScrollEnd()',
     '(layout)': 'onLayout($event)',
@@ -861,10 +860,17 @@ export class VirtualList<T> extends ScrollViewProps {
       if (this.sticky.native) this.driveStickyRows();
       this.recheckItems();
     });
+    // Not a host `(scroll)` listener: Angular marks every view above one dirty on each event, so a
+    // fling would check the whole screen every frame. What a scroll changes is in signals, which
+    // schedule the views that read them.
+    const stopScroll = this.engine.setEventListener(this.node, 'topScroll', (event) =>
+      this.onScroll(event as NativeSyntheticEvent<{ contentOffset?: { x?: number; y?: number } }>),
+    );
     const stop = dismissKeyboardOnTap(this.engine, this.node, () =>
       this.keyboardShouldPersistTaps(),
     );
     inject(DestroyRef).onDestroy(() => {
+      stopScroll();
       stop();
       this.sticky.destroy();
       clearTimeout(this.fillTimer);
@@ -1368,7 +1374,7 @@ export class VirtualList<T> extends ScrollViewProps {
     return style!;
   }
 
-  protected onScroll(
+  private onScroll(
     event: NativeSyntheticEvent<{ contentOffset?: { x?: number; y?: number } }>,
   ): void {
     const contentOffset = event.nativeEvent?.contentOffset;
