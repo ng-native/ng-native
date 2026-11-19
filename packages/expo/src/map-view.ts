@@ -18,6 +18,10 @@
  * }
  * ```
  *
+ * `<expo-maps-apple>` and `<expo-maps-google>`, the names `registerExpoViews` gives each platform's
+ * view on its own, are typed by the same component, so an app that writes them gets the same
+ * inputs and colour conversion.
+ *
  * One element rather than one per platform because the two views share everything an app reaches
  * for first: a marker list, a camera position, the same three events and the same two view
  * functions. What differs is inside the option objects, and each platform's native side reads only
@@ -84,8 +88,12 @@ export type MapUiSettings = AppleMaps.MapUISettings & GoogleMaps.MapUISettings;
 /** `LIGHT` and `DARK` on both; `AUTOMATIC` is iOS's and `FOLLOW_SYSTEM` Android's. */
 export type MapColorScheme = `${AppleMaps.MapColorScheme}` | `${GoogleMaps.MapColorScheme}`;
 
-/** A colour, as a template writes one: `'#ff5a36'`, `'rgba(0, 0, 0, 0.5)'`, `'green'`. */
-export type MapColor = string;
+/**
+ * A colour, as a template writes one: `'#ff5a36'`, `'rgba(0, 0, 0, 0.5)'`, `'green'`. A number is
+ * one React Native's `processColor` already returned, as `expo-maps`' own types allow, and reaches
+ * native as it is.
+ */
+export type MapColor = string | number;
 
 /**
  * A line through `coordinates`, such as a route. `contourStyle` is Apple's, `geodesic` Google's:
@@ -164,7 +172,7 @@ export function registerExpoMap(platform: 'ios' | 'android' | 'macos'): void {
 }
 
 @Component({
-  selector: 'expo-map',
+  selector: 'expo-map, expo-maps-apple, expo-maps-google',
   exportAs: 'map',
   template: '',
   host: {
@@ -233,7 +241,7 @@ export class MapView {
   readonly circleClick = output<MapCircleClickEvent>();
 
   protected readonly nativePolylines = computed(() =>
-    this.polylines()?.map((line) => ({ ...line, color: this.engine.color(line.color) })),
+    this.polylines()?.map((line) => ({ ...line, color: this.colour(line.color) })),
   );
   protected readonly nativePolygons = computed(() =>
     this.polygons()?.map((shape) => this.filled(shape)),
@@ -287,11 +295,16 @@ export class MapView {
     return true;
   }
 
+  /** A colour as native takes it: a number is one `processColor` already returned. */
+  private colour(colour: MapColor | undefined): unknown {
+    return typeof colour === 'number' ? colour : this.engine.color(colour);
+  }
+
   private filled<T extends MapPolygon | MapCircle>(shape: T) {
     return {
       ...shape,
-      color: this.engine.color(shape.color),
-      lineColor: this.engine.color(shape.lineColor),
+      color: this.colour(shape.color),
+      lineColor: this.colour(shape.lineColor),
     };
   }
 

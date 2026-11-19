@@ -53,6 +53,11 @@ ScrollerVisibility scrollerVisibility(
 // The gutter the visible scrollers take: their width for legacy scrollers, nothing for overlay.
 ScrollerGutter scrollerGutter(ScrollerStyle style, float legacyWidth, const ScrollerVisibility &visibility);
 
+// Where a scroll view with `pagingEnabled` settles along one axis when a drag ends at `offset`,
+// moving at `velocity` (points a millisecond, positive further into the content): the nearest page,
+// or the next one in the drag's direction when it was flicked, within [0, `max`].
+float pagedOffset(float offset, float velocity, float page, float max);
+
 // `style` with `gutter` added to the padding Yoga reads for the right and bottom edges in
 // `direction`. A percentage or `auto` there is left alone.
 facebook::yoga::Style withGutter(

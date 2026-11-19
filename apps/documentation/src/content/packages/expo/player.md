@@ -32,24 +32,18 @@ own module installed. `Player`, `PlayerState` and the watchers both use come fro
 ## The smallest useful example
 
 ```ts
-import { Component, input } from '@angular/core';
+import { Component } from '@angular/core';
 import { Pressable, Text } from '@ng-native/components';
-import { registerExpoViews } from '@ng-native/expo';
+import { ExpoVideo, registerExpoViews } from '@ng-native/expo';
 import { videoPlayer } from '@ng-native/expo/video';
 
 registerExpoViews('expo-video'); // once, before the app mounts
-
-/** The view's one prop this uses, as an input, so the template is checked against it. */
-@Component({ selector: 'expo-video', template: '', host: { '[player]': 'player()' } })
-class ExpoVideo {
-  readonly player = input<number>();
-}
 
 @Component({
   selector: 'app-clip',
   imports: [ExpoVideo, Pressable, Text],
   template: `
-    <expo-video [player]="player.id" class="flex-1" />
+    <expo-video [player]="player" class="flex-1" />
     <text>{{ player.state().currentTime }} / {{ player.state().duration }}</text>
     <pressable (press)="player.native.play()"><text>Play</text></pressable>
   `,
@@ -71,10 +65,11 @@ Each returns a `Player<T>`:
 - **`native`** - the module's own player object, straight through: it already has `play()`,
   `pause()`, `seekBy()`, `replace()` and the rest, and wrapping them would be a second place for
   each to be wrong. Call its methods directly.
-- **`id`** - the player's shared-object id, which is what `<expo-video [player]="player.id">`
-  takes: `expo-video`'s own `VideoView` passes this id, not the player. Bound to the player
-  itself, the view has no player and draws nothing, while the video keeps playing with nothing on
-  screen.
+- **`id`** - the player's shared-object id, which is what the `<expo-video>` view takes:
+  `expo-video`'s own `VideoView` passes this id, not the player. `ExpoVideo` takes either, and
+  commits the id. On the element with no `ExpoVideo` imported, bind `[player]="player.id"`: bound
+  to the player itself, the view has no player and draws nothing, while the video keeps playing
+  with nothing on screen.
 - **`state`** - a signal, updated from the player's own change events: `playing`, `status`
   (`'idle'`, `'loading'`, `'readyToPlay'`, `'error'`), `currentTime`, `duration`, `muted`,
   `volume`, and `ended` (set once playback runs to the end, cleared when it starts again). Video
@@ -124,10 +119,12 @@ it in an injection context, as the players:
 ```ts
 import { Component, DestroyRef, ErrorHandler, inject } from '@angular/core';
 import { RecordingPresets } from 'expo-audio';
+import { Text } from '@ng-native/components';
 import { audioRecorder, recordingPermission, setAudioMode } from '@ng-native/expo/audio';
 
 @Component({
   selector: 'app-voice-note',
+  imports: [Text],
   template: `<text>{{ recorder.state().durationMillis / 1000 }} s</text>`,
 })
 export class VoiceNote {
@@ -213,10 +210,10 @@ import { registerExpoViews } from '@ng-native/expo';
 registerExpoViews('expo-video');
 ```
 
-Then use it as a plain element, with `player` bound to `player.id`:
+Then import `ExpoVideo`, the view's typed component, and bind `player` to the player:
 
 ```html
-<expo-video [player]="player.id" [nativeControls]="false" contentFit="cover" class="flex-1" />
+<expo-video [player]="player" [nativeControls]="false" contentFit="cover" class="flex-1" />
 ```
 
 The view is `VideoView` on iOS and `SurfaceVideoView` on Android, as `expo-video` names them;
@@ -226,12 +223,16 @@ On macOS the desktop host plays a `videoPlayer` with AVPlayer and draws `<expo-v
 AVPlayerView, under the iOS view's name and with its props. `requiresLinearPlayback` does nothing
 there, and the player has no tracks, thumbnails or now-playing controls.
 
-The props are `expo-video`'s own `VideoViewProps`, unwrapped: `player`, `nativeControls` (default
-`true`), `contentFit` (`'contain'`, `'cover'` or `'fill'`, default `'contain'`),
-`requiresLinearPlayback`, `fullscreenOptions`, and a few platform-specific ones (`showsTimecodes`
-on iOS, `buttonOptions` on Android). There is no Angular component wrapping these props one by
-one - an unknown prop on the element reaches native exactly as it would in `expo-video`'s own
-React component, and the module's own documentation is the reference for what each one does.
+`ExpoVideo`'s inputs are `expo-video`'s own `VideoViewProps`, typed: `player`, `nativeControls`
+(default `true`), `contentFit` (`'contain'`, `'cover'` or `'fill'`, default `'contain'`),
+`requiresLinearPlayback`, `fullscreenOptions`, `allowsPictureInPicture`,
+`startsPictureInPictureAutomatically`, and the platform-specific ones (`showsTimecodes`,
+`contentPosition` and `allowsVideoFrameAnalysis` on iOS, `buttonOptions`, `useExoShutter` and
+`controllerAutoShow` on Android). A boolean works bound or written bare: `requiresLinearPlayback`
+on its own is true, and `null` or `undefined` leaves the prop to `expo-video`'s default. The
+module's own documentation is the reference for what each one does. The view's events,
+`(firstFrameRender)`, `(fullscreenEnter)`, `(fullscreenExit)`, `(pictureInPictureStart)` and
+`(pictureInPictureStop)`, are typed outputs.
 
 `surfaceType` is the exception: `expo-video`'s React component reads it to choose between two
 Android views, and no native view reads it, so on the element it does nothing. For a

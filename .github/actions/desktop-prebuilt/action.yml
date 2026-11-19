@@ -3,8 +3,9 @@ description: >-
   The universal prebuilt desktop host for one flavour, packed by make-prebuilt.mjs into `out`.
   Shared by the release and by the Desktop host workflow's warm-up on main, so both read and write
   the same caches. In order: the last release's archive when it was built from the same inputs
-  (byte for byte, no build), then a host built from the same inputs kept in the Actions cache, then
-  a build through ccache with Hermes and the fetched sources restored. Anything that cannot be
+  (byte for byte, no build), then a host built from the same inputs kept in the Actions cache or,
+  once the cache has evicted it, as an artifact of the Desktop host workflow on main, then a build
+  through ccache with Hermes and the fetched sources restored. Anything that cannot be
   checked falls through to the next, and the last builds from scratch.
 
 inputs:
@@ -20,6 +21,18 @@ inputs:
   out:
     description: Where the archive and its manifest entry go.
     required: true
+  github-token:
+    description: >-
+      A token with actions read access, to fetch a host the Desktop host workflow built on main
+      when the Actions cache no longer has it. Empty skips that.
+    default: ''
+
+outputs:
+  host-dir:
+    description: >-
+      The folder holding the host built from this run's inputs, for the caller to keep. Empty when
+      the last release's archive was reused or nothing was kept.
+    value: ${{ steps.kept.outputs.dir }}
 
 runs:
   using: composite
@@ -63,10 +76,51 @@ runs:
         path: ${{ github.workspace }}/.desktop-cache/prebuilt-host-${{ inputs.flavour }}
         key: desktop-prebuilt-host-${{ inputs.flavour }}-${{ steps.key.outputs.key }}
 
+    # The Actions cache evicts by size, so the host the Desktop host workflow built on main is also
+    # kept as an artifact of that run. Only a push or a manual run on main of this repository's
+    # desktop.yml counts: the host goes into the release, and a pull request's run can upload an
+    # artifact of any name.
+    # Any failure here builds instead.
+    - id: artifact
+      if: >-
+        steps.key.outputs.key != '' && steps.reuse.outputs.done != 'true' &&
+        steps.host.outputs.cache-hit != 'true' && inputs.github-token != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        NAME: desktop-prebuilt-host-${{ inputs.flavour }}-${{ steps.key.outputs.key }}
+        DEST: ${{ github.workspace }}/.desktop-cache
+      run: |
+        fetch() {
+          local found id run origin tmp
+          found=$(gh api "repos/$REPO/actions/artifacts?name=$NAME&per_page=20" --jq '
+            [.artifacts[] | select(.expired | not)
+              | select(.workflow_run.head_branch == "main")
+              | select(.workflow_run.head_repository_id == .workflow_run.repository_id)]
+            | first // empty | "\(.id) \(.workflow_run.id)"') || return 1
+          [ -n "$found" ] || { echo "No artifact $NAME from main."; return 1; }
+          read -r id run <<< "$found"
+          origin=$(gh api "repos/$REPO/actions/runs/$run" --jq '"\(.event) \(.path) \(.head_branch)"') || return 1
+          case "$origin" in
+            'push .github/workflows/desktop.yml main' | 'workflow_dispatch .github/workflows/desktop.yml main') ;;
+            *) echo "Artifact $id comes from '$origin', not desktop.yml on main."; return 1 ;;
+          esac
+          tmp=$(mktemp -d)
+          gh api "repos/$REPO/actions/artifacts/$id/zip" > "$tmp/host.zip" &&
+            unzip -q "$tmp/host.zip" -d "$tmp" &&
+            mkdir -p "$DEST" &&
+            tar -xzf "$tmp/host.tar.gz" -C "$DEST" || return 1
+          echo "Restored the host from artifact $id of run $run."
+        }
+        if fetch; then echo "restored=true" >> "$GITHUB_OUTPUT"; else echo "Not using a host from main."; fi
+
     # Everything a build needs, only when there is no host to pack. A cached host that fails its
     # check below still builds, without these: slower, never stale.
     - id: build
-      if: steps.reuse.outputs.done != 'true' && steps.host.outputs.cache-hit != 'true'
+      if: >-
+        steps.reuse.outputs.done != 'true' && steps.host.outputs.cache-hit != 'true' &&
+        steps.artifact.outputs.restored != 'true'
       shell: bash
       run: echo "needed=true" >> "$GITHUB_OUTPUT"
 
@@ -155,6 +209,18 @@ runs:
       with:
         path: ${{ github.workspace }}/.desktop-cache/prebuilt-host-${{ inputs.flavour }}
         key: desktop-prebuilt-host-${{ inputs.flavour }}-${{ steps.key.outputs.key }}
+
+    # The kept host, built, restored or fetched, when its record names this run's key.
+    - id: kept
+      if: steps.key.outputs.key != '' && steps.reuse.outputs.done != 'true'
+      shell: bash
+      env:
+        DIR: ${{ github.workspace }}/.desktop-cache/prebuilt-host-${{ inputs.flavour }}
+        KEY: ${{ steps.key.outputs.key }}
+      run: |
+        if [ -f "$DIR/host.json" ] && [ "$(jq -r .key "$DIR/host.json")" = "$KEY" ]; then
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+        fi
 
     - if: always() && steps.ccache.outcome == 'success'
       shell: bash

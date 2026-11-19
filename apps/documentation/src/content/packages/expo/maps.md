@@ -123,7 +123,8 @@ it once at startup, before the first map commits.
 
 If you would rather write each platform's element yourself, `registerExpoViews('expo-maps-apple')`
 and `registerExpoViews('expo-maps-google')` register the same two views under those names (see
-[Native views](/packages/expo/native-views)); they are untyped elements.
+[Native views](/packages/expo/native-views)). `MapView` types those two elements as well, with the
+same inputs, outputs and functions, so import it for either.
 
 ## Inputs
 
@@ -150,7 +151,8 @@ and `registerExpoViews('expo-maps-google')` register the same two views under th
 `expo-maps`' enums are typed as their string values, so `mapType: 'HYBRID'` needs no import of
 `expo-maps` itself. A shape's colors are written as a template writes any color (`'#ff5a36'`,
 `'rgba(0, 128, 0, 0.5)'`, `'green'`) and converted before they reach native, as `expo-maps`' own
-React components convert them.
+React components convert them. A number is a color React Native's `processColor` already returned,
+as `expo-maps`' own types allow, and reaches native as it is.
 
 A route that grows as fixes arrive is a `computed` over the fixes, and the map redraws the line
 each time it changes:
