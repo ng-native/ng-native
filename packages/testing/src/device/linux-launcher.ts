@@ -391,10 +391,14 @@ interface Said {
   crash: string[] | undefined;
 }
 
-/** Take one line of the host's output into `said`. */
-function hear(said: Said, line: string): void {
-  if (said.crash) said.crash.push(line);
-  else if (line === CRASH_MARKER) said.crash = [];
+/**
+ * Take one line of the host's output into `said`. The session script prints the crash report on
+ * stderr after its marker, so only stderr's lines from there on are the report; stdout's stay in
+ * the tail.
+ */
+function hear(said: Said, line: string, stderr: boolean): void {
+  if (stderr && said.crash) said.crash.push(line);
+  else if (stderr && line === CRASH_MARKER) said.crash = [];
   else said.tail = [...said.tail, line].slice(-TAIL_LINES);
 }
 
@@ -431,10 +435,10 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
         stream?.on('data', (chunk: Buffer) => {
           const lines = (current.pending[at] + chunk.toString()).split('\n');
           current.pending[at] = lines.pop() ?? '';
-          for (const line of lines) if (line) hear(current.said, line);
+          for (const line of lines) if (line) hear(current.said, line, at === 1);
         });
         stream?.on('end', () => {
-          if (current.pending[at]) hear(current.said, current.pending[at]);
+          if (current.pending[at]) hear(current.said, current.pending[at], at === 1);
           current.pending[at] = '';
         });
       });
@@ -487,7 +491,7 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
         tail: [...asked.said.tail],
         crash: asked.said.crash && [...asked.said.crash],
       };
-      for (const line of asked.pending) if (line) hear(said, line);
+      asked.pending.forEach((line, at) => line && hear(said, line, at === 1));
       const { tail, crash } = said;
       const parts = [
         ...(crash?.length ? [`The host's crash report:\n${crash.join('\n')}`] : []),

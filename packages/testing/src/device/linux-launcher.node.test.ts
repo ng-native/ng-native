@@ -314,6 +314,42 @@ describe('linuxLauncher stop', () => {
 });
 
 describe('linuxLauncher crashReport', () => {
+  it('keeps stdout in the last output, finished or not, after the crash marker on stderr', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ngn-linux-launcher-'));
+    try {
+      const host = path.join(dir, 'host.sh');
+      writeFileSync(
+        host,
+        [
+          '#!/bin/bash',
+          `echo '${CRASH_MARKER}' >&2`,
+          'echo frame-1 >&2',
+          'sleep 0.2',
+          'echo stdout-line-after',
+          "printf 'stdout-unfinished'",
+          // A child holding the pipes, so the report reads the unfinished line at the deadline.
+          'sleep 30 &',
+          'exit 3',
+          '',
+        ].join('\n'),
+        { mode: 0o755 },
+      );
+      const launcher = linuxLauncher({ host, container: false, display: 'inherit' });
+      const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir: dir });
+      try {
+        await app.exited;
+        assert.equal(
+          await launcher.crashReport?.(0),
+          "The host's crash report:\nframe-1\n\nThe host's last output:\nstdout-line-after\nstdout-unfinished",
+        );
+      } finally {
+        await app.stop();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('recognises the crash marker when two chunks split it, and keeps a last unfinished line', async () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'ngn-linux-launcher-'));
     try {
