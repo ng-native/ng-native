@@ -30,6 +30,12 @@ TEST_CASE("A split view gives the window back while its screen is covered, and t
   REQUIRE((mounted.window.contentViewController != nil));
   REQUIRE((mounted.window.contentView != mounted.surface));
 
+  // The user drags the divider; the width comes back after the screen in front goes.
+  auto *controller = (NSSplitViewController *)mounted.window.contentViewController;
+  [controller.splitView setPosition:300 ofDividerAtIndex:0];
+  [controller.splitView layoutSubtreeIfNeeded];
+  CGFloat dragged = NSWidth(controller.splitViewItems[0].viewController.view.frame);
+
   mounted.backend->setCovered(MountedViews::kSurface, 4, true);
   CHECK((mounted.window.contentViewController == nil));
   CHECK((mounted.window.contentView == mounted.surface));
@@ -38,7 +44,10 @@ TEST_CASE("A split view gives the window back while its screen is covered, and t
 
   mounted.backend->setCovered(MountedViews::kSurface, 4, false);
   CHECK((split.ownWindow == mounted.window));
-  CHECK((mounted.window.contentViewController != nil));
+  REQUIRE((mounted.window.contentViewController != nil));
+  auto *again = (NSSplitViewController *)mounted.window.contentViewController;
+  [again.splitView layoutSubtreeIfNeeded];
+  CHECK(NSWidth(again.splitViewItems[0].viewController.view.frame) == doctest::Approx(dragged).epsilon(0.02));
   [split uninstall];
 }
 

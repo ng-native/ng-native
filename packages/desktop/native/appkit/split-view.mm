@@ -169,6 +169,8 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   CGFloat _plainWidth;
   ngn::SidebarCollapse _collapse;
   std::string _autosave;
+  // The sidebar's width as a screen in front covered it, for when it takes the window again.
+  CGFloat _widthBeforeCover;
 }
 
 + (ngn::InputSink *)input {
@@ -381,8 +383,10 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   window.contentViewController = _controller;
   [window setFrame:frame display:YES];
   if (!restoring) {
-    [_controller.splitView setPosition:[self startingWidth] ofDividerAtIndex:0];
+    CGFloat width = _widthBeforeCover > 0 ? _widthBeforeCover : [self startingWidth];
+    [_controller.splitView setPosition:width ofDividerAtIndex:0];
   }
+  _widthBeforeCover = 0;
   [_sidebarItem addObserver:self forKeyPath:@"collapsed" options:NSKeyValueObservingOptionNew context:nil];
   // A collapsed state the autosave restored is the user's: the app hears it.
   if (_sidebarItem.collapsed) {
@@ -453,6 +457,7 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   }
   if (covered) {
     if (_controller != nil) {
+      _widthBeforeCover = _sidebarItem.collapsed ? 0 : NSWidth(_sidebarItem.viewController.view.frame);
       [self uninstall];
     }
   } else if (_decided && _controller == nil) {
