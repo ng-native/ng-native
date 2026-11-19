@@ -121,6 +121,10 @@ void connectWindow(GtkWidget *window, const char *signal, WindowSignal data) {
 
 } // namespace
 
+bool GtkWindows::fillsScreen(GtkWindow *window) {
+  return gtk_window_is_maximized(window) || gtk_window_is_fullscreen(window);
+}
+
 GtkWindows::GtkWindows(Hooks hooks, GtkApplication *application, MenuPlacement menus)
     : hooks_(std::move(hooks)), application_(application), menus_(menus) {}
 
@@ -178,6 +182,9 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
     if (hooks_.resizeSurface) {
       hooks_.resizeSurface(surface, w, h, gtk_widget_get_scale_factor(window));
     }
+    // A window that fills the screen has the size GTK allocates, which arrives after the
+    // notify::maximized or notify::fullscreened that reported the old one.
+    reportFrame(surface, true);
   });
   if (request.minWidth || request.minHeight) {
     gtk_widget_set_size_request(widget, static_cast<int>(request.minWidth.value_or(-1)), static_cast<int>(request.minHeight.value_or(-1)));
@@ -268,7 +275,7 @@ void GtkWindows::didMount(SurfaceId surface) {
   reportFrame(surface);
 }
 
-void GtkWindows::reportFrame(SurfaceId surface) {
+void GtkWindows::reportFrame(SurfaceId surface, bool onAllocation) {
   auto it = windows_.find(surface);
   auto host = host_.lock();
   // A window still waiting for its first frame has not been sized by the user.
@@ -278,16 +285,27 @@ void GtkWindows::reportFrame(SurfaceId surface) {
   GtkWindow *window = GTK_WINDOW(it->second.window);
   bool maximized = gtk_window_is_maximized(window);
   bool fullScreen = gtk_window_is_fullscreen(window);
+  bool fills = windowFills(window);
+  // An allocation of a window with a size of its own changes nothing the app was not told.
+  if (onAllocation && !fills) {
+    return;
+  }
   // The default size is the one the window has, or goes back to when it fills the screen.
   int width = 0, height = 0;
   gtk_window_get_default_size(window, &width, &height);
   WindowFrame saved{.width = static_cast<double>(width), .height = static_cast<double>(height), .maximized = maximized, .fullScreen = fullScreen};
   WindowFrame now = saved;
-  if ((maximized || fullScreen) && gtk_widget_get_width(it->second.surface) > 0) {
+  if (fills && gtk_widget_get_width(it->second.surface) > 0) {
     now.width = gtk_widget_get_width(it->second.surface);
     now.height = gtk_widget_get_height(it->second.surface);
   }
+  // Each allocation comes here, but the app hears a size once.
+  if (onAllocation && now.width == it->second.reportedWidth && now.height == it->second.reportedHeight) {
+    return;
+  }
   if (width > 0 && height > 0) {
+    it->second.reportedWidth = now.width;
+    it->second.reportedHeight = now.height;
     host->resized(surface, now, gtk_widget_get_scale_factor(it->second.window), saved);
   }
 }

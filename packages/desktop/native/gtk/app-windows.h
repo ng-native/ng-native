@@ -66,6 +66,10 @@ class GtkWindows final : public WindowBackend {
   GtkWindows(const GtkWindows &) = delete;
   GtkWindows &operator=(const GtkWindows &) = delete;
 
+  // Whether a window fills the screen, so it has the size GTK gives it rather than its own. A seam for
+  // tests, which run without a window manager to maximise one.
+  std::function<bool(GtkWindow *)> windowFills = &GtkWindows::fillsScreen;
+
   // The host the close button asks first. Set once, before any window opens.
   void setHost(std::weak_ptr<WindowHost> host);
   // The surface's first frame mounted: its window shows. The UI thread.
@@ -94,13 +98,18 @@ class GtkWindows final : public WindowBackend {
     gulong closeRequested{0};
     GdkFrameClock *clock{nullptr};
     gulong laidOut{0};
+    // The size the app last heard, so an allocation that changes nothing says nothing.
+    double reportedWidth{0};
+    double reportedHeight{0};
   };
   static void disconnect(Window &entry);
+  static bool fillsScreen(GtkWindow *window);
   void open(SurfaceId surface, const WindowRequest &request, const WindowPlacement &placement, std::function<void()> opened);
   void close(SurfaceId surface);
   // The window's size, maximised and full-screen state changed: the app hears its size now, and
   // its frame autosaves with the size it goes back to (never a place: GTK has none to give).
-  void reportFrame(SurfaceId surface);
+  // `onAllocation`: GTK has just allocated the surface, which only a window filling the screen reports.
+  void reportFrame(SurfaceId surface, bool onAllocation = false);
   void reportFocus(SurfaceId surface, bool active);
 
   Hooks hooks_;
