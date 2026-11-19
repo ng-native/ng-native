@@ -13,6 +13,7 @@
  */
 
 import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
+import { isDesktopOs } from './os.ts';
 import { reactNative, type ReactNative } from './react-native.ts';
 
 /** One choice in a dialog or an action sheet. */
@@ -216,8 +217,9 @@ export function dialogSource(
   if (!native) return null;
 
   const ios = native.Platform.OS === 'ios';
-  // A Mac's alert module is iOS's, and React Native's `Alert.prompt` takes its iOS body there.
-  const apple = ios || native.Platform.OS === 'macos';
+  // The desktop host's alert module is iOS's, and React Native's `Alert.prompt` takes its iOS body
+  // on macOS and Linux, whose bundles take React Native's iOS files.
+  const apple = ios || isDesktopOs(native.Platform.OS);
   const android = native.Platform.OS === 'android';
 
   return {

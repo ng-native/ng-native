@@ -1131,6 +1131,40 @@ describe('os-comparisons-on-macos: Platform.select and double-quoted templates',
   });
 });
 
+describe('os-comparisons-on-linux, through nx migrate, ng update and ng-native-migrate', () => {
+  const files = {
+    'src/app/platform.ts': [
+      "import { Platform } from 'react-native';",
+      "import { OS, OS_VERSION } from '@ng-native/device';",
+      "import { inject } from '@angular/core';",
+      '',
+      "export const ios = Platform.OS === 'ios';",
+      "export const mac = () => inject(OS) === 'macos';",
+      "export const notMac = () => inject(OS) !== 'macos';",
+      "export const notAndroid = () => inject(OS) !== 'android';",
+      "export const android = Platform.OS === 'android';",
+      'export const glass = () => (inject(OS_VERSION) ?? 0) >= 26;',
+      '',
+    ].join('\n'),
+    'src/app/screen.html': ["@if (os === 'macos') {", '  <text>Mac</text>', '}', ''].join('\n'),
+    'src/app/plain.ts': 'export const answer = 42;\n',
+  };
+
+  it('says where each comparison Linux answers differently is, and changes nothing', async () => {
+    const { nx, angular, cli } = await acrossAdapters(files, 'os-comparisons-on-linux', '0.23.0');
+    assert.deepEqual(nx.files, files);
+    assert.deepEqual(nx.notes, [
+      "src/app/platform.ts:5: Platform.OS === 'ios' is false on Linux, where the OS is 'linux'. If the branch is about React Native's iOS behaviour, which Linux shares, check for 'linux' too.",
+      "src/app/platform.ts:6: inject(OS) === 'macos' is false on Linux, where the OS is 'linux'. If the branch is for every desktop OS, check DESKTOP instead, injected into a field where a template reads it.",
+      "src/app/platform.ts:7: inject(OS) !== 'macos' is true on Linux, where the OS is 'linux'. If the branch is for every OS but a desktop one, check that DESKTOP is false instead, injected into a field where a template reads it.",
+      "src/app/platform.ts:8: inject(OS) !== 'android' is true on Linux too, so Linux takes this branch. Check that it is right there.",
+      "src/app/screen.html:1: os === 'macos' is false on Linux, where the OS is 'linux'. If the branch is for every desktop OS, check DESKTOP instead, injected into a field where a template reads it.",
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+});
+
 describe('available-signal, through nx migrate, ng update and ng-native-migrate', () => {
   const files = {
     'src/app/privacy.ts': [

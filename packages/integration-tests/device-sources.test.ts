@@ -1088,25 +1088,29 @@ describe('the sharing source', () => {
     assert.equal(result.action, 'sharedAction');
   });
 
-  it("is the desktop host's NgNativeSharing on macOS, and absent without it", async () => {
-    const asked: unknown[] = [];
-    const host = {
-      share: async (request: unknown) => (asked.push(request), { action: 'dismissedAction' }),
-    };
-    const mac = (modules: Record<string, unknown>) => ({
-      Platform: { OS: 'macos' },
-      TurboModuleRegistry: { get: (name: string) => modules[name] ?? null },
-      Share: {
-        share: () => Promise.reject(new Error('Unsupported platform')),
-      },
-    });
-    assert.equal(
-      withNative(mac({}) as never, () => sharingSource()),
-      null,
-    );
-    const source = withNative(mac({ NgNativeSharing: host }) as never, () => sharingSource());
-    assert.equal((await source!.share({ url: 'https://example.com' })).action, 'dismissedAction');
-    assert.deepEqual(asked, [{ url: 'https://example.com' }]);
+  it("is the desktop host's NgNativeSharing on macOS and Linux, and absent without it", async () => {
+    for (const os of ['macos', 'linux']) {
+      const asked: unknown[] = [];
+      const host = {
+        share: async (request: unknown) => (asked.push(request), { action: 'dismissedAction' }),
+      };
+      const desktop = (modules: Record<string, unknown>) => ({
+        Platform: { OS: os },
+        TurboModuleRegistry: { get: (name: string) => modules[name] ?? null },
+        Share: {
+          share: () => Promise.reject(new Error('Unsupported platform')),
+        },
+      });
+      assert.equal(
+        withNative(desktop({}) as never, () => sharingSource()),
+        null,
+        os,
+      );
+      const source = withNative(desktop({ NgNativeSharing: host }) as never, () => sharingSource());
+      const result = await source!.share({ url: 'https://example.com' });
+      assert.equal(result.action, 'dismissedAction', os);
+      assert.deepEqual(asked, [{ url: 'https://example.com' }], os);
+    }
   });
 
   it('passes a url straight through on iOS, which reads it itself', async () => {

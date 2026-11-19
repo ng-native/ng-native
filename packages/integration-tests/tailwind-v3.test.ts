@@ -450,7 +450,7 @@ describe('Tailwind 3', () => {
 describe('the Tailwind 3 preset', () => {
   // Tailwind 3 reads no brace expansion in raw content, so each variant is written out.
   const VARIANTS =
-    'hover press hovered focus focus-visible disabled ios android web native macos desktop dark';
+    'hover press hovered focus focus-visible disabled ios android web native macos linux desktop dark';
   const PRESET =
     VARIANTS.split(' ')
       .map((variant) => `${variant}:bg-red-500`)
@@ -512,6 +512,11 @@ describe('the Tailwind 3 preset', () => {
     assert.equal(on('platform-macos', 'macos:bg-red-500'), red);
     assert.equal(on('platform-macos', 'desktop:bg-red-500'), red);
     assert.equal(on('platform-ios', 'desktop:bg-red-500'), undefined);
+    assert.equal(on('platform-linux', 'native:bg-red-500'), red);
+    assert.equal(on('platform-linux', 'linux:bg-red-500'), red);
+    assert.equal(on('platform-linux', 'desktop:bg-red-500'), red);
+    assert.equal(on('platform-linux', 'macos:bg-red-500'), undefined);
+    assert.equal(on('platform-macos', 'linux:bg-red-500'), undefined);
     assert.equal(on('platform-web', 'web:bg-red-500'), red);
     assert.equal(on('dark', 'dark:bg-red-500'), red);
     assert.equal(on('', 'dark:bg-red-500'), undefined);
@@ -662,6 +667,7 @@ describe('the Tailwind 3 preset', () => {
     assert.equal(font('platform-ios'), 'Menlo');
     assert.equal(font('platform-android'), 'monospace');
     assert.equal(font('platform-macos'), 'Menlo');
+    assert.equal(font('platform-linux'), 'monospace');
     assert.equal(font(''), 'Courier New');
   });
 
@@ -678,7 +684,7 @@ describe('the Tailwind 3 preset', () => {
     // wears `platform-ios` and `dark`, which `mount` and `watchConditions` set unprefixed.
     const classes =
       'ios:tw-pt-2 android:tw-pt-3 native:tw-pt-4 web:tw-pt-1 dark:tw-pt-5 dark:ios:tw-pt-6 ' +
-      'macos:tw-pt-8 ' +
+      'macos:tw-pt-8 linux:tw-pt-9 desktop:tw-pt-10 dark:linux:tw-pt-11 ' +
       'tw-font-mono tw-group group-hover:tw-pt-7';
     const refused: string[] = [];
     const sheet = compileCss(flattenTailwind(build(classes, { prefix: 'tw-' })), 'tailwind', {
@@ -703,6 +709,14 @@ describe('the Tailwind 3 preset', () => {
     assert.equal(on('platform-macos', 'native:tw-pt-4')['paddingTop'], 16);
     assert.equal(on('platform-macos', 'macos:tw-pt-8')['paddingTop'], 32);
     assert.equal(on('platform-ios', 'macos:tw-pt-8')['paddingTop'], undefined);
+    assert.equal(on('platform-linux', 'linux:tw-pt-9')['paddingTop'], 36);
+    assert.equal(on('platform-macos', 'linux:tw-pt-9')['paddingTop'], undefined);
+    assert.equal(on('platform-linux', 'desktop:tw-pt-10')['paddingTop'], 40);
+    assert.equal(on('platform-macos', 'desktop:tw-pt-10')['paddingTop'], 40);
+    assert.equal(on('platform-ios', 'desktop:tw-pt-10')['paddingTop'], undefined);
+    assert.equal(on('platform-linux', 'tw-font-mono')['fontFamily'], 'monospace');
+    assert.equal(on('platform-linux dark', 'dark:linux:tw-pt-11')['paddingTop'], 44);
+    assert.equal(on('platform-linux', 'dark:linux:tw-pt-11')['paddingTop'], undefined);
     assert.equal(on('', 'tw-font-mono')['fontFamily'], 'Courier New');
     // A class of the app's own that the prefix applies to keeps it.
     assert.equal(on('tw-group', 'group-hover:tw-pt-7')['paddingTop'], undefined);

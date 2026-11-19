@@ -246,10 +246,6 @@ function contextMenuMethods(
   };
 }
 
-/** The `ShortcutOs` an `OS` reads shortcuts as. */
-const shortcutOs = (os: string): ShortcutOs =>
-  os === 'android' || os === 'macos' || os === 'web' ? os : 'ios';
-
 /** A `[shortcut]` registered with `KeyboardShortcuts`. */
 interface Registered {
   readonly shortcut: Signal<string>;
@@ -269,7 +265,7 @@ export class Menus {
   });
 
   private readonly native = inject(Menus.SOURCE);
-  private readonly os = shortcutOs(injectOs());
+  private readonly os: ShortcutOs = injectOs();
 
   /** Whether the host has the module: shortcuts from a hardware keyboard, and menus. */
   readonly available: Signal<boolean> = signal(this.native !== null).asReadonly();

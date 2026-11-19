@@ -50,7 +50,13 @@ const SUMMARY = path.join(OUT, 'summary.json');
  * `report()` folds each copy back onto the source it was generated from. Fixtures and tests stay
  * out: they are the instrument, not the thing measured.
  */
-const EXCLUDE = ['**/*.test.ts', '**/fixtures/**', '**/node_modules/**', '**/dist/**'];
+const EXCLUDE = [
+  '**/*.test.ts',
+  '**/fixtures/**',
+  '**/node_modules/**',
+  '**/dist/**',
+  '**/metro/ngp/**',
+];
 
 /**
  * How each suite is run and where it leaves its lcov.

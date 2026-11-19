@@ -1,7 +1,7 @@
 {
   "generators": {
     "sync-app-versions": {
-      "version": "0.24.0",
+      "version": "0.25.0",
       "description": "Move the @ng-native packages each project's own package.json lists to the new version.",
       "implementation": "./migrations/run.cjs#sync-app-versions"
     },
@@ -59,6 +59,11 @@
       "version": "0.23.0",
       "description": "Call each service's available, now a Signal<boolean> on every service, and stop awaiting it.",
       "implementation": "./migrations/run.cjs#available-signal"
+    },
+    "os-comparisons-on-linux": {
+      "version": "0.24.0",
+      "description": "Note each comparison with 'ios', 'macos' or !== 'android', which answers differently now that Linux is reported as 'linux'.",
+      "implementation": "./migrations/run.cjs#os-comparisons-on-linux"
     }
   }
 }

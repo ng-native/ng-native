@@ -331,14 +331,17 @@ function rootOf(config) {
 
 /**
  * The file extensions each OS resolves ahead of the plain ones, in order, as Metro and Expo SDK 58
- * do: a Mac takes a `.macos` file, then an `.ios` one, then a `.native` one.
+ * do: a Mac takes a `.macos` file, then an `.ios` one, then a `.native` one, and Linux the same with
+ * `.linux` first. One entry for each of
+ * `OS_NAMES` in `@ng-native/device`, so its keys are the OSes a project can test as.
  *
- * @type {Readonly<Record<'ios' | 'android' | 'macos' | 'web', readonly string[]>>}
+ * @type {Readonly<Record<import('@ng-native/device').OsName, readonly string[]>>}
  */
 export const PLATFORM_EXTENSIONS = {
   ios: ['ios', 'native'],
   android: ['android', 'native'],
   macos: ['macos', 'ios', 'native'],
+  linux: ['linux', 'ios', 'native'],
   web: ['web'],
 };
 
@@ -350,7 +353,7 @@ const EXTENSIONS = ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'];
  * plain one, so `./storage` is `storage.macos.ts`, then `storage.ios.ts`, then `storage.native.ts`,
  * then `storage.ts` on a Mac.
  *
- * @param {'ios' | 'android' | 'macos' | 'web'} os
+ * @param {import('@ng-native/device').OsName} os
  */
 export function extensionsFor(os) {
   const code = ['.ts', '.tsx', '.mts', '.js', '.mjs', '.jsx'];
@@ -365,7 +368,7 @@ export function extensionsFor(os) {
  * own where it has none.
  *
  * @param {import('vitest/config').UserConfig} config
- * @param {'ios' | 'android' | 'macos' | 'web'} os
+ * @param {import('@ng-native/device').OsName} os
  */
 function withExtensions(config, os) {
   const own = config.resolve?.extensions;
@@ -382,7 +385,7 @@ function withExtensions(config, os) {
  * Android. iOS for every other project, as before.
  *
  * @param {string} root
- * @returns {'ios' | 'android' | 'macos' | 'web'}
+ * @returns {import('@ng-native/device').OsName}
  */
 export function defaultOs(root) {
   let platforms;
@@ -392,14 +395,14 @@ export function defaultOs(root) {
     return 'ios';
   }
   if (!Array.isArray(platforms) || platforms.includes('ios')) return 'ios';
-  for (const os of /** @type {const} */ (['macos', 'android', 'web'])) {
+  for (const os of /** @type {const} */ (['macos', 'linux', 'android', 'web'])) {
     if (platforms.includes(os)) return os;
   }
   return 'ios';
 }
 
 /**
- * @param {{ inline?: (string | RegExp)[], libraryStyles?: string[] | false, intl?: 'hermes' | 'node', os?: 'ios' | 'android' | 'macos' | 'web' }} [options]
+ * @param {{ inline?: (string | RegExp)[], libraryStyles?: string[] | false, intl?: 'hermes' | 'node', os?: import('@ng-native/device').OsName }} [options]
  * @returns {import('vitest/config').Plugin}
  */
 export function ngNative(options = {}) {
@@ -410,6 +413,12 @@ export function ngNative(options = {}) {
     config: (config) => {
       const projectRoot = rootOf(config);
       const os = options.os ?? defaultOs(projectRoot);
+      if (!Object.hasOwn(PLATFORM_EXTENSIONS, os)) {
+        throw new Error(
+          `[angular-native] ngNative({ os: '${os}' }) names no OS tests can run as: ` +
+            `${Object.keys(PLATFORM_EXTENSIONS).join(', ')}.`,
+        );
+      }
       const conditions = withConditions(tsconfigConditions(projectRoot));
       // An extensionless import resolves a platform file first, as Metro does for the OS. Vite
       // appends a list a plugin returns to the app's own, which would put the app's first, so the

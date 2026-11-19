@@ -1300,16 +1300,20 @@ export function isApplePlatform(): boolean {
   return platformOS === 'ios' || platformOS === 'macos';
 }
 
+/** Whether the host is the desktop host: macOS or Linux, which share its views and its events. */
+const isDesktopPlatform = (): boolean => platformOS === 'macos' || platformOS === 'linux';
+
 /**
  * Call once at startup with `Platform.OS`. The view names above are the iOS/canonical ones, so
- * only the mapping half is a no-op elsewhere. macOS takes iOS's: the desktop host implements them.
+ * only the mapping half is a no-op elsewhere. macOS and Linux take iOS's, less the few the desktop
+ * host has none of: the desktop host implements them.
  */
 export function registerPlatformComponents(platform: string): void {
   platformOS = platform;
   const names =
     platform === 'android'
       ? ANDROID_VIEW_NAMES
-      : platform === 'macos'
+      : isDesktopPlatform()
         ? { ...IOS_VIEW_NAMES, ...MACOS_VIEW_NAMES }
         : IOS_VIEW_NAMES;
   for (const [element, viewName] of Object.entries(names)) registerViewName(element, viewName);
@@ -5516,7 +5520,10 @@ function textContent(node: EngineNode): string {
 export interface PlatformViewName {
   readonly ios: string;
   readonly android: string;
-  /** The view on macOS, where it is not iOS's: an iOS-only view the desktop host has none of. */
+  /**
+   * The view on a desktop OS (macOS and Linux), where it is not iOS's: an iOS-only view the desktop
+   * host has none of.
+   */
   readonly macos?: string;
 }
 
@@ -5525,7 +5532,7 @@ export function registeredViewName(elementName: string): string | undefined {
   const name = VIEW_NAMES[elementName];
   if (name === undefined || typeof name === 'string') return name;
   if (platformOS === 'android') return name.android;
-  return platformOS === 'macos' ? (name.macos ?? name.ios) : name.ios;
+  return isDesktopPlatform() ? (name.macos ?? name.ios) : name.ios;
 }
 
 /**
@@ -7470,7 +7477,7 @@ function focusVisible(nativeEvent: unknown): boolean {
 
 /** Whether the host says which focus came from the keyboard: the desktop host does. */
 function hostReportsKeyboardFocus(): boolean {
-  return platformOS === 'macos';
+  return isDesktopPlatform();
 }
 
 /** Dev-time commit accounting, so a slow frame can be attributed rather than guessed at. */

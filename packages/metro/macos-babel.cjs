@@ -1,5 +1,7 @@
 /**
- * The Babel plugin a `macos` bundle is transformed with, ahead of `babel-preset-expo`'s own.
+ * The Babel plugin a desktop bundle (`macos` or `linux`) is transformed with, ahead of
+ * `babel-preset-expo`'s own. Its `platform` option names the OS, `macos` when left out; macOS is
+ * the example below, and Linux reads the same with `linux` in its place.
  *
  * Expo SDK 58 resolves React Native's `.ios.js` files for `macos`, and the desktop host implements
  * the iOS-named native modules, so React Native's JavaScript has to take its iOS branches there
@@ -26,11 +28,17 @@ const REACT_NATIVE = /[\\/]node_modules[\\/]react-native[\\/](Libraries|src)[\\/
 /** React Native's `Platform` module, as its own files import it by path. */
 const PLATFORM_MODULE = /(^|[\\/])Utilities[\\/]Platform(\.js)?$/;
 
-/** The keys a `macos` bundle reads a `Platform.select` by, in order. */
-const SELECT_ORDER = ['macos', 'ios', 'native', 'default'];
-
-/** @param {{ types: any }} babel Babel's API, as it hands a plugin */
-module.exports = function macosPlatformPlugin({ types: t }) {
+/**
+ * @param {{ types: any }} babel Babel's API, as it hands a plugin
+ * @param {{ platform?: string }} [options] the desktop OS the bundle is for, `macos` by default
+ */
+module.exports = function macosPlatformPlugin({ types: t }, options = {}) {
+  const platform = options.platform ?? 'macos';
+  /**
+   * The keys the bundle reads a `Platform.select` by, in order. Another desktop OS's key is not
+   * among them: a `macos` key in an app's select is about the Mac, not about being a desktop.
+   */
+  const SELECT_ORDER = [platform, 'ios', 'native', 'default'];
   /** The comparisons this plugin wrote, which it must not rewrite again. */
   const written = new WeakSet();
 
@@ -152,7 +160,7 @@ module.exports = function macosPlatformPlugin({ types: t }) {
   }
 
   return {
-    name: 'ng-native-macos-platform',
+    name: `ng-native-${platform}-platform`,
     visitor: {
       BinaryExpression(path, state) {
         const { node } = path;
@@ -163,14 +171,14 @@ module.exports = function macosPlatformPlugin({ types: t }) {
         const read = os ?? reversed;
         if (!read) return;
         written.add(node);
-        const macos = t.binaryExpression(
+        const desktop = t.binaryExpression(
           node.operator,
           t.cloneNode(read),
-          t.stringLiteral('macos'),
+          t.stringLiteral(platform),
         );
-        written.add(macos);
+        written.add(desktop);
         const negated = node.operator.startsWith('!');
-        path.replaceWith(t.logicalExpression(negated ? '&&' : '||', node, macos));
+        path.replaceWith(t.logicalExpression(negated ? '&&' : '||', node, desktop));
       },
       CallExpression(path) {
         if (!isPlatformSelect(path)) return;
