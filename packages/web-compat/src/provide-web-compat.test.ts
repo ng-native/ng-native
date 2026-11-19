@@ -1,6 +1,7 @@
 /**
  * What `provideWebCompat()` adds, and when: nothing as the package is imported, all of it while
- * an app that asked for it is up, and none of it once the last such app is destroyed.
+ * an app that asked for it is up, and none of it once the last such app is destroyed, but for
+ * the window's listening.
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
@@ -118,6 +119,23 @@ const load = () => import('./index.ts');
 function globalsNow(): Map<string, PropertyDescriptor | undefined> {
   const names = [...Object.getOwnPropertyNames(globalThis), 'document', 'window', 'Node'];
   return new Map(names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
+}
+
+/**
+ * The globals there are once the last app has gone, with the window's listening as it was
+ * `before`, after checking it stayed: a root service torn down after the package takes its
+ * listener off with it. See `window-teardown.test.ts`.
+ */
+function globalsLeft(
+  before: Map<string, PropertyDescriptor | undefined>,
+): Map<string, PropertyDescriptor | undefined> {
+  const left = globalsNow();
+  for (const name of ['addEventListener', 'removeEventListener', 'dispatchEvent']) {
+    assert.equal(typeof (globalThis as Dom)[name], 'function', name);
+    if (before.has(name)) left.set(name, before.get(name));
+    else left.delete(name);
+  }
+  return left;
 }
 
 /** The members every engine node has on the prototype they share. */
@@ -252,7 +270,7 @@ describe('provideWebCompat', () => {
     engine.appendChild(engine.root, late);
     const { contentWindowOf } = await import('./frame.ts');
     assert.equal(contentWindowOf(late), null);
-    assert.deepEqual(globalsNow(), globals, 'every global as it was, the document too');
+    assert.deepEqual(globalsLeft(globals), globals, 'every global as it was, the document too');
     // A node of the app that went still answers, as an element out of the document does in a
     // browser: a library's late timer has something to call.
     assert.equal(typeof host.getAttribute, 'function');

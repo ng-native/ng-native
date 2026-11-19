@@ -511,8 +511,9 @@ void applyTextFieldProps(ViewData &view) {
     gtk_editable_set_alignment(GTK_EDITABLE(text), xalign);
   }
   // A controlled value JavaScript set, when it has seen every change the user made and no input
-  // method is composing.
-  if (controlledTextIsCurrent(props->mostRecentEventCount, field.eventCount, field.composing) && props->text != fieldText(field) &&
+  // method is composing. Once per props: a layout update applies the same props again, which
+  // must not undo a setTextAndSelection.
+  if (field.applied != view.props && controlledTextIsCurrent(props->mostRecentEventCount, field.eventCount, field.composing) && props->text != fieldText(field) &&
       (!props->text.empty() || props->defaultValue.empty() || field.eventCount > 0)) {
     setText(field, props->text);
   }
@@ -586,7 +587,8 @@ void textFieldCommand(ViewData &view, const std::string &name, const folly::dyna
   } else if (name == "setTextAndSelection" && args.isArray() && args.size() >= 4) {
     // [mostRecentEventCount, value, start, end]: a value only when JavaScript has seen every change,
     // and never over an input method's composition.
-    if (args[0].isInt() && args[0].asInt() < field.eventCount) {
+    // The count is a JavaScript number, which can arrive as a double.
+    if (args[0].isNumber() && args[0].asDouble() < field.eventCount) {
       return;
     }
     if (args[1].isString() && !field.composing) {

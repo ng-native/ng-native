@@ -291,14 +291,25 @@ function handOver(standIns: StandIns | undefined, target: Record<string, unknown
   for (const { type, listener, options } of standIns?.kept ?? []) listen(type, listener, options);
 }
 
+/**
+ * Whether a global stays once the last app has gone: the window's listening, where nothing stood
+ * in for it. The services an app made after the package are destroyed after the package's own
+ * teardown has run, and a root service that listened on the window, with `fromEvent(window, ...)`,
+ * takes its listener off then. The window's listeners have gone with the app all the same, and
+ * one added from then on is kept for the next app, as the stand-ins keep one.
+ */
+const stays = (name: string, standIns: StandIns | undefined): boolean =>
+  !standIns && (LISTENING as readonly string[]).includes(name);
+
 /** The stand-ins back, once the window's own have gone, for a later app to be handed. */
 function giveBack(standIns: StandIns | undefined, target: Record<string, unknown>): void {
   if (standIns) for (const name of LISTENING) target[name] ??= standIns[name];
 }
 
 /**
- * Define the globals above that the runtime does not have, and answer what removes them again.
- * One the runtime has is left alone: React Native's own `requestAnimationFrame`, a test's jsdom.
+ * Define the globals above that the runtime does not have, and answer what removes them again,
+ * but for the window's listening: see `stays`. One the runtime has is left alone: React Native's
+ * own `requestAnimationFrame`, a test's jsdom.
  */
 export function installWindow(): () => void {
   const target = globalThis as Record<string, unknown>;
@@ -353,6 +364,7 @@ export function installWindow(): () => void {
     for (const name of added) {
       // A module that kept a storage reads nothing of this app from it after.
       if (globals[name] instanceof MemoryStorage) globals[name].clear();
+      if (stays(name, standIns)) continue;
       if (target[name] === globals[name]) delete target[name];
     }
     giveBack(standIns, target);

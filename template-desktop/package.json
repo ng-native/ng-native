@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/template-desktop",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "description": "A macOS app in Angular, rendering real AppKit views. Use with create-expo-app --template.",
   "license": "MIT",
   "main": "src/main.ts",
