@@ -31,6 +31,7 @@ import {
   linuxNames,
   metainfo,
   rpmSpec,
+  selfBuiltDebWarning,
   summaryOf,
 } from './package-linux.mjs';
 import { decodePng, encodePng, scaleImage } from './png-icon.mjs';
@@ -838,6 +839,7 @@ describe('ng-native-desktop package --os linux', () => {
 
   it('makes a .deb whose data installs into /usr, owned by root', async () => {
     const { root, app, sys } = linuxApp();
+    const warned: string[] = [];
     try {
       await quiet(() =>
         main(
@@ -850,9 +852,15 @@ describe('ng-native-desktop package --os linux', () => {
             '--maintainer',
             'Ada <ada@example.com>',
           ],
-          sys,
+          { ...sys, warn: (line: string) => void warned.push(line) },
         ),
       );
+      // Built here, not the prebuilt AlmaLinux 9 host the dependency floors hold for.
+      assert.deepEqual(
+        warned.filter((line) => line.includes('built on this machine')),
+        [selfBuiltDebWarning('arm64')],
+      );
+      assert.match(warned.join('\n'), /glibc 2\.34[\s\S]*AlmaLinux 9/);
       const members = readAr(
         readFileSync(path.join(app, 'dist', 'linux', 'notes_2.0.0_arm64.deb')),
       );
@@ -1030,8 +1038,10 @@ describe('ng-native-desktop package --os linux', () => {
         { reactNative: '0.88.0', url: 'https://e.com/m.tar.gz', sha256: sha.macos, libraries: {} },
       ],
     };
+    const warned: string[] = [];
     const mac: typeof system = {
       ...sys,
+      warn: (line: string) => void warned.push(line),
       env: { NGN_DESKTOP_CACHE: cache },
       readFile: (file: string) =>
         file.endsWith('prebuilt.json')
@@ -1069,6 +1079,8 @@ describe('ng-native-desktop package --os linux', () => {
       );
       const data = readTar(gunzipSync(members[2]!.data));
       assert.equal(data['./usr/lib/notes/ngn-app']!.data.toString(), '#!/bin/sh\necho prebuilt\n');
+      // The prebuilt host is the one the .deb's dependency floors are for.
+      assert.ok(!warned.some((line) => line.includes('built on this machine')));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
