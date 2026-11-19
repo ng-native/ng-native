@@ -12,6 +12,7 @@
 
 #include <react/renderer/components/view/ViewProps.h>
 
+#include <algorithm>
 #include <utility>
 
 namespace ngn::gtk {
@@ -240,6 +241,7 @@ void GtkBackend::deleteView(SurfaceId, Tag tag) {
   }
   modals_->unmounted(tag);
   headers_->forget(tag);
+  relations_.erase(tag);
   splitViews_->deleted(tag);
   unhostView(tag);
   if (viewData(it->second)->component == "RNSScreenStackHeaderConfig") {
@@ -389,6 +391,14 @@ void GtkBackend::followRole(const ShadowView &view) {
     g_object_unref(child);
   }
   it->second = next;
+  // GTK's relations point at widgets: the view's own go onto its new widget, and those of the views
+  // that name it move to it.
+  auto names = [&](const std::vector<Tag> &tags) { return std::find(tags.begin(), tags.end(), view.tag) != tags.end(); };
+  for (const auto &[source, relations] : relations_) {
+    if (source == view.tag || names(relations.labelledBy) || names(relations.describedBy)) {
+      applyRelations(source);
+    }
+  }
   if (field && GTK_IS_TEXT(focus)) {
     // Focusing a GtkText selects all of it: the caret stays where the user left it.
     gtk_text_grab_focus_without_selecting(GTK_TEXT(focus));
@@ -445,6 +455,46 @@ void GtkBackend::setPresented(SurfaceId surfaceId, Tag screen, bool presented) {
 
 void GtkBackend::setFrontHeader(SurfaceId surfaceId, const std::optional<ScreenStacks::FrontHeader> &header) {
   headers_->show(surfaceId, header);
+}
+
+void GtkBackend::setAccessibilityRelations(SurfaceId, Tag tag, const AxRelations &relations) {
+  if (relations.empty()) {
+    relations_.erase(tag);
+  } else {
+    relations_[tag] = relations;
+  }
+  applyRelations(tag);
+}
+
+void GtkBackend::applyRelations(Tag tag) {
+  GtkWidget *widget = view(tag);
+  if (!widget) {
+    return;
+  }
+  auto it = relations_.find(tag);
+  AxRelations relations = it == relations_.end() ? AxRelations{} : it->second;
+  GtkAccessible *source = GTK_ACCESSIBLE(accessibleWidget(*viewData(widget)));
+  auto point = [&](GtkAccessibleRelation relation, const std::vector<Tag> &tags) {
+    GList *targets = nullptr;
+    for (Tag target : tags) {
+      if (GtkWidget *w = view(target)) {
+        targets = g_list_append(targets, accessibleWidget(*viewData(w)));
+      }
+    }
+    if (targets) {
+      // A list of references goes in a GValue as a GList, which GTK keeps: the varargs form takes
+      // them one by one, up to a null.
+      GValue value = G_VALUE_INIT;
+      g_value_init(&value, G_TYPE_POINTER);
+      g_value_set_pointer(&value, targets);
+      gtk_accessible_update_relation_value(source, 1, &relation, &value);
+      g_value_unset(&value);
+    } else {
+      gtk_accessible_reset_relation(source, relation);
+    }
+  };
+  point(GTK_ACCESSIBLE_RELATION_LABELLED_BY, relations.labelledBy);
+  point(GTK_ACCESSIBLE_RELATION_DESCRIBED_BY, relations.describedBy);
 }
 
 void GtkBackend::didMount(SurfaceId surfaceId) {

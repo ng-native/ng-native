@@ -191,7 +191,11 @@ jobs:
             bash -euo pipefail -c '
               ccache --zero-stats > /dev/null
               start=$(date +%s)
-              build=$(native/scripts/build.sh --backend gtk --no-debug-info | tail -n 1)
+              # With worklets and Reanimated, whose shared C++ needs the Linux shims
+              # (native/shim/worklets), so a change that breaks them on glibc fails here.
+              lib=../../examples/canary/node_modules
+              build=$(native/scripts/build.sh --backend gtk --no-debug-info \
+                --library $lib/react-native-worklets --library $lib/react-native-reanimated | tail -n 1)
               echo "Built in $(( $(date +%s) - start ))s"
               ccache --show-stats
               echo "$build" > "$GITHUB_WORKSPACE/.linux-probe/build-dir"
@@ -253,7 +257,8 @@ jobs:
               kill $weston
             '
           # The same app read over AT-SPI as a screen reader reads it: its buttons and its text, each
-          # named, then a Tab that must focus a node AT-SPI reports. As root: dbus-daemon will not start
+          # named, a row described by its preview (aria-describedby), then a Tab that must focus a node
+          # AT-SPI reports. As root: dbus-daemon will not start
           # for a user the image has no passwd entry for.
           docker run --rm -e GITHUB_WORKSPACE \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
@@ -261,7 +266,7 @@ jobs:
               probe="$GITHUB_WORKSPACE/.linux-probe"
               Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
               DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
-                "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/notes/main.js" --role "push button" --role label --tab
+                "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/notes/main.js" --role "push button" --role label --relation described-by --tab
             '
 
       # The notes example's in-app tests on the GTK host, as `vitest --project linux` runs them

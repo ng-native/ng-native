@@ -193,7 +193,9 @@ When the app has them installed, the host compiles in the Fabric components of
   read when the view is made, and `clearHistory` and `clearFormData` do nothing, as WebKit has no
   way to.
 - Worklets run on the UI thread, and Reanimated's shared values, animations and worklet styles move
-  views at the display's rate, with no frames requested while nothing animates.
+  views at the display's rate, with no frames requested while nothing animates. On Linux the
+  frames come from the frame clock of a shown window, the active one first, and from a 60 Hz timer
+  while no window is shown.
 
 ## Expo's views
 

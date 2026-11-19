@@ -11,6 +11,7 @@
 // after its first frame, or with an input script (NGN_INPUT_SCRIPT) a second after the script has
 // played.
 #include "accessibility-settings.h"
+#include "animation-frames.h"
 #include "app-info.h"
 #include "app-windows.h"
 #include "capture.h"
@@ -485,6 +486,7 @@ int main(int argc, char *argv[]) {
   });
   gHost.mounting = views.mounting;
   gHost.input = std::move(views.input);
+  ngn::gtk::installWorkletHost(gHost.mounting, gHost.backend);
   gHost.backend->hooks = {
       .containerRoot =
           [](facebook::react::Tag tag, bool root) {

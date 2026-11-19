@@ -10,6 +10,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ngn {
 
@@ -53,6 +54,9 @@ struct DesktopProps {
   std::string role;
   // `accessibilityLevel` (`aria-level`): a heading's level, from 1.
   std::optional<int> accessibilityLevel;
+  // `accessibilityDescribedBy` (`aria-describedby`): the nativeIDs of the views that describe this
+  // one (accessibility-relations.h). React Native's ViewProps has `accessibilityLabelledBy`.
+  std::vector<std::string> accessibilityDescribedBy;
   // ModalHostView only.
   ModalPresentation presentation{ModalPresentation::Sheet};
 
@@ -68,7 +72,7 @@ struct HasDesktopProps {
 // hit test, the cursor and Tab order all read it, and a flattened view is not mounted.
 inline bool formsStackingContext(const DesktopProps &props) {
   return props.focusable.value_or(false) || props.tabIndex.has_value() || props.cursor.has_value() ||
-      !props.role.empty() || props.onDoubleClick || props.onContextMenu || props.onWheel || props.fileDrop || !props.dragItem.isNull() ||
+      !props.role.empty() || !props.accessibilityDescribedBy.empty() || props.onDoubleClick || props.onContextMenu || props.onWheel || props.fileDrop || !props.dragItem.isNull() ||
       !props.contextMenu.isNull();
 }
 

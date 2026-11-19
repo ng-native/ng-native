@@ -5,6 +5,8 @@
 #include "ngn/mounting-manager.h"
 
 #include <doctest/doctest.h>
+
+#include <algorithm>
 #include <react/renderer/components/view/ConcreteViewShadowNode.h>
 #include <react/renderer/core/ConcreteComponentDescriptor.h>
 #include <react/renderer/core/ConcreteState.h>
@@ -345,6 +347,37 @@ TEST_CASE("an svg is drawn again when a view in its foreignObject is relaid out 
   besideMoved.layoutMetrics.frame.origin.y = 40;
   f.mount({ShadowViewMutation::UpdateMutation(beside, besideMoved, 1)});
   CHECK(svgCalls(f.backend->calls).empty());
+}
+
+TEST_CASE("a view's relations reach the backend after the transaction, and follow the view they name") {
+  Fixture f;
+  auto props = [](std::string id, std::vector<std::string> labelledBy, std::vector<std::string> describedBy) {
+    auto p = std::make_shared<ngn::DesktopViewProps>();
+    p->nativeId = std::move(id);
+    p->accessibilityLabelledBy.value = std::move(labelledBy);
+    p->desktop.accessibilityDescribedBy = std::move(describedBy);
+    return p;
+  };
+  auto label = shadowView(2, "View", {}, props("name", {}, {}));
+  auto hint = shadowView(3, "View", {}, props("hint", {}, {}));
+  auto field = shadowView(4, "View", {}, props("", {"name"}, {"hint"}));
+  f.mount({ShadowViewMutation::CreateMutation(field), ShadowViewMutation::InsertMutation(1, field, 0),
+           ShadowViewMutation::CreateMutation(label), ShadowViewMutation::InsertMutation(1, label, 1),
+           ShadowViewMutation::CreateMutation(hint), ShadowViewMutation::InsertMutation(1, hint, 2)});
+  auto &calls = f.backend->calls;
+  auto at = std::find(calls.begin(), calls.end(), "relations 4 labelledBy=2 describedBy=3");
+  REQUIRE(at != calls.end());
+  CHECK(*(at + 1) == "mounted 1");
+
+  f.backend->calls.clear();
+  f.mount({ShadowViewMutation::RemoveMutation(1, label, 1), ShadowViewMutation::DeleteMutation(label)});
+  CHECK(std::count(calls.begin(), calls.end(), "relations 4 labelledBy= describedBy=3") == 1);
+
+  f.backend->calls.clear();
+  auto plain = field;
+  plain.props = props("", {}, {});
+  f.mount({ShadowViewMutation::UpdateMutation(field, plain, 0)});
+  CHECK(std::count(calls.begin(), calls.end(), "relations 4 labelledBy= describedBy=") == 1);
 }
 
 TEST_CASE("a live region's new text is announced after the transaction that changed it") {
