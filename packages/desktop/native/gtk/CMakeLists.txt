@@ -15,6 +15,7 @@ endif()
 add_library(ngn_gtk OBJECT
     accessibility-settings.cpp
     accessible.cpp
+    accessible-text.cpp
     alerts.cpp
     animation-frames.cpp
     app-windows.cpp

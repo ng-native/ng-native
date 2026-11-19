@@ -35,7 +35,11 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   which the core's `aria-role.h` reads from its `role` or `accessibilityRole`, and its label,
   description, level and states follow the props. GTK fixes a role when it makes the widget, so
   a view whose role changes gets a new widget in its place, with its children and the focus. A
-  text input's field is the text box with its label, and its view is generic. Announcements go
+  text input's field is the text box with its label, and its view is generic. On GTK 4.14 and
+  later a Paragraph's widget also implements `GtkAccessibleText` (`accessible-text.h`, added at
+  run time), so a screen reader reads it by character, word, sentence, line and paragraph, with
+  the spans worked out in the core's `text-units.h`; a field is GTK's own GtkText or GtkTextView,
+  which implement it themselves. Announcements go
   through `gtk_accessible_announce`, found at run time on GTK 4.14 and later, and say nothing
   below. `AccessibilityInfo`'s settings (`accessibility-settings.h`) come from the settings
   portal, GTK's settings and libadwaita's high contrast, through the core's `linuxAccessibility`,

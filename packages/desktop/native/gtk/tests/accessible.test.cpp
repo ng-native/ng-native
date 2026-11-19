@@ -6,6 +6,7 @@
 #include "../focus.h"
 
 #include "../accessible.h"
+#include "../accessible-text.h"
 #include "../text-field.h"
 
 #include <doctest/doctest.h>
@@ -300,6 +301,55 @@ TEST_CASE("an item's place in its set and a grid's counts reach GTK as relations
   views.update(item, desktopViewProps(dynamic::object("role", "listitem")));
   CHECK_FALSE(gtk_test_accessible_has_relation(GTK_ACCESSIBLE(views.view(2)), GTK_ACCESSIBLE_RELATION_POS_IN_SET));
   CHECK_FALSE(gtk_test_accessible_has_relation(GTK_ACCESSIBLE(views.view(2)), GTK_ACCESSIBLE_RELATION_SET_SIZE));
+}
+
+TEST_CASE("a paragraph is read by word and line through GtkAccessibleText on GTK 4.14 and later, and by its name below") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  // Narrow enough that "Hello world." and "Bye now" take a line each.
+  auto paragraph = MountedViews::shadow(2, "Paragraph", desktopViewProps(dynamic::object()), {{0, 0}, {60, 60}});
+  paragraph.state = paragraphState("Hello world. Bye now");
+  views.add(paragraph);
+  views.add(MountedViews::shadow(3, "View", desktopViewProps(dynamic::object()), {{0, 70}, {60, 20}}));
+  GType text = ngn::gtk::accessibleTextType();
+  CHECK((text != 0) == (gtk_get_minor_version() >= 14));
+  // Styled as any view is: the focus ring's selector names it.
+  CHECK(std::string(gtk_widget_get_css_name(views.view(2))) == "ngn-view");
+  // A plain view says no text.
+  CHECK_FALSE((text && G_TYPE_CHECK_INSTANCE_TYPE(views.view(3), text)));
+  if (!text) {
+    CHECK(hasProperty(views.view(2), GTK_ACCESSIBLE_PROPERTY_LABEL, "Hello world. Bye now"));
+    return;
+  }
+  REQUIRE(G_TYPE_CHECK_INSTANCE_TYPE(views.view(2), text));
+  auto *iface = static_cast<ngn::gtk::AccessibleTextInterface *>(g_type_interface_peek(G_OBJECT_GET_CLASS(views.view(2)), text));
+  auto at = [&](unsigned int offset, int granularity) {
+    unsigned int start = 0, end = 0;
+    GBytes *bytes = iface->get_contents_at(GTK_ACCESSIBLE(views.view(2)), offset, granularity, &start, &end);
+    std::string said = static_cast<const char *>(g_bytes_get_data(bytes, nullptr));
+    g_bytes_unref(bytes);
+    return said;
+  };
+  constexpr int word = 1, line = 3;
+  CHECK(at(2, word) == "Hello ");
+  CHECK(at(7, word) == "world. ");
+  CHECK(at(14, line) == "Bye now");
+  GBytes *all = iface->get_contents(GTK_ACCESSIBLE(views.view(2)), 0, G_MAXUINT);
+  CHECK(std::string(static_cast<const char *>(g_bytes_get_data(all, nullptr))) == "Hello world. Bye now");
+  g_bytes_unref(all);
+
+  // Emptied, its role changes and GTK gives it a new widget, which still reads as text: the new text
+  // once it says something again.
+  auto setText = [&](const std::string &said) {
+    auto current = views.mounting->tree().find(2)->view;
+    auto next = current;
+    next.state = paragraphState(said);
+    views.mount({ShadowViewMutation::UpdateMutation(current, next, MountedViews::kSurface)});
+  };
+  setText("");
+  setText("Saved");
+  CHECK(G_TYPE_CHECK_INSTANCE_TYPE(views.view(2), text));
+  CHECK(at(0, word) == "Saved");
 }
 
 TEST_CASE("an announcement is said through the window on GTK 4.14 and later, and nothing is said below") {
