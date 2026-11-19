@@ -70,6 +70,9 @@ jobs:
           filters: |
             desktop:
               - 'packages/desktop/**'
+              - 'packages/testing/device/fake-portals.py'
+              - 'packages/testing/src/device/fake-portals.node.test.ts'
+              - 'packages/testing/src/device/linux-launcher.ts'
               - '.github/workflows/desktop.yml'
               - 'scripts/desktop-host-pins.mjs'
               - '.github/actions/desktop-prebuilt/**'
@@ -214,6 +217,15 @@ jobs:
               native/docker/glibc-floor.sh 2.34 "$build/ngn_core_tests" "$build/ngn_runtime_tests" "$build/gtk/ngn-linux" \
                 "$NGN_DESKTOP_CACHE"/*/hermes-$(uname -m)/bin/hermesc
             '
+
+      # The Linux test launcher's fake system UI (packages/testing/device/fake-portals.py) on a
+      # session bus of its own, in the image that has dbus-daemon and PyGObject. As root: dbus-daemon
+      # takes no client whose user the image has no passwd entry for.
+      - name: Test the fake system UI of the Linux test launcher
+        run: |
+          docker run --rm -e NGN_REQUIRE_FAKE_SYSTEM_UI=1 \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ngn-el9 \
+            node --test packages/testing/src/device/fake-portals.node.test.ts
 
       # A .deb depends on DEB_DEPENDS and nothing else: with only those installed in a clean Ubuntu
       # 24.04, every library the built host loads must be found. (An rpm's requirements are
