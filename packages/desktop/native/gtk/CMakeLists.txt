@@ -48,7 +48,7 @@ string(JSON _rn_version GET "${_rn_package}" version)
 target_compile_definitions(ngn-linux PRIVATE NGN_REACT_NATIVE_VERSION="${_rn_version}")
 # The hermesc built with the Hermes the binary links, beside it, as ngn-macos has it.
 add_custom_command(TARGET ngn-linux POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${NGN_HERMES_BUILD}/bin/hermesc $<TARGET_FILE_DIR:ngn-linux>/hermesc
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${NGN_HERMESC} $<TARGET_FILE_DIR:ngn-linux>/hermesc
     VERBATIM)
 
 # The GTK view tests: views mounted from Fabric mutations into a window GTK draws, through the
