@@ -246,6 +246,12 @@ void runMenuItem(const ngn::MenuItem &item, GtkWindow *window) {
     case ngn::MenuCommand::Quit:
       gHost.windows->beginQuit();
       return;
+    case ngn::MenuCommand::ToggleSidebar:
+      // The window's split view (split-view.h); a window without one leaves it to the app.
+      if (auto surface = window ? surfaceOfWindow(window) : std::nullopt; surface && gHost.backend->splitViews().toggle(*surface)) {
+        return;
+      }
+      break;
     case ngn::MenuCommand::CloseWindow:
       // The sheet, cover or popover in front first, as Escape asks it to close; then the window, as
       // the close button does: the app decides (close-request).

@@ -21,6 +21,7 @@
 #include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/core/ConcreteComponentDescriptor.h>
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -67,6 +68,12 @@ struct SidebarWidths {
 };
 // `props` is the sidebar's, or null before it has any.
 SidebarWidths sidebarWidths(const SplitPaneProps *props);
+
+// The narrowest the content pane is beside the sidebar, in points: a window narrower than the
+// sidebar's narrowest plus this is compact, and a split view that folds into a stack (FoldingSplit)
+// folds there.
+constexpr facebook::react::Float kSplitContentMinWidth = 360;
+facebook::react::Float sidebarCompactWidth(const SidebarWidths &widths);
 
 // The size the toolkit gives a pane, or a custom row's width (height unused). Zero until it reports.
 struct SplitPaneState {
@@ -262,6 +269,60 @@ class SidebarCollapse {
   bool prop_{false};
   bool toolkit_{false};
 };
+
+// A split view that folds into a stack whose root is the sidebar (libadwaita's
+// AdwNavigationSplitView), and what it shows. The core decides, the toolkit only shows the result:
+// - side by side, the sidebar beside the content, while the window is wide and the sidebar is not
+//   collapsed;
+// - a stack with the content in front while the window is wide and the sidebar is collapsed, so a
+//   collapsed sidebar is out of sight as it is on macOS;
+// - a stack at a compact width, whose front pane is the stack's own: the content until Show Sidebar
+//   brings the sidebar forward, and the content again once an item is chosen there. That is no
+//   collapse the app hears of, so the panes are side by side again as the window widens.
+class FoldingSplit {
+ public:
+  struct Showing {
+    bool stacked{false};
+    // In a stack, the content in front, else the sidebar.
+    bool content{true};
+    bool operator==(const Showing &) const = default;
+  };
+  Showing showing() const;
+  // The window crossed the compact width (sidebarCompactWidth).
+  void setCompact(bool compact);
+  bool compact() const {
+    return compact_;
+  }
+  // The sidebar's collapsed state, as SidebarCollapse settles it.
+  void setCollapsed(bool collapsed);
+  // An item chosen in the sidebar: a stack shows the content.
+  void chose();
+  // Show Sidebar (F9, the header bar's sidebar button). At a compact width the stack swaps its
+  // front pane; otherwise the sidebar's collapsed state flips, and the new state is returned for
+  // the toolkit to report (SidebarCollapse::toolkitChanged).
+  std::optional<bool> toggle();
+
+ private:
+  bool compact_{false};
+  bool collapsed_{false};
+  bool sidebarInFront_{false};
+};
+
+// What a toolkit drawing a source list keeps between the lists the core sends: the sections the
+// user folded with their disclosure, each forgotten as its section goes.
+class SourceListFolds {
+ public:
+  // The list now: the folds of sections no longer in it go.
+  void setList(const SourceList &list);
+  void fold(Tag section, bool folded);
+  bool folded(Tag section) const;
+
+ private:
+  std::unordered_set<Tag> folded_;
+};
+
+// The row the app has selected in `list`, if any: the last one that says so.
+std::optional<Tag> selectedRow(const SourceList &list);
 
 // Sizes reported as the toolkit lays out (every step of a divider drag), coalesced so layout hears
 // each view's latest at most once per display frame.

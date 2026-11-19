@@ -3,6 +3,7 @@
 #pragma once
 
 #include "screens.h"
+#include "split-view.h"
 #include "view-widget.h"
 
 #include "ngn/desktop-view-props.h"
@@ -60,6 +61,9 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
   Modals &modals() {
     return *modals_;
   }
+  SplitViews &splitViews() {
+    return *splitViews_;
+  }
 
   void runOnUiThread(std::function<void()> task) override;
   bool onUiThread() const override;
@@ -78,6 +82,8 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
   void setFrontHeader(SurfaceId surfaceId, const std::optional<ScreenStacks::FrontHeader> &header) override;
   void didMount(SurfaceId surfaceId) override;
   void updateDesktopProps(SurfaceId surfaceId, Tag tag, const DesktopProps &props) override;
+  void setSplitView(SurfaceId surfaceId, Tag split, bool window) override;
+  void setSourceLists(SurfaceId surfaceId, Tag parent, const std::vector<SourceList> &lists) override;
   void setSvgDrawing(SurfaceId surfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) override;
   std::vector<facebook::react::ComponentDescriptorProvider> componentProviders() const override;
 
@@ -102,6 +108,7 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
   std::unordered_map<Tag, GtkWidget *> searchEntries_;
   std::unique_ptr<Headers> headers_;
   std::unique_ptr<Modals> modals_;
+  std::unique_ptr<SplitViews> splitViews_;
 };
 
 } // namespace ngn::gtk
