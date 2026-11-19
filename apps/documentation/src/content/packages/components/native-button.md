@@ -5,7 +5,8 @@ summary: <native-button>, the platform's own button on macOS and iOS, and a draw
 
 # Native button
 
-`<native-button>` is a button the platform draws: NSButton on macOS and UIButton on iOS. Android
+`<native-button>` is a button the platform draws: NSButton on macOS, a GtkButton on Linux and UIButton
+on iOS. Android
 has no platform button, so there it is a view pressed as a
 [`<pressable>`](/packages/components/pressable) is, and the web host draws an HTML `button`. Its
 label is the text inside it.

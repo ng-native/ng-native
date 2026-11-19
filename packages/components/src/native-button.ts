@@ -1,5 +1,10 @@
 import { Component, computed, forwardRef, input } from '@angular/core';
-import { isApplePlatform, registerViewName, type HostNode } from '@ng-native/fabric';
+import {
+  isApplePlatform,
+  nativePlatform,
+  registerViewName,
+  type HostNode,
+} from '@ng-native/fabric';
 import type { ControlSize } from '@ng-native/device';
 import { ControlBase, TouchableBase } from './pressable.ts';
 
@@ -28,7 +33,7 @@ registerViewName(
  *
  *   <native-button kind="default" (press)="save()">Save</native-button>
  *
- * On macOS it is an NSButton and on iOS a UIButton, drawn by the host, which sends
+ * On macOS it is an NSButton, on Linux a GtkButton and on iOS a UIButton, drawn by the host, which sends
  * `topButtonPress` when it is clicked, tapped, or pressed by Space, and on macOS by Return (a
  * `default` button) or Escape (a `cancel` one). On Android it is a view pressed through the responder, as a
  * `<pressable>` is, and takes `android_ripple` as one does. The web host draws an HTML `button`.
@@ -71,8 +76,11 @@ export class NativeButton extends ControlBase {
     return this.drawableName() ?? (icon && 'drawable' in icon ? icon.drawable : undefined);
   });
 
-  /** Where the host draws the button, it presses it: the responder would press it twice. */
-  private readonly drawnByHost = isApplePlatform();
+  /**
+   * Where the host draws the button (AppKit, UIKit, GTK), it presses it: the responder would press
+   * it twice.
+   */
+  private readonly drawnByHost = isApplePlatform() || nativePlatform() === 'linux';
   private stopPress: (() => void) | null = null;
 
   protected override roleByDefault(): 'button' {
