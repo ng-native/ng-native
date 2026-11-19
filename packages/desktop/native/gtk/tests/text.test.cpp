@@ -564,6 +564,39 @@ TEST_CASE("undo and redo put back what the field had, not capitalized again, one
   }
 }
 
+TEST_CASE("Backspace over a mark puts its base back as it was, not capitalized, one line or many") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    // Armenian small ayb and a combining acute: Pango lets Backspace delete the acute alone, which
+    // GTK does by deleting both and putting the ayb back.
+    views.add(MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("multiline", multiline)("autoCapitalize", "characters")("defaultValue", "\xD5\xA1\xCC\x81")), {{10, 10}, {150, 80}}));
+    auto *field = ngn::gtk::viewData(views.view(2))->field;
+    if (multiline) {
+      GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text));
+      GtkTextIter end;
+      gtk_text_buffer_get_end_iter(buffer, &end);
+      gtk_text_buffer_place_cursor(buffer, &end);
+    } else {
+      gtk_editable_set_position(GTK_EDITABLE(field->text), -1);
+    }
+    int before = field->eventCount;
+    g_signal_emit_by_name(field->text, "backspace");
+    CHECK(ngn::gtk::fieldText(*field) == "\xD5\xA1");
+    // Still the user's change, which JavaScript hears of.
+    CHECK(field->eventCount > before);
+    // What is typed afterwards is capitalized as before.
+    if (multiline) {
+      gtk_text_buffer_insert_at_cursor(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), "\xD5\xA1", -1);
+    } else {
+      int position = gtk_editable_get_position(GTK_EDITABLE(field->text));
+      gtk_editable_insert_text(GTK_EDITABLE(field->text), "\xD5\xA1", -1, &position);
+    }
+    CHECK(ngn::gtk::fieldText(*field) == "\xD5\xA1\xD4\xB1");
+  }
+}
+
 TEST_CASE("autoCapitalize words fits a long paste in linear time, and maxLength never cuts inside a character") {
   REQUIRE(ngn::testing::gtkReady());
   MountedViews views;
