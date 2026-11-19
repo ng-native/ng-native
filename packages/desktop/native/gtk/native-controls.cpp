@@ -218,10 +218,15 @@ void dayChosen(Control *c) {
   double ms = static_cast<double>(g_date_time_to_unix(at)) * 1000;
   ms = std::max(ms, p->minimumDate.value_or(ms));
   ms = std::min(ms, p->maximumDate.value_or(ms));
-  double offset = static_cast<double>(g_date_time_get_utc_offset(at)) / G_TIME_SPAN_MINUTE;
+  // The offset at the instant sent, which a bound can move across a daylight-saving change.
+  GDateTime *sent = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(ms / 1000)));
+  double offset = sent ? static_cast<double>(g_date_time_get_utc_offset(sent)) / G_TIME_SPAN_MINUTE : 0;
   g_date_time_unref(was);
   g_date_time_unref(day);
   g_date_time_unref(at);
+  if (sent) {
+    g_date_time_unref(sent);
+  }
   send(c, "change", folly::dynamic::object("timestamp", ms)("utcOffset", offset));
   if (GtkPopover *popover = gtk_menu_button_get_popover(GTK_MENU_BUTTON(c->widget))) {
     gtk_popover_popdown(popover);
@@ -246,15 +251,44 @@ void searchEvent(GtkWidget *entry, const char *name, bool withText) {
   send(c, name, std::move(payload));
 }
 
+// Empties the field and sends the cancel, as AppKit's clear button does.
+void cancelSearch(GtkWidget *entry) {
+  gtk_editable_set_text(GTK_EDITABLE(entry), "");
+  searchEvent(entry, "pressCancel", false);
+}
+
+// The click GtkSearchEntry clears the field on, from its clear icon: GTK sends no stop-search for it.
+GtkGesture *clearIconClick(GtkWidget *entry) {
+  for (GtkWidget *child = gtk_widget_get_first_child(entry); child; child = gtk_widget_get_next_sibling(child)) {
+    if (!GTK_IS_IMAGE(child) || g_strcmp0(gtk_image_get_icon_name(GTK_IMAGE(child)), "edit-clear-symbolic") != 0) {
+      continue;
+    }
+    GListModel *controllers = gtk_widget_observe_controllers(child);
+    GtkGesture *click = nullptr;
+    for (guint i = 0; !click && i < g_list_model_get_n_items(controllers); ++i) {
+      gpointer controller = g_list_model_get_item(controllers, i);
+      if (GTK_IS_GESTURE_CLICK(controller)) {
+        click = GTK_GESTURE(controller);
+      }
+      g_object_unref(controller);
+    }
+    g_object_unref(controllers);
+    return click;
+  }
+  return nullptr;
+}
+
 void wireSearch(GtkWidget *entry) {
   // Each change as it is made, as AppKit's field sends it: GTK's search-changed waits for a pause.
   g_signal_connect(entry, "changed", G_CALLBACK(+[](GtkEditable *e, gpointer) { searchEvent(GTK_WIDGET(e), "changeText", true); }), nullptr);
   g_signal_connect(entry, "activate", G_CALLBACK(+[](GtkSearchEntry *e, gpointer) { searchEvent(GTK_WIDGET(e), "submitSearch", true); }), nullptr);
-  // Escape empties the field, as the cancel button of AppKit's does.
-  g_signal_connect(entry, "stop-search", G_CALLBACK(+[](GtkSearchEntry *e, gpointer) {
-    gtk_editable_set_text(GTK_EDITABLE(e), "");
-    searchEvent(GTK_WIDGET(e), "pressCancel", false);
-  }), nullptr);
+  // Escape and the clear icon empty the field, as the cancel button of AppKit's does.
+  g_signal_connect(entry, "stop-search", G_CALLBACK(+[](GtkSearchEntry *e, gpointer) { cancelSearch(GTK_WIDGET(e)); }), nullptr);
+  if (GtkGesture *click = clearIconClick(entry)) {
+    g_signal_connect_after(click, "released", G_CALLBACK(+[](GtkGestureClick *, int, double, double, gpointer e) {
+      cancelSearch(GTK_WIDGET(e));
+    }), entry);
+  }
   GtkEventController *focus = gtk_event_controller_focus_new();
   g_signal_connect(focus, "enter", G_CALLBACK(+[](GtkEventControllerFocus *f, gpointer) {
     searchEvent(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(f)), "beginEditing", false);
@@ -422,10 +456,14 @@ void applyControlProps(ViewData &view) {
   configure(c, c->kind, w, *p);
   gtk_widget_set_sensitive(w, p->enabled);
   // The app's label for the control, which reads its own (a button's title) without one.
-  if (!p->accessibilityLabel.empty()) {
-    gtk_accessible_update_property(GTK_ACCESSIBLE(w), GTK_ACCESSIBLE_PROPERTY_LABEL, p->accessibilityLabel.c_str(), -1);
-  } else {
-    gtk_accessible_reset_property(GTK_ACCESSIBLE(w), GTK_ACCESSIBLE_PROPERTY_LABEL);
+  // And its hint, which the view around the control is no accessible element to carry.
+  for (auto [property, text] : {std::pair{GTK_ACCESSIBLE_PROPERTY_LABEL, &p->accessibilityLabel},
+                                std::pair{GTK_ACCESSIBLE_PROPERTY_DESCRIPTION, &p->accessibilityHint}}) {
+    if (!text->empty()) {
+      gtk_accessible_update_property(GTK_ACCESSIBLE(w), property, text->c_str(), -1);
+    } else {
+      gtk_accessible_reset_property(GTK_ACCESSIBLE(w), property);
+    }
   }
   switch (c->kind) {
     case ControlKind::Switch:
@@ -489,7 +527,10 @@ void controlCommand(ViewData &view, const std::string &name, const folly::dynami
   } else if (c->kind == ControlKind::SearchField && name == "focus") {
     gtk_widget_grab_focus(c->widget);
   } else if (c->kind == ControlKind::SearchField && name == "blur") {
-    if (GtkRoot *root = gtk_widget_get_root(c->widget)) {
+    // Only this field's focus, which the text inside it holds: not another field's.
+    GtkRoot *root = gtk_widget_get_root(c->widget);
+    GtkWidget *focus = root ? gtk_root_get_focus(root) : nullptr;
+    if (focus && (focus == c->widget || gtk_widget_is_ancestor(focus, c->widget))) {
       gtk_root_set_focus(root, nullptr);
     }
   }
