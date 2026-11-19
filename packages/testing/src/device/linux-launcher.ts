@@ -47,8 +47,13 @@ export interface LinuxLauncherOptions {
   container?: string | false;
   /** The container command. Default `docker`. */
   docker?: string;
-  /** The directory the host runs in. Default: the current directory. */
+  /**
+   * The directory the host runs in, and the base a relative `bundle` file is resolved against, in a
+   * container too. Default: the current directory.
+   */
   cwd?: string;
+  /** How long `stop` waits after SIGTERM before it kills what is left, in milliseconds. Default 3000. */
+  stopGraceMs?: number;
   /** Environment added to the process's own. */
   env?: Readonly<Record<string, string>>;
 }
@@ -214,7 +219,14 @@ export function linuxLaunchCommand(
   request: LaunchRequest,
   env: Environment = process.env,
 ): LinuxLaunch {
-  const { host, metroPort, bundle, image, display } = resolveLaunch(options, env);
+  const resolved = resolveLaunch(options, env);
+  const { host, metroPort, image, display } = resolved;
+  // A bundle file is resolved against the directory the launch runs in, so the container's mount
+  // and the path the host is given name the same file. A URL is left as it is.
+  const bundle =
+    image && !/^https?:/.test(resolved.bundle)
+      ? path.resolve(options.cwd ?? process.cwd(), resolved.bundle)
+      : resolved.bundle;
   const hostArgs = [
     host,
     ...(options.args ?? []),
@@ -245,7 +257,7 @@ export function linuxLaunchCommand(
   };
   // The host's build folder, and a bundle file's folder, at the same paths.
   const mounts = [path.dirname(path.dirname(host))];
-  if (!/^https?:/.test(bundle)) mounts.push(path.dirname(path.resolve(bundle)));
+  if (!/^https?:/.test(bundle)) mounts.push(path.dirname(bundle));
   const name = `ngn-test-${request.runId}`;
   return {
     command: options.docker ?? 'docker',
@@ -288,6 +300,28 @@ function signalName(number: number): string | undefined {
   return Object.entries(constants.signals).find(([, value]) => value === number)?.[0];
 }
 
+function signalGroup(group: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-group, signal);
+  } catch {
+    // The group is already gone.
+  }
+}
+
+/** Whether any process of the group `group` is left. */
+function groupAlive(group: number): boolean {
+  try {
+    process.kill(-group, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function untilGroupGone(group: number): Promise<void> {
+  while (groupAlive(group)) await new Promise((resolve) => setTimeout(resolve, 20));
+}
+
 /** How many lines of the host's output a lost host's failure quotes. */
 const TAIL_LINES = 30;
 
@@ -301,6 +335,9 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
         cwd: options.cwd,
         env: launch.env as NodeJS.ProcessEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
+        // The session script leads a process group of its own, so `stop` can end the host and the
+        // display with it even when the script's own cleanup cannot run.
+        detached: true,
       });
       const keep = (chunk: Buffer) => {
         tail = [...tail, ...chunk.toString().split('\n').filter(Boolean)].slice(-TAIL_LINES);
@@ -320,10 +357,17 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
       return {
         exited,
         async stop() {
-          if (child.exitCode === null && child.signalCode === null) {
-            child.kill('SIGTERM');
-            await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 3000))]);
-            if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+          const group = child.pid;
+          if (group !== undefined && groupAlive(group)) {
+            signalGroup(group, 'SIGTERM');
+            await Promise.race([
+              untilGroupGone(group),
+              new Promise((resolve) => setTimeout(resolve, options.stopGraceMs ?? 3000)),
+            ]);
+            if (groupAlive(group)) {
+              signalGroup(group, 'SIGKILL');
+              await untilGroupGone(group);
+            }
           }
           if (launch.container) {
             spawnSync(options.docker ?? 'docker', ['rm', '-f', launch.container], {
