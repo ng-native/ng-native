@@ -91,6 +91,29 @@ describe('linuxLauncher crashReport', () => {
       }
     }
   });
+
+  it('holds an unfinished last line while a process the host left keeps the pipes open', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ngn-linux-launcher-'));
+    const stateDir = path.join(dir, 'state');
+    mkdirSync(stateDir);
+    const host = path.join(dir, 'host.sh');
+    // No line break after the message, and a child holding the pipes past the drain's wait.
+    writeFileSync(host, "#!/bin/bash\nprintf 'fatal detail' >&2\nsleep 30 &\nexit 3\n", {
+      mode: 0o755,
+    });
+    const launcher = linuxLauncher({ host, container: false, display: 'inherit' });
+    const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir });
+    try {
+      assert.equal(await app.exited, 'status 3');
+      assert.match((await launcher.crashReport?.(0)) ?? '', /fatal detail/);
+    } finally {
+      try {
+        await app.stop();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  });
 });
 
 /** A file's text, or an empty string while it is missing or empty. */
