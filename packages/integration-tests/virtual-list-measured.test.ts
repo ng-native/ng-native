@@ -125,14 +125,15 @@ describe('virtual list with measured rows', () => {
   });
 
   it('keeps the rows it scrolled past as a spacer of their measured height', async () => {
-    const { measureAll, scroll, canvas, rendered, unmount } = await boot('Measured');
+    const { measureAll, scroll, canvas, rendered, row, unmount } = await boot('Measured');
     // Scroll down a row at a time, measuring each window, as a finger would reveal them.
     for (let y = 0; y <= 20 * 60; y += 60) {
       await measureAll(() => 60);
       await scroll(y);
     }
     await measureAll(() => 60);
-    const first = Math.min(...rendered());
+    // Not counting the slots kept hidden for reuse, which are out of the flow.
+    const first = Math.min(...rendered().filter((id) => row(id)!.props['opacity'] !== 0));
     const spacer = canvas().children[0]!;
     assert.equal(spacer.props['height'], first * 60, 'the spacer is what is above the window');
     assert.ok(rendered().includes(20), 'the row at the offset is rendered');

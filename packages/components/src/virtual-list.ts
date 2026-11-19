@@ -156,6 +156,8 @@ const HOLD_TOLERANCE = 0.5;
  * viewport: FlatList's `updateCellsBatchingPeriod`.
  */
 const FILL_BATCH_MS = 50;
+/** How long without a scroll event counts as the scroll having stopped. */
+const PAUSE_MS = 200;
 
 /** The row a held position is held by: its key, and how far into it the viewport starts. */
 interface Anchor<T> {
@@ -345,6 +347,13 @@ export class VirtualList<T> extends ScrollViewProps {
    * the rest behind. `1` renders the visible rows and the overscan only.
    */
   readonly windowSize = input(5, { transform: numberOr(5) });
+  /**
+   * How far past the viewport a scroll renders in the direction it is going, in milliseconds of
+   * its speed, up to three viewports: the rows the list will reach by the time a window change has
+   * been through JavaScript and back to native. `0` renders only the visible rows, the overscan
+   * and the fill.
+   */
+  readonly velocityLead = input(500, { transform: numberOr(500) });
   /** How close to the end, in viewport heights, `(endReached)` fires. RN's default is 2. */
   readonly endReachedThreshold = input(2, { transform: numberOr(2) });
 
@@ -874,6 +883,7 @@ export class VirtualList<T> extends ScrollViewProps {
       stop();
       this.sticky.destroy();
       clearTimeout(this.fillTimer);
+      clearTimeout(this.speedTimer);
       this.zeroSize?.stop();
     });
     if (this.zeroSize) this.checkZeroSize(this.zeroSize);
@@ -941,8 +951,12 @@ export class VirtualList<T> extends ScrollViewProps {
      * then the rows added below happened to be worth exactly the rows wasted above. With mixed
      * heights they are not, and the list clips short of its own bottom.
      */
+    const ahead = this.velocityLead() ? this.ahead() : 0;
     const top = this.topOf(visible);
-    const first = Math.max(0, Math.min(overscanned, this.indexAt(top - fill.before * viewport)));
+    const first = Math.max(
+      0,
+      Math.min(overscanned, this.indexAt(top - fill.before * viewport - Math.max(0, -ahead))),
+    );
 
     let last = visible;
     while (last < items.length && this.topOf(last) < top + budget) last++;
@@ -954,7 +968,13 @@ export class VirtualList<T> extends ScrollViewProps {
      * when the visible row does.
      */
     let end = last < items.length ? this.lineStart(this.lineOf(last) + overscan) : items.length;
-    const deepest = top + this.heightOf(visible) + this.rowGap() + budget + fill.after * viewport;
+    const deepest =
+      top +
+      this.heightOf(visible) +
+      this.rowGap() +
+      budget +
+      fill.after * viewport +
+      Math.max(0, ahead);
     while (end < items.length && this.topOf(end) < deepest) end++;
     return { first, last: end };
   });
@@ -1375,7 +1395,7 @@ export class VirtualList<T> extends ScrollViewProps {
   }
 
   protected onScroll(
-    event: NativeSyntheticEvent<{ contentOffset?: { x?: number; y?: number } }>,
+    event: NativeSyntheticEvent<{ contentOffset?: { x?: number; y?: number }; timestamp?: number }>,
   ): void {
     const contentOffset = event.nativeEvent?.contentOffset;
     const along = (this.horizontal() ? contentOffset?.x : contentOffset?.y) ?? 0;
@@ -1385,6 +1405,7 @@ export class VirtualList<T> extends ScrollViewProps {
     // window is built, so that both edges can be measured from the same place.
     // Not clamped to the items: an input set in the same task as this event has not reached the
     // list yet, and the window clamps when it renders.
+    this.trackSpeed(content, event.nativeEvent?.timestamp);
     const visible = this.indexAt(content);
     if (visible !== this.visible()) this.moveTo(visible);
     this.lastOffset = content;
@@ -1392,6 +1413,56 @@ export class VirtualList<T> extends ScrollViewProps {
     this.sticky.scrolled(content, along);
     this.checkEnd(along);
     this.announceViewable(content);
+  }
+
+  /**
+   * Points the window reaches past the viewport for the scroll's speed, positive toward the end,
+   * in steps of a quarter viewport: written only when it moves a step, so a fling costs a pass
+   * for it every few frames rather than on every scroll event.
+   */
+  private readonly ahead = signal(0);
+  /** The speed's lead before rounding to a step, eased from one event to the next. */
+  private eased = 0;
+  /** The offset of the last scroll event, and when it arrived. */
+  private lastScroll = { offset: 0, at: -Infinity };
+  /** Lets go of the reach once scroll events stop, which is all a scroll that stops sends. */
+  private speedTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * Follow the scroll's speed, from each scroll event's offset and the time native sent it, in
+   * milliseconds, which iOS and Android both give. Not the time it reached JavaScript: a thread
+   * that fell behind gets a fling's events in a burst, which would read as no time at all between
+   * them. Where native gives no time, as on the web, the time it arrived.
+   */
+  private trackSpeed(offset: number, sent: number | undefined): void {
+    const ms = this.velocityLead();
+    const now = typeof sent === 'number' && Number.isFinite(sent) ? sent : performance.now();
+    const elapsed = now - this.lastScroll.at;
+    const moved = offset - this.lastScroll.offset;
+    this.lastScroll = { offset, at: now };
+    const viewport = this.viewport();
+    // A pause, or the first event of a scroll, starts the speed over.
+    if (!ms || !viewport || elapsed <= 0 || elapsed > PAUSE_MS) {
+      this.eased = 0;
+    } else {
+      const reach = 3 * viewport;
+      const lead = Math.max(-reach, Math.min(reach, (moved / elapsed) * ms));
+      // Halfway to the new speed, so one late event does not throw the window around.
+      this.eased = (this.eased + lead) / 2;
+    }
+    const step = viewport / 4;
+    const ahead = step ? Math.round(this.eased / step) * step : 0;
+    this.ahead.set(ahead);
+    clearTimeout(this.speedTimer);
+    if (ahead) this.speedTimer = setTimeout(() => this.stopSpeed(), PAUSE_MS);
+  }
+
+  /** Start the speed over: a pause, or a jump, which is no fling. */
+  private stopSpeed(): void {
+    clearTimeout(this.speedTimer);
+    this.lastScroll = { offset: 0, at: -Infinity };
+    this.eased = 0;
+    this.ahead.set(0);
   }
 
   /** The most viewports rendered ahead of the scroll direction and behind it. */
@@ -1416,6 +1487,8 @@ export class VirtualList<T> extends ScrollViewProps {
   private jumpTo(index: number): void {
     const span = this.span();
     if (span && (index < span.first || index >= span.last)) this.fill.set({ before: 0, after: 0 });
+    // Nor is the scroll that reports it a fling: its speed starts over from where it lands.
+    this.stopSpeed();
   }
 
   /**

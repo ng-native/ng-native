@@ -40,6 +40,7 @@ interface Section {
       [sectionFooterHeight]="10"
       [overscan]="1"
       [windowSize]="1"
+      [velocityLead]="0"
       [stickySectionHeadersEnabled]="sticky()"
       [style]="fill"
       (endReached)="ended = ended + 1"

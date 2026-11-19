@@ -22,6 +22,13 @@ two-thirds of the extra viewports ahead of the scroll and the rest behind. A lis
 rows can lower it, and a `windowSize` of 1 renders the visible rows and the overscan only.
 `<section-list>` takes the same input.
 
+While the list scrolls, the window also reaches past the viewport in the direction of the scroll,
+by how far the list travels in `velocityLead` milliseconds at its current speed (500 by default),
+up to three viewports. A fast fling then lands on rows that were rendered while the window change
+that needed them was still on its way through JavaScript. The reach drops back once the scroll
+slows or pauses, and a `scrollToIndex`, `scrollToOffset` or `scrollToEnd` is not read as a fling.
+A `velocityLead` of 0 turns it off. `<section-list>` takes the same input.
+
 The list reads scroll events outside Angular's listeners, so its own listener marks no view for
 checking. A scroll event that moves no row in or out of the window checks only what reads the
 signals it changes, such as a pinned sticky row, and the views of any `(scroll)` handler the app

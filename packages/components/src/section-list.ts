@@ -244,6 +244,7 @@ const measure = <A extends unknown[]>(height: Height<A>, ...args: A): number =>
       [stickyIndices]="stickyRows()"
       [overscan]="overscan()"
       [windowSize]="windowSize()"
+      [velocityLead]="velocityLead()"
       [endReachedThreshold]="endReachedThreshold()"
       [contentPadding]="contentPadding()"
       [keyboardShouldPersistTaps]="keyboardShouldPersistTaps()"
@@ -315,6 +316,8 @@ export class SectionList<T, S extends SectionListSection<T> = SectionListSection
   readonly overscan = input(4, { transform: numberOr(4) });
   /** How many viewports of rows to render at most. See `<virtual-list>`. */
   readonly windowSize = input(5, { transform: numberOr(5) });
+  /** How far past the viewport a fast scroll renders. See `<virtual-list>`. */
+  readonly velocityLead = input(500, { transform: numberOr(500) });
   readonly endReachedThreshold = input(2, { transform: numberOr(2) });
   /** Space around the rows, inside the scrolling content. See `<virtual-list>`. */
   readonly contentPadding = input<VirtualListPadding>(0);

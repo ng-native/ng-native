@@ -3,7 +3,7 @@
  * footer rows, and so is this one.
  */
 import assert from 'node:assert/strict';
-import { after, before, describe, it } from 'node:test';
+import { after, before, describe, it, mock } from 'node:test';
 import type { Type } from '@angular/core';
 import { registerPlatformComponents, registerViewName } from '@ng-native/fabric';
 import {
@@ -336,6 +336,26 @@ describe('the list options a section list passes on', () => {
     // Several of the list's 50ms fill batches.
     await new Promise((resolve) => setTimeout(resolve, 300));
     assert.equal(rows(), shown);
+  });
+
+  it('passes velocityLead on: at 0, a fast scroll renders no further than a slow one', async () => {
+    const { fabric } = await boot();
+    const host = flatten(fabric.committed).find((node) => node.viewName === 'ScrollView')!;
+    const rows = () =>
+      flatten(fabric.committed).filter((node) => node.props['position'] === 'absolute').length;
+    let now = 1000;
+    const clock = mock.method(performance, 'now', () => now);
+    try {
+      await fireEvent.scroll(host, { contentOffset: { y: 2000 } });
+      now += 16;
+      await fireEvent.scroll(host, { contentOffset: { y: 2400 } });
+      const fast = rows();
+      now += 1000;
+      await fireEvent.scroll(host, { contentOffset: { y: 2400 } });
+      assert.equal(fast, rows());
+    } finally {
+      clock.mock.restore();
+    }
   });
 
   it('keeps the keyboard up on a tap in the list when taps persist', async () => {
