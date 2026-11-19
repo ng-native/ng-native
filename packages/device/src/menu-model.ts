@@ -93,6 +93,21 @@ export const isSeparator = (entry: MenuEntry): entry is MenuSeparator => 'separa
  * app gives it a handler. File holds Print... (`mod+p`), which prints the key window unless the app
  * gives a `print` item a handler.
  */
+/**
+ * The groups of a merged menu bar (`mergeMenuBar`) that have no `menuRole` and are named as one
+ * of the default menus is: each is drawn as a second menu of that name beside the default one,
+ * since only a role merges a group into its menu.
+ */
+export function unmergedGroups(
+  defaults: readonly MenuGroupModel[],
+  merged: readonly MenuGroupModel[],
+): string[] {
+  const named = new Set(defaults.map((group) => group.label.toLowerCase()));
+  return merged
+    .filter((group) => !group.menuRole && named.has(group.label.toLowerCase()))
+    .map((group) => group.label);
+}
+
 export function defaultMenuBar(appName: string): MenuGroupModel[] {
   const item = (label: string, menuRole: MenuRole, shortcut?: string): MenuItemModel =>
     shortcut ? { label, menuRole, shortcut } : { label, menuRole };
