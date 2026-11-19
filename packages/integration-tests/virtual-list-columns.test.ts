@@ -162,6 +162,29 @@ describe('a windowed list in columns', () => {
     assert.deepEqual(across(tile(4)!), { x: 0, width: 75 });
   });
 
+  it('renders down to the viewport s end when a new count moves the top item onto a shorter line', async () => {
+    // Tile 4 is 1000 high, so at 940 the viewport is 900 into line 1 (tiles 3 to 5). In two
+    // columns tile 3 is on a 40-high line: the list must window from the line now at the top.
+    const { instance, shown, scroll } = await boot((page) => {
+      page.height.set((_: unknown, index: number) => (index === 4 ? 1000 : 40));
+    });
+    await scroll(940);
+    instance.columns.set(2);
+    await settle();
+    // Lines 2 (tiles 4 and 5) to 9 (tiles 18 and 19) cover 940 to 1340.
+    for (const index of [4, 5, 12, 18, 19]) {
+      assert.ok(shown().includes(index), `tile ${index} is rendered`);
+    }
+  });
+
+  it('announces what is viewable after a new count, with no scroll', async () => {
+    const { instance } = await boot();
+    assert.deepEqual(instance.viewable(), range(0, 30));
+    instance.columns.set(4);
+    await settle();
+    assert.deepEqual(instance.viewable(), range(0, 40));
+  });
+
   it('puts the items back a line each, across the width, with one column', async () => {
     const { instance, tile, canvas } = await boot((page) => page.columnGap.set(6));
     instance.columns.set(1);

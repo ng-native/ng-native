@@ -757,8 +757,16 @@ export class VirtualList<T> extends ScrollViewProps {
       this.pendingScroll = { offset: held, animated: false };
       this.lastOffset = held;
     }
-    this.anchor = { ...anchor, items, index };
-    return index;
+    // The window is built from the row the held offset lands in, which is not the anchored one
+    // when that row came out shorter than the way into it: a new column count can move an item
+    // off a line made tall by another item, onto a short one.
+    const top = Math.max(0, Math.min(this.indexAt(held), items.length - 1));
+    if (top === index) {
+      this.anchor = { ...anchor, items, index };
+      return index;
+    }
+    this.anchorAt(top, held);
+    return top;
   }
 
   /**
@@ -860,6 +868,8 @@ export class VirtualList<T> extends ScrollViewProps {
 
   /** The items the end and viewability were last checked against after a render. */
   private checkedItems: readonly T[] | null = null;
+  /** And the table placing them, which a new column count makes again for the same items. */
+  private checkedTable: HeightIndex | null = null;
 
   /**
    * New items can bring the end within reach or change what is on screen with no scroll: a list
@@ -868,8 +878,10 @@ export class VirtualList<T> extends ScrollViewProps {
    */
   private recheckItems(): void {
     const items = this.items();
-    if (items === this.checkedItems) return;
+    const table = this.table();
+    if (items === this.checkedItems && table === this.checkedTable) return;
     this.checkedItems = items;
+    this.checkedTable = table;
     this.checkEnd(this.headerHeight() + this.lastOffset);
     this.announceViewable(this.lastOffset);
   }
