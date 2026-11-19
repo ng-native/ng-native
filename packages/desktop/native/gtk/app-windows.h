@@ -96,6 +96,8 @@ class GtkWindows final : public WindowBackend {
     // The handlers that call back into these windows, stopped when the window closes or these go.
     gulong scaled{0};
     gulong closeRequested{0};
+    // The window's notify handlers (size, maximised, full screen, focus).
+    std::vector<gulong> notified;
     GdkFrameClock *clock{nullptr};
     gulong laidOut{0};
     // The size the app last heard, so an allocation that changes nothing says nothing.
