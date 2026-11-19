@@ -167,7 +167,11 @@ void installThinScrollbars() {
   GtkCssProvider *css = gtk_css_provider_new();
   gtk_css_provider_load_from_data(
       css,
-      "scrolledwindow.ngn-thin-scrollbars > scrollbar slider { min-width: 3px; min-height: 3px; margin: 0; border-width: 1px; }"
+      "scrolledwindow.ngn-thin-scrollbars > scrollbar slider { margin: 0; border-width: 1px; }"
+      // Only the thickness narrows: the theme's minimum length along the scrolling axis stays, so
+      // the thumb of a long document remains big enough to grab.
+      "scrolledwindow.ngn-thin-scrollbars > scrollbar.vertical slider { min-width: 3px; }"
+      "scrolledwindow.ngn-thin-scrollbars > scrollbar.horizontal slider { min-height: 3px; }"
       "scrolledwindow.ngn-thin-scrollbars > scrollbar { padding: 0; }",
       -1);
   gtk_style_context_add_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);

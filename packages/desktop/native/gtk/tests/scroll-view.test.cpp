@@ -444,3 +444,45 @@ TEST_CASE("a thin scroll view mounted under classic scroll bars takes the narrow
   CHECK(narrow > 0);
   CHECK(ngn::ScrollerGutters::shared().get(2).right == doctest::Approx(narrow));
 }
+
+TEST_CASE("thin scroll bars narrow the thickness and keep the theme's minimum thumb length") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkSettings *settings = gtk_settings_get_default();
+  gboolean overlay = TRUE;
+  g_object_get(settings, "gtk-overlay-scrolling", &overlay, nullptr);
+  struct Restore {
+    GtkSettings *settings;
+    gboolean overlay;
+    ~Restore() {
+      g_object_set(settings, "gtk-overlay-scrolling", overlay, nullptr);
+    }
+  } restore{settings, overlay};
+  g_object_set(settings, "gtk-overlay-scrolling", FALSE, nullptr);
+
+  MountedViews views;
+  mountScrollView(views);
+  auto *box = ngn::gtk::viewData(views.view(2))->scroll;
+  settleScrollers(views, box);
+  GtkWidget *vbar = gtk_scrolled_window_get_vscrollbar(GTK_SCROLLED_WINDOW(box->scrolled));
+  GtkWidget *hbar = gtk_scrolled_window_get_hscrollbar(GTK_SCROLLED_WINDOW(box->scrolled));
+  int vLength = 0, hLength = 0;
+  gtk_widget_measure(vbar, GTK_ORIENTATION_VERTICAL, -1, &vLength, nullptr, nullptr, nullptr);
+  gtk_widget_measure(hbar, GTK_ORIENTATION_HORIZONTAL, -1, &hLength, nullptr, nullptr, nullptr);
+  float regular = ngn::gtk::classicScrollerWidth(box->scrolled);
+  // The slider's own minimum length is what keeps these well past a few pixels.
+  CHECK(vLength > 20);
+  CHECK(hLength > 20);
+
+  ngn::DesktopProps thin;
+  thin.scrollbarWidth = ngn::ScrollbarWidth::Thin;
+  views.backend->updateDesktopProps(MountedViews::kSurface, 2, thin);
+  settleScrollers(views, box);
+  int thinV = 0, thinH = 0;
+  gtk_widget_measure(vbar, GTK_ORIENTATION_VERTICAL, -1, &thinV, nullptr, nullptr, nullptr);
+  gtk_widget_measure(hbar, GTK_ORIENTATION_HORIZONTAL, -1, &thinH, nullptr, nullptr, nullptr);
+  CHECK(ngn::gtk::classicScrollerWidth(box->scrolled) < regular);
+  // The bar loses its padding and margin, but the theme's 40px slider minimum stays: without the
+  // fix this measures about 5px.
+  CHECK(thinV > 30);
+  CHECK(thinH > 30);
+}
