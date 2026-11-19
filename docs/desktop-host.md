@@ -49,7 +49,11 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   timeouts (the longest silence), decoded bodies and `file:` and `data:` urls, and opening a
   WebSocket's `http` or `https` url as `ws` or `wss`, as React Native's HMR client asks. Its
   lasting cookies are kept between launches in `cookies.txt` in the app's data folder, as macOS
-  keeps them, and session cookies are not. Unlike macOS, it takes a proxy only from libcurl's environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY`, `NO_PROXY` and the rest), not the desktop's settings. It runs a `linux`
+  keeps them, and session cookies are not. A proxy comes from libcurl's environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY` and
+  the rest) when any is set, else from the desktop's settings, asked for each origin at most every 30 seconds: the
+  proxy portal (`org.freedesktop.portal.ProxyResolver`) when one answers, else GLib's
+  `GProxyResolver` (`proxy-resolver.h`), which reads GNOME's and KDE's settings only where glib-networking is
+  installed. `NO_PROXY` applies to either. It runs a `linux`
   bundle, which `expo export` makes once the app's `app.config.js` registers the platform
   (`@ng-native/metro/linux.cjs`). A window is an
   `AdwApplicationWindow` of the app's `AdwApplication`, holding an `AdwToolbarView` with an

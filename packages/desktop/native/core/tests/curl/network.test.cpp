@@ -647,6 +647,111 @@ TEST_CASE("cookies over libcurl outlive the process in the cookie file, all but 
   CHECK(cookies(later) == "fresh=yes");
 }
 
+TEST_CASE("the desktop's proxy answer becomes libcurl's: the first usable, GNOME's socks as SOCKS 5, direct as none") {
+  CHECK(ngn::curlProxyFor({"http://proxy.example:3128", "direct://"}) == "http://proxy.example:3128");
+  CHECK(ngn::curlProxyFor({"direct://"}) == "");
+  CHECK(ngn::curlProxyFor({"socks://proxy.example:1080"}) == "socks5://proxy.example:1080");
+  CHECK(ngn::curlProxyFor({"socks4a://proxy.example:1080"}) == "socks4a://proxy.example:1080");
+  CHECK(ngn::curlProxyFor({"HTTPS://proxy.example"}) == "HTTPS://proxy.example");
+  CHECK(ngn::curlProxyFor({"pac+http://wpad/wpad.dat", "http://proxy.example:3128"}) == "http://proxy.example:3128");
+  CHECK(ngn::curlProxyFor({"pac+http://wpad/wpad.dat"}) == std::nullopt);
+  CHECK(ngn::curlProxyFor({}) == std::nullopt);
+}
+
+TEST_CASE("a libcurl proxy variable set, not empty, is the environment's proxy; NO_PROXY alone is not") {
+  auto env = [](std::map<std::string, std::string> values) {
+    return [values](const char *name) -> std::optional<std::string> {
+      auto it = values.find(name);
+      return it == values.end() ? std::nullopt : std::optional<std::string>(it->second);
+    };
+  };
+  CHECK_FALSE(ngn::proxyEnvironmentSet(env({})));
+  CHECK_FALSE(ngn::proxyEnvironmentSet(env({{"NO_PROXY", "localhost"}, {"no_proxy", "localhost"}})));
+  CHECK_FALSE(ngn::proxyEnvironmentSet(env({{"https_proxy", ""}})));
+  for (const char *name : {"http_proxy", "https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"}) {
+    CHECK(ngn::proxyEnvironmentSet(env({{name, "http://proxy.example:3128"}})));
+  }
+  // curl reads only the lower-case http_proxy, so HTTP_PROXY names no proxy.
+  CHECK_FALSE(ngn::proxyEnvironmentSet(env({{"HTTP_PROXY", "http://proxy.example:3128"}})));
+}
+
+namespace {
+
+// Sets an environment variable for a scope, and puts back what was there.
+struct ScopedEnv {
+  std::string name;
+  std::optional<std::string> was;
+  ScopedEnv(std::string n, const std::string &value) : name(std::move(n)) {
+    if (const char *v = getenv(name.c_str())) {
+      was = v;
+    }
+    setenv(name.c_str(), value.c_str(), 1);
+  }
+  ~ScopedEnv() {
+    if (was) {
+      setenv(name.c_str(), was->c_str(), 1);
+    } else {
+      unsetenv(name.c_str());
+    }
+  }
+};
+
+} // namespace
+
+TEST_CASE("a request over libcurl goes through the desktop's proxy for its url, unless the environment names one") {
+  TestServer server;
+  auto proxy = server.url("");
+  std::mutex mutex;
+  std::vector<std::string> asked;
+  auto desktop = [&](std::vector<std::string> answer) {
+    return [&, answer](const std::string &url) {
+      std::lock_guard lock(mutex);
+      asked.push_back(url);
+      return answer;
+    };
+  };
+  auto host = [](ngn::CurlNetwork &network, const std::string &url) {
+    auto r = std::make_shared<Recorder>();
+    network.http->send({.url = url}, Recorder::owned(r));
+    REQUIRE(r->waitForComplete());
+    return echoedHeader(echoed(*r), "host");
+  };
+  // Clear any proxy the machine running the tests sets.
+  std::vector<std::unique_ptr<ScopedEnv>> cleared;
+  for (const char *name : {"http_proxy", "https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"}) {
+    cleared.push_back(std::make_unique<ScopedEnv>(name, ""));
+  }
+  {
+    // A host that does not resolve answers only through the proxy, which the test server plays.
+    auto network = ngn::makeCurlNetwork({.desktopProxies = desktop({"pac+http://wpad/wpad.dat", proxy})});
+    CHECK(host(network, "http://proxied.invalid/echo") == "proxied.invalid");
+    // Asked once for an origin, not for each request to it: a portal answer can take a PAC script.
+    CHECK(host(network, "http://proxied.invalid/echo?again") == "proxied.invalid");
+    std::lock_guard lock(mutex);
+    CHECK(asked == std::vector<std::string>{"http://proxied.invalid/echo"});
+  }
+  {
+    // A WebSocket asks with its http url.
+    SocketRecorder socket;
+    auto network = ngn::makeCurlNetwork({.desktopProxies = desktop({"direct://"})});
+    auto ws = network.webSockets->connect(server.ws("/ws"), {}, {}, socket.callbacks());
+    REQUIRE(ws);
+    ws->sendText("hi");
+    REQUIRE(socket.waitFor(2));
+    std::lock_guard lock(mutex);
+    CHECK(asked.back() == server.url("/ws"));
+  }
+  {
+    // The environment's proxy wins, and the desktop is not asked.
+    ScopedEnv env("http_proxy", proxy);
+    asked.clear();
+    auto network = ngn::makeCurlNetwork({.desktopProxies = desktop({"direct://"})});
+    CHECK(host(network, "http://proxied.invalid/echo") == "proxied.invalid");
+    std::lock_guard lock(mutex);
+    CHECK(asked.empty());
+  }
+}
+
 TEST_CASE("a compressed body over libcurl arrives decoded") {
   TestServer server;
   Recorder r;

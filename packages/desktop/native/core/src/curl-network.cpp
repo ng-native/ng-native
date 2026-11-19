@@ -30,6 +30,9 @@ namespace {
 using Clock = std::chrono::steady_clock;
 using std::chrono::milliseconds;
 
+// How long the desktop's proxy answer for an origin is used before it is asked again.
+constexpr auto kProxyKept = std::chrono::seconds(30);
+
 // NSURLSession's request timeout on macOS (network.mm): a dev server's first bundle can take
 // minutes before its first byte.
 constexpr milliseconds kDefaultIdle = std::chrono::seconds(300);
@@ -370,6 +373,10 @@ class Engine {
     // Every handle lives on the thread, so the shared cookie store needs no lock.
     curl_share_setopt(share_, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
     ca_ = findCaCertificates();
+    useDesktopProxies_ = options_.desktopProxies && !proxyEnvironmentSet([](const char *name) -> std::optional<std::string> {
+      const char *value = getenv(name);
+      return value ? std::optional<std::string>(value) : std::nullopt;
+    });
     if (!options_.cookieFile.empty()) {
       // A handle of its own reads and fills the shared store.
       cookies_ = curl_easy_init();
@@ -482,6 +489,9 @@ class Engine {
     }
     CURL *e = t->easy;
     common(e);
+    if (t->http) {
+      useProxy(e, request.url);
+    }
     curl_easy_setopt(e, CURLOPT_URL, request.url.c_str());
     curl_easy_setopt(e, CURLOPT_PRIVATE, t.get());
     curl_easy_setopt(e, CURLOPT_PROTOCOLS_STR, "http,https,file");
@@ -586,7 +596,10 @@ class Engine {
     s->offered = protocols;
     CURL *e = s->easy;
     common(e);
-    curl_easy_setopt(e, CURLOPT_URL, webSocketUrl(url).c_str());
+    // The desktop names proxies for http and https; a WebSocket starts as one of those.
+    auto ws = webSocketUrl(url);
+    useProxy(e, startsWithNoCase(ws, "wss:") ? "https:" + ws.substr(4) : "http:" + ws.substr(3));
+    curl_easy_setopt(e, CURLOPT_URL, ws.c_str());
     curl_easy_setopt(e, CURLOPT_PROTOCOLS_STR, "ws,wss");
     // The handshake through the multi handle, then frames by curl_ws_send and curl_ws_recv.
     curl_easy_setopt(e, CURLOPT_CONNECT_ONLY, 2L);
@@ -654,6 +667,25 @@ class Engine {
     }
     if (!ca_.directory.empty()) {
       curl_easy_setopt(e, CURLOPT_CAPATH, ca_.directory.c_str());
+    }
+  }
+
+  // The desktop's proxy for `url`, unless the environment names one (libcurl reads it itself). Asked
+  // once per origin (scheme, host and port) for kProxyKept, so a changed setting arrives within it;
+  // a redirect keeps the first url's proxy.
+  void useProxy(CURL *e, const std::string &url) {
+    if (!useDesktopProxies_) {
+      return;
+    }
+    auto now = Clock::now();
+    std::erase_if(proxies_, [now](const auto &entry) { return now - entry.second.asked >= kProxyKept; });
+    auto origin = url.substr(0, url.find('/', url.find("://") + 3));
+    auto it = proxies_.find(origin);
+    if (it == proxies_.end()) {
+      it = proxies_.emplace(origin, KeptProxy{now, curlProxyFor(options_.desktopProxies(url))}).first;
+    }
+    if (it->second.proxy) {
+      curl_easy_setopt(e, CURLOPT_PROXY, it->second.proxy->c_str());
     }
   }
 
@@ -1212,6 +1244,13 @@ class Engine {
   }
 
   CurlOptions options_;
+  bool useDesktopProxies_{false};
+  struct KeptProxy {
+    Clock::time_point asked;
+    std::optional<std::string> proxy;
+  };
+  // The desktop's answers by origin, while they are fresh.
+  std::map<std::string, KeptProxy> proxies_;
   CURLM *multi_;
   CURLSH *share_;
   // Reads and fills the store for the cookie file, with what the file last held.
@@ -1361,6 +1400,32 @@ class CurlWebSockets final : public WebSockets {
 CurlNetwork makeCurlNetwork(CurlOptions options) {
   auto client = std::make_shared<Client>(std::move(options));
   return {.http = std::make_shared<CurlHttp>(client), .webSockets = std::make_shared<CurlWebSockets>(client)};
+}
+
+std::optional<std::string> curlProxyFor(const std::vector<std::string> &proxies) {
+  for (const auto &proxy : proxies) {
+    if (startsWithNoCase(proxy, "direct://")) {
+      return std::string();
+    }
+    if (startsWithNoCase(proxy, "socks://")) {
+      return "socks5://" + proxy.substr(8);
+    }
+    for (const char *scheme : {"http://", "https://", "socks4://", "socks4a://", "socks5://", "socks5h://"}) {
+      if (startsWithNoCase(proxy, scheme)) {
+        return proxy;
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+bool proxyEnvironmentSet(const std::function<std::optional<std::string>(const char *name)> &env) {
+  for (const char *name : {"http_proxy", "https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"}) {
+    if (auto value = env(name); value && !value->empty()) {
+      return true;
+    }
+  }
+  return false;
 }
 
 CaCertificates findCaCertificates(const CaProbe &probe) {

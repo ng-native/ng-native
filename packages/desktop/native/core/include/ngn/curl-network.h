@@ -11,9 +11,10 @@
 // without a byte in either direction (a header line counts once it is whole, as libcurl hands over
 // only whole ones), compressed bodies arrive decoded, `file:` and `data:` urls
 // answer 200 with no headers, and requests with credentials share one cookie store, which the
-// cookie file keeps between launches as NSHTTPCookieStorage does. A proxy comes only from libcurl's
-// environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY`, `NO_PROXY` and the rest), not the
-// desktop's settings. A `file:` url that is not a regular file is refused. TLS is the system's
+// cookie file keeps between launches as NSHTTPCookieStorage does. A proxy comes from libcurl's
+// environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY` and the rest) when any is set,
+// else from the desktop's settings (desktopProxies), each request's for its url; `NO_PROXY` applies
+// to either. A `file:` url that is not a regular file is refused. TLS is the system's
 // OpenSSL, verifying against the certificates findCaCertificates() locates.
 #pragma once
 
@@ -23,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ngn {
 
@@ -32,7 +34,21 @@ struct CurlOptions {
   // whenever a request or connection has finished and the store differs from the file: a session
   // cookie, or one that has expired, is never written. Empty keeps the store in memory.
   std::string cookieFile;
+  // The desktop's proxies for a url, best first, as GProxyResolver and the proxy portal answer
+  // (`direct://` for none). Asked on the network thread as a request or WebSocket starts, once per
+  // origin every 30 seconds at most, unless a libcurl proxy variable is set, which wins. Unset, or answering nothing usable: libcurl's own
+  // choice, from the environment.
+  std::function<std::vector<std::string>(const std::string &url)> desktopProxies;
 };
+
+// The proxy libcurl takes (CURLOPT_PROXY) for desktopProxies' answer: the first it can use, with
+// GNOME's `socks://` as SOCKS 5, and `direct://` as "" (none, whatever the environment says).
+// Nothing when no entry is usable.
+std::optional<std::string> curlProxyFor(const std::vector<std::string> &proxies);
+
+// Whether any proxy variable libcurl reads is set, not empty: `http_proxy`, `https_proxy` or
+// `HTTPS_PROXY`, `all_proxy` or `ALL_PROXY` (`NO_PROXY` only excludes hosts, so it is not one).
+bool proxyEnvironmentSet(const std::function<std::optional<std::string>(const char *name)> &env);
 
 // The two clients over one thread, which stops once both are gone.
 struct CurlNetwork {
