@@ -18,8 +18,9 @@ fast.
 While the JS thread is idle, the window grows a viewport at a time, ahead of the scroll direction
 first, so a fling lands on rows that are already drawn. `windowSize` caps it, as `FlatList`'s
 does: the viewport on screen and at most `windowSize - 1` more, five in all by default, with about
-two-thirds of the extra viewports ahead of the scroll and the rest behind. A list with expensive rows can lower it, and a `windowSize` of 1 renders
-the visible rows and the overscan only. `<section-list>` takes the same input.
+two-thirds of the extra viewports ahead of the scroll and the rest behind. A list with expensive
+rows can lower it, and a `windowSize` of 1 renders the visible rows and the overscan only.
+`<section-list>` takes the same input.
 
 The rendering loop is deliberately not something this component owns. `<virtual-list>` computes
 _which_ rows should exist, as `window()`, and the caller's own `@for` renders them - so tracking,
