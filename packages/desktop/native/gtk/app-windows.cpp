@@ -110,8 +110,8 @@ struct WindowSignal {
   void (*report)(GtkWindows *, SurfaceId, GtkWindow *);
 };
 
-void connectWindow(GtkWidget *window, const char *signal, WindowSignal data) {
-  g_signal_connect_data(
+gulong connectWindow(GtkWidget *window, const char *signal, WindowSignal data) {
+  return g_signal_connect_data(
       window, signal, G_CALLBACK(+[](GtkWindow *w, GParamSpec *, gpointer p) {
         auto *s = static_cast<WindowSignal *>(p);
         s->report(s->windows, s->surface, w);
@@ -140,6 +140,10 @@ GtkWindows::~GtkWindows() {
 void GtkWindows::disconnect(Window &entry) {
   g_clear_signal_handler(&entry.scaled, entry.window);
   g_clear_signal_handler(&entry.closeRequested, entry.window);
+  for (gulong &id : entry.notified) {
+    g_clear_signal_handler(&id, entry.window);
+  }
+  entry.notified.clear();
   if (entry.clock) {
     g_clear_signal_handler(&entry.laidOut, entry.clock);
     g_clear_object(&entry.clock);
@@ -223,11 +227,12 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
       }),
       request_, [](gpointer data, GClosure *) { delete static_cast<CloseRequest *>(data); }, GConnectFlags(0));
   for (const char *signal : {"notify::default-width", "notify::default-height", "notify::maximized", "notify::fullscreened"}) {
-    connectWindow(window, signal, {this, surface, [](GtkWindows *windows, SurfaceId s, GtkWindow *) { windows->reportFrame(s); }});
+    entry.notified.push_back(
+        connectWindow(window, signal, {this, surface, [](GtkWindows *windows, SurfaceId s, GtkWindow *) { windows->reportFrame(s); }}));
   }
-  connectWindow(window, "notify::is-active", {this, surface, [](GtkWindows *windows, SurfaceId s, GtkWindow *w) {
+  entry.notified.push_back(connectWindow(window, "notify::is-active", {this, surface, [](GtkWindows *windows, SurfaceId s, GtkWindow *w) {
     windows->reportFocus(s, gtk_window_is_active(w));
-  }});
+  }}));
   if (hooks_.addSurface) {
     hooks_.addSurface(surface, widget);
   }

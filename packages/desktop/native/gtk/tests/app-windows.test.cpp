@@ -84,6 +84,24 @@ TEST_CASE("a window opens at its saved size, and a resize saves the size and no 
   CHECK(w.saved("main") == folly::dynamic::object("x", 0)("y", 0)("width", 700)("height", 520));
 }
 
+TEST_CASE("a window that outlives its owner no longer reports to it") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkWidget *kept = nullptr;
+  {
+    Windows w;
+    auto surface = w.open({.key = "main", .title = "Notes"});
+    kept = GTK_WIDGET(g_object_ref(w.windows->window(surface)));
+  }
+  // The owner is gone: nothing of it is left connected to the window someone else still holds.
+  guint notify = g_signal_lookup("notify", G_TYPE_OBJECT);
+  for (const char *property : {"default-width", "default-height", "maximized", "fullscreened", "is-active", "scale-factor"}) {
+    CAPTURE(property);
+    CHECK(g_signal_handler_find(kept, GSignalMatchType(G_SIGNAL_MATCH_ID | G_SIGNAL_MATCH_DETAIL), notify, g_quark_from_string(property),
+                                nullptr, nullptr, nullptr) == 0);
+  }
+  g_object_unref(kept);
+}
+
 TEST_CASE("a maximised window saves that with the size it goes back to, and opens maximised again") {
   REQUIRE(ngn::testing::gtkReady());
   {
