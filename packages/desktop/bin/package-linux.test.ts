@@ -21,6 +21,7 @@ import { ar, tar, tarGz, withFolders } from './archive.mjs';
 import { main, system } from './cli.mjs';
 import {
   categoryList,
+  checkLinuxFlags,
   debControl,
   desktopEntry,
   finishArgs,
@@ -226,6 +227,44 @@ describe('the icon', () => {
     assert.deepEqual(grey([[1, 10, 99, 5, 1]], 2, 16), [10, 15]);
   });
 
+  it('reads a palette of 1-bit, 2-bit and 4-bit indices, packed into bytes', () => {
+    const colours = ['PLTE', Buffer.from([10, 0, 0, 0, 20, 0, 0, 0, 30, 40, 40, 40])] as [
+      string,
+      Buffer,
+    ];
+    const reds = (png: Buffer) => [...decodePng(png).rgba].filter((_, index) => index % 4 === 0);
+    // Eight 1-bit indices in a byte, the first in the high bit: 1 0 1 1 0 0 0 1, then a short row.
+    assert.deepEqual(
+      reds(pngOf(3, 0, Buffer.from([0, 0b10110001, 0b10000000]), 9, [colours], { depth: 1 })),
+      [0, 10, 0, 0, 10, 10, 10, 0, 0],
+    );
+    // 2 bits: indices 3 2 1 0 and 1.
+    assert.deepEqual(
+      reds(pngOf(3, 0, Buffer.from([0, 0b11100100, 0b01000000]), 5, [colours], { depth: 2 })),
+      [40, 0, 0, 10, 0],
+    );
+    // 4 bits: indices 1 then 3, packed in one byte.
+    assert.deepEqual(
+      reds(pngOf(3, 0, Buffer.from([0, 0x13]), 2, [colours], { depth: 4 })),
+      [0, 40],
+    );
+  });
+
+  it('draws a pixel of the tRNS colour key clear, in grey and RGB and at either depth', () => {
+    const alphas = (png: Buffer) => [...decodePng(png).rgba].filter((_, index) => index % 4 === 3);
+    // Grey: the key is the 8-bit sample 7.
+    assert.deepEqual(
+      alphas(pngOf(0, 0, Buffer.from([0, 7, 9]), 2, [['tRNS', Buffer.from([0, 7])]])),
+      [0, 255],
+    );
+    // RGB at 16 bits: the key compares whole samples, so a pixel whose high bytes match is opaque.
+    const key = Buffer.from([0, 1, 0, 2, 0, 3]);
+    const rgb16 = Buffer.from([0, 0, 1, 0, 2, 0, 3, 0, 1, 0, 2, 1, 3]);
+    assert.deepEqual(alphas(pngOf(2, 0, rgb16, 2, [['tRNS', key]], { depth: 16 })), [0, 255]);
+    // No tRNS: opaque, as before.
+    assert.deepEqual(alphas(pngOf(0, 0, Buffer.from([0, 7]), 1)), [255]);
+  });
+
   it('reads RGB and palette PNGs, and refuses one it cannot', () => {
     const rgb = pngOf(2, 0, Buffer.from([0, 1, 2, 3, 4, 5, 6]), 1);
     assert.deepEqual([...decodePng(rgb).rgba.subarray(0, 4)], [1, 2, 3, 255]);
@@ -290,6 +329,21 @@ describe('linuxNames', () => {
     }
   });
 
+  it('makes an id from a numeric slug that no part starts with a digit', () => {
+    const bare = desktopAppConfig({ ...EXPO, ios: {} });
+    assert.equal(linuxNames({ ...EXPO, slug: '2048' }, bare, 'app').appId, 'dev.ngnative.app2048');
+    assert.equal(linuxNames(EXPO, bare, 'app').appId, 'dev.ngnative.notes');
+  });
+
+  it("refuses a slug whose command's link would not fit a tar header", () => {
+    const ok = 'a'.repeat(64);
+    assert.equal(linuxNames({ ...EXPO, slug: ok }, config, 'deb').packageName, ok);
+    assert.throws(
+      () => linuxNames({ ...EXPO, slug: 'a'.repeat(65) }, config, 'deb'),
+      /takes 64 at most/,
+    );
+  });
+
   it("refuses an id Linux cannot take, a Flatpak's Flathub rules, and a version that is not one", () => {
     const named = (id: string) => desktopAppConfig({ ...EXPO, ios: { bundleIdentifier: id } });
     assert.throws(
@@ -309,6 +363,24 @@ describe('linuxNames', () => {
     assert.ok(linuxNames(EXPO, named('com.example.my-notes'), 'flatpak'));
     const versioned = desktopAppConfig({ ...EXPO, version: '2.0-beta' });
     assert.throws(() => linuxNames(EXPO, versioned, 'rpm'), /not one a Linux package takes/);
+  });
+});
+
+describe('checkLinuxFlags', () => {
+  it('takes the whole --homepage as one URL, with no line break to start another field', () => {
+    const check = (homepage: string) => () => checkLinuxFlags({ format: 'app', homepage });
+    assert.doesNotThrow(check('https://example.com/a/b?c=d#e'));
+    assert.doesNotThrow(check('http://example.com'));
+    for (const bad of [
+      'https://example.com\nMaintainer: x',
+      'https://example.com\rX',
+      'https://example.com/a b',
+      'https://example.com\u0000',
+      'ftp://example.com',
+      'https://',
+    ]) {
+      assert.throws(check(bad), /--homepage takes the URL/, JSON.stringify(bad));
+    }
   });
 });
 
@@ -437,8 +509,11 @@ describe('the package formats', () => {
     assert.match(spec, /^Requires: libadwaita >= 1\.4$/m);
     assert.match(spec, /^%global __os_install_post %\{nil\}$/m);
     assert.match(spec, /^100%% notes$/m);
-    assert.match(spec, /^cp -a '\/work\/arm64\/tree\/\.' %\{buildroot\}\/usr\/$/m);
-    assert.match(spec, /^chmod -R u\+rwX,go\+rX,go-w %\{buildroot\}\/usr$/m);
+    // The build root is under the project and may have a space in its path: each command quotes it.
+    assert.match(spec, /^mkdir -p "\$RPM_BUILD_ROOT\/usr"$/m);
+    assert.match(spec, /^cp -a '\/work\/arm64\/tree\/\.' "\$RPM_BUILD_ROOT\/usr\/"$/m);
+    assert.match(spec, /^chmod -R u\+rwX,go\+rX,go-w "\$RPM_BUILD_ROOT\/usr"$/m);
+    assert.doesNotMatch(spec, /%\{buildroot\}/);
     assert.match(spec, /^\/usr\/share\/icons\/hicolor\/\*\/apps\/com\.example\.notes\.png$/m);
     assert.doesNotMatch(rpmSpec({ ...APP, icon: false }, { tree: '/t' }), /hicolor/);
     // A % anywhere rpm reads, and a quote in the folder's path, kept literal.
@@ -454,7 +529,7 @@ describe('the package formats', () => {
     assert.match(odd, /^Summary: Saves 100%%\{name\}$/m);
     assert.match(odd, /^URL: https:\/\/e\.com\/%%7E$/m);
     assert.match(odd, /^Packager: A%% <a@b\.c>$/m);
-    assert.match(odd, /^cp -a '\/Users\/o'\\''neil\/50%%\/tree\/\.' %\{buildroot\}\/usr\/$/m);
+    assert.match(odd, /^cp -a '\/Users\/o'\\''neil\/50%%\/tree\/\.' "\$RPM_BUILD_ROOT\/usr\/"$/m);
   });
 
   it('gives a Flatpak only the permissions the app uses, and names what its sandbox takes', () => {
@@ -491,6 +566,23 @@ describe('the package formats', () => {
     assert.equal(problems.length, 2);
     assert.match(problems[0]!, /^capabilities\.spawn: /);
     assert.match(problems[1]!, /^capabilities\.paths: /);
+    // A path under /etc or /usr is one the sandbox's runtime keeps, so the permission does nothing.
+    const reserved = desktopAppConfig({
+      ...EXPO,
+      plugins: [
+        [
+          '@ng-native/desktop',
+          {
+            capabilities: {
+              paths: [{ path: '/etc/notes' }, { path: '~/Notes' }, { path: '/etcetera' }],
+            },
+          },
+        ],
+      ],
+    });
+    const warned = flatpakProblems(reserved).filter((line) => line.includes('keeps for its own'));
+    assert.equal(warned.length, 1);
+    assert.match(warned[0]!, /\/etc\/notes/);
   });
 
   it('writes a Flatpak manifest of each architecture as its archive, on the GNOME runtime', () => {
@@ -637,9 +729,9 @@ describe('ng-native-desktop package --os linux', () => {
 
       const folder = path.join(app, 'dist', 'linux', 'notes-2.0.0-aarch64');
       const lib = path.join(folder, 'lib', 'notes');
-      assert.equal(readlinkSync(path.join(folder, 'bin', 'notes')), '../lib/notes/notes');
-      assert.equal(readFileSync(path.join(lib, 'notes'), 'utf8'), '#!/bin/sh\necho host\n');
-      assert.equal(lstatSync(path.join(lib, 'notes')).mode & 0o777, 0o755);
+      assert.equal(readlinkSync(path.join(folder, 'bin', 'notes')), '../lib/notes/ngn-app');
+      assert.equal(readFileSync(path.join(lib, 'ngn-app'), 'utf8'), '#!/bin/sh\necho host\n');
+      assert.equal(lstatSync(path.join(lib, 'ngn-app')).mode & 0o777, 0o755);
       assert.equal(readFileSync(path.join(lib, 'main.jsbundle'), 'utf8'), 'bytecode');
       assert.equal(readFileSync(path.join(lib, 'assets', 'logo.png'), 'utf8'), 'png');
       assert.equal(
@@ -673,8 +765,8 @@ describe('ng-native-desktop package --os linux', () => {
       assert.ok(!existsSync(path.join(app, 'dist', 'linux', 'notes-2.0.0-x86_64')));
 
       const entries = readTar(gunzipSync(readFileSync(`${folder}.tar.gz`)));
-      assert.equal(entries['notes-2.0.0-aarch64/bin/notes']!.link, '../lib/notes/notes');
-      assert.equal(entries['notes-2.0.0-aarch64/lib/notes/notes']!.mode, 0o755);
+      assert.equal(entries['notes-2.0.0-aarch64/bin/notes']!.link, '../lib/notes/ngn-app');
+      assert.equal(entries['notes-2.0.0-aarch64/lib/notes/ngn-app']!.mode, 0o755);
       assert.ok(entries['notes-2.0.0-aarch64/share/applications/com.example.notes.desktop']);
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -710,8 +802,8 @@ describe('ng-native-desktop package --os linux', () => {
       assert.match(control, /^Architecture: arm64$/m);
       assert.match(control, /^Maintainer: Ada <ada@example\.com>$/m);
       const data = readTar(gunzipSync(members[2]!.data));
-      assert.equal(data['./usr/bin/notes']!.link, '../lib/notes/notes');
-      assert.equal(data['./usr/lib/notes/notes']!.mode, 0o755);
+      assert.equal(data['./usr/bin/notes']!.link, '../lib/notes/ngn-app');
+      assert.equal(data['./usr/lib/notes/ngn-app']!.mode, 0o755);
       assert.ok(data['./usr/share/metainfo/com.example.notes.metainfo.xml']);
       assert.equal(Object.keys(data)[0], './');
       for (const entry of Object.values(data)) assert.equal(entry.owner, 'root:root 0:0');
@@ -734,16 +826,90 @@ describe('ng-native-desktop package --os linux', () => {
         script,
         /^rpmsign --addsign --define '_gpg_name ABCD' '.*notes-2\.0\.0-1\.aarch64\.rpm'$/m,
       );
-      assert.match(
-        script,
-        new RegExp(
-          `^cp '.*' '${path.join(app, 'dist', 'linux')}/notes-2\\.0\\.0-1\\.aarch64\\.rpm'$`,
-          'm',
-        ),
+      // Compared as text: a temp directory named "ci[1]" is no regular expression.
+      const copy = script.split('\n').find((line) => line.startsWith('cp '))!;
+      assert.ok(
+        copy.endsWith(` '${path.join(app, 'dist', 'linux')}/notes-2.0.0-1.aarch64.rpm'`),
+        copy,
       );
       // The user's own GPG home and agent on Linux: no copy.
       assert.doesNotMatch(script, /GNUPGHOME/);
       assert.ok(!calls.some((call) => call.command === 'docker'));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('runs rpmbuild in a container that gets an output folder and gives back what it wrote, on exit', async () => {
+    const make = (engine: 'docker' | 'podman') => {
+      const made = linuxApp({
+        answers: {
+          'rpmbuild --version': 1,
+          ...(engine === 'podman' ? { 'docker info': 1 } : {}),
+          [`${engine} image`]: 1,
+        },
+      });
+      const out = path.join(made.app, 'dist', 'linux');
+      let outputAtRun: boolean | undefined;
+      const run = made.sys.run;
+      made.sys.run = (command, args, options) => {
+        if (command === engine && args[0] === 'run') outputAtRun = existsSync(out);
+        return run(command, args, options);
+      };
+      return { ...made, out, ran: () => outputAtRun };
+    };
+    const docker = make('docker');
+    const podman = make('podman');
+    try {
+      for (const { sys } of [docker, podman]) {
+        await quiet(() =>
+          main(['package', '--format', 'rpm', '--arch', 'arm64', ...LICENSED], sys),
+        );
+      }
+      const scriptOf = (calls: Call[], engine: string) =>
+        readFileSync(
+          calls.find((call) => call.command === engine && call.args[0] === 'run')!.args.at(-1)!,
+          'utf8',
+        );
+      // Both engines bind-mount the output folder, which exists first.
+      assert.equal(docker.ran(), true);
+      assert.equal(podman.ran(), true);
+      // Rootful Docker writes as root: ownership comes back whether rpmbuild passes or fails.
+      const lines = scriptOf(docker.calls, 'docker').split('\n');
+      assert.match(lines[1]!, /^ngn_restore\(\) \{ chown -R \d+:\d+ .* \|\| true; \}$/);
+      assert.equal(lines[2], 'trap ngn_restore EXIT');
+      assert.ok(lines.findIndex((line) => line.startsWith('rpmbuild ')) > 2);
+      // Rootless Podman's container root is this user: a host UID given to chown is a subordinate one.
+      assert.doesNotMatch(scriptOf(podman.calls, 'podman'), /chown|ngn_restore/);
+    } finally {
+      rmSync(docker.root, { recursive: true, force: true });
+      rmSync(podman.root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the host apart from metadata.json whatever the slug is', async () => {
+    const { root, app, sys } = linuxApp({ expo: { slug: 'metadata.json' } });
+    try {
+      await quiet(() => main(['package', '--arch', 'arm64'], sys));
+      const folder = path.join(app, 'dist', 'linux', 'metadata.json-2.0.0-aarch64');
+      const lib = path.join(folder, 'lib', 'metadata.json');
+      assert.equal(readFileSync(path.join(lib, 'ngn-app'), 'utf8'), '#!/bin/sh\necho host\n');
+      const metadata = JSON.parse(readFileSync(path.join(lib, 'metadata.json'), 'utf8'));
+      assert.equal(metadata.NGNDistribution, 'app');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('removes the signature of an earlier build when it ships the archive unsigned', async () => {
+    const { root, app, sys } = linuxApp();
+    try {
+      const stale = path.join(app, 'dist', 'linux', 'notes-2.0.0-aarch64.tar.gz.asc');
+      mkdirSync(path.dirname(stale), { recursive: true });
+      writeFileSync(stale, 'old signature');
+      await quiet(() => main(['package', '--arch', 'arm64'], sys));
+      assert.ok(existsSync(path.join(app, 'dist', 'linux', 'notes-2.0.0-aarch64.tar.gz')));
+      assert.ok(!existsSync(stale));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -757,6 +923,19 @@ describe('ng-native-desktop package --os linux', () => {
         packageWith(sys, ['--format', 'deb', '--maintainer', 'A <a@b.c>']),
         /The Linux desktop host builds on Linux only for now[\s\S]*no prebuilt Linux x64 host/,
       );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('does not build an x64 host on a machine of another architecture, such as riscv64', async () => {
+    const { root, sys, calls } = linuxApp();
+    try {
+      await assert.rejects(
+        packageWith({ ...sys, arch: 'riscv64' }, ['--arch', 'x64']),
+        /builds on Linux only for now[\s\S]*no prebuilt Linux x64 host/,
+      );
+      assert.ok(!calls.some((call) => call.command.endsWith('build.sh')));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -826,7 +1005,7 @@ describe('ng-native-desktop package --os linux', () => {
         readFileSync(path.join(app, 'dist', 'linux', 'notes_2.0.0_amd64.deb')),
       );
       const data = readTar(gunzipSync(members[2]!.data));
-      assert.equal(data['./usr/lib/notes/notes']!.data.toString(), '#!/bin/sh\necho prebuilt\n');
+      assert.equal(data['./usr/lib/notes/ngn-app']!.data.toString(), '#!/bin/sh\necho prebuilt\n');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -913,13 +1092,14 @@ describe('ng-native-desktop package --os linux', () => {
         script,
         /^flatpak-builder --user --arch=aarch64 --install-deps-from=flathub --force-clean --disable-rofiles-fuse /m,
       );
-      assert.match(script, new RegExp(`--repo='${out}/flatpak-repo'`));
+      assert.ok(script.includes(`--repo='${out}/flatpak-repo'`));
       assert.match(
         script,
         /^flatpak build-bundle --arch=aarch64 .* 'com\.example\.notes' stable$/m,
       );
       assert.match(script, /^flatpak build-update-repo --generate-static-deltas /m);
-      assert.match(script, /^chown -R \d+:\d+ /m);
+      assert.match(script, /^ngn_restore\(\) \{ chown -R \d+:\d+ /m);
+      assert.match(script, /^trap 'rm -rf "\$work" 2>\/dev\/null \|\| true; ngn_restore' EXIT$/m);
       // The key's home, mounted read-only and copied, since gpg writes to its home.
       assert.ok(run.args.includes('/keys/gnupg:/gnupg:ro'));
       assert.match(script, /^rm -rf \/tmp\/gnupg && cp -r \/gnupg \/tmp\/gnupg/m);
