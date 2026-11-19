@@ -48,9 +48,9 @@ posting each step to the X server through XTest (`libXtst.so.6`), so a step reac
 person's input does, native controls included. The pointer steps, `key` and `type` play, with the
 command modifier as Ctrl and option as Alt. A character is typed in the keyboard group that has it,
 the active group first, and the active group is put back after. A press the script has not
-released when it ends or its window closes is released then. A script with `scroll`, `magnify`, `rotate` or `choose`
-is refused, as is any script on an X server without the XTEST extension, with the reason in the
-host's log.
+released when it ends or its window closes is released then. A script with `scroll`, `magnify`,
+`rotate` or `choose` is refused, as is any script on an X server without the XTEST extension, with
+the reason in the host's log.
 
 ## Crash reports
 
