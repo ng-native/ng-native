@@ -762,6 +762,42 @@ TEST_CASE("an anchor the stack has covered leaves a presentation a sheet, not a 
   views.mount({ShadowViewMutation::RemoveMutation(2, sheet, 1), ShadowViewMutation::DeleteMutation(sheet)});
 }
 
+TEST_CASE("a popover presented before its window is shown stays a popover, and shows with the window") {
+  REQUIRE(ngn::testing::gtkReady());
+  int criticals = 0;
+  // Removed on every exit path: runUntil throws on a timeout, and the handler holds &criticals.
+  struct Handler {
+    guint id;
+    ~Handler() {
+      g_log_remove_handler("Gtk", id);
+    }
+  } handler{g_log_set_handler("Gtk", G_LOG_LEVEL_CRITICAL, [](const gchar *, GLogLevelFlags, const gchar *, gpointer count) {
+    ++*static_cast<int *>(count);
+  }, &criticals)};
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto anchor = shadow(5, "View", nullptr, {{20, 20}, {80, 30}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {anchor, 3}});
+  // As at launch: the first mount settles the modals before GtkWindows::didMount shows the window.
+  gtk_widget_set_visible(views.window, FALSE);
+  REQUIRE_FALSE(gtk_widget_get_mapped(views.surface));
+
+  auto popover = shadow(7, "RNSScreen", presented("formSheet", 5), {{0, 0}, {800, 600}});
+  auto content = shadow(9, "View", nullptr, {{0, 0}, {200, 100}});
+  mountAll(views, {{popover, 2}, {content, 7}});
+  views.backend->modals().settle();
+  GtkWidget *shown = views.backend->modals().popoverOf(7);
+  REQUIRE(shown);
+
+  gtk_window_present(GTK_WINDOW(views.window));
+  ngn::testing::runUntil([shown] { return gtk_widget_get_mapped(shown); });
+  CHECK(criticals == 0);
+  views.mount({ShadowViewMutation::RemoveMutation(2, popover, 1), ShadowViewMutation::DeleteMutation(popover)});
+  CHECK(views.backend->modals().popoverOf(7) == nullptr);
+}
+
 TEST_CASE("a popover GTK closed stays up while the app has not unmounted its modal") {
   REQUIRE(ngn::testing::gtkReady());
   Glue glue;

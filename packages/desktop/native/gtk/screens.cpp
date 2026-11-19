@@ -717,14 +717,15 @@ void Modals::requestClose(Tag tag) {
   }
 }
 
-// Whether a popover on `anchor` would show: it is in a window, and nothing above it is hidden, as a
-// screen the stack covers is (setCovered). Not whether it is mapped yet, which a presentation begun
-// before the window maps is not.
+// Whether a popover on `anchor` would show: it is in a window, and nothing between it and the
+// window is hidden, as a screen the stack covers is (setCovered). Not whether it is mapped yet, nor
+// whether the window is shown: the first mount presents before the window is (GtkWindows::didMount).
 static bool anchorOnScreen(GtkWidget *anchor) {
-  if (!gtk_widget_get_root(anchor)) {
+  GtkWidget *root = GTK_WIDGET(gtk_widget_get_root(anchor));
+  if (!root) {
     return false;
   }
-  for (GtkWidget *w = anchor; w; w = gtk_widget_get_parent(w)) {
+  for (GtkWidget *w = anchor; w != root; w = gtk_widget_get_parent(w)) {
     if (!gtk_widget_get_visible(w) || !gtk_widget_get_child_visible(w)) {
       return false;
     }
