@@ -11,16 +11,21 @@
 // after its first frame, or with an input script (NGN_INPUT_SCRIPT) a second after the script has
 // played.
 #include "accessibility-settings.h"
+#include "app-info.h"
 #include "app-windows.h"
 #include "capture.h"
+#include "crypto.h"
 #include "file-dialogs.h"
 #include "file-system.h"
 #include "focus.h"
+#include "fonts.h"
 #include "gtk-backend.h"
 #include "host-sources.h"
+#include "image-manipulator.h"
 #include "image-view.h"
 #include "input-replay.h"
 #include "launcher-badge.h"
+#include "locales.h"
 #include "menus.h"
 #include "notifications.h"
 #include "pango-text.h"
@@ -748,7 +753,7 @@ int main(int argc, char *argv[]) {
   auto updates = std::make_shared<ngn::UpdatesClient>(std::move(updatesConfig), network.http, nullptr);
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
   // is left empty, and its module answers that it is unavailable.
-  ngn::addDesktopModules(
+  auto desktopModules = ngn::addDesktopModules(
       *modules,
       {.os = os,
        .system = system,
@@ -775,15 +780,19 @@ int main(int argc, char *argv[]) {
        .undo = gHost.undo,
        .fileDialogs = ngn::gtk::makeFileDialogs(),
        .fileWatcher = ngn::gtk::makeFileWatcher(),
+       .bundle = ngn::bundleFactsOf(settings.plist),
+       .machine = ngn::gtk::machineFacts(),
        .pathMonitor = ngn::gtk::makePathMonitor(),
+       .fontRegistrar = ngn::gtk::makeFontRegistrar(),
+       .imageCodec = ngn::gtk::makeImageCodec(),
        .printSystem = ngn::gtk::makePrintSystem(surfaceWidgetOf),
-       .regionCode = [system] {
-         auto locale = system->facts().locale;
-         auto dash = locale.find('-');
-         return dash == std::string::npos ? std::string() : locale.substr(dash + 1);
-       },
+       .crypto = ngn::gtk::makeCryptoSource(),
+       .locales = ngn::gtk::makeLocaleSource(),
+       .regionCode = ngn::gtk::systemRegionCode,
        .updates = updates,
        .reload = [](const std::string &next, std::function<void(bool)> done) { gHost.runtime->reload(next, std::move(done)); }});
+  // The names fonts are loaded under, which text resolves (fonts.h).
+  ngn::gtk::useFontLibrary(desktopModules.fonts);
 
   gHost.runtime = std::make_unique<ngn::Runtime>(
       gHost.mounting,

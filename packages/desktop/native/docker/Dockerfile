@@ -16,7 +16,7 @@ FROM almalinux:9
 # what the static libcurl links dynamically (cmake/curl.cmake). Xvfb, Weston, Mesa's software
 # drivers, D-Bus and the fonts are for launching the GTK host headless, under X11 and Wayland, and
 # pyatspi reads its accessibility tree over AT-SPI as a screen reader would (atspi-check.py).
-# libsecret is SecureStore's.
+# libsecret is SecureStore's. The English and German locale data are for the Localization tests.
 RUN dnf -y install dnf-plugins-core epel-release \
  && dnf config-manager --set-enabled crb \
  && dnf -y module enable nodejs:24 \
@@ -29,6 +29,7 @@ RUN dnf -y install dnf-plugins-core epel-release \
       gtk4-devel libadwaita-devel pango-devel cairo-devel libsecret-devel \
       xorg-x11-server-Xvfb weston mesa-dri-drivers dbus-daemon dbus-tools at-spi2-core python3-pyatspi \
       dejavu-sans-fonts google-noto-sans-fonts \
+      glibc-langpack-en glibc-langpack-de \
  && dnf clean all
 
 ENV CC=clang CXX=clang++
