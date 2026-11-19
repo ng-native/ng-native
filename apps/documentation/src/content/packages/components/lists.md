@@ -22,9 +22,10 @@ two-thirds of the extra viewports ahead of the scroll and the rest behind. A lis
 rows can lower it, and a `windowSize` of 1 renders the visible rows and the overscan only.
 `<section-list>` takes the same input.
 
-A scroll event that moves no row in or out of the window runs no change detection: the list reads
-the offset outside Angular's listeners and keeps what a scroll changes in signals, so only the
-views reading them are checked.
+The list reads scroll events outside Angular's listeners, so its own listener marks no view for
+checking. A scroll event that moves no row in or out of the window checks only what reads the
+signals it changes, such as a pinned sticky row, and the views of any `(scroll)` handler the app
+binds on the list.
 
 The rendering loop is deliberately not something this component owns. `<virtual-list>` computes
 _which_ rows should exist, as `window()`, and the caller's own `@for` renders them - so tracking,

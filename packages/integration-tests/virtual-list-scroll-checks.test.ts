@@ -20,46 +20,54 @@ before(async () => {
   mod = await compileFixture('fixtures/virtual-scroll-checks.ts');
 });
 
-async function boot(name: string) {
+/** Render a fixture laid out at 400 points, run the test on it, and unmount it whatever happens. */
+async function withList(
+  name: string,
+  test: (list: { fabric: FakeFabric; host: FakeFabricNode }) => Promise<void>,
+): Promise<void> {
   const rendered = await render(mod[name] as Type<unknown>);
-  const host = flatten(rendered.fabric.committed).find((n) => n.viewName === 'ScrollView')!;
-  await fireEvent(host, 'layout', { layout: { height: 400 } });
-  return { ...rendered, host };
+  try {
+    const host = flatten(rendered.fabric.committed).find((n) => n.viewName === 'ScrollView')!;
+    await fireEvent(host, 'layout', { layout: { height: 400 } });
+    await test({ fabric: rendered.fabric, host });
+  } finally {
+    rendered.unmount();
+  }
 }
 
 describe('windowed list scroll events and change detection', () => {
   it('checks the screen for no scroll event that leaves the window as it was', async () => {
-    const { fabric, host, unmount } = await boot('VirtualScrollChecks');
-    await fireEvent.scroll(host, { contentOffset: { y: 400 } });
-    const before = Number(textOf(fabric, 'checks'));
-    // Inside row 10, each time: the window stays rows 6 to 24.
-    for (const y of [405, 410, 415, 420]) await fireEvent.scroll(host, { contentOffset: { y } });
-    assert.equal(Number(textOf(fabric, 'checks')), before);
-    unmount();
+    await withList('VirtualScrollChecks', async ({ fabric, host }) => {
+      await fireEvent.scroll(host, { contentOffset: { y: 400 } });
+      const before = Number(textOf(fabric, 'checks'));
+      // Inside row 10, each time: the window stays rows 6 to 24.
+      for (const y of [405, 410, 415, 420]) await fireEvent.scroll(host, { contentOffset: { y } });
+      assert.equal(Number(textOf(fabric, 'checks')), before);
+    });
   });
 
   it('still renders the rows a scroll brings into the window', async () => {
-    const { fabric, host, unmount } = await boot('VirtualScrollChecks');
-    await fireEvent.scroll(host, { contentOffset: { y: 50 * 40 } });
-    const rows = flatten(fabric.committed)
-      .map((node) => node.props['text'])
-      .filter((text) => typeof text === 'string');
-    assert.ok(rows.includes('row 50'), rows.join(', '));
-    unmount();
+    await withList('VirtualScrollChecks', async ({ fabric, host }) => {
+      await fireEvent.scroll(host, { contentOffset: { y: 50 * 40 } });
+      const rows = flatten(fabric.committed)
+        .map((node) => node.props['text'])
+        .filter((text) => typeof text === 'string');
+      assert.ok(rows.includes('row 50'), rows.join(', '));
+    });
   });
 
   it('shows what an endReached handler writes to a plain field', async () => {
-    const { fabric, host, unmount } = await boot('VirtualScrollChecks');
-    await fireEvent.scroll(host, { contentOffset: { y: 90 * 40 } });
-    assert.equal(textOf(fabric, 'ended'), '1');
-    unmount();
+    await withList('VirtualScrollChecks', async ({ fabric, host }) => {
+      await fireEvent.scroll(host, { contentOffset: { y: 90 * 40 } });
+      assert.equal(textOf(fabric, 'ended'), '1');
+    });
   });
 
   it('runs a scroll handler of the screen s own, and shows what it writes', async () => {
-    const { fabric, host, unmount } = await boot('VirtualScrollHandler');
-    await fireEvent.scroll(host, { contentOffset: { y: 5 } });
-    await fireEvent.scroll(host, { contentOffset: { y: 10 } });
-    assert.equal(textOf(fabric, 'scrolled'), '2');
-    unmount();
+    await withList('VirtualScrollHandler', async ({ fabric, host }) => {
+      await fireEvent.scroll(host, { contentOffset: { y: 5 } });
+      await fireEvent.scroll(host, { contentOffset: { y: 10 } });
+      assert.equal(textOf(fabric, 'scrolled'), '2');
+    });
   });
 });
