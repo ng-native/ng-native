@@ -31,7 +31,7 @@ const char *imageContentFit(facebook::react::ImageResizeMode mode);
 // does. Its `cache` is read as React Native iOS maps it to a cache policy, over `cache` (kept in
 // memory) in place of the system's URL cache: `default` and `force-cache` answer from it when it
 // holds the source, `reload` fetches again, and `only-if-cached` fails when it does not. Only a GET
-// over http(s) with no body is cached. `file:` and `data:` sources are read, a file only inside the
+// over http(s) with no body is cached, by its uri and headers. `file:` and `data:` sources are read, a file only inside the
 // boundary `files` draws (readableSource). Answers once, on any thread: the bytes, or an error.
 void loadImageSource(
     const std::shared_ptr<Http> &http,

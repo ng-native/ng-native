@@ -1,6 +1,8 @@
 // An svg mounted into GTK: its document, which the core builds from react-native-svg's elements,
 // drawn by the cairo canvas into the svg view's snapshot. Read from the pixels the window draws.
 #include "../cairo-canvas.h"
+#include "../image-view.h"
+#include "fake-network.h"
 #include "mounted-views.h"
 
 #include <doctest/doctest.h>
@@ -60,6 +62,32 @@ void mountSvg(MountedViews &views, SvgNode root) {
   views.add(MountedViews::shadow(2, "RNSVGSvgView", desktopViewProps(dynamic::object()), {{0, 0}, {96, 96}}));
   views.backend->setSvgDrawing(MountedViews::kSurface, 2, std::make_shared<const ngn::SvgDocument>(ngn::SvgDocument{.root = std::move(root)}));
   views.settle();
+}
+
+// The image load `http` was last asked for, answered with `bytes` or, when empty, an error, and the
+// answer delivered on the main loop.
+void answer(ngn::testing::FakeHttp &http, const std::string &bytes) {
+  REQUIRE_FALSE(http.sent.empty());
+  auto &callbacks = http.sent.back()->callbacks;
+  if (bytes.empty()) {
+    callbacks.onComplete("unreachable", false);
+  } else {
+    callbacks.onResponse({.status = 200});
+    callbacks.onData(bytes, -1);
+    callbacks.onComplete("", false);
+  }
+  for (int i = 0; i < 20; ++i) {
+    g_main_context_iteration(nullptr, FALSE);
+  }
+}
+
+// Draws an svg <image> of `uri` on a cairo canvas of its own, as an svg view's snapshot does.
+void drawImage(const std::string &uri) {
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 10, 10);
+  cairo_t *cr = cairo_create(surface);
+  ngn::gtk::makeCairoCanvas(cr, 10, 10, 1, nullptr)->image(uri, {0, 0, 10, 10}, "xMidYMid", 0, 1);
+  cairo_destroy(cr);
+  cairo_surface_destroy(surface);
 }
 
 } // namespace
@@ -200,4 +228,89 @@ TEST_CASE("the cairo canvas measures text as Pango lays it out, and splits it in
   canvas.reset();
   cairo_destroy(cr);
   cairo_surface_destroy(surface);
+}
+
+TEST_CASE("a pattern's tiles start at its x and y and follow its patternTransform") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  // 6 by 12 tiles, green on their left half, moved right by half a tile.
+  SvgElement moved{.kind = SvgKind::Pattern, .name = "moved"};
+  moved.units = 1;
+  moved.lengths = {{"x", len(3)}, {"y", len(0)}, {"width", len(6)}, {"height", len(12)}};
+  // The same tiles at the origin, twice as wide through the transform.
+  SvgElement wide{.kind = SvgKind::Pattern, .name = "wide"};
+  wide.units = 1;
+  wide.lengths = {{"x", len(0)}, {"y", len(0)}, {"width", len(6)}, {"height", len(12)}};
+  wide.gradientTransform = ngn::SvgMatrix::scale(2, 1);
+  auto top = rect(0, 0, 24, 12);
+  top.fill = {.type = SvgBrush::Type::Ref, .ref = "moved"};
+  top.propList = {"fill"};
+  auto bottom = rect(0, 12, 24, 12);
+  bottom.fill = {.type = SvgBrush::Type::Ref, .ref = "wide"};
+  bottom.propList = {"fill"};
+  mountSvg(views, node(icon(), {node(moved, {node(rect(0, 0, 3, 12, 0xff00ff00))}), node(wide, {node(rect(0, 0, 3, 12, 0xff00ff00))}), node(top), node(bottom)}));
+  // Green from 12 to 24 points of each 24, not from 0.
+  CHECK(views.pixel(6, 24).a == 0);
+  CHECK(greenish(views.pixel(18, 24)));
+  CHECK(views.pixel(30, 24).a == 0);
+  CHECK(greenish(views.pixel(42, 24)));
+  // Green for the first 24 points of each 48.
+  CHECK(greenish(views.pixel(6, 72)));
+  CHECK(greenish(views.pixel(18, 72)));
+  CHECK(views.pixel(30, 72).a == 0);
+  CHECK(greenish(views.pixel(54, 72)));
+}
+
+TEST_CASE("an svg <image> whose load failed, or whose picture cairo cannot hold, is not requested again on each draw") {
+  REQUIRE(ngn::testing::gtkReady());
+  auto http = std::make_shared<ngn::testing::FakeHttp>();
+  ngn::gtk::useImageLoading(http, nullptr);
+  struct Restore {
+    ~Restore() {
+      ngn::gtk::useImageLoading(nullptr, nullptr);
+    }
+  } restore;
+
+  drawImage("https://example.com/offline.png");
+  answer(*http, "");
+  drawImage("https://example.com/offline.png");
+  CHECK(http->sent.size() == 1);
+
+  // Wider than a cairo image surface can be (32767 pixels): decoded, but never drawn.
+  std::vector<guchar> pixels(40000 * 4, 0xff);
+  GBytes *data = g_bytes_new(pixels.data(), pixels.size());
+  GdkTexture *texture = gdk_memory_texture_new(40000, 1, GDK_MEMORY_DEFAULT, data, 40000 * 4);
+  g_bytes_unref(data);
+  GBytes *png = gdk_texture_save_to_png_bytes(texture);
+  g_object_unref(texture);
+  // Copied into no pixels: GDK's check on the pointer is all that stops a write through null.
+  int criticals = 0;
+  guint handler = g_log_set_handler("Gdk", G_LOG_LEVEL_CRITICAL, [](const gchar *, GLogLevelFlags, const gchar *, gpointer count) {
+    ++*static_cast<int *>(count);
+  }, &criticals);
+  drawImage("https://example.com/huge.png");
+  answer(*http, std::string(static_cast<const char *>(g_bytes_get_data(png, nullptr)), g_bytes_get_size(png)));
+  g_bytes_unref(png);
+  drawImage("https://example.com/huge.png");
+  g_log_remove_handler("Gdk", handler);
+  CHECK(criticals == 0);
+  CHECK(http->sent.size() == 2);
+}
+
+TEST_CASE("an svg element's view stays hidden when it is removed and inserted again, or moved") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  mountSvg(views, node(icon(), {node(rect(0, 0, 24, 24, 0xffff0000))}));
+  auto element = MountedViews::shadow(3, "RNSVGRect", desktopViewProps(dynamic::object()), {{0, 0}, {96, 96}});
+  auto other = MountedViews::shadow(4, "RNSVGGroup", desktopViewProps(dynamic::object()), {{0, 0}, {96, 96}});
+  views.add(element, 2);
+  views.add(other, 2);
+  REQUIRE_FALSE(gtk_widget_get_child_visible(views.view(3)));
+  views.mount({ShadowViewMutation::RemoveMutation(2, element, 0), ShadowViewMutation::InsertMutation(2, element, 1)});
+  CHECK_FALSE(gtk_widget_get_child_visible(views.view(3)));
+  // Moved while it has a parent: insertChild takes it out itself.
+  views.backend->insertChild(MountedViews::kSurface, 2, 3, 0);
+  CHECK_FALSE(gtk_widget_get_child_visible(views.view(3)));
+  // The svg itself still draws.
+  CHECK(gtk_widget_get_child_visible(views.view(2)));
 }
