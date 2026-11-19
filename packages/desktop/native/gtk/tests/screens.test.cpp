@@ -13,8 +13,11 @@
 #include <adwaita.h>
 #include <doctest/doctest.h>
 
+#include <react/renderer/components/FBReactNativeSpec/EventEmitters.h>
+
 using namespace facebook::react;
 using ngn::testing::MountedViews;
+using ngn::testing::SentEvents;
 
 namespace {
 
@@ -263,6 +266,8 @@ TEST_CASE("a modal is presented over the window as a sheet at its content's size
   CHECK(gtk_widget_get_parent(views.view(3)) == slot);
   if (ngn::gtk::haveAdwDialog()) {
     CHECK(views.backend->modals().inDialog(3));
+    // In the window, not in one of its own.
+    CHECK(gtk_widget_get_root(slot) == gtk_widget_get_root(views.surface));
   } else {
     // libadwaita 1.4: the drawn sheet, on the overlay over the surface.
     CHECK(gtk_widget_is_ancestor(slot, overlay));
@@ -584,4 +589,220 @@ TEST_CASE("a window shows with no widget focused, unless one was focused before"
     }
     gtk_window_destroy(GTK_WINDOW(window));
   }
+}
+
+TEST_CASE("a header item that changes size changes its slot's") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 400, 300);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {400, 300}});
+  auto screen = shadow(3, "RNSScreen", nullptr, {{0, 0}, {400, 300}});
+  auto config = shadow(4, "RNSScreenStackHeaderConfig", header("Notes"), {{0, 0}, {400, 44}});
+  auto plus = shadow(5, "RNSScreenStackHeaderSubview", item("right"), {{360, 8}, {28, 28}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {screen, 2}, {config, 3}, {plus, 4}});
+  GtkWidget *slot = gtk_widget_get_parent(views.view(5));
+  REQUIRE(gtk_widget_get_width(slot) == 28);
+
+  auto current = views.mounting->tree().find(5)->view;
+  auto wider = current;
+  wider.layoutMetrics.frame.size = {80, 28};
+  views.mount({ShadowViewMutation::UpdateMutation(current, wider, 4)});
+  CHECK(gtk_widget_get_parent(views.view(5)) == slot);
+  CHECK(gtk_widget_get_width(slot) == 80);
+}
+
+TEST_CASE("a header item removed and deleted in one transaction lets go of its input") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 400, 300);
+  std::vector<Tag> detached;
+  views.backend->hooks.detachInput = [&detached](Tag tag) { detached.push_back(tag); };
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {400, 300}});
+  auto screen = shadow(3, "RNSScreen", nullptr, {{0, 0}, {400, 300}});
+  auto config = shadow(4, "RNSScreenStackHeaderConfig", header("Notes"), {{0, 0}, {400, 44}});
+  auto plus = shadow(5, "RNSScreenStackHeaderSubview", item("right"), {{360, 8}, {28, 28}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {screen, 2}, {config, 3}, {plus, 4}});
+  detached.clear();
+
+  views.mount({ShadowViewMutation::RemoveMutation(4, plus, 0), ShadowViewMutation::DeleteMutation(plus)});
+  CHECK(std::count(detached.begin(), detached.end(), 5) == 1);
+}
+
+TEST_CASE("a header's search field keeps the focus as its title changes, and reports only the user's typing") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 600, 300);
+  GtkWidget *bar = ngn::gtk::chromeOf(views.surface)->headerBar;
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {600, 300}});
+  auto screen = shadow(3, "RNSScreen", nullptr, {{0, 0}, {600, 300}});
+  // A bar button beside the field, which focus would move to were the field taken out.
+  auto withButton = [](const std::string &title) {
+    auto props = std::make_shared<HeaderProps>();
+    props->bar.title = title;
+    props->bar.right.push_back({.id = "add", .title = "Add"});
+    return props;
+  };
+  auto config = shadow(4, "RNSScreenStackHeaderConfig", withButton("Notes"), {{0, 0}, {600, 44}});
+  auto subview = shadow(5, "RNSScreenStackHeaderSubview", item("searchBar"), {{0, 0}, {220, 36}});
+  auto search = shadow(6, "RNSSearchBar", nullptr, {{0, 0}, {220, 36}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {screen, 2}, {config, 3}, {subview, 4}, {search, 5}});
+  GtkWidget *entry = views.backend->searchEntry(6);
+  REQUIRE(entry);
+  REQUIRE(gtk_widget_is_ancestor(entry, bar));
+  SentEvents<> sent(*ngn::gtk::viewData(views.view(6)));
+
+  gtk_widget_grab_focus(entry);
+  auto focusInEntry = [&] {
+    GtkWidget *focus = gtk_root_get_focus(gtk_widget_get_root(entry));
+    return focus && (focus == entry || gtk_widget_is_ancestor(focus, entry));
+  };
+  REQUIRE(focusInEntry());
+  views.update(config, withButton("Notes, 2"));
+  CHECK(std::string(titleOf(bar)) == "Notes, 2");
+  CHECK(gtk_widget_is_ancestor(entry, bar));
+  CHECK(focusInEntry());
+  CHECK(sent.count("topSearchBlur") == 0);
+
+  // Text the app sets is not the user's, however long the field waits.
+  views.backend->dispatchCommand(6, "setText", folly::dynamic::array("abc"));
+  gint64 until = g_get_monotonic_time() + 400 * 1000;
+  ngn::testing::runUntil([until] { return g_get_monotonic_time() > until; });
+  CHECK(sent.count("topChangeText") == 0);
+  // What the user types is, as they type it.
+  int position = -1;
+  gtk_editable_insert_text(GTK_EDITABLE(entry), "d", -1, &position);
+  CHECK(sent.count("topChangeText") == 1);
+}
+
+TEST_CASE("a sheet over a window that is not resizable is drawn over it") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views(true, 800, 600);
+  gtk_window_set_resizable(GTK_WINDOW(views.window), FALSE);
+  GtkWidget *overlay = ngn::gtk::chromeOf(views.surface)->overlay;
+  auto modal = shadow(3, "ModalHostView", nullptr, {{0, 0}, {800, 600}});
+  mountAll(views, {{modal, MountedViews::kSurface}});
+  GtkWidget *slot = views.backend->modals().slotOf(3);
+  REQUIRE(slot);
+  CHECK_FALSE(views.backend->modals().inDialog(3));
+  CHECK(gtk_widget_is_ancestor(slot, overlay));
+  views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, modal, 0), ShadowViewMutation::DeleteMutation(modal)});
+}
+
+TEST_CASE("Escape asks the modal in front to close, whichever layer's shortcut runs") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views(true, 800, 600);
+  auto back = shadow(3, "ModalHostView", nullptr, {{0, 0}, {800, 600}});
+  mountAll(views, {{back, MountedViews::kSurface}});
+  auto front = shadow(5, "ModalHostView", nullptr, {{0, 0}, {800, 600}});
+  mountAll(views, {{front, MountedViews::kSurface}});
+  SentEvents<ModalHostViewEventEmitter> backSent(*ngn::gtk::viewData(views.view(3)));
+  SentEvents<ModalHostViewEventEmitter> frontSent(*ngn::gtk::viewData(views.view(5)));
+
+  // The back modal's layer registered its Escape first, so GTK runs it first.
+  GtkWidget *slot = views.backend->modals().slotOf(3);
+  REQUIRE(slot);
+  // The layer is the overlay's child that holds the slot: the cover itself, or a sheet's backdrop.
+  GtkWidget *overlay = ngn::gtk::chromeOf(views.surface)->overlay;
+  GtkWidget *layer = views.backend->modals().inDialog(3) ? nullptr : slot;
+  while (layer && gtk_widget_get_parent(layer) != overlay) {
+    layer = gtk_widget_get_parent(layer);
+  }
+  if (!layer) {
+    // libadwaita 1.5 and later: AdwDialog sheets, which take Escape themselves.
+    return;
+  }
+  GListModel *controllers = gtk_widget_observe_controllers(layer);
+  bool ran = false;
+  for (guint i = 0; i < g_list_model_get_n_items(controllers) && !ran; ++i) {
+    auto *controller = g_list_model_get_item(controllers, i);
+    if (GTK_IS_SHORTCUT_CONTROLLER(controller)) {
+      auto *shortcut = GTK_SHORTCUT(g_list_model_get_item(G_LIST_MODEL(controller), 0));
+      ran = gtk_shortcut_action_activate(gtk_shortcut_get_action(shortcut), GtkShortcutActionFlags(0), layer, nullptr);
+      g_object_unref(shortcut);
+    }
+    g_object_unref(controller);
+  }
+  g_object_unref(controllers);
+  REQUIRE(ran);
+  CHECK(frontSent.count("topRequestClose") == 1);
+  CHECK(backSent.count("topRequestClose") == 0);
+  views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, front, 1), ShadowViewMutation::DeleteMutation(front),
+               ShadowViewMutation::RemoveMutation(MountedViews::kSurface, back, 0), ShadowViewMutation::DeleteMutation(back)});
+}
+
+TEST_CASE("Return presses the default button of the modal in front, whichever layer's shortcut runs") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  // Not resizable: the sheets are drawn over the window, not AdwDialogs.
+  gtk_window_set_resizable(GTK_WINDOW(views.window), FALSE);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto firstConfig = shadow(4, "RNSScreenStackHeaderConfig", header("Notes"), {{0, 0}, {800, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {firstConfig, 3}});
+
+  auto withDefault = [](const std::string &id) {
+    auto props = std::make_shared<HeaderProps>();
+    props->bar.title = id;
+    props->bar.right = {barButton(id, "Save")};
+    return props;
+  };
+  auto back = shadow(7, "RNSScreen", presented("formSheet"), {{0, 0}, {800, 600}});
+  auto backConfig = shadow(8, "RNSScreenStackHeaderConfig", withDefault("back-save"), {{0, 0}, {800, 44}});
+  mountAll(views, {{back, 2}, {backConfig, 7}});
+  views.backend->modals().settle();
+  auto front = shadow(9, "RNSScreen", presented("formSheet"), {{0, 0}, {800, 600}});
+  auto frontConfig = shadow(10, "RNSScreenStackHeaderConfig", withDefault("front-save"), {{0, 0}, {800, 44}});
+  mountAll(views, {{front, 2}, {frontConfig, 9}});
+  views.backend->modals().settle();
+  REQUIRE_FALSE(views.backend->modals().inDialog(7));
+  REQUIRE_FALSE(views.backend->modals().inDialog(9));
+  SentEvents<> backSent(*ngn::gtk::viewData(views.view(8)));
+  SentEvents<> frontSent(*ngn::gtk::viewData(views.view(10)));
+
+  // The back sheet's layer registered its Return first, so GTK runs it first.
+  GtkWidget *slot = views.backend->modals().slotOf(7);
+  REQUIRE(slot);
+  GtkWidget *overlay = ngn::gtk::chromeOf(views.surface)->overlay;
+  GtkWidget *layer = slot;
+  while (layer && gtk_widget_get_parent(layer) != overlay) {
+    layer = gtk_widget_get_parent(layer);
+  }
+  REQUIRE(layer);
+  GListModel *controllers = gtk_widget_observe_controllers(layer);
+  bool ran = false;
+  for (guint i = 0; i < g_list_model_get_n_items(controllers); ++i) {
+    auto *controller = g_list_model_get_item(controllers, i);
+    if (GTK_IS_SHORTCUT_CONTROLLER(controller)) {
+      auto *shortcut = GTK_SHORTCUT(g_list_model_get_item(G_LIST_MODEL(controller), 0));
+      char *label = gtk_shortcut_trigger_to_string(gtk_shortcut_get_trigger(shortcut));
+      if (std::string(label).find("Return") != std::string::npos) {
+        ran = gtk_shortcut_action_activate(gtk_shortcut_get_action(shortcut), GtkShortcutActionFlags(0), layer, nullptr);
+      }
+      g_free(label);
+      g_object_unref(shortcut);
+    }
+    g_object_unref(controller);
+  }
+  g_object_unref(controllers);
+  CHECK(ran);
+  CHECK(frontSent.count("topPressHeaderBarButtonItem") == 1);
+  CHECK(backSent.count("topPressHeaderBarButtonItem") == 0);
+  views.mount({ShadowViewMutation::RemoveMutation(2, front, 2), ShadowViewMutation::DeleteMutation(front),
+               ShadowViewMutation::RemoveMutation(2, back, 1), ShadowViewMutation::DeleteMutation(back)});
+}
+
+TEST_CASE("a surface finalized with its window is the backend's no more, for a header or modal let go of later") {
+  REQUIRE(ngn::testing::gtkReady());
+  auto backend = std::make_shared<ngn::gtk::GtkBackend>();
+  GtkWidget *window = adw_window_new();
+  GtkWidget *surface = ngn::gtk::makeSurfaceWidget(7, nullptr);
+  adw_window_set_content(ADW_WINDOW(window), ngn::gtk::wrapInChrome(surface));
+  backend->addSurface(7, surface);
+  REQUIRE(backend->surfaceWidget(7) == surface);
+  gpointer alive = surface;
+  g_object_add_weak_pointer(G_OBJECT(surface), &alive);
+  gtk_window_destroy(GTK_WINDOW(window));
+  REQUIRE(alive == nullptr);
+  CHECK(backend->surfaceWidget(7) == nullptr);
 }

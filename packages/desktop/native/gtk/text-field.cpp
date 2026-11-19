@@ -464,6 +464,11 @@ void plainTextViews() {
 void watch(TextField *field, GtkWidget *editor) {
   g_object_set_data(G_OBJECT(editor), "ngn-text-field", field);
   g_signal_connect(editor, "preedit-changed", G_CALLBACK(preeditChanged), field);
+  // Backspace over a mark Pango lets go of alone deletes its whole character and puts the base
+  // back (GtkText and GtkTextBuffer alike): text the field had, not fitted again.
+  g_signal_connect_swapped(editor, "backspace", G_CALLBACK(+[](TextField *f) { f->replaying = true; }), field);
+  g_signal_connect_data(editor, "backspace", G_CALLBACK(+[](TextField *f) { f->replaying = false; }), field, nullptr,
+                        static_cast<GConnectFlags>(G_CONNECT_SWAPPED | G_CONNECT_AFTER));
   GtkEventController *focus = gtk_event_controller_focus_new();
   g_signal_connect(focus, "enter", G_CALLBACK(focused), field);
   g_signal_connect(focus, "leave", G_CALLBACK(unfocused), field);
