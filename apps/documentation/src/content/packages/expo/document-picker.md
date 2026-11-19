@@ -72,10 +72,12 @@ component, or `.bytes()` for anything that is not text.
   other failure is rethrown. It uses `expo-file-system`'s picker, so that package must be installed
   too. Make a file in the folder with `createFile(name, mimeType)`, then write it with
   [`FileSystem.write()`](/packages/expo/file-system). On macOS it is the desktop host's open
-  panel, and `createFile` makes the file in the folder through the desktop host.
+  panel, and on Linux the desktop's folder chooser, and `createFile` makes the file in the folder
+  through the desktop host.
 - **`save(options)`** - writes a file where the user chooses and resolves to where it went, or
-  `null` if they dismissed the dialog or there is nowhere to save. On macOS it is the save panel;
-  on iOS and Android the user picks a folder and the file is made in it.
+  `null` if they dismissed the dialog or there is nowhere to save. On macOS it is the save panel,
+  and on Linux the desktop's save dialog; on iOS and Android the user picks a folder and the file
+  is made in it.
   - `suggestedName` - the name to give the file, with its extension.
   - `contents` - text, or bytes for anything that is not text. Or `fromFile`, a file to copy, such
     as one from [the file system](/packages/expo/file-system).
@@ -88,6 +90,10 @@ const where = await this.documents.save({
   types: ['text/csv'],
 });
 ```
+
+On Linux the GTK host's dialogs are the desktop's FileChooser portal, so they look like the
+desktop's own (GNOME's or KDE's), placed against the app's front window. Where no portal answers,
+they are GTK's own `GtkFileDialog`. The types a call names become one filter of all of them.
 
 ## Without the module
 

@@ -53,17 +53,18 @@ export interface PrintableWindow {
 }
 
 /**
- * What `print()` prints: HTML, a file such as a PDF, or on macOS what a window shows; and on iOS
- * the printer to use.
+ * What `print()` prints: HTML, a file such as a PDF, or on the desktop what a window shows; and on
+ * iOS the printer to use.
  */
 export type PrintOptions = (
   | { readonly html: string; readonly uri?: never; readonly window?: never }
   | { readonly uri: string; readonly html?: never; readonly window?: never }
   | {
       /**
-       * macOS: what this window shows, laid out on the paper the print panel has. Web views print
-       * their page; video, the camera preview and Metal content print blank. Absent on every other
-       * OS, where the call does nothing.
+       * macOS and Linux: what this window shows, laid out on the paper the print panel has. On
+       * macOS web views print their page, and video, the camera preview and Metal content print
+       * blank; on Linux it is scaled down to fit one page. Absent on every other OS, where the call
+       * does nothing.
        */
       readonly window: PrintableWindow;
       readonly html?: never;
@@ -100,14 +101,14 @@ export class Printing {
   readonly available: Signal<boolean> = presence(this.native);
 
   /**
-   * Shows the print dialog for HTML, a file, or on macOS a window's content. Resolves once it
-   * closes, printed or not. A window prints nothing off macOS.
+   * Shows the print dialog for HTML, a file, or on macOS and Linux a window's content. Resolves
+   * once it closes, printed or not. A window prints nothing on a phone or the web.
    */
   async print(options: PrintOptions): Promise<void> {
     if (!this.native) return;
     const { printer, window, ...rest } = options;
     if (window) {
-      if (this.os !== 'macos') return;
+      if (this.os !== 'macos' && this.os !== 'linux') return;
       await this.native.printAsync?.({ ...rest, window: window.surface });
       return;
     }

@@ -23,6 +23,7 @@ export const TOOLCHAIN_MINIMUMS = /** @type {const} */ ({
 export const LINUX_LIBRARY_MINIMUMS = /** @type {Readonly<Record<string, string>>} */ ({
   gtk4: '4.10',
   'libadwaita-1': '1.4',
+  'libsecret-1': '0.20',
   openssl: '3.0',
 });
 
@@ -143,6 +144,9 @@ export const LINUX_LIBRARIES = [
   { module: 'pangocairo', pkg: { apt: 'libpango1.0-dev', dnf: 'pango-devel' } },
   { module: 'gio-unix-2.0', pkg: { apt: 'libglib2.0-dev', dnf: 'glib2-devel' } },
   { module: 'x11', pkg: { apt: 'libx11-dev', dnf: 'libX11-devel' } },
+  { module: 'libsecret-1', pkg: { apt: 'libsecret-1-dev', dnf: 'libsecret-devel' } },
+  { module: 'fontconfig', pkg: { apt: 'libfontconfig-dev', dnf: 'fontconfig-devel' } },
+  { module: 'pangoft2', pkg: { apt: 'libpango1.0-dev', dnf: 'pango-devel' } },
   { module: 'openssl', pkg: { apt: 'libssl-dev', dnf: 'openssl-devel' } },
   { module: 'libnghttp2', pkg: { apt: 'libnghttp2-dev', dnf: 'libnghttp2-devel' } },
   { module: 'zlib', pkg: { apt: 'zlib1g-dev', dnf: 'zlib-devel' } },

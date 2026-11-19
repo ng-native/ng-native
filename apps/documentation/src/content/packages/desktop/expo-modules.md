@@ -49,3 +49,12 @@ and after each key press, click and menu command, and never polls.
 
 The other services with a desktop source in `DESKTOP_MODULES` throw `MissingModuleError` on first
 use until the host has their module.
+
+## On Linux
+
+The GTK host answers some of the same modules. `NgNativeSecureStore` keeps items in the Secret
+Service (GNOME Keyring or KWallet) through libsecret, under a schema named for the app's id with
+the item's service and key, and through the Secret portal inside a Flatpak. With no Secret Service
+running or able to start, there is no store and SecureStore is absent: secrets are never written to
+a file. `NgNativeKeepAwake` holds the session idle through the desktop's Inhibit portal, and
+`NgNativeFileSystem` watches with `GFileMonitor`.
