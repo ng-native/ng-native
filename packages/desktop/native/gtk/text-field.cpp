@@ -671,8 +671,10 @@ void applyTextFieldProps(ViewData &view) {
     if (controlledTextIsCurrent(props->mostRecentEventCount, field.eventCount, false) &&
         (!props->text.empty() || props->defaultValue.empty() || field.eventCount > 0)) {
       auto previous = std::dynamic_pointer_cast<const DesktopTextInputProps>(field.applied);
-      if (field.pendingText && previous && previous->text == props->text) {
-        // The text is the same as the props before it: a held setTextAndSelection stays.
+      if (field.pendingText && previous && previous->text == props->text &&
+          field.pendingText->seen >= props->mostRecentEventCount) {
+        // The text is the same as the props before it, which answer no newer edit: a held
+        // setTextAndSelection stays.
       } else if (field.composing) {
         cancelPendingApply(field);
         field.pendingText.emplace(TextField::Pending{props->text, props->mostRecentEventCount, std::nullopt});
