@@ -28,7 +28,8 @@
  *   the list scrolls and one of its views changes each frame.
  * - `resizeCommitMs` and `resizeCommitsPerFrame`: the slowest commit, and commits over frames,
  *   while a divider's width changes each frame, as a drag changes it.
- * - `extraWindowMb`: the growth of the host's proportional set size from opening a second window.
+ * - `extraWindowMb`: the growth of the host's proportional set size from opening four more
+ *   windows, over four.
  * The slowest commit the host logs on the notes bundle is reported, not judged: its budget is
  * relative to the same commit on the fake backend, which this does not measure yet.
  *
@@ -266,9 +267,9 @@ export class HostEvents {
  * what the host logged and the memory sampled around the window step. A metric whose events are not
  * there is null, which fails the run: a step that logged no commit measured nothing.
  *
- * @param {{ events: { kind: string, ms: number, at: number }[], steps: Record<string, { from?: number, to?: number, failed?: boolean }>, pss: { before: number | null, after: number | null } }} measured
+ * @param {{ events: { kind: string, ms: number, at: number }[], steps: Record<string, { from?: number, to?: number, failed?: boolean }>, pss: { before: number | null, after: number | null }, windows?: number }} measured
  */
-export function workloadMetrics({ events, steps, pss }) {
+export function workloadMetrics({ events, steps, pss, windows }) {
   const within = (name, kind) => {
     const step = steps[name];
     if (step?.from === undefined || step.to === undefined || step.failed) return [];
@@ -286,9 +287,9 @@ export function workloadMetrics({ events, steps, pss }) {
     resizeCommitMs: slowest(resizeCommits),
     resizeCommitsPerFrame: resizeFrames.length ? resizeCommits.length / resizeFrames.length : null,
     extraWindowMb:
-      steps['window']?.failed || pss.before === null || pss.after === null
+      steps['window']?.failed || pss.before === null || pss.after === null || !(windows > 0)
         ? null
-        : pss.after - pss.before,
+        : (pss.after - pss.before) / windows,
   };
 }
 
@@ -299,7 +300,7 @@ const DRAIN_MS = 300;
  * Launch the host on the workload bundle and measure it: the bundle asks this process's server, on
  * `port`, to start, and to bracket each step (`begin/<name>`, then `end/<name>`, or `failed/<name>`
  * for a step that did not do what it measures), and says when it is done. The host's commits and frames are read from its output against those brackets, and its
- * memory is sampled at the window step's. Stops the host. Rejects when the host does not start or
+ * memory is sampled at the window step's, divided by the windows it opened (`count/<n>`). Stops the host. Rejects when the host does not start or
  * the workload does not finish in `timeoutMs`.
  *
  * @param {string} host
@@ -322,6 +323,7 @@ export async function measureWorkload(
     after: /** @type {number | null} */ (null),
   };
   const sample = () => pssMb(read(`/proc/${launched.child.pid}/smaps_rollup`) ?? '');
+  let windows;
   let finished;
   const done = new Promise((resolve) => (finished = resolve));
   const server = createServer(async (request, response) => {
@@ -346,6 +348,9 @@ export async function measureWorkload(
         steps[name].to = performance.now();
         steps[name].failed = action === 'failed';
         if (name === 'window') pss.after = sample();
+      } else if (action === 'count' && name) {
+        // How many windows the window step opens, which its memory is divided by.
+        windows = Number(name);
       } else if (action === 'done') {
         finished();
       }
@@ -389,7 +394,7 @@ export async function measureWorkload(
     );
     exited.catch(() => {});
     await Promise.race([done, failed, exited, timedOut]);
-    return { ...workloadMetrics({ events: output.events, steps, pss }) };
+    return { ...workloadMetrics({ events: output.events, steps, pss, windows }) };
   } finally {
     clearTimeout(timer);
     // The next launch listens on the same port, so it is closed before this returns.

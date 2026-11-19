@@ -1,7 +1,8 @@
 // The workload `pnpm bench:linux` measures beside the notes example (scripts/bench-linux.mjs): a
 // release bundle of its own, exported from this folder with the notes example's Metro config, that
-// is not part of the notes app. It mounts a list of 2,000 views, scrolls it while one view changes
-// a frame, drags a divider by changing a width each frame, and opens a second window, telling the
+// is not part of the notes app. It opens four more windows (and closes them), mounts a list of
+// 2,000 views, scrolls it while one view changes a frame, and drags a divider by changing a width
+// each frame, telling the
 // bench's local server when each step begins and ends so it can read what the host logged in
 // between (the commits and frames, NGN_LOG_COMMITS) and the process's memory. A step that did not
 // do what it measures (the list did not reach its height, the window did not open) says so, and
@@ -10,7 +11,7 @@ import 'expo';
 import { Component, inject, signal, viewChild } from '@angular/core';
 import { AppRegistry, Image, Platform, processColor } from 'react-native';
 import { ScrollView, Text, View } from '@ng-native/components';
-import { AppWindows } from '@ng-native/device';
+import { AppWindows, type AppWindow } from '@ng-native/device';
 import { getFabricUIManager, nextFrame, registerPlatformComponents } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
 
@@ -19,6 +20,8 @@ const SERVER = 'http://127.0.0.1:51741';
 const ROWS = 2000;
 const ROW_HEIGHT = 24;
 const FRAMES = 120;
+/** How many windows the window step opens: one window's memory is small beside a process's noise. */
+const EXTRA_WINDOWS = 4;
 
 const tell = (path: string): Promise<unknown> => fetch(`${SERVER}/${path}`).then((r) => r.text());
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -69,6 +72,22 @@ class BenchRoot {
 
   private async run(): Promise<void> {
     await tell('start');
+    // First, before the steps that leave garbage behind, so the memory it reads moves with the windows.
+    const opened: AppWindow[] = [];
+    await tell(`count/${EXTRA_WINDOWS}`);
+    await this.step('window', async () => {
+      for (let index = 0; index < EXTRA_WINDOWS; index += 1) {
+        const next = await this.windows.open(BenchWindow, {
+          title: `Window ${index + 2}`,
+          width: 400,
+          height: 300,
+        });
+        if (next) opened.push(next);
+      }
+      await nextFrame();
+      return opened.length === EXTRA_WINDOWS;
+    });
+    await Promise.all(opened.map((window) => window.close()));
     await this.step('mount', async () => {
       this.rows.set(Array.from({ length: ROWS }, (_, row) => row));
       return this.until(() => this.contentHeight() >= ROWS * ROW_HEIGHT);
@@ -87,15 +106,6 @@ class BenchRoot {
         await nextFrame();
       }
       return true;
-    });
-    await this.step('window', async () => {
-      const opened = await this.windows.open(BenchWindow, {
-        title: 'Second window',
-        width: 400,
-        height: 300,
-      });
-      await nextFrame();
-      return opened !== null;
     });
     await tell('done');
   }

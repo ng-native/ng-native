@@ -39,6 +39,7 @@ const bench = (await import(new URL('../../scripts/bench-linux.mjs', import.meta
     events: { kind: string; ms: number; at: number }[];
     steps: Record<string, { from?: number; to?: number; failed?: boolean }>;
     pss: { before: number | null; after: number | null };
+    windows?: number;
   }): Record<string, number | null>;
   measureWorkload(
     host: string,
@@ -305,13 +306,14 @@ describe('the workload metrics', () => {
       ],
       steps,
       pss,
+      windows: 4,
     });
     assert.deepEqual(metrics, {
       mountMs: 12,
       scrollFrameMs: 6,
       resizeCommitMs: 7.5,
       resizeCommitsPerFrame: 0.75,
-      extraWindowMb: 18.5,
+      extraWindowMb: 4.625,
     });
   });
 
@@ -324,6 +326,13 @@ describe('the workload metrics', () => {
     assert.equal(metrics['mountMs'], 8);
   });
 
+  it('divides the memory by the windows opened, and reads nothing without a count', () => {
+    const base = { events: [], steps: {}, pss: { before: 100, after: 140 } };
+    assert.equal(bench.workloadMetrics({ ...base, windows: 4 })['extraWindowMb'], 10);
+    assert.equal(bench.workloadMetrics(base)['extraWindowMb'], null);
+    assert.equal(bench.workloadMetrics({ ...base, windows: 0 })['extraWindowMb'], null);
+  });
+
   it('reads nothing from a step that said it did not do what it measures', () => {
     const metrics = bench.workloadMetrics({
       events: [event('commit', 12, 150), event('commit', 2, 350), event('frame', 1, 360)],
@@ -333,6 +342,7 @@ describe('the workload metrics', () => {
         window: { from: 500, to: 600, failed: true },
       },
       pss: { before: 100, after: 118 },
+      windows: 4,
     });
     assert.equal(metrics['mountMs'], null);
     assert.equal(metrics['extraWindowMb'], null, 'a window that did not open grew nothing');
@@ -488,6 +498,7 @@ const workloadHost = (steps: string[], options: { crashBeforeDone?: boolean } = 
     "console.error('[ngn] first frame 50 ms after launch');",
     '(async () => {',
     "  await tell('start');",
+    "  await tell('count/2');",
     `  for (const entry of ${JSON.stringify(steps)}) {`,
     '    const [name, ...lines] = entry.split("|");',
     '    const failed = name.startsWith("!");',
