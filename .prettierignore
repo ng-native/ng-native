@@ -21,6 +21,8 @@ packages/integration-tests/fixtures/tailwind-utilities.css
 packages/integration-tests/fixtures/ng-packagr/
 # Generated from an app's Tailwind entry by its Metro config.
 examples/*/.angular-native/
+# Taiga UI's theme as lessc compiles it, by the example's scripts/build-theme.mjs.
+examples/taiga/src/theme/taiga-theme.css
 # Typings NativeScript's Android build writes for every class in the SDK.
 examples/nativescript/types/
 # Rewritten by the all-contributors bot in its own JSON style each time it adds someone.

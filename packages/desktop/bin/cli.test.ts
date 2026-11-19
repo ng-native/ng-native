@@ -405,6 +405,7 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
       problems: [],
     }),
     writeFile: (file, text) => void (written[file] = String(text)),
+    mkdir: () => {},
     readBytes: () => new Uint8Array(),
     files: () => [],
     symlink: () => {},
