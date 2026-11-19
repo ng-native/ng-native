@@ -328,6 +328,16 @@ describe('the list options a section list passes on', () => {
     assert.equal(header.props['right'], 16);
   });
 
+  it('passes windowSize on: at 1, nothing is filled while idle', async () => {
+    const { fabric } = await boot();
+    const rows = () =>
+      flatten(fabric.committed).filter((node) => node.props['position'] === 'absolute').length;
+    const shown = rows();
+    // Several of the list's 50ms fill batches.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(rows(), shown);
+  });
+
   it('keeps the keyboard up on a tap in the list when taps persist', async () => {
     const fabric = await padded();
     await fireEvent(screen.getByTestId('field'), 'focus', {});
