@@ -71,8 +71,9 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   holds where the app's menus will go, hidden until it has them: a `GtkPopoverMenuBar` under the
   header bar when `XDG_CURRENT_DESKTOP` names KDE, else a primary `GtkMenuButton` in it. The
   front screen's header goes into the header bar as macOS puts it into the toolbar, in the core's
-  `headerLayout` order, with the header's subviews moved into slots of their own, each a container
-  for input, a bar button's menu as a `GtkMenuButton`, the header's tint, title and background
+  `headerLayout` order, led by a back and forward pair that follows the window's history
+  (`historyButtons`, with a secondary click or a long press listing `historyMenu`), with the
+  header's subviews moved into slots of their own, each a container for input, a bar button's menu as a `GtkMenuButton`, the header's tint, title and background
   colours as CSS classes, and a search bar as a `GtkSearchEntry`. The `AdwApplication` is unique
   by the app id, except in a test launch, and handles open: a second launch finds the first on the
   session bus and hands it its links and files (`forwardLaunch`), then exits, and the first raises
@@ -96,8 +97,23 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   libadwaita 1.5 and later, found at run time, and a drawn sheet on a dimmed overlay on 1.4 or over
   a window that is not resizable, where libadwaita would open a window of its own; a cover fills
   the overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. A
+  `<split-view>` is an `AdwNavigationSplitView` in an `AdwBreakpointBin` (`split-view.h`), each
+  pane in a page of its own as a container for input, its size going back to layout as state. The
+  core owns collapse (`FoldingSplit`): the bin's breakpoint, at the core's `sidebarCompactWidth`,
+  only reports the width, and the split view's `collapsed` and `show-content` show the result. The
+  sections are a `GtkListBox` over their frames, drawn from the core's `sourceLists`, and Show
+  Sidebar (F9) and the header bar's sidebar button go to the window's split view. A
   presented screen's header is the sheet's own header bar, with Cancel at the start and bound to
-  Escape and the last right item the default on Return.
+  Escape and the last right item the default on Return. An alert (`alerts.h`) is an
+  `AdwAlertDialog` in the active window on libadwaita 1.5 and later, and an `AdwMessageDialog` on
+  1.4 or with no window, its buttons in GNOME's order (`gnomeAlertLayout`) and a prompt's fields in
+  it. Close Window asks the presentation in
+  front of the window to close (`Modals::front`) before the window. Each tray icon is a
+  StatusNotifierItem on a session-bus connection of its own (`status-notifier.h`), its menu laid
+  out for `com.canonical.dbusmenu` by the core (`dbus-menu.h`); the tray module is left out when no
+  StatusNotifierWatcher runs at launch, and the Dock's always is. The badge count goes out as the
+  `com.canonical.Unity.LauncherEntry` `Update` signal (`launcher-badge.h`), as the
+  notification centre's `showBadge`.
 - `native/scripts`: fetching the pinned sources, building Hermes and building the host.
   `NGN_DESKTOP_CACHE` moves the cache and `NGN_JOBS` caps parallel compiles. `build.sh --library
   <dir>` compiles a library's component codegen and its own C++ in, as React Native's Android
@@ -114,7 +130,8 @@ pnpm --filter @ng-native/desktop build:host     # the macOS host
 
 On Linux, `build.sh --backend gtk` builds `ngn-linux` over the core, Hermes and the runtime half,
 and `--test` runs the core, runtime and GTK view tests (`ngn_gtk_tests`, which need a display:
-Xvfb on a machine without one). `build.sh --backend none --runtime --test` still builds the
+Xvfb on a machine without one). The tray tests also need a session bus, under `dbus-run-session`:
+without one they are skipped, and in CI they fail. `build.sh --backend none --runtime --test` still builds the
 toolkit-free half alone. Off macOS, Hermes links ICU 77.1, which `fetch.sh` pins and `build-icu.sh`
 builds statically, with only English data (`icu-filter.json`). The GTK host links libcurl 8.23.0,
 which `fetch.sh` also pins and `cmake/curl.cmake` builds statically with HTTP/1.1, HTTP/2,

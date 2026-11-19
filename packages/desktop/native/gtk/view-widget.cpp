@@ -69,7 +69,12 @@ void viewSizeAllocate(GtkWidget *widget, int width, int height, int) {
         ngn::gtk::allocateTextField(*d, width, height);
       } else if (d->scroll && child == d->scroll->scrolled) {
         ngn::gtk::allocateScrollView(*d, width, height);
-      } else if (child == d->control) {
+      } else if (auto *frame = static_cast<const Rect *>(g_object_get_data(G_OBJECT(child), "ngn-frame"))) {
+        // A source list over its sections (split-view.h).
+        GtkAllocation all{static_cast<int>(std::round(frame->origin.x)), static_cast<int>(std::round(frame->origin.y)),
+                          static_cast<int>(std::ceil(frame->size.width)), static_cast<int>(std::ceil(frame->size.height))};
+        gtk_widget_size_allocate(child, &all, -1);
+      } else if (child == d->control || child == d->split) {
         GtkAllocation all{0, 0, width, height};
         gtk_widget_size_allocate(child, &all, -1);
       }

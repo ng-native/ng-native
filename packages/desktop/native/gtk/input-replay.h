@@ -10,6 +10,7 @@
 
 #include <gtk/gtk.h>
 
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -27,8 +28,9 @@ std::optional<std::string> xtestProblem(_XDisplay *display);
 #endif
 
 // Plays the script into `window` from now, a step at a time on the main loop, and logs
-// "[ngn] input script done" after the last. A press the script has not released when it stops, done
-// or its window closed, is released then. False, having logged why, when it cannot play.
-bool replayInputScript(GtkWidget *window, InputScript script);
+// "[ngn] input script done" after the last, then calls `done`, which a script whose window
+// closes first never reaches. A press the script has not released when it stops, done or its window
+// closed, is released then. False, having logged why, when it cannot play.
+bool replayInputScript(GtkWidget *window, InputScript script, std::function<void()> done = {});
 
 } // namespace ngn::gtk

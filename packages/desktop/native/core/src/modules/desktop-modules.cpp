@@ -21,8 +21,13 @@ DesktopModules addDesktopModules(ModuleRegistry &registry, const DesktopModuleSo
 
   addModule(registry, "NgNativeWindows", [windows = s.windows] { return makeWindowsModule(windows); });
   addModule(registry, "NgNativeMenus", [menus = s.menus] { return makeMenusModule(menus); });
-  addModule(registry, "NgNativeTray", [tray = s.tray] { return makeTrayModule(tray); });
-  addModule(registry, "NgNativeDock", [dock = s.dock] { return makeDockModule(dock); });
+  // Absent without a source: Linux has no Dock, and a tray only while a StatusNotifierWatcher runs.
+  if (s.tray) {
+    addModule(registry, "NgNativeTray", [tray = s.tray] { return makeTrayModule(tray); });
+  }
+  if (s.dock) {
+    addModule(registry, "NgNativeDock", [dock = s.dock] { return makeDockModule(dock); });
+  }
   addModule(registry, "NgNativeProcesses", [launcher = made.launcher, processes = s.processes] {
     return makeProcessesModule(launcher, processes);
   });

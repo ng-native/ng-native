@@ -49,17 +49,19 @@ On Linux the same bar is GTK's. Under KDE Plasma (`XDG_CURRENT_DESKTOP` naming K
 bar under each window's header bar; everywhere else it is the header bar's main menu, as GNOME's
 apps have it. Linux's default bar is File (Close Window on Ctrl+W, Print...), Edit, View (Back,
 Forward, Show Sidebar on F9, Full Screen on F11), the app's own menus, then a menu named for the app
-with Preferences (shown only when the app handles `settings`), About and Quit (Ctrl+Q). Print... and
-Show Sidebar are shown, but do nothing on Linux unless the app gives a `print` or `toggleSidebar`
-item a handler. Preferences has Ctrl+comma only when the app's own `settings` item names it, as an
-app's item replaces the default one whole.
+with Preferences (shown only when the app handles `settings`), About and Quit (Ctrl+Q). Print... with
+no `print` item of the app's prints what the window shows, and Show Sidebar toggles the window's
+split view; one with no split view does nothing unless the app gives a `toggleSidebar` item a
+handler. Preferences has Ctrl+comma only when the app's own `settings` item names it, as an app's
+item replaces the default one whole.
 `mod` is Ctrl. The Super key is the desktop's, so an item on `cmd` or `meta` shows no key and no
 press chooses it. A key press goes to the app's `[shortcut]` first, then the back and forward keys
 (Alt+Left and Alt+Right, a keyboard's Back and Forward keys, and mouse buttons 8 and 9), then the
 menus' keys, and a focused text input keeps Ctrl+Z, X, C, V and A. A press nothing in the window
 used then reaches its buttons: Return presses a `default` `<native-button>` and Escape a `cancel`
-one, while a focused text input or button keeps Return for itself. A view's `[contextMenu]` shows as
-a GTK popover menu at the secondary click.
+one, while a focused text input or button keeps Return for itself. Close Window (Ctrl+W) closes the
+sheet, cover or popover in front first, as Escape asks it to, and the window after. A view's
+`[contextMenu]` shows as a GTK popover menu at the secondary click.
 
 ## The tray and the Dock
 
@@ -69,3 +71,13 @@ service's menu sits above the Dock menu's own items, and its bounce is
 `requestUserAttention`, cancelled by the function it answers. A reload clears the tray icons and
 the Dock menu until the reloaded app sets its own. The Dock badge is the count of
 `NgNativeNotifications` (see [Notifications](/packages/expo/notifications#on-macos)).
+
+On Linux each `<tray-icon>` is a StatusNotifierItem, with its menu over `com.canonical.dbusmenu`,
+which KDE Plasma and GNOME's AppIndicator extension draw. Its picture is `image` as the name of an
+icon in the icon theme, or else the app's own icon; an SF Symbol is not drawn. `title` and `tooltip`
+are the item's title and tooltip, which the panel shows on hover, as it draws no text beside the
+icon. An icon with a menu opens it on a click, and one without fires `(press)`. The tray is there
+only when a StatusNotifierWatcher runs as the app starts, which stock GNOME and Fedora without the
+extension have none of: then `Tray.available()` is `false`. Linux has no Dock, so `Dock.available()`
+is `false`. The badge count goes out as the Unity launcher entry's count for the app's desktop
+entry, which KDE Plasma and Ubuntu's dock show and stock GNOME does not.

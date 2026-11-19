@@ -730,8 +730,8 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   NSArray *_top;
   NSMutableDictionary<NSNumber *, id> *_objects;
   NSMutableDictionary<NSNumber *, NGNSourceRowHost *> *_hosts;
-  // Sections the user folded away.
-  NSMutableSet<NSNumber *> *_folded;
+  // Sections the user folded away, the same on every toolkit.
+  ngn::SourceListFolds _folds;
   BOOL _syncing;
   // The custom row whose content took the click in progress.
   NGNSourceRowHost *_claimedBy;
@@ -741,7 +741,6 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   if ((self = [super initWithFrame:frame])) {
     _objects = [NSMutableDictionary dictionary];
     _hosts = [NSMutableDictionary dictionary];
-    _folded = [NSMutableSet set];
     _top = @[];
     NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"row"];
     column.resizingMask = NSTableColumnAutoresizingMask;
@@ -834,17 +833,17 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
     }
   }
   _top = top;
+  _folds.setList(list);
   for (NSNumber *tag in _objects.allKeys) {
     if (![live containsObject:tag]) {
       [_objects removeObjectForKey:tag];
-      [_folded removeObject:tag];
       [_hosts removeObjectForKey:tag];
     }
   }
   _syncing = YES;
   [self reloadData];
   for (id item in _top) {
-    if ([item isKindOfClass:NGNSourceGroup.class] && ![_folded containsObject:@(((NGNSourceGroup *)item).tag)]) {
+    if ([item isKindOfClass:NGNSourceGroup.class] && !_folds.folded(((NGNSourceGroup *)item).tag)) {
       [self expandItem:item];
     }
   }
@@ -857,9 +856,8 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 - (void)syncSelection {
   _syncing = YES;
   NSInteger selected = -1;
-  for (NSNumber *tag in _objects) {
-    NGNSourceRow *row = _objects[tag];
-    if ([row isKindOfClass:NGNSourceRow.class] && row.row.selected) {
+  if (auto tag = ngn::selectedRow(_list)) {
+    if (NGNSourceRow *row = _objects[@(*tag)]; [row isKindOfClass:NGNSourceRow.class]) {
       selected = [self rowForItem:row];
     }
   }
@@ -1066,11 +1064,7 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   }
   NSInteger tag = ((NGNSourceGroup *)item).tag;
   if (!_syncing) {
-    if (folded) {
-      [_folded addObject:@(tag)];
-    } else {
-      [_folded removeObject:@(tag)];
-    }
+    _folds.fold(tag, folded);
   }
   NGNView *section = self.views ? self.views(tag) : nil;
   if ([section isKindOfClass:NGNSidebarSectionView.class]) {

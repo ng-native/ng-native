@@ -418,3 +418,59 @@ TEST_CASE("sizes reported as a divider drags reach layout once a frame, the late
   sizes.report(4, {750, 700});
   CHECK(sizes.flush().size() == 1);
 }
+
+TEST_CASE("a split view that folds into a stack does so below the compact width, the sidebar in front only when asked") {
+  ngn::SidebarWidths widths{.minimum = 180, .maximum = 320, .starting = 240};
+  CHECK(ngn::sidebarCompactWidth(widths) == 180 + ngn::kSplitContentMinWidth);
+
+  using Showing = ngn::FoldingSplit::Showing;
+  ngn::FoldingSplit split;
+  CHECK(split.showing() == Showing{.stacked = false, .content = true});
+  // Collapsed while wide: the content alone, and Show Sidebar opens it again, which the app hears.
+  split.setCollapsed(true);
+  CHECK(split.showing() == Showing{.stacked = true, .content = true});
+  CHECK(split.toggle() == std::optional<bool>(false));
+  CHECK(split.showing() == Showing{.stacked = false, .content = true});
+
+  // Compact: a stack with the content in front, and Show Sidebar swaps the front pane without
+  // collapsing anything.
+  split.setCompact(true);
+  CHECK(split.showing() == Showing{.stacked = true, .content = true});
+  CHECK(split.toggle() == std::nullopt);
+  CHECK(split.showing() == Showing{.stacked = true, .content = false});
+  // An item chosen there brings the content back.
+  split.chose();
+  CHECK(split.showing() == Showing{.stacked = true, .content = true});
+  CHECK(split.toggle() == std::nullopt);
+  // Wide again: side by side, as the sidebar was never collapsed.
+  split.setCompact(false);
+  CHECK(split.showing() == Showing{.stacked = false, .content = true});
+  // And compact once more starts from the content, whatever was in front before.
+  split.setCompact(true);
+  CHECK(split.showing().content);
+}
+
+TEST_CASE("a source list keeps the sections the user folded until they go, and finds the selected row") {
+  ngn::SourceList list{.groups = {
+      {.tag = 3, .title = "Mailboxes", .collapsible = true, .rows = {{.tag = 4, .label = "Inbox"}, {.tag = 5, .label = "Sent", .selected = true}}},
+      {.tag = 6, .title = "Tags", .collapsible = true, .rows = {{.tag = 7, .label = "Work"}}},
+  }};
+  CHECK(ngn::selectedRow(list) == std::optional<Tag>(5));
+  ngn::SourceListFolds folds;
+  folds.setList(list);
+  folds.fold(3, true);
+  folds.fold(6, true);
+  folds.fold(6, false);
+  CHECK(folds.folded(3));
+  CHECK_FALSE(folds.folded(6));
+  // The same list again keeps the fold; the section gone forgets it, so one with its tag later
+  // starts open.
+  folds.setList(list);
+  CHECK(folds.folded(3));
+  list.groups.erase(list.groups.begin());
+  folds.setList(list);
+  CHECK(ngn::selectedRow(list) == std::nullopt);
+  list.groups.insert(list.groups.begin(), ngn::SidebarGroup{.tag = 3, .title = "Mailboxes"});
+  folds.setList(list);
+  CHECK_FALSE(folds.folded(3));
+}
