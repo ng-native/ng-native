@@ -294,6 +294,9 @@ void runMenuItem(const ngn::MenuItem &item, GtkWindow *window) {
         gtk_window_is_fullscreen(window) ? gtk_window_unfullscreen(window) : gtk_window_fullscreen(window);
       }
       return;
+    case ngn::MenuCommand::KeyboardShortcuts:
+      gtk_window_present(GTK_WINDOW(ngn::gtk::keyboardShortcutsWindow(gHost.menus->keyboardShortcuts(gHost.gtkMenus->bar()), window)));
+      return;
     case ngn::MenuCommand::About: {
       GtkWidget *about = adw_about_window_new();
       adw_about_window_set_application_name(ADW_ABOUT_WINDOW(about), gHost.menus->options().appName.c_str());

@@ -41,7 +41,9 @@ export type MenuRole =
   | 'zoom'
   | 'bringAllToFront'
   | 'close'
-  | 'print';
+  | 'print'
+  | 'keyboardShortcuts'
+  | 'help';
 
 /** One item in a menu. */
 export interface MenuItemModel {
@@ -94,7 +96,8 @@ const item = (label: string, menuRole: MenuRole, shortcut?: string): MenuItemMod
 /**
  * Linux's bar, as GNOME's and KDE's apps have theirs: File (Close Window, Print...), Edit, View
  * (Back, Forward, Show Sidebar on F9, Full Screen on F11), the app's own groups after View, and a
- * menu named for the app last, with Preferences (kept only with the app's handler), About and
+ * menu named for the app last, with Preferences and Help on F1 (each kept only with the app's
+ * handler), Keyboard Shortcuts (a window the host draws, unless the app handles it), About and
  * Quit. None of macOS's Services, Hide, Minimize, Zoom or window list.
  */
 function linuxMenuBar(appName: string): MenuGroupModel[] {
@@ -139,6 +142,8 @@ function linuxMenuBar(appName: string): MenuGroupModel[] {
       menuRole: 'app',
       items: [
         item('Preferences', 'settings', 'mod+,'),
+        item('Keyboard Shortcuts', 'keyboardShortcuts', 'mod+shift+?'),
+        item('Help', 'help', 'F1'),
         SEPARATOR,
         item(`About ${appName}`, 'about'),
         SEPARATOR,
@@ -325,7 +330,8 @@ function takeClose(
  *
  * - An app item with a `menuRole` replaces the default item with that role, where the default is,
  *   and leaves the group it was written in.
- * - `Settings...` shows only when the app gives a `settings` item a handler.
+ * - `Settings...` (Preferences on Linux) and Linux's Help show only when the app gives a `settings`
+ *   or `help` item a handler.
  * - A group whose `menuRole` names a default menu adds its items to the end of that menu; a `file`
  *   group's go before Print..., which stays last, as on a Mac.
  * - A `file` group with no default File menu goes after the App menu, and any other group after
@@ -339,7 +345,8 @@ export function mergeMenuBar(
 ): MenuGroupModel[] {
   const replacing = byRole(app);
   const defaultRoles = byRole(defaults);
-  const settings = replacing.get('settings');
+  // Preferences (Settings... on macOS) and Help show only with the app's handler: the OS has none.
+  const handled = (role: MenuRole) => Boolean(replacing.get(role)?.select);
   const replace = (entries: readonly MenuEntry[]): MenuEntry[] =>
     entries.map((entry) => {
       if (isSeparator(entry)) return entry;
@@ -349,7 +356,11 @@ export function mergeMenuBar(
     });
   const merged: MergedGroup[] = defaults.map((group) => ({
     ...group,
-    items: tidy(replace(group.items), (item) => item.menuRole === 'settings' && !settings?.select),
+    items: tidy(
+      replace(group.items),
+      (item) =>
+        (item.menuRole === 'settings' || item.menuRole === 'help') && !handled(item.menuRole),
+    ),
   }));
   const moved = (item: MenuItemModel) => Boolean(item.menuRole && defaultRoles.has(item.menuRole));
   const defaultFile = merged.find((group) => group.menuRole === 'file');

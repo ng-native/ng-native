@@ -137,6 +137,37 @@ TEST_CASE("Linux's menu bar: the app's groups, then the app's menu with About an
   CHECK(back->modifiers == ngn::Option);
 }
 
+TEST_CASE("Linux's app menu opens Keyboard Shortcuts on Ctrl+Shift+?, before About") {
+  auto bar = ngn::defaultMenuBar({.appName = "Notes", .os = ngn::linuxOs()});
+  auto shortcuts = ngn::findMenuItem(bar, MenuCommand::KeyboardShortcuts);
+  REQUIRE(shortcuts);
+  CHECK(shortcuts->title == "Keyboard Shortcuts");
+  CHECK(shortcuts->key == "?");
+  CHECK(shortcuts->modifiers == (ngn::Control | ngn::Shift));
+  CHECK(&bar.back().items.front() == shortcuts);
+  CHECK(ngn::findMenuItem(bar, ngn::KeyChord{.key = "?", .modifiers = ngn::Control | ngn::Shift}) == shortcuts);
+  // macOS has no such window.
+  CHECK_FALSE(ngn::findMenuItem(ngn::defaultMenuBar({.appName = "Notes", .os = ngn::macOS()}), MenuCommand::KeyboardShortcuts));
+}
+
+TEST_CASE("the Keyboard Shortcuts window lists each menu's keys, through submenus, leaving out the rest") {
+  ngn::MenuItem keyed{.title = "Save", .key = "s", .modifiers = ngn::Control};
+  ngn::MenuItem plain{.title = "Share"};
+  ngn::MenuItem off{.title = "Export", .key = "e", .modifiers = ngn::Control, .disabled = true};
+  ngn::MenuItem nested{.title = "Open Recent", .items = {ngn::MenuItem{.title = "Clear", .key = "Delete", .modifiers = ngn::Control}}};
+  std::vector<ngn::MenuItem> bar{
+      ngn::MenuItem{.title = "File", .items = {keyed, ngn::MenuItem{.separator = true}, plain, off, nested}},
+      ngn::MenuItem{.title = "Window", .items = {plain}},
+  };
+  auto groups = ngn::menuShortcuts(bar);
+  REQUIRE(groups.size() == 1);
+  CHECK(groups[0].title == "File");
+  CHECK(groups[0].entries == std::vector<ngn::ShortcutEntry>{
+                                 {.title = "Save", .chord = {.key = "s", .modifiers = ngn::Control}},
+                                 {.title = "Clear", .chord = {.key = "Delete", .modifiers = ngn::Control}},
+                             });
+}
+
 TEST_CASE("Linux's Developer menu reloads on Ctrl+R") {
   CHECK_FALSE(ngn::findMenuItem(ngn::defaultMenuBar({.appName = "Notes", .os = ngn::linuxOs()}), MenuCommand::Reload));
   auto bar = ngn::defaultMenuBar({.appName = "Notes", .developer = true, .os = ngn::linuxOs()});

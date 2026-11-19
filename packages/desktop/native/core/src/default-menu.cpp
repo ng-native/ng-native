@@ -132,8 +132,45 @@ std::vector<MenuItem> linuxMenuBar(const DefaultMenuOptions &options) {
             item("Open DevTools", MenuCommand::OpenDevTools, "i", Control | Shift),
         }));
   }
-  bar.push_back(menu(app, {item("About " + app, MenuCommand::About), separator(), item("Quit", MenuCommand::Quit, "q", Control)}));
+  bar.push_back(menu(
+      app,
+      {
+          item("Keyboard Shortcuts", MenuCommand::KeyboardShortcuts, "?", Control | Shift),
+          separator(),
+          item("About " + app, MenuCommand::About),
+          separator(),
+          item("Quit", MenuCommand::Quit, "q", Control),
+      }));
   return bar;
+}
+
+namespace {
+
+void collectShortcuts(const std::vector<MenuItem> &items, std::vector<ShortcutEntry> &out) {
+  for (const auto &m : items) {
+    if (m.separator || m.disabled) {
+      continue;
+    }
+    if (!m.items.empty()) {
+      collectShortcuts(m.items, out);
+    } else if (!m.key.empty()) {
+      out.push_back({.title = m.title, .chord = {.key = m.key, .modifiers = m.modifiers}});
+    }
+  }
+}
+
+} // namespace
+
+std::vector<ShortcutGroup> menuShortcuts(const std::vector<MenuItem> &menus) {
+  std::vector<ShortcutGroup> groups;
+  for (const auto &m : menus) {
+    ShortcutGroup group{.title = m.title};
+    collectShortcuts(m.items, group.entries);
+    if (!group.entries.empty()) {
+      groups.push_back(std::move(group));
+    }
+  }
+  return groups;
 }
 
 namespace {
