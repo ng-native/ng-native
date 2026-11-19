@@ -482,7 +482,7 @@ export function selfBuiltDebWarning(arch) {
     `No prebuilt Linux ${arch} host fits this app, so the .deb holds one built on this machine. Its ` +
     `dependencies (glibc ${m.glibc}, GTK ${m.gtk}, libadwaita ${m.libadwaita} and GStreamer ` +
     `${m.gstreamer} or later) hold for the prebuilt host, built on AlmaLinux 9, and the one built ` +
-    "here may need newer libraries than they say. Package on AlmaLinux 9, or use the prebuilt host, " +
+    'here may need newer libraries than they say. Package on AlmaLinux 9, or use the prebuilt host, ' +
     'for a .deb that installs only where it runs.'
   );
 }

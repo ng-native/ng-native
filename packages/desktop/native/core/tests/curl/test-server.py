@@ -161,7 +161,10 @@ class Handler(socketserver.BaseRequestHandler):
                     with LOG_LOCK:
                         LOG.append(f'pong {answer[1].decode()}' if answer and answer[0] == 10 else 'no pong')
                 elif text == 'ping-flood':
-                    self.wait_until_client_stalls()
+                    if not self.wait_until_client_stalls():
+                        with LOG_LOCK:
+                            LOG.append('the client never stalled')
+                        continue
                     for i in range(200):
                         self.send_frame(9, str(i).encode())
                     time.sleep(0.3)
@@ -208,17 +211,20 @@ class Handler(socketserver.BaseRequestHandler):
                 self.send_frame(8, payload)
                 return
 
-    # Returns once the client's sends are held up: this side reads nothing, and its receive queue is
-    # full, holding the same byte count across several polls. The pings that follow then find the
-    # client unable to send a pong at once.
+    # Whether the client's sends are held up: this side reads nothing, and its receive queue holds
+    # the same byte count, more than none, across five polls. False after 5 seconds without, well
+    # inside the 10 seconds `serverLog` waits, so a client that never stalls is named in the log.
     def wait_until_client_stalls(self):
         last, steady = -1, 0
-        deadline = time.monotonic() + 10
-        while steady < 5 and time.monotonic() < deadline:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
             queued = struct.unpack('i', fcntl.ioctl(self.request.fileno(), termios.FIONREAD, b'\0' * 4))[0]
-            steady = steady + 1 if queued == last and queued >= 65536 else 0
+            steady = steady + 1 if queued == last and queued > 0 else 0
+            if steady >= 5:
+                return True
             last = queued
             time.sleep(0.02)
+        return False
 
     # An (opcode, payload) pair, or None once the connection ends, mid-frame included.
     def read_frame(self):
