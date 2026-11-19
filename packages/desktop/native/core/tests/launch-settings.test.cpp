@@ -288,7 +288,7 @@ TEST_CASE("A host with no metadata.json beside it is a dev run, and a broken one
   REQUIRE(std::holds_alternative<ngn::LaunchSettings>(dev));
   CHECK_FALSE(std::get<ngn::LaunchSettings>(dev).packaged);
 
-  for (const char *text : {"{\"NGNBundleFile\": ", "[\"main.hbc\"]"}) {
+  for (const char *text : {"{\"NGNBundleFile\": ", "[\"main.hbc\"]", "{}", "{\"NGNBundleFile\": null}", "{\"NGNBundleFile\": \"\"}"}) {
     CAPTURE(text);
     folder.write(text);
     CHECK(std::holds_alternative<std::string>(ngn::packagedMetadata(folder.path.string())));

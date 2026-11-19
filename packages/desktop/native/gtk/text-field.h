@@ -29,7 +29,8 @@ struct TextField {
   bool settingText{false};
   // Whether an input method is composing: its preedit text is not yet the field's.
   bool composing{false};
-  // The props last applied, against which a `selection` prop is new.
+  // The props last applied, against which a `selection` prop is new. The same props again (a
+  // layout update) never put their controlled value back over a setTextAndSelection.
   facebook::react::Props::Shared applied;
 };
 
