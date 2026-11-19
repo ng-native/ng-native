@@ -80,12 +80,14 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
   // Moved on by each page settling, so only the latest one's end is reported.
   uint64_t _settle;
   BOOL _settleUnderway;
+  // A mouse's wheel queued a settling that has not run.
+  BOOL _settleQueued;
 }
 
 - (void)setPagingEnabled:(BOOL)pagingEnabled {
   _pagingEnabled = pagingEnabled;
   if (!pagingEnabled) {
-    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(settleOnPage) object:nil];
+    [self dropSettle];
   }
 }
 
@@ -118,20 +120,26 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
   NSEventPhase phase = event.phase, momentum = event.momentumPhase;
   BOOL wheel = phase == NSEventPhaseNone && momentum == NSEventPhaseNone;
   BOOL still = event.scrollingDeltaX == 0 && event.scrollingDeltaY == 0;
-  if (phase == NSEventPhaseBegan) {
-    // A mouse's wheel may have queued a settling: the gesture now beginning has its own.
-    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(settleOnPage) object:nil];
-  }
   if (phase == NSEventPhaseMayBegin) {
     _passing = NO;
     _heldStart = nil;
   } else if (phase == NSEventPhaseBegan && still) {
     _heldStart = event;
     _passing = NO;
+    // A settling the wheel queued waits until the gesture's direction says whose it is.
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(settleOnPage) object:nil];
     return;
   } else if (phase == NSEventPhaseBegan || wheel || (_heldStart != nil && !still)) {
     _passing = ![self scrollsAlong:event];
     _settling = NO;
+    if (!wheel && _settleQueued) {
+      // A gesture this view takes settles itself; one that goes past leaves the wheel's to run.
+      if (_passing) {
+        [self queueSettle];
+      } else {
+        [self dropSettle];
+      }
+    }
   }
   if (_heldStart != nil && (!still || (phase != NSEventPhaseChanged && phase != NSEventPhaseStationary))) {
     NSEvent *start = _heldStart;
@@ -192,9 +200,19 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
     [self report:NGNScrollPhaseMomentumEnded];
   } else if (wheel && self.pagingEnabled) {
     // A mouse's wheel has no end: the page settles once it stops turning.
-    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(settleOnPage) object:nil];
-    [self performSelector:@selector(settleOnPage) withObject:nil afterDelay:0.2];
+    [self queueSettle];
   }
+}
+
+- (void)queueSettle {
+  [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(settleOnPage) object:nil];
+  [self performSelector:@selector(settleOnPage) withObject:nil afterDelay:0.2];
+  _settleQueued = YES;
+}
+
+- (void)dropSettle {
+  [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(settleOnPage) object:nil];
+  _settleQueued = NO;
 }
 
 - (void)report:(NGNScrollPhase)phase {
@@ -205,6 +223,7 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
 
 // Animates to the page the drag points at (ngn::pagedOffset), reporting it as momentum.
 - (void)settleOnPage {
+  _settleQueued = NO;
   if (!self.pagingEnabled) {
     return;
   }

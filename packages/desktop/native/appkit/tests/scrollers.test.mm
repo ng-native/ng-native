@@ -279,3 +279,17 @@ TEST_CASE("a drag whose start has no deltas, after a mouse's wheel turned, cance
   CHECK(pager.phases[0].integerValue == NGNScrollPhaseDragBegan);
 }
 
+TEST_CASE("a vertical gesture that goes past a pager leaves the settling its wheel queued to run") {
+  Nested pager(NSMakeSize(600, 300));
+  pager.scroll.pagingEnabled = YES;
+  CGEventRef cg = CGEventCreateScrollWheelEvent(nullptr, kCGScrollEventUnitLine, 2, 0, -1);
+  NSEvent *wheel = [NSEvent eventWithCGEvent:cg];
+  CFRelease(cg);
+  // From a still start too, once it goes vertically.
+  pager.send(@[ wheel, trackpad(0, 0, kCGScrollPhaseBegan), trackpad(0, -30, kCGScrollPhaseChanged) ]);
+  CHECK(pager.above.wheels == 2);
+  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
+  REQUIRE((pager.phases.count >= 1));
+  CHECK(pager.phases[0].integerValue == NGNScrollPhaseMomentumBegan);
+}
+
