@@ -98,4 +98,3 @@ export function claimNativeView(element: keyof typeof NATIVE_VIEWS): void {
   claimed.add(element);
   registerNativeViews(element);
 }
-
