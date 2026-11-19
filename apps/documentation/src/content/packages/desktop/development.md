@@ -47,7 +47,8 @@ screens-check's Linux mode drives an exported bundle. It plays under X11 only, X
 posting each step to the X server through XTest (`libXtst.so.6`), so a step reaches GTK as a
 person's input does, native controls included. The pointer steps, `key` and `type` play, with the
 command modifier as Ctrl and option as Alt. A script with `scroll`, `magnify`, `rotate` or `choose`
-is refused, with the reason in the host's log.
+is refused, as is any script on an X server without the XTEST extension, with the reason in the
+host's log.
 
 ## Crash reports
 

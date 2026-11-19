@@ -2,6 +2,7 @@
 
 #include <execinfo.h>
 #include <fcntl.h>
+#include <pwd.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -88,10 +89,19 @@ void onFatalSignal(int signal) {
 
 } // namespace
 
+std::optional<std::string> accountHomeDirectory() {
+  const passwd *account = getpwuid(getuid());
+  if (!account || !account->pw_dir || !*account->pw_dir) {
+    return std::nullopt;
+  }
+  return std::string(account->pw_dir);
+}
+
 std::string crashReportPath(
     const std::string &appId,
     const std::optional<std::string> &testStateDir,
-    const std::function<std::optional<std::string>(const std::string &name)> &env) {
+    const std::function<std::optional<std::string>(const std::string &name)> &env,
+    const std::function<std::optional<std::string>()> &accountHome) {
   if (testStateDir) {
     return *testStateDir + "/crash.txt";
   }
@@ -99,7 +109,15 @@ std::string crashReportPath(
   if (auto xdg = env("XDG_STATE_HOME"); xdg && !xdg->empty()) {
     state = *xdg;
   } else {
-    state = env("HOME").value_or("") + "/.local/state";
+    auto home = env("HOME");
+    if (!home || home->empty()) {
+      home = accountHome();
+    }
+    if (!home || home->empty()) {
+      std::error_code ignored;
+      home = std::filesystem::temp_directory_path(ignored).string();
+    }
+    state = *home + "/.local/state";
   }
   return state + "/" + appId + "/crash.txt";
 }

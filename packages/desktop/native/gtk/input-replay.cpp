@@ -25,8 +25,9 @@ struct XTest {
   int (*motion)(Display *, int screen, int x, int y, unsigned long delay){nullptr};
   int (*button)(Display *, unsigned button, Bool press, unsigned long delay){nullptr};
   int (*key)(Display *, unsigned keycode, Bool press, unsigned long delay){nullptr};
+  Bool (*query)(Display *, int *event, int *error, int *major, int *minor){nullptr};
   explicit operator bool() const {
-    return motion && button && key;
+    return motion && button && key && query;
   }
 };
 
@@ -38,6 +39,7 @@ const XTest &xtest() {
       t.motion = reinterpret_cast<decltype(t.motion)>(dlsym(lib, "XTestFakeMotionEvent"));
       t.button = reinterpret_cast<decltype(t.button)>(dlsym(lib, "XTestFakeButtonEvent"));
       t.key = reinterpret_cast<decltype(t.key)>(dlsym(lib, "XTestFakeKeyEvent"));
+      t.query = reinterpret_cast<decltype(t.query)>(dlsym(lib, "XTestQueryExtension"));
     }
     return t;
   }();
@@ -93,22 +95,41 @@ unsigned long keysymOf(const std::string &key) {
   return gdk_unicode_to_keyval(c);
 }
 
-// A key down and up, with the script's modifiers held: command is Linux's primary modifier, Ctrl.
-void pressKey(Display *display, unsigned long keysym, unsigned modifiers) {
-  std::vector<unsigned> held;
-  if (modifiers & (InputStep::Command | InputStep::Control)) held.push_back(XKeysymToKeycode(display, XK_Control_L));
-  if (modifiers & InputStep::Option) held.push_back(XKeysymToKeycode(display, XK_Alt_L));
-  // A capital letter is the key with Shift.
-  bool shifted = (modifiers & InputStep::Shift) || (keysym < 0x100 && g_unichar_isupper(static_cast<gunichar>(keysym)));
-  if (shifted) held.push_back(XKeysymToKeycode(display, XK_Shift_L));
-  unsigned code = XKeysymToKeycode(display, keysym);
-  if (code == 0) {
+// The key that types `keysym` in the keyboard map's first group, and its level: 0 alone, 1 with
+// Shift, 2 with AltGr (ISO_Level3_Shift), 3 with both. None when no key in that group types it.
+std::optional<GdkKeymapKey> keyFor(GdkDisplay *display, unsigned long keysym) {
+  GdkKeymapKey *keys = nullptr;
+  int count = 0;
+  std::optional<GdkKeymapKey> best;
+  if (gdk_display_map_keyval(display, static_cast<guint>(keysym), &keys, &count)) {
+    for (int i = 0; i < count; ++i) {
+      if (keys[i].group == 0 && keys[i].level < 4 && (!best || keys[i].level < best->level)) {
+        best = keys[i];
+      }
+    }
+    g_free(keys);
+  }
+  return best;
+}
+
+// A key down and up, at the level that types it, with the script's modifiers held too: command is
+// Linux's primary modifier, Ctrl.
+void pressKey(GdkDisplay *gdkDisplay, unsigned long keysym, unsigned modifiers) {
+  Display *display = gdk_x11_display_get_xdisplay(gdkDisplay);
+  auto key = keyFor(gdkDisplay, keysym);
+  unsigned level3 = key && key->level >= 2 ? XKeysymToKeycode(display, XK_ISO_Level3_Shift) : 0;
+  if (!key || (key->level >= 2 && level3 == 0)) {
     fprintf(stderr, "[ngn] input script: no key for keysym 0x%lx\n", keysym);
     return;
   }
+  std::vector<unsigned> held;
+  if (modifiers & (InputStep::Command | InputStep::Control)) held.push_back(XKeysymToKeycode(display, XK_Control_L));
+  if (modifiers & InputStep::Option) held.push_back(XKeysymToKeycode(display, XK_Alt_L));
+  if ((modifiers & InputStep::Shift) || (key->level & 1)) held.push_back(XKeysymToKeycode(display, XK_Shift_L));
+  if (level3) held.push_back(level3);
   for (unsigned m : held) xtest().key(display, m, True, 0);
-  xtest().key(display, code, True, 0);
-  xtest().key(display, code, False, 0);
+  xtest().key(display, key->keycode, True, 0);
+  xtest().key(display, key->keycode, False, 0);
   for (auto m = held.rbegin(); m != held.rend(); ++m) xtest().key(display, *m, False, 0);
 }
 
@@ -133,11 +154,11 @@ void play(GtkWidget *window, const InputStep &step) {
       xtest().button(display, 3, False, 0);
       break;
     case InputStep::Kind::Key:
-      pressKey(display, keysymOf(step.key), step.modifiers);
+      pressKey(gtk_widget_get_display(window), keysymOf(step.key), step.modifiers);
       break;
     case InputStep::Kind::Type: {
       for (const char *p = step.key.c_str(); *p; p = g_utf8_next_char(p)) {
-        pressKey(display, gdk_unicode_to_keyval(g_utf8_get_char(p)), 0);
+        pressKey(gtk_widget_get_display(window), gdk_unicode_to_keyval(g_utf8_get_char(p)), 0);
       }
       break;
     }
@@ -150,7 +171,8 @@ void play(GtkWidget *window, const InputStep &step) {
 // Plays from `replay->at`: a wait waits, and every other step leaves the loop a moment to take
 // the event before the next, as a person's input arrives.
 void playNext(std::shared_ptr<Replay> replay) {
-  if (!replay->window) {
+  // A destroyed window that another reference keeps is unrealized, with no surface to post to.
+  if (!replay->window || !gtk_widget_get_realized(replay->window)) {
     fprintf(stderr, "[ngn] input script: the window closed before the script ended\n");
     return;
   }
@@ -190,14 +212,25 @@ std::optional<std::string> inputReplayProblem(GtkWidget *window, const InputScri
   if (!window || !GDK_IS_X11_DISPLAY(gtk_widget_get_display(window))) {
     return "an input script plays under X11 only";
   }
-  if (!xtest()) {
-    return "libXtst.so.6 is not installed";
-  }
-  return std::nullopt;
+  return xtestProblem(displayOf(window));
 #else
   return "an input script plays under X11 only";
 #endif
 }
+
+#ifdef GDK_WINDOWING_X11
+std::optional<std::string> xtestProblem(Display *display) {
+  if (!xtest()) {
+    return "libXtst.so.6 is not installed";
+  }
+  // Without the extension on the server, the library's calls post nothing and report no error.
+  int event = 0, error = 0, major = 0, minor = 0;
+  if (!xtest().query(display, &event, &error, &major, &minor)) {
+    return "the X server has no XTEST extension";
+  }
+  return std::nullopt;
+}
+#endif
 
 bool replayInputScript(GtkWidget *window, InputScript script) {
   if (auto problem = inputReplayProblem(window, script)) {
