@@ -217,23 +217,25 @@ describe('publishPrebuilt', () => {
     }
   });
 
-  it('takes macos or linux for --os, builds a Linux host only on Linux, and keeps the cache flags to macOS', () => {
+  it('takes macos or linux for --os, builds a Linux host only on Linux, with the cache flags too', () => {
     const windows = makePrebuilt(['--os', 'windows']);
     assert.equal(windows.status, 2);
     assert.match(windows.stderr, /--os takes macos or linux/);
-    for (const flag of [['--host-cache', '/tmp/c'], ['--reuse', '/tmp/p.json'], ['--print-key']]) {
-      const result = makePrebuilt(['--os', 'linux', ...flag]);
-      assert.equal(result.status, 2, flag.join(' '));
-      assert.match(result.stderr, /is for --os macos only/);
+    for (const flag of [
+      [],
+      ['--host-cache', '/tmp/c'],
+      ['--reuse', '/tmp/p.json'],
+      ['--print-key'],
+    ]) {
+      const linux = makePrebuilt(['--os', 'linux', ...flag]);
+      if (process.platform === 'linux') {
+        assert.match(linux.stderr, /react-native is not installed/, flag.join(' '));
+      } else {
+        assert.equal(linux.status, 2, flag.join(' '));
+        assert.match(linux.stderr, /--os linux builds on Linux only/);
+      }
+      assert.ok(!linux.wroteOut, 'nothing built or written');
     }
-    const linux = makePrebuilt(['--os', 'linux']);
-    if (process.platform === 'linux') {
-      assert.match(linux.stderr, /react-native is not installed/);
-    } else {
-      assert.equal(linux.status, 2);
-      assert.match(linux.stderr, /--os linux builds on Linux only/);
-    }
-    assert.ok(!linux.wroteOut, 'nothing built or written');
   });
 
   it('never replaces an archive a run already published, which a manifest may point to', () => {

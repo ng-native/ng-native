@@ -149,10 +149,14 @@ once per architecture and flavour on a runner of that architecture, runs
 `build.sh --backend gtk`, strips `gtk/ngn-linux` and `gtk/hermesc` and packs them as
 `...-linux-<arch>[-debug].tar.gz` with the entry `prebuilt-host-linux-<arch>-<flavour>.json`, and
 checks the packed host needs glibc 2.34 at most. The release job writes all six entries
-(`RELEASE_HOSTS` in `bin/prebuilt.mjs`) and stops when one is missing. A Linux host has no
-`--reuse` or `--host-cache` yet: each release builds it, through ccache. The Desktop host
-workflow's `prebuilt-host-linux` job runs the same action on a push to `main` that changed the
-host's inputs, and on a manual run on any branch, keeping each archive as an artifact.
+(`RELEASE_HOSTS` in `bin/prebuilt.mjs`) and stops when one is missing. A Linux host is reused or
+packed from the Actions cache as a macOS one is (below), with `--print-key`, `--reuse` and
+`--host-cache` run in the image. Its key adds the OS and architecture, and takes in place of the
+SDK the image's glibc and the versions pkg-config gives for the libraries the host builds against;
+the image's Dockerfile and the ICU pin are among the native sources it already covers. The cached
+host is kept only from `main`, as the ccache set is. The Desktop host workflow's
+`prebuilt-host-linux` job runs the same action on a push to `main` that changed the host's inputs,
+and on a manual run on any branch, keeping each archive as an artifact.
 
 A host is built only when something it is built from changed. `make-prebuilt.mjs --print-key`
 computes the key of its inputs: the host's native sources and build scripts, React Native's and

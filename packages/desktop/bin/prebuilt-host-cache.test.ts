@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   hostInputsKey,
+  LINUX_HOST,
   readHostCache,
   treeDigests,
   writeHostCache,
@@ -68,6 +69,7 @@ describe('hostInputsKey', () => {
       { ...inputs, sources: [['native/CMakeLists.txt', 'b']] as [string, string][] },
       { ...inputs, toolchain: 'Apple clang 18\n26.0' },
       { ...inputs, signing: 'Developer ID Application: Someone' },
+      { ...inputs, platform: { os: 'linux', arch: 'x64' } },
     ]) {
       assert.notEqual(hostInputsKey(changed), key, JSON.stringify(changed));
     }
@@ -77,6 +79,12 @@ describe('hostInputsKey', () => {
         libraries: { 'react-native-svg': '15.0.0', 'react-native-screens': '4.0.0' },
       }),
       key,
+    );
+    const linux = { ...inputs, platform: { os: 'linux', arch: 'x64' } };
+    assert.notEqual(
+      hostInputsKey({ ...linux, platform: { os: 'linux', arch: 'arm64' } }),
+      hostInputsKey(linux),
+      'one key per Linux architecture',
     );
   });
 });
@@ -105,8 +113,8 @@ describe('the host cache', () => {
       const cache = path.join(dir, 'cache');
       writeHostCache(cache, 'k1', appkit);
       const read = readHostCache(cache, 'k1');
-      assert.equal(read.appkit, path.join(cache, 'appkit'));
-      assert.deepEqual(treeDigests(read.appkit!, read.appkit!), treeDigests(appkit, appkit));
+      assert.equal(read.host, path.join(cache, 'appkit'));
+      assert.deepEqual(treeDigests(read.host!, read.host!), treeDigests(appkit, appkit));
     });
   });
 
@@ -141,6 +149,24 @@ describe('the host cache', () => {
     });
   });
 
+  it("keeps a Linux host's files in its own folder, and is never used short of one", () => {
+    inTemp((dir) => {
+      const gtk = path.join(dir, 'build', 'gtk');
+      mkdirSync(gtk, { recursive: true });
+      writeFileSync(path.join(gtk, 'ngn-linux'), 'host');
+      writeFileSync(path.join(gtk, 'hermesc'), 'hermesc');
+      const cache = path.join(dir, 'cache');
+      writeHostCache(cache, 'k1', gtk, LINUX_HOST);
+      const read = readHostCache(cache, 'k1', LINUX_HOST);
+      assert.equal(read.host, path.join(cache, 'gtk'));
+      assert.deepEqual(treeDigests(read.host!, read.host!), treeDigests(gtk, gtk));
+      // A macOS host's files are not in it.
+      assert.match(readHostCache(cache, 'k1').reason ?? '', /has no ngn-macos/);
+      rmSync(path.join(cache, 'gtk', 'ngn-linux'));
+      assert.match(readHostCache(cache, 'k1', LINUX_HOST).reason ?? '', /has no ngn-linux/);
+    });
+  });
+
   it('replaces what the folder held, so a file of an older host never stays', () => {
     inTemp((dir) => {
       const appkit = fakeHost(dir);
@@ -149,7 +175,7 @@ describe('the host cache', () => {
       writeFileSync(path.join(cache, 'appkit', 'stale'), 'old');
       writeHostCache(cache, 'k1', appkit);
       assert.ok(!existsSync(path.join(cache, 'appkit', 'stale')));
-      assert.ok(readHostCache(cache, 'k1').appkit);
+      assert.ok(readHostCache(cache, 'k1').host);
     });
   });
 });
@@ -219,7 +245,7 @@ describe('make-prebuilt.mjs --host-cache', { skip: process.platform !== 'darwin'
         assert.ok(listing.split('\n').includes(file), `${file} in ${listing}`);
       }
       // Signed in the archive only: the cache keeps the build's files for the next run.
-      assert.ok(readHostCache(cache, key.stdout.trim()).appkit, 'the cache is unchanged');
+      assert.ok(readHostCache(cache, key.stdout.trim()).host, 'the cache is unchanged');
 
       // A changed byte builds instead, which this app cannot: it fails rather than pack the cache.
       writeFileSync(path.join(cache, 'appkit', 'hermesc'), 'tampered');
@@ -401,3 +427,156 @@ describe('make-prebuilt.mjs --host-cache', { skip: process.platform !== 'darwin'
     });
   });
 });
+
+describe(
+  'make-prebuilt.mjs --os linux, --host-cache and --reuse',
+  { skip: process.platform !== 'linux' },
+  () => {
+    /** An app with only react-native's package.json: enough to key and pack, never to build. */
+    function app(dir: string) {
+      const rn = path.join(dir, 'app', 'node_modules', 'react-native');
+      mkdirSync(rn, { recursive: true });
+      writeFileSync(path.join(dir, 'app', 'package.json'), '{"name":"app"}');
+      writeFileSync(path.join(rn, 'package.json'), '{"name":"react-native","version":"0.88.0"}');
+      return path.join(dir, 'app');
+    }
+
+    /** A GTK host's `gtk` folder in `dir`, each file an executable for this machine. */
+    function linuxHost(dir: string) {
+      const gtk = path.join(dir, 'build', 'gtk');
+      mkdirSync(gtk, { recursive: true });
+      const source = path.join(dir, 'main.c');
+      writeFileSync(source, 'int main(void) { return 0; }\n');
+      for (const file of LINUX_HOST.files) {
+        const result = spawnSync('cc', ['-o', path.join(gtk, file), source], { encoding: 'utf8' });
+        assert.equal(result.status, 0, result.stderr);
+      }
+      return gtk;
+    }
+
+    const env = { ...process.env, NODE_PATH: '' };
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+    /** The manifest entry's file for this machine's Linux release host. */
+    const ENTRY = `prebuilt-host-linux-${arch}-release.json`;
+    const printKey = (appDir: string, ...args: string[]) => {
+      const result = spawnSync(
+        process.execPath,
+        [path.join(scripts, 'make-prebuilt.mjs'), appDir, '--print-key', ...args],
+        { encoding: 'utf8', env },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.trim();
+    };
+
+    /** make-prebuilt.mjs run without blocking, so a server in this process can answer it. */
+    function makePrebuiltAsync(args: string[]) {
+      return new Promise<{ status: number | null; stderr: string }>((resolve) => {
+        const child = spawn(process.execPath, [path.join(scripts, 'make-prebuilt.mjs'), ...args], {
+          env,
+        });
+        let stderr = '';
+        child.stderr.on('data', (chunk) => (stderr += chunk));
+        child.on('close', (status) => resolve({ status, stderr }));
+      });
+    }
+
+    it('packs the cached host, then reuses its archive in the next release, for this architecture only', async () => {
+      const dir = mkdtempSync(path.join(tmpdir(), 'ngn-host-linux-'));
+      let served: Buffer | null = null;
+      const server = createServer((_request, response) => {
+        if (served) response.end(served);
+        else response.writeHead(404).end();
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`;
+      try {
+        const appDir = app(dir);
+        const key = printKey(appDir, '--os', 'linux');
+        assert.match(key, /^[0-9a-f]{64}$/);
+        assert.notEqual(printKey(appDir, '--os', 'linux', '--flavour', 'debug'), key);
+
+        const cache = path.join(dir, 'cache');
+        writeHostCache(cache, key, linuxHost(dir), LINUX_HOST);
+        const earlier = path.join(dir, 'earlier');
+        const first = await makePrebuiltAsync([
+          appDir,
+          earlier,
+          '--os',
+          'linux',
+          '--host-cache',
+          cache,
+          '--version',
+          '1.0.0',
+          '--base-url',
+          base,
+        ]);
+        assert.equal(first.status, 0, first.stderr);
+        assert.match(first.stderr, /packing the host built from these inputs/);
+        const entry = JSON.parse(readFileSync(path.join(earlier, ENTRY), 'utf8'));
+        assert.equal(entry.os, 'linux');
+        assert.equal(entry.inputs, key, 'the entry records the inputs key');
+        const packed = path.join(earlier, path.basename(entry.url));
+        const listing = spawnSync('tar', ['-tzf', packed], { encoding: 'utf8' }).stdout;
+        for (const file of ['gtk/ngn-linux', 'gtk/hermesc']) {
+          assert.ok(listing.split('\n').includes(file), `${file} in ${listing}`);
+        }
+        assert.ok(readHostCache(cache, key, LINUX_HOST).host, 'stripped in the archive only');
+
+        const manifest = path.join(dir, 'prebuilt.json');
+        const writeManifest = (host: object) =>
+          writeFileSync(manifest, JSON.stringify({ version: 1, hosts: [host] }));
+        const archive = readFileSync(packed);
+        writeManifest(entry);
+        served = archive;
+        const out = path.join(dir, 'out');
+        const reused = await makePrebuiltAsync([
+          appDir,
+          out,
+          '--os',
+          'linux',
+          '--reuse',
+          manifest,
+          '--reuse-only',
+          '--version',
+          '1.0.1',
+          '--base-url',
+          base,
+        ]);
+        assert.equal(reused.status, 0, reused.stderr);
+        assert.match(reused.stderr, /reusing the host/);
+        const next = JSON.parse(readFileSync(path.join(out, ENTRY), 'utf8'));
+        assert.equal(next.sha256, entry.sha256);
+        assert.equal(next.arch, entry.arch);
+        assert.match(next.url, /host-1\.0\.1-rn/);
+        assert.deepEqual(readFileSync(path.join(out, path.basename(next.url))), archive);
+
+        // The other architecture's entry, or a macOS one, is never this host's.
+        const other = entry.arch === 'x64' ? 'arm64' : 'x64';
+        const { os: _os, arch: _arch, ...mac } = entry;
+        for (const host of [{ ...entry, arch: other }, mac]) {
+          writeManifest(host);
+          const missOut = path.join(dir, 'miss');
+          const miss = await makePrebuiltAsync([
+            appDir,
+            missOut,
+            '--os',
+            'linux',
+            '--reuse',
+            manifest,
+            '--reuse-only',
+            '--version',
+            '1.0.2',
+            '--base-url',
+            base,
+          ]);
+          assert.equal(miss.status, 3, miss.stderr);
+          assert.match(miss.stderr, /has no Linux (x64|arm64) release host/);
+          assert.ok(!existsSync(path.join(missOut, ENTRY)));
+        }
+      } finally {
+        server.close();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  },
+);

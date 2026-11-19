@@ -6,7 +6,7 @@
  *   make-prebuilt.mjs <app> <out> [--os macos|linux] [--flavour debug|release] [--version <v>]
  *                     [--base-url <url>] [--manifest <prebuilt.json>] [--host-cache <dir>]
  *                     [--reuse <prebuilt.json>] [--reuse-only] [--build-dir <dir>]
- *   make-prebuilt.mjs <app> --print-key [--flavour debug|release]
+ *   make-prebuilt.mjs <app> --print-key [--os macos|linux] [--flavour debug|release]
  *
  * - <app>: the app whose react-native and host libraries (react-native-screens,
  *   react-native-safe-area-context) the host is built against: the desktop template.
@@ -16,7 +16,6 @@
  *   host for this machine's architecture (x64 or arm64), built on Linux (the AlmaLinux 9 image in
  *   CI, so it needs glibc 2.34 at most). A Linux archive holds `gtk/ngn-linux` and `gtk/hermesc`,
  *   stripped of debug info and local symbols and not signed, and its entry names `os` and `arch`.
- *   --host-cache, --reuse and --print-key are for macOS only.
  * - --flavour: `release` (the default), the universal Release build a packaged app ships
  *   (`build.sh --universal --release`), or `debug`, the universal dev build `run` uses
  *   (`build.sh --universal --no-tests`), which carries React Native's debugger.
@@ -31,7 +30,10 @@
  *   holds a host built from the same inputs (the host's native sources and build scripts, React
  *   Native's and each compiled-in library's version, the flavour, the compiler and the SDK), that
  *   host is stripped, signed and packed with no build; otherwise the host is built and the folder
- *   replaced with it. An inputs key that cannot be computed builds without the cache.
+ *   replaced with it. An inputs key that cannot be computed builds without the cache. For Linux the
+ *   inputs are the same with the OS and architecture, and in place of the SDK glibc's version and
+ *   those of the libraries the host builds against in the image; the sources already cover the
+ *   image's Dockerfile and the ICU pin, both under native/.
  * - --reuse: a `prebuilt.json` of an earlier release. When its entry for this React Native version
  *   and flavour records the same inputs key, its archive is downloaded, checked against the entry's
  *   SHA-256 and published again under this release's name, byte for byte. A different key, a failed
@@ -75,14 +77,27 @@ import {
   signPrebuiltFiles,
 } from '../../bin/prebuilt.mjs';
 import {
-  HOST_FILES,
   hostInputsKey,
+  LINUX_HOST,
+  MACOS_HOST,
   readHostCache,
   treeDigests,
   writeHostCache,
 } from './prebuilt-host-cache.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+
+/** What the GTK host builds against through pkg-config (gtk/CMakeLists.txt), and what it links. */
+const LINUX_PKG_CONFIG = [
+  'gtk4',
+  'libadwaita-1',
+  'pangocairo',
+  'gio-unix-2.0',
+  'sqlite3',
+  'openssl',
+  'libnghttp2',
+  'zlib',
+];
 
 /** @param {string} command @param {string[]} args @param {import('node:child_process').SpawnSyncOptions} [options] */
 function run(command, args, options = {}) {
@@ -112,7 +127,7 @@ const [appArg, outArg] = positionals;
 const printKey = values['print-key'];
 if (!appArg || (!outArg && !printKey)) {
   console.error(
-    'Usage: make-prebuilt.mjs <app> <out> [--flavour debug|release] [--version <v>] [--base-url <url>] [--manifest <prebuilt.json>] [--host-cache <dir>] [--reuse <prebuilt.json> [--reuse-only]] [--build-dir <dir>]\n       make-prebuilt.mjs <app> --print-key [--flavour debug|release]',
+    'Usage: make-prebuilt.mjs <app> <out> [--os macos|linux] [--flavour debug|release] [--version <v>] [--base-url <url>] [--manifest <prebuilt.json>] [--host-cache <dir>] [--reuse <prebuilt.json> [--reuse-only]] [--build-dir <dir>]\n       make-prebuilt.mjs <app> --print-key [--os macos|linux] [--flavour debug|release]',
   );
   process.exit(2);
 }
@@ -132,11 +147,6 @@ if (os !== 'macos' && os !== 'linux') {
 }
 const linux = os === 'linux';
 if (linux) {
-  const macOnly = ['host-cache', 'reuse', 'print-key'].find((flag) => values[flag]);
-  if (macOnly) {
-    console.error(`--${macOnly} is for --os macos only.`);
-    process.exit(2);
-  }
   if (process.platform !== 'linux') {
     console.error(
       '--os linux builds on Linux only: run it in the AlmaLinux 9 image (native/docker).',
@@ -202,6 +212,17 @@ const libraryVersions = Object.fromEntries(
 const capture = (command, args) =>
   run(command, args, { stdio: ['ignore', 'pipe', 'inherit'] }).stdout.trim();
 
+/**
+ * The version of each library the GTK host builds against, as pkg-config has it in the image, or
+ * that it is missing, which a build then fails on.
+ */
+function linuxLibraries() {
+  return LINUX_PKG_CONFIG.map((name) => {
+    const found = spawnSync('pkg-config', ['--modversion', name], { encoding: 'utf8' });
+    return `${name} ${found.status === 0 ? found.stdout.trim() : 'missing'}`;
+  }).join('\n');
+}
+
 /** The key of everything the host is built from (prebuilt-host-cache.mjs hostInputsKey). */
 function inputsKey() {
   const desktop = path.resolve(here, '..', '..');
@@ -215,12 +236,17 @@ function inputsKey() {
       path.join(desktop, 'bin', 'host.mjs'),
       path.join(desktop, 'bin', 'prebuilt.mjs'),
     ].flatMap((root) => treeDigests(desktop, root)),
-    toolchain: [
-      capture('xcrun', ['clang', '--version']),
-      capture('xcrun', ['--show-sdk-version']),
-    ].join('\n'),
-    // A reused archive is signed: another identity is another archive.
-    signing: process.env['NGN_SIGN_IDENTITY'] || '-',
+    toolchain: (linux
+      ? [
+          capture(process.env['CXX'] || 'clang++', ['--version']),
+          capture('ldd', ['--version']).split('\n')[0] ?? '',
+          linuxLibraries(),
+        ]
+      : [capture('xcrun', ['clang', '--version']), capture('xcrun', ['--show-sdk-version'])]
+    ).join('\n'),
+    // A reused archive is signed: another identity is another archive. A Linux one is not signed.
+    signing: linux ? 'unsigned' : process.env['NGN_SIGN_IDENTITY'] || '-',
+    ...(linux ? { platform } : {}),
   });
 }
 
@@ -254,12 +280,16 @@ if (hostCache || reuse) {
  */
 async function reuseArchive(manifestFile, inputs, packed) {
   try {
-    // The universal macOS host, never a Linux one for the same version and flavour.
+    // The host for this OS (and a Linux one's architecture), never another's.
     const entry = findHost(readManifest(readFileSync(manifestFile, 'utf8')), {
       reactNative,
       flavour,
+      ...platform,
     });
-    if (!entry) return `${manifestFile} has no ${flavour} host for React Native ${reactNative}`;
+    if (!entry) {
+      const which = linux ? `Linux ${platform.arch} ${flavour}` : flavour;
+      return `${manifestFile} has no ${which} host for React Native ${reactNative}`;
+    }
     if (entry.inputs !== inputs)
       return `the ${flavour} host in ${manifestFile} was built from other inputs`;
     const response = await fetch(entry.url, { signal: AbortSignal.timeout(600_000) });
@@ -297,8 +327,8 @@ function checkArchitecture(executable) {
 const desktopVersion = values.version ?? versionOf(packageDir);
 const name = prebuiltName(desktopVersion, reactNative, flavour, platform);
 // The build folder's subfolder the host's files are in, and the files archived from it.
-const folder = linux ? 'gtk' : 'appkit';
-const files = linux ? ['ngn-linux', 'hermesc'] : HOST_FILES;
+const layout = linux ? LINUX_HOST : MACOS_HOST;
+const { folder, files } = layout;
 mkdirSync(out, { recursive: true });
 // Packed at a name of its own in <out>, and moved into place with its entry by publishPrebuilt.
 const packed = path.join(out, `.${name}.${process.pid}.partial`);
@@ -331,9 +361,9 @@ try {
     /** @type {string | null} */
     let source = null;
     if (hostCache && key) {
-      const cached = readHostCache(hostCache, key);
-      if (cached.appkit) {
-        source = cached.appkit;
+      const cached = readHostCache(hostCache, key, layout);
+      if (cached.host) {
+        source = cached.host;
         console.error(
           `make-prebuilt: packing the host built from these inputs (${key}) in ${hostCache}.`,
         );
@@ -385,7 +415,7 @@ try {
   }
   checkArchitecture(path.join(appkit, files[0] ?? ''));
   // Kept as the build left it, unstripped and unsigned, for the next run with the same inputs.
-  if (built && hostCache && key) writeHostCache(hostCache, key, built);
+  if (built && hostCache && key) writeHostCache(hostCache, key, built, layout);
 
   // Owner and group dropped, so the archive does not carry the build machine's: bsdtar on a Mac,
   // GNU tar on Linux.
