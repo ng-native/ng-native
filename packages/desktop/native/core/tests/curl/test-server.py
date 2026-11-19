@@ -15,7 +15,9 @@
 #   /ws             a WebSocket that echoes, picks the subprotocol "chat", refuses "refuse", picks
 #                   "other" when offered "pick-other", and answers the texts "pings" (pings seen),
 #                   "fragments" (a message in two frames), "close-me" (a close 4000 "bye"),
-#                   "ping-me" (a ping "hb", then logs the pong), "bad-utf8" (a text that is not
+#                   "ping-me" (a ping "hb", then logs the pong), "ping-flood" (reads nothing for
+#                   300 ms, pings 200 times, waits 300 ms, then reads until the text "done" and
+#                   logs the pongs and the last one's payload), "bad-utf8" (a text that is not
 #                   UTF-8), "split-utf8" (an é split across two frames),
 #                   "flood" (2000 one-byte texts at once) and "close-later" (reads nothing for
 #                   300 ms, closes 4000 "bye", then reads until the client's close frame and logs
@@ -156,6 +158,20 @@ class Handler(socketserver.BaseRequestHandler):
                     answer = self.read_frame()
                     with LOG_LOCK:
                         LOG.append(f'pong {answer[1].decode()}' if answer and answer[0] == 10 else 'no pong')
+                elif text == 'ping-flood':
+                    time.sleep(0.3)
+                    for i in range(200):
+                        self.send_frame(9, str(i).encode())
+                    time.sleep(0.3)
+                    pongs, last = 0, None
+                    while True:
+                        frame = self.read_frame()
+                        if frame is None or (frame[0] == 1 and frame[1] == b'done'):
+                            break
+                        if frame[0] == 10:
+                            pongs, last = pongs + 1, frame[1].decode()
+                    with LOG_LOCK:
+                        LOG.append(f'pongs {pongs} last {last}')
                 elif text == 'bad-utf8':
                     self.send_frame(1, b'\xff\xfe')
                 elif text == 'split-utf8':

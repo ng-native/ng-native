@@ -981,6 +981,14 @@ class Engine {
     if (s.closeSent) {
       return;
     }
+    // One pong waits at most: a later ping's replaces it, as RFC 6455 allows, so a peer that
+    // pings without reading cannot grow the queue.
+    for (auto &frame : s.outgoing) {
+      if (!frame.started && (frame.flags & CURLWS_PONG)) {
+        frame.bytes = std::move(payload);
+        return;
+      }
+    }
     auto at = s.outgoing.begin();
     if (at != s.outgoing.end() && at->started) {
       ++at;

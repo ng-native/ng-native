@@ -774,6 +774,19 @@ TEST_CASE("a WebSocket over libcurl answers the server's ping while it has nothi
   CHECK(serverLog(server, *network.http) == "[\"pong hb\"]");
 }
 
+TEST_CASE("a WebSocket over libcurl keeps one pong waiting, for the latest ping, while its sends are held up") {
+  TestServer server;
+  SocketRecorder r;
+  auto network = ngn::makeCurlNetwork();
+  auto c = network.webSockets->connect(server.ws("/ws"), {}, {}, r.callbacks());
+  REQUIRE(r.waitFor(1));
+  // The server stops reading, so the 16 MB message stalls part way, and pings 200 times.
+  c->sendText("ping-flood");
+  c->sendBinary(std::string(16 * 1024 * 1024, 'x'));
+  c->sendText("done");
+  CHECK(serverLog(server, *network.http) == "[\"pongs 1 last 199\"]");
+}
+
 TEST_CASE("a WebSocket over libcurl delivers UTF-8 split across frames, and fails on a text that is not UTF-8") {
   TestServer server;
   SocketRecorder r;
