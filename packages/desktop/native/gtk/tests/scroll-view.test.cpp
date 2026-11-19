@@ -57,6 +57,8 @@ struct CommittedState {
   State::Shared state;
   // The updates applied that gave a new state, each of which clones the scroll view's node.
   int applied = 0;
+  // Whether each update's callback runs twice, as a retried commit runs it.
+  bool retried = false;
 
   CommittedState() {
     auto processor = EventQueueProcessor(
@@ -88,6 +90,10 @@ struct CommittedState {
   void apply(const StateUpdate &update) {
     if (update.family != family_) {
       return;
+    }
+    if (retried) {
+      // A commit that failed and runs the callback again, as ShadowTree::commit retries.
+      update.callback(std::make_shared<const ScrollViewState>(data));
     }
     if (auto next = update.callback(std::make_shared<const ScrollViewState>(data))) {
       ++applied;
@@ -284,29 +290,34 @@ TEST_CASE("a ScrollView's new gutter still lays the content out when later moves
   } restore{settings, overlay};
   g_object_set(settings, "gtk-overlay-scrolling", FALSE, nullptr);
 
-  CommittedState committed;
-  MountedViews views;
-  mountScrollView(views, dynamic::object("showsVerticalScrollIndicator", false), committed.state);
-  committed.flush();
-  int before = committed.applied;
-  auto scroll = views.mounting->tree().find(2)->view;
-  views.update(scroll, scrollProps(dynamic::object("showsVerticalScrollIndicator", true)));
-  REQUIRE(ngn::ScrollerGutters::shared().get(2).right > 0);
-  // Two moves that end where the state already is, each replacing the update before it.
-  views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 100, false));
-  views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 0, false));
-  views.settle();
-  committed.flush();
-  CHECK(committed.data.contentOffset == Point{0, 0});
-  // The gutter's clone still happened.
-  CHECK(committed.applied == before + 1);
+  // Each way: an update applied once, and one whose commit is retried.
+  for (bool retried : {false, true}) {
+    CAPTURE(retried);
+    CommittedState committed;
+    committed.retried = retried;
+    MountedViews views;
+    mountScrollView(views, dynamic::object("showsVerticalScrollIndicator", false), committed.state);
+    committed.flush();
+    int before = committed.applied;
+    auto scroll = views.mounting->tree().find(2)->view;
+    views.update(scroll, scrollProps(dynamic::object("showsVerticalScrollIndicator", true)));
+    REQUIRE(ngn::ScrollerGutters::shared().get(2).right > 0);
+    // Two moves that end where the state already is, each replacing the update before it.
+    views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 100, false));
+    views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 0, false));
+    views.settle();
+    committed.flush();
+    CHECK(committed.data.contentOffset == Point{0, 0});
+    // The gutter's clone still happened.
+    CHECK(committed.applied == before + 1);
 
-  // Once applied, the same two moves clone nothing more: the gutter's relayout is not owed again.
-  views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 100, false));
-  views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 0, false));
-  views.settle();
-  committed.flush();
-  CHECK(committed.applied == before + 1);
+    // Once applied, the same two moves clone nothing more: the gutter's relayout is not owed again.
+    views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 100, false));
+    views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 0, false));
+    views.settle();
+    committed.flush();
+    CHECK(committed.applied == before + 1);
+  }
 }
 
 TEST_CASE("a ScrollView's contentOffset waits for the view to have a size") {
