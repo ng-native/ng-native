@@ -3,7 +3,9 @@
 // is not part of the notes app. It mounts a list of 2,000 views, scrolls it while one view changes
 // a frame, drags a divider by changing a width each frame, and opens a second window, telling the
 // bench's local server when each step begins and ends so it can read what the host logged in
-// between (the commits and frames, NGN_LOG_COMMITS) and the process's memory.
+// between (the commits and frames, NGN_LOG_COMMITS) and the process's memory. A step that did not
+// do what it measures (the list did not reach its height, the window did not open) says so, and
+// the server reads it as no measurement.
 import 'expo';
 import { Component, inject, signal, viewChild } from '@angular/core';
 import { AppRegistry, Image, Platform, processColor } from 'react-native';
@@ -35,7 +37,7 @@ class BenchWindow {}
   template: `
     <view style="flex: 1; flex-direction: row">
       <view [style]="{ width: divider(), backgroundColor: '#dddddd' }"></view>
-      <scroll-view style="flex: 1">
+      <scroll-view style="flex: 1" (contentSizeChange)="contentHeight.set($event.height)">
         @for (row of rows(); track row) {
           <view
             [style]="{
@@ -58,6 +60,8 @@ class BenchRoot {
   protected readonly changing = signal(-1);
   /** The width of the strip a drag would resize. */
   protected readonly divider = signal(200);
+  /** What the list's content measures, which reaches the rows' height once they are mounted. */
+  protected readonly contentHeight = signal(0);
 
   constructor() {
     void this.run();
@@ -67,7 +71,7 @@ class BenchRoot {
     await tell('start');
     await this.step('mount', async () => {
       this.rows.set(Array.from({ length: ROWS }, (_, row) => row));
-      await nextFrame();
+      return this.until(() => this.contentHeight() >= ROWS * ROW_HEIGHT);
     });
     await this.step('scroll', async () => {
       for (let frame = 0; frame < FRAMES; frame += 1) {
@@ -75,26 +79,42 @@ class BenchRoot {
         this.list().scrollTo({ y: frame * ROW_HEIGHT, animated: false });
         await nextFrame();
       }
+      return true;
     });
     await this.step('resize', async () => {
       for (let frame = 0; frame < FRAMES; frame += 1) {
         this.divider.set(200 + frame);
         await nextFrame();
       }
+      return true;
     });
     await this.step('window', async () => {
-      await this.windows.open(BenchWindow, { title: 'Second window', width: 400, height: 300 });
+      const opened = await this.windows.open(BenchWindow, {
+        title: 'Second window',
+        width: 400,
+        height: 300,
+      });
       await nextFrame();
+      return opened !== null;
     });
     await tell('done');
   }
 
-  /** `begin` and `end` bracket the step for the server, which lets the host's output catch up first. */
-  private async step(name: string, body: () => Promise<void>): Promise<void> {
+  /**
+   * `begin` and `end` bracket the step for the server, which lets the host's output catch up first;
+   * `failed` ends it when it did not do what it measures.
+   */
+  private async step(name: string, body: () => Promise<boolean>): Promise<void> {
     await tell(`begin/${name}`);
-    await body();
+    const worked = await body();
     await sleep(500);
-    await tell(`end/${name}`);
+    await tell(`${worked ? 'end' : 'failed'}/${name}`);
+  }
+
+  /** Whether `condition` held within five seconds of frames. */
+  private async until(condition: () => boolean): Promise<boolean> {
+    for (let waited = 0; waited < 5000 && !condition(); waited += 16) await sleep(16);
+    return condition();
   }
 }
 

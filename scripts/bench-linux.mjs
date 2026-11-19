@@ -266,12 +266,12 @@ export class HostEvents {
  * what the host logged and the memory sampled around the window step. A metric whose events are not
  * there is null, which fails the run: a step that logged no commit measured nothing.
  *
- * @param {{ events: { kind: string, ms: number, at: number }[], steps: Record<string, { from?: number, to?: number }>, pss: { before: number | null, after: number | null } }} measured
+ * @param {{ events: { kind: string, ms: number, at: number }[], steps: Record<string, { from?: number, to?: number, failed?: boolean }>, pss: { before: number | null, after: number | null } }} measured
  */
 export function workloadMetrics({ events, steps, pss }) {
   const within = (name, kind) => {
     const step = steps[name];
-    if (step?.from === undefined || step.to === undefined) return [];
+    if (step?.from === undefined || step.to === undefined || step.failed) return [];
     return events
       .filter((event) => event.kind === kind && event.at > step.from && event.at <= step.to)
       .map((event) => event.ms);
@@ -285,7 +285,10 @@ export function workloadMetrics({ events, steps, pss }) {
     scrollFrameMs: scrollFrames.length ? median(scrollFrames) : null,
     resizeCommitMs: slowest(resizeCommits),
     resizeCommitsPerFrame: resizeFrames.length ? resizeCommits.length / resizeFrames.length : null,
-    extraWindowMb: pss.before === null || pss.after === null ? null : pss.after - pss.before,
+    extraWindowMb:
+      steps['window']?.failed || pss.before === null || pss.after === null
+        ? null
+        : pss.after - pss.before,
   };
 }
 
@@ -294,8 +297,8 @@ const DRAIN_MS = 300;
 
 /**
  * Launch the host on the workload bundle and measure it: the bundle asks this process's server, on
- * `port`, to start, and to bracket each step (`begin/<name>`, `end/<name>`), and says when it is
- * done. The host's commits and frames are read from its output against those brackets, and its
+ * `port`, to start, and to bracket each step (`begin/<name>`, then `end/<name>`, or `failed/<name>`
+ * for a step that did not do what it measures), and says when it is done. The host's commits and frames are read from its output against those brackets, and its
  * memory is sampled at the window step's. Stops the host. Rejects when the host does not start or
  * the workload does not finish in `timeoutMs`.
  *
@@ -310,22 +313,15 @@ export async function measureWorkload(
 ) {
   const output = new HostEvents();
   let log = '';
-  const { child, state, failed } = launchHost(
-    host,
-    bundle,
-    (chunk) => {
-      log += chunk;
-      output.push(String(chunk), performance.now());
-    },
-    { NGN_BENCH_PORT: String(port) },
-  );
-  /** @type {Record<string, { from?: number, to?: number }>} */
+  /** The host, once the server is listening: a port that is taken starts nothing. */
+  let launched;
+  /** @type {Record<string, { from?: number, to?: number, failed?: boolean }>} */
   const steps = {};
   const pss = {
     before: /** @type {number | null} */ (null),
     after: /** @type {number | null} */ (null),
   };
-  const sample = () => pssMb(read(`/proc/${child.pid}/smaps_rollup`) ?? '');
+  const sample = () => pssMb(read(`/proc/${launched.child.pid}/smaps_rollup`) ?? '');
   let finished;
   const done = new Promise((resolve) => (finished = resolve));
   const server = createServer(async (request, response) => {
@@ -345,8 +341,10 @@ export async function measureWorkload(
         await wait(DRAIN_MS);
         steps[name] = { from: performance.now() };
         if (name === 'window') pss.before = sample();
-      } else if (action === 'end' && name && steps[name]) {
+      } else if ((action === 'end' || action === 'failed') && name && steps[name]) {
+        // A step that did not do what it measures is a measurement of nothing.
         steps[name].to = performance.now();
+        steps[name].failed = action === 'failed';
         if (name === 'window') pss.after = sample();
       } else if (action === 'done') {
         finished();
@@ -357,12 +355,22 @@ export async function measureWorkload(
       response.end();
     }
   });
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(port, '127.0.0.1', () => resolve(undefined));
-  });
   let timer;
   try {
+    await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(port, '127.0.0.1', () => resolve(undefined));
+    });
+    launched = launchHost(
+      host,
+      bundle,
+      (chunk) => {
+        log += chunk;
+        output.push(String(chunk), performance.now());
+      },
+      { NGN_BENCH_PORT: String(port) },
+    );
+    const { child, failed } = launched;
     const timedOut = new Promise((_, reject) => {
       timer = setTimeout(
         () =>
@@ -373,8 +381,9 @@ export async function measureWorkload(
     const exited = new Promise((_, reject) =>
       child.once('exit', (code, signal) =>
         reject(
-          new Error(`The host ended (${signal ?? code}) before the workload finished.
-${log.slice(-2000)}`),
+          new Error(
+            `The host ended (${signal ?? code}) before the workload finished.\n${log.slice(-2000)}`,
+          ),
         ),
       ),
     );
@@ -383,10 +392,15 @@ ${log.slice(-2000)}`),
     return { ...workloadMetrics({ events: output.events, steps, pss }) };
   } finally {
     clearTimeout(timer);
-    server.close();
-    server.closeAllConnections();
-    await stopHost(child, stopGraceMs);
-    rmSync(state, { recursive: true, force: true });
+    // The next launch listens on the same port, so it is closed before this returns.
+    await new Promise((resolve) => {
+      server.close(resolve);
+      server.closeAllConnections();
+    });
+    if (launched) {
+      await stopHost(launched.child, stopGraceMs);
+      rmSync(launched.state, { recursive: true, force: true });
+    }
   }
 }
 

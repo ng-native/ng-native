@@ -5,7 +5,15 @@
  * runs it in the AlmaLinux 9 image from a Mac.
  */
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -29,7 +37,7 @@ const bench = (await import(new URL('../../scripts/bench-linux.mjs', import.meta
   };
   workloadMetrics(measured: {
     events: { kind: string; ms: number; at: number }[];
-    steps: Record<string, { from?: number; to?: number }>;
+    steps: Record<string, { from?: number; to?: number; failed?: boolean }>;
     pss: { before: number | null; after: number | null };
   }): Record<string, number | null>;
   measureWorkload(
@@ -316,6 +324,21 @@ describe('the workload metrics', () => {
     assert.equal(metrics['mountMs'], 8);
   });
 
+  it('reads nothing from a step that said it did not do what it measures', () => {
+    const metrics = bench.workloadMetrics({
+      events: [event('commit', 12, 150), event('commit', 2, 350), event('frame', 1, 360)],
+      steps: {
+        mount: { from: 100, to: 200, failed: true },
+        resize: { from: 300, to: 400 },
+        window: { from: 500, to: 600, failed: true },
+      },
+      pss: { before: 100, after: 118 },
+    });
+    assert.equal(metrics['mountMs'], null);
+    assert.equal(metrics['extraWindowMb'], null, 'a window that did not open grew nothing');
+    assert.equal(metrics['resizeCommitMs'], 2, 'the steps that worked are read');
+  });
+
   it('reads nothing for a step that logged nothing, or that never ended, so the run fails', () => {
     const metrics = bench.workloadMetrics({
       events: [event('commit', 5, 150)],
@@ -465,12 +488,14 @@ const workloadHost = (steps: string[], options: { crashBeforeDone?: boolean } = 
     "console.error('[ngn] first frame 50 ms after launch');",
     '(async () => {',
     "  await tell('start');",
-    `  for (const step of ${JSON.stringify(steps)}) {`,
-    '    const [name, ...lines] = step.split("|");',
-    '    await tell(`begin/${name}`);',
+    `  for (const entry of ${JSON.stringify(steps)}) {`,
+    '    const [name, ...lines] = entry.split("|");',
+    '    const failed = name.startsWith("!");',
+    '    const step = failed ? name.slice(1) : name;',
+    '    await tell(`begin/${step}`);',
     '    for (const line of lines) console.error(line);',
     '    await sleep(100);',
-    '    await tell(`end/${name}`);',
+    '    await tell(`${failed ? "failed" : "end"}/${step}`);',
     '  }',
     options.crashBeforeDone ? '  process.exit(7);' : "  await tell('done');",
     '  setTimeout(() => {}, 600_000);',
@@ -514,6 +539,20 @@ describe('measuring the workload', { skip: process.platform !== 'linux' }, () =>
     assert.ok(metrics['extraWindowMb'] !== null && Math.abs(metrics['extraWindowMb']!) < 5);
   });
 
+  it('reads a step the app reports as failed as no measurement', async () => {
+    const metrics = await measureOf(
+      workloadHost([
+        'mount|[ngn] commit 4 ms',
+        'scroll|[ngn] frame 2 ms',
+        'resize|[ngn] commit 3 ms|[ngn] frame 1 ms',
+        '!window',
+      ]),
+      await freePort(),
+    );
+    assert.equal(metrics['mountMs'], 4);
+    assert.equal(metrics['extraWindowMb'], null);
+  });
+
   it('rejects, with what the host said, when the host ends before the workload does', async () => {
     await assert.rejects(
       measureOf(
@@ -522,6 +561,27 @@ describe('measuring the workload', { skip: process.platform !== 'linux' }, () =>
       ),
       /ended \(7\) before the workload finished[\s\S]*first frame/,
     );
+  });
+
+  it('starts no host when the port is taken', async () => {
+    const taken = createServer();
+    await new Promise<void>((resolve) => taken.listen(0, '127.0.0.1', resolve));
+    const { port } = taken.address() as { port: number };
+    const dir = mkdtempSync(path.join(tmpdir(), 'bench-linux-port-'));
+    const startedFile = path.join(dir, 'started');
+    try {
+      const script = workloadHost([]).replace(
+        "console.error('[ngn] first frame",
+        `require('node:fs').writeFileSync(${JSON.stringify(startedFile)}, ''); console.error('[ngn] first frame`,
+      );
+      await assert.rejects(measureOf(script, port), /EADDRINUSE/);
+      // Long enough for a host that had been started to have run its first line.
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      assert.equal(existsSync(startedFile), false);
+    } finally {
+      await new Promise((resolve) => taken.close(resolve));
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('rejects a workload that does not finish in time', async () => {
