@@ -2,8 +2,10 @@
 """Launches the GTK host on a bundle and reads its accessibility tree over AT-SPI, as a screen
 reader reads it, with no screen reader: the host's window, and each role named in it with a name.
 Fails when the host exits, draws no first frame, or the tree lacks a role. Prints the tree.
+With --tab, it then presses Tab, as a keyboard user does, and fails unless a node in the host's
+window says it is focused: the core's Tab order reached a real GTK widget that AT-SPI reports.
 
-    dbus-run-session -- atspi-check.py <ngn-linux> <bundle.js> [--role "push button"]...
+    dbus-run-session -- atspi-check.py <ngn-linux> <bundle.js> [--role "push button"]... [--tab]
 
 Needs a display (Xvfb) and pyatspi. A test launch, as launch-probe.sh starts one: the host keeps its
 state in a new directory and shows no system prompt.
@@ -21,7 +23,8 @@ import pyatspi
 
 def walk(node, depth, out):
     try:
-        out.append((depth, node.getRoleName(), node.name or ""))
+        focused = node.getState().contains(pyatspi.STATE_FOCUSED)
+        out.append((depth, node.getRoleName() + (" (focused)" if focused else ""), node.name or ""))
         for i in range(node.childCount):
             walk(node.getChildAtIndex(i), depth + 1, out)
     except Exception as error:  # A node can go as it is read.
@@ -49,12 +52,30 @@ def print_tree(tree, stream):
         print("%s%s %r" % ("  " * depth, role, name), file=stream)
 
 
+def check_tab(host, deadline, fail):
+    """Points into the window, so GTK takes it as active with no window manager, then presses Tab
+    until a node is focused."""
+    pyatspi.Registry.generateMouseEvent(200, 200, pyatspi.MOUSE_ABS)
+    tree = None
+    while time.time() < deadline:
+        pyatspi.Registry.generateKeyboardEvent(0xFF09, None, pyatspi.KEY_SYM)  # Tab
+        time.sleep(1)
+        tree = host_tree(host.pid) or []
+        focused = [(r, n) for _, r, n in tree if r.endswith(" (focused)")]
+        if focused:
+            print_tree(tree, sys.stdout)
+            print("atspi-check: Tab focused %s %r" % (focused[0][0].split(" (")[0], focused[0][1]))
+            return 0
+    return fail("no node in the host's window was focused after Tab", tree)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("host")
     parser.add_argument("bundle")
     parser.add_argument("--role", action="append", default=[], help="an AT-SPI role name the tree must hold, named")
     parser.add_argument("--seconds", type=int, default=60)
+    parser.add_argument("--tab", action="store_true", help="press Tab and require a focused node")
     args = parser.parse_args()
 
     # The registry the host's GTK and pyatspi both find through the session bus.
@@ -88,8 +109,10 @@ def main():
             with open(log_path) as text:
                 drawn = "[ngn] first frame" in text.read()
             tree = host_tree(host.pid) if drawn else None
-            missing = [role for role in args.role if not any(r == role and n for _, r, n in tree or [])]
+            missing = [role for role in args.role if not any(r.split(" (")[0] == role and n for _, r, n in tree or [])]
             if tree and not missing:
+                if args.tab:
+                    return check_tab(host, deadline, fail)
                 print_tree(tree, sys.stdout)
                 print("atspi-check: %d nodes, with %s" % (len(tree), ", ".join(args.role) or "a window"))
                 return 0

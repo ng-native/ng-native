@@ -175,11 +175,7 @@ void GtkBackend::serviceUiThread() {
 }
 
 void GtkBackend::createView(const ShadowView &view) {
-  auto accessibility = accessibilityOf(view);
   GtkWidget *widget = makeViewWidget(accessibleRole(view));
-  if (accessibility) {
-    applyAccessibility(widget, *accessibility);
-  }
   g_object_ref_sink(widget);
   ViewData *d = viewData(widget);
   d->tag = view.tag;
@@ -215,6 +211,9 @@ void GtkBackend::createView(const ShadowView &view) {
     }
   }
   makeControl(widget, *d);
+  if (auto accessibility = accessibilityOf(view)) {
+    applyAccessibility(accessibleWidget(*d), *accessibility);
+  }
   applyViewProps(widget, *d);
   views_[view.tag] = widget;
   if (view.tag == view.surfaceId) {
@@ -294,7 +293,7 @@ void GtkBackend::updateProps(const ShadowView &view) {
   followRole(view);
   applyViewProps(it->second, *d);
   if (auto accessibility = accessibilityOf(view)) {
-    applyAccessibility(it->second, *accessibility);
+    applyAccessibility(accessibleWidget(*d), *accessibility);
   }
   applyTextFieldProps(*d);
   applyScrollViewProps(*d);
@@ -319,7 +318,7 @@ void GtkBackend::updateState(const ShadowView &view) {
     // or no element at all.
     followRole(view);
     if (auto accessibility = accessibilityOf(view)) {
-      applyAccessibility(it->second, *accessibility);
+      applyAccessibility(accessibleWidget(*d), *accessibility);
     }
     gtk_widget_queue_draw(it->second);
   }
@@ -448,6 +447,10 @@ void GtkBackend::setSplitView(SurfaceId surfaceId, Tag split, bool window) {
 
 void GtkBackend::setSourceLists(SurfaceId, Tag parent, const std::vector<SourceList> &lists) {
   splitViews_->setSourceLists(parent, lists);
+}
+
+void GtkBackend::announce(SurfaceId surfaceId, const Announcement &announcement) {
+  announceOn(surfaceWidget(surfaceId), announcement);
 }
 
 void GtkBackend::setSvgDrawing(SurfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) {

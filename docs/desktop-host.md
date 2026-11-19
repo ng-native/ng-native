@@ -34,7 +34,12 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   Accessibility is GTK's own: each widget is made with the GTK role for the view's ARIA role,
   which the core's `aria-role.h` reads from its `role` or `accessibilityRole`, and its label,
   description, level and states follow the props. GTK fixes a role when it makes the widget, so
-  a view whose role changes gets a new widget in its place, with its children and the focus.
+  a view whose role changes gets a new widget in its place, with its children and the focus. A
+  text input's field is the text box with its label, and its view is generic. Announcements go
+  through `gtk_accessible_announce`, found at run time on GTK 4.14 and later, and say nothing
+  below. `AccessibilityInfo`'s settings (`accessibility-settings.h`) come from the settings
+  portal, GTK's settings and libadwaita's high contrast, through the core's `linuxAccessibility`,
+  and the screen reader from AT-SPI's `org.a11y.Status`.
   Orca's structural navigation finds no headings or landmarks in a GTK 4 app. It
   builds on Linux against GTK 4.10 or later and libadwaita 1.4 or later, and on a Mac against
   Homebrew's (`brew install gtk4 libadwaita`) as a dev loop. Its HTTP and WebSocket client is the
