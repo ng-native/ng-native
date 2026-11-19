@@ -212,8 +212,9 @@ fetching the runtime from Flathub. A Flatpak made this way is the app's own remo
 take an app that ships a prebuilt host without an exception, and the manifest the command writes
 beside the repository is what a submission would start from.
 
-The JavaScript is not updated in place yet: the Linux host does not check an updates server, so a
-new version of the app is a new package.
+The JavaScript updates in place, from a server you host, as on macOS: see
+[Over-the-air updates](/guide/ota-updates). A new version of the host itself is a
+new package.
 
 ## Prebuilt hosts
 

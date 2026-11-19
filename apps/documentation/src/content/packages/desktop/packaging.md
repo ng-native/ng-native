@@ -66,9 +66,13 @@ assets are kept by their key, the file hash, and `NgNativeUpdates.localAssets` m
 transformer that looks there first, by the file hash of the scale it picks, as `expo-asset` does
 with `expo-updates` on iOS and Android.
 
-The Linux host takes no updates from a server yet: it does not read `updates.url`, whatever
-`metadata.json` holds, and `checkForAppUpdate()` resolves `false`. A Linux package is updated as a
-new package, by the package manager or Flatpak.
+A Linux package takes JavaScript updates the same way, from the `updates.url`, runtime version and
+code-signing certificate that `metadata.json` holds, and keeps them in
+`$XDG_DATA_HOME/<app id>/updates`, outside the install folder, which a `deb`, `rpm` or Flatpak
+installs read-only. The host itself is
+updated as a new package, by the package manager or Flatpak: `checkForAppUpdate()` resolves
+`false`. An update downloaded before such a package update does not run over the new package's
+bundle.
 
 ## Linux packages
 
