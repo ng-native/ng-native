@@ -5,7 +5,7 @@
  * runs it in the AlmaLinux 9 image from a Mac.
  */
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -114,6 +114,34 @@ describe('the bundle measured', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("puts the export's assets beside the bytecode the host launches", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'bench-linux-hbc-'));
+    try {
+      writeFileSync(
+        path.join(dir, 'hermesc'),
+        '#!/usr/bin/env bash\nwhile [ "$1" != -out ]; do shift; done\necho ok > "$2"\n',
+      );
+      chmodSync(path.join(dir, 'hermesc'), 0o755);
+      const exported = path.join(dir, 'export');
+      mkdirSync(path.join(exported, 'assets'), { recursive: true });
+      writeFileSync(path.join(exported, 'main.js'), '');
+      writeFileSync(path.join(exported, 'assets', 'logo.png'), 'png');
+      const out = path.join(dir, 'out');
+      mkdirSync(out);
+      const launched = bench.bytecode(
+        path.join(dir, 'ngn-linux'),
+        path.join(exported, 'main.js'),
+        out,
+      );
+      assert.equal(
+        readFileSync(path.join(path.dirname(launched), 'assets', 'logo.png'), 'utf8'),
+        'png',
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('the Linux budget', () => {
@@ -139,6 +167,15 @@ describe('the Linux budget', () => {
       const expected = waived.some((one) => one.metric === result.metric) ? 'waived' : 'missing';
       assert.equal(result.status, expected, result.metric);
     }
+  });
+});
+
+describe('a host that cannot start', () => {
+  it('rejects the measurement instead of ending the process', async () => {
+    await assert.rejects(
+      bench.measure('/nowhere/ngn-linux', '/b/main.hbc', { settleMs: 50, idleMs: 50 }),
+      /ENOENT/,
+    );
   });
 });
 

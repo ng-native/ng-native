@@ -62,13 +62,20 @@ export async function shoot(target, route) {
   let log = '';
   child.stdout.on('data', (chunk) => (log += chunk));
   child.stderr.on('data', (chunk) => (log += chunk));
-  const exited = new Promise((resolve) => child.once('exit', resolve));
+  // A host that never starts emits `error` and no `exit`.
+  let spawnError;
+  child.once('error', (error) => (spawnError = error));
+  const exited = new Promise((resolve) => {
+    child.once('exit', resolve);
+    child.once('error', resolve);
+  });
   try {
     const limit = (target.limitSeconds ?? 30) * 1000;
     for (let waited = 0; waited < limit && !captureResult(log); waited += 200) {
-      if (child.exitCode !== null || child.signalCode !== null) break;
+      if (spawnError || child.exitCode !== null || child.signalCode !== null) break;
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
+    if (spawnError) throw spawnError;
     if (captureResult(log) !== 'captured' || !existsSync(file)) {
       throw new Error(`No capture for ${route}. The host's output:\n${log}`);
     }
