@@ -134,6 +134,16 @@ void watchFirstFrame(GtkWidget *window, GtkWidget *surface) {
   }), surface);
 }
 
+// A surface fills its window below the header bar, which its content never runs under: its safe
+// area is clear on every side, and the window controls reach none of it.
+void reportContainer(SurfaceId surface, int width, int height) {
+  gHost.backend->modals().settle();
+  if (gHost.mounting) {
+    gHost.mounting->setContainerInsets(
+        surface, {.size = {static_cast<facebook::react::Float>(width), static_cast<facebook::react::Float>(height)}});
+  }
+}
+
 // A surface's widget joins the backend and the input dispatcher.
 void addSurface(SurfaceId surface, GtkWidget *widget) {
   gHost.backend->addSurface(surface, widget);
@@ -220,6 +230,33 @@ int main(int argc, char *argv[]) {
   });
   gHost.mounting = views.mounting;
   gHost.input = std::move(views.input);
+  gHost.backend->hooks = {
+      .containerRoot =
+          [](facebook::react::Tag tag, bool root) {
+            if (!gHost.mounting) {
+              return;
+            }
+            if (root) {
+              gHost.mounting->tree().addContainerRoot(tag);
+            } else {
+              gHost.mounting->tree().removeContainerRoot(tag);
+            }
+          },
+      .attachInput =
+          [](GtkWidget *slot, SurfaceId surface, facebook::react::Tag tag) {
+            ngn::gtk::attachPointerInput(slot, surface, static_cast<ngn::ContainerId>(tag), gHost.input.get());
+            gHost.input->addContainer(static_cast<ngn::ContainerId>(tag), surface, tag);
+          },
+      .detachInput =
+          [](facebook::react::Tag tag) {
+            if (gHost.input) {
+              gHost.input->removeContainer(static_cast<ngn::ContainerId>(tag));
+            }
+          },
+  };
+  gHost.backend->modals().setSheetNodes([](SurfaceId surface, facebook::react::Tag tag) -> std::optional<ngn::SheetNode> {
+    return gHost.runtime ? gHost.runtime->sheetNode(surface, tag) : std::nullopt;
+  });
   if (settings.logCommits) {
     gHost.mounting->onCommit = [](SurfaceId, double ms) { fprintf(stderr, "[ngn] commit %.1f ms\n", ms); };
   }
@@ -249,10 +286,11 @@ int main(int argc, char *argv[]) {
   };
 
   int width = static_cast<int>(ngn::kDefaultWindowWidth), height = static_cast<int>(ngn::kDefaultWindowHeight);
-  gHost.appWindow = gtk_window_new();
+  gHost.appWindow = adw_window_new();
   gtk_window_set_title(GTK_WINDOW(gHost.appWindow), settings.title.c_str());
   gtk_window_set_default_size(GTK_WINDOW(gHost.appWindow), width, height);
   gHost.appSurface = ngn::gtk::makeSurfaceWidget(kAppSurface, [](int w, int h) {
+    reportContainer(kAppSurface, w, h);
     // Each allocation, a new size or a new scale: Dimensions follows the window, as on macOS.
     if (gHost.state) {
       gHost.state->metrics.set(windowMetrics(w, h));
@@ -261,7 +299,7 @@ int main(int argc, char *argv[]) {
       gHost.runtime->updateSurface(kAppSurface, metricsFor(w, h, gtk_widget_get_scale_factor(gHost.appWindow)));
     }
   });
-  gtk_window_set_child(GTK_WINDOW(gHost.appWindow), gHost.appSurface);
+  adw_window_set_content(ADW_WINDOW(gHost.appWindow), ngn::gtk::wrapInChrome(gHost.appSurface));
   addSurface(kAppSurface, gHost.appSurface);
   g_signal_connect(gHost.appWindow, "close-request", G_CALLBACK(+[](GtkWindow *, gpointer) -> gboolean {
     gHost.quit = true;
@@ -351,6 +389,7 @@ int main(int argc, char *argv[]) {
       .startSurface = [](SurfaceId surface, int w, int h, int scale) { gHost.runtime->startSurface(surface, "", metricsFor(w, h, scale)); },
       .resizeSurface =
           [](SurfaceId surface, int w, int h, int scale) {
+            reportContainer(surface, w, h);
             if (gHost.runtime) {
               gHost.runtime->updateSurface(surface, metricsFor(w, h, scale));
             }
@@ -358,6 +397,7 @@ int main(int argc, char *argv[]) {
       .stopSurface =
           [](SurfaceId surface) {
             gHost.runtime->stopSurface(surface);
+            gHost.mounting->removeContainerInsets(surface);
             gHost.input->removeContainer(surface);
             gHost.backend->removeSurface(surface);
             gHost.surfaces.erase(surface);

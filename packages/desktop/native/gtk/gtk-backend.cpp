@@ -34,9 +34,21 @@ void relayout(GtkWidget *widget) {
 
 } // namespace
 
-GtkBackend::GtkBackend() : uiThread_(std::this_thread::get_id()) {}
+GtkBackend::GtkBackend()
+    : uiThread_(std::this_thread::get_id()),
+      headers_(std::make_unique<Headers>(*this)),
+      modals_(std::make_unique<Modals>(*this)) {}
 
 GtkBackend::~GtkBackend() {
+  // Each gives back the views it hosts before the views go.
+  modals_.reset();
+  headers_.reset();
+  for (auto &[surfaceId, surface] : surfaces_) {
+    g_object_weak_unref(G_OBJECT(surface), surfaceGone, this);
+  }
+  for (auto &[tag, entry] : searchEntries_) {
+    g_object_unref(entry);
+  }
   {
     std::lock_guard lock(tasksMutex_);
     if (drainSource_ != 0) {
@@ -53,16 +65,92 @@ GtkBackend::~GtkBackend() {
 }
 
 void GtkBackend::addSurface(SurfaceId surfaceId, GtkWidget *surface) {
+  removeSurface(surfaceId);
   surfaces_[surfaceId] = surface;
+  // A surface finalized with its window (the window closed) is forgotten then, so that nothing
+  // reads it after: a header or modal let go of later finds no window.
+  g_object_weak_ref(G_OBJECT(surface), surfaceGone, this);
 }
 
 void GtkBackend::removeSurface(SurfaceId surfaceId) {
-  surfaces_.erase(surfaceId);
+  if (auto it = surfaces_.find(surfaceId); it != surfaces_.end()) {
+    g_object_weak_unref(G_OBJECT(it->second), surfaceGone, this);
+    surfaces_.erase(it);
+  }
+}
+
+void GtkBackend::surfaceGone(gpointer self, GObject *surface) {
+  auto &surfaces = static_cast<GtkBackend *>(self)->surfaces_;
+  for (auto it = surfaces.begin(); it != surfaces.end(); ++it) {
+    if (G_OBJECT(it->second) == surface) {
+      surfaces.erase(it);
+      return;
+    }
+  }
 }
 
 GtkWidget *GtkBackend::view(Tag tag) const {
   auto it = views_.find(tag);
   return it == views_.end() ? nullptr : it->second;
+}
+
+GtkWidget *GtkBackend::surfaceWidget(SurfaceId surfaceId) const {
+  auto it = surfaces_.find(surfaceId);
+  return it == surfaces_.end() ? nullptr : it->second;
+}
+
+ViewData *GtkBackend::data(Tag tag) const {
+  return viewData(view(tag));
+}
+
+void GtkBackend::hostView(Tag tag, GtkWidget *slot) {
+  GtkWidget *widget = view(tag);
+  if (!widget) {
+    return;
+  }
+  unhostView(tag);
+  GtkWidget *placeholder = makeViewWidget();
+  g_object_ref_sink(placeholder);
+  gtk_widget_set_child_visible(placeholder, FALSE);
+  if (GtkWidget *parent = gtk_widget_get_parent(widget)) {
+    gtk_widget_insert_after(placeholder, parent, widget);
+    gtk_widget_unparent(widget);
+  }
+  gtk_widget_set_parent(widget, slot);
+  hosted_[tag] = {.placeholder = placeholder, .slot = slot};
+  gtk_widget_queue_resize(slot);
+}
+
+void GtkBackend::unhostView(Tag tag) {
+  auto it = hosted_.find(tag);
+  if (it == hosted_.end()) {
+    return;
+  }
+  Hosted hosted = it->second;
+  hosted_.erase(it);
+  GtkWidget *widget = view(tag);
+  if (widget && gtk_widget_get_parent(widget) == hosted.slot) {
+    gtk_widget_unparent(widget);
+    if (GtkWidget *parent = gtk_widget_get_parent(hosted.placeholder)) {
+      gtk_widget_insert_after(widget, parent, hosted.placeholder);
+    }
+    relayout(widget);
+  }
+  if (gtk_widget_get_parent(hosted.placeholder)) {
+    gtk_widget_unparent(hosted.placeholder);
+  }
+  g_object_unref(hosted.placeholder);
+}
+
+bool GtkBackend::isHosted(Tag tag) const {
+  auto it = hosted_.find(tag);
+  GtkWidget *widget = view(tag);
+  return it != hosted_.end() && widget && gtk_widget_get_parent(widget) == it->second.slot;
+}
+
+GtkWidget *GtkBackend::searchEntry(Tag tag) const {
+  auto it = searchEntries_.find(tag);
+  return it == searchEntries_.end() ? nullptr : it->second;
 }
 
 void GtkBackend::runOnUiThread(std::function<void()> task) {
@@ -145,6 +233,17 @@ void GtkBackend::createView(const ShadowView &view) {
     applyScrollViewState(*d);
   } else if (d->component == "Image") {
     makeImageView(widget, *d);
+  } else if (d->component == "RNSScreenStackHeaderConfig") {
+    // What of a header shows is in the window's header bar: its subtree is neither drawn nor hit
+    // in the content.
+    gtk_widget_set_child_visible(widget, FALSE);
+    hooks.containerRoot(view.tag, true);
+  } else if (d->component == "RNSSearchBar") {
+    GtkWidget *entry = makeSearchEntry(*this, view.tag);
+    searchEntries_[view.tag] = GTK_WIDGET(g_object_ref_sink(entry));
+    if (view.props) {
+      applySearchBar(entry, *view.props);
+    }
   }
   hideSvgElement(widget);
   applyViewProps(widget, *d);
@@ -161,6 +260,19 @@ void GtkBackend::deleteView(SurfaceId, Tag tag) {
   if (it == views_.end()) {
     return;
   }
+  modals_->unmounted(tag);
+  headers_->forget(tag);
+  unhostView(tag);
+  if (viewData(it->second)->component == "RNSScreenStackHeaderConfig") {
+    hooks.containerRoot(tag, false);
+  }
+  if (auto entry = searchEntries_.find(tag); entry != searchEntries_.end()) {
+    if (gtk_widget_get_parent(entry->second)) {
+      gtk_widget_unparent(entry->second);
+    }
+    g_object_unref(entry->second);
+    searchEntries_.erase(entry);
+  }
   if (gtk_widget_get_parent(it->second)) {
     gtk_widget_unparent(it->second);
   }
@@ -168,11 +280,12 @@ void GtkBackend::deleteView(SurfaceId, Tag tag) {
   views_.erase(it);
 }
 
-void GtkBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
+void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int index) {
   auto p = views_.find(parent), c = views_.find(child);
   if (p == views_.end() || c == views_.end()) {
     return;
   }
+  unhostView(child);
   unparentStayingHidden(c->second);
   // Fabric's order is the drawing order. The index counts views only: a TextInput's field is a
   // child of its own, after them.
@@ -190,9 +303,14 @@ void GtkBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
   if (ViewData *d = viewData(c->second); d && d->image) {
     applyImageProps(*d, gtk_widget_get_scale_factor(c->second));
   }
+  if (viewData(c->second)->component == "ModalHostView") {
+    modals_->mounted(surfaceId, child);
+  }
 }
 
 void GtkBackend::removeChild(SurfaceId, Tag, Tag child, int) {
+  modals_->unmounted(child);
+  unhostView(child);
   if (auto c = views_.find(child); c != views_.end()) {
     unparentStayingHidden(c->second);
   }
@@ -215,6 +333,9 @@ void GtkBackend::updateProps(const ShadowView &view) {
   applyScrollViewProps(*d);
   if (d->image) {
     applyImageProps(*d, gtk_widget_get_scale_factor(it->second));
+  }
+  if (GtkWidget *entry = searchEntry(view.tag); entry && view.props) {
+    applySearchBar(entry, *view.props);
   }
   relayout(it->second);
 }
@@ -302,8 +423,13 @@ void GtkBackend::followRole(const ShadowView &view) {
 void GtkBackend::updateLayout(const ShadowView &view) {
   if (auto it = views_.find(view.tag); it != views_.end()) {
     ViewData *d = viewData(it->second);
+    bool resized = d->layout.frame.size != view.layoutMetrics.frame.size;
     d->layout = view.layoutMetrics;
     forgetText(*d);
+    // A slot is measured from the view it hosts, and GTK keeps a measurement until a resize.
+    if (auto hosted = hosted_.find(view.tag); resized && hosted != hosted_.end()) {
+      gtk_widget_queue_resize(hosted->second.slot);
+    }
     // A field's natural alignment follows the layout's direction, and a scroll view's scroll bars
     // the content's size against its own.
     applyTextFieldProps(*d);
@@ -321,6 +447,9 @@ void GtkBackend::updateEventEmitter(const ShadowView &view) {
 void GtkBackend::dispatchCommand(Tag tag, const std::string &name, const folly::dynamic &args) {
   if (auto it = views_.find(tag); it != views_.end()) {
     textFieldCommand(*viewData(it->second), name, args);
+    if (GtkWidget *entry = searchEntry(tag)) {
+      runSearchBarCommand(entry, name, args);
+    }
     scrollViewCommand(*viewData(it->second), name, args);
   }
 }
@@ -333,7 +462,13 @@ void GtkBackend::setCovered(SurfaceId, Tag tag, bool covered) {
   }
 }
 
+void GtkBackend::setFrontHeader(SurfaceId surfaceId, const std::optional<ScreenStacks::FrontHeader> &header) {
+  headers_->show(surfaceId, header);
+}
+
 void GtkBackend::didMount(SurfaceId surfaceId) {
+  modals_->settle();
+  headers_->refresh();
   if (onMount) {
     onMount(surfaceId);
   }

@@ -1,6 +1,9 @@
 #include "app-windows.h"
 
+#include "screens.h"
 #include "view-widget.h"
+
+#include <adwaita.h>
 
 #include <algorithm>
 #include <cmath>
@@ -63,7 +66,7 @@ void GtkWindows::openWindow(SurfaceId surface, const WindowRequest &request, con
 void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const WindowPlacement &placement, std::function<void()> opened) {
   int width = static_cast<int>(std::lround(placement.frame.width > 0 ? placement.frame.width : request.width.value_or(kDefaultWindowWidth)));
   int height = static_cast<int>(std::lround(placement.frame.height > 0 ? placement.frame.height : request.height.value_or(kDefaultWindowHeight)));
-  GtkWidget *window = gtk_window_new();
+  GtkWidget *window = adw_window_new();
   gtk_window_set_title(GTK_WINDOW(window), request.title.c_str());
   gtk_window_set_default_size(GTK_WINDOW(window), width, height);
   gtk_window_set_resizable(GTK_WINDOW(window), request.resizable);
@@ -75,7 +78,7 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   if (request.minWidth || request.minHeight) {
     gtk_widget_set_size_request(widget, static_cast<int>(request.minWidth.value_or(-1)), static_cast<int>(request.minHeight.value_or(-1)));
   }
-  gtk_window_set_child(GTK_WINDOW(window), widget);
+  adw_window_set_content(ADW_WINDOW(window), wrapInChrome(widget));
   windows_[surface] = {.window = window, .surface = widget};
   // A move to a monitor of another scale changes no size, so the surface widget does not report it.
   g_signal_connect_data(

@@ -78,7 +78,9 @@ bool SafeAreas::settle(const ViewTree &tree) {
     }
     auto insets = insetsWithin(*container, unmoved);
     bool changed = !tracked.known || insets != tracked.insets ||
-        (tracked.kind == Kind::Provider && (frame != tracked.frame || container->titlebarLeading != tracked.titlebarLeading));
+        (tracked.kind == Kind::Provider &&
+         (frame != tracked.frame || container->titlebarLeading != tracked.titlebarLeading ||
+          container->titlebarTrailing != tracked.titlebarTrailing));
     if (!changed) {
       continue;
     }
@@ -87,8 +89,9 @@ bool SafeAreas::settle(const ViewTree &tree) {
     tracked.insets = insets;
     tracked.frame = frame;
     tracked.titlebarLeading = container->titlebarLeading;
+    tracked.titlebarTrailing = container->titlebarTrailing;
     if (tracked.kind == Kind::Provider) {
-      emitInsetsChange(*node, insets, frame, container->titlebarLeading);
+      emitInsetsChange(*node, insets, frame, container->titlebarLeading, container->titlebarTrailing);
     } else {
       setStateInsets(*node, insets);
     }
@@ -96,7 +99,12 @@ bool SafeAreas::settle(const ViewTree &tree) {
   return told;
 }
 
-void SafeAreas::emitInsetsChange(const ViewTree::Node &provider, EdgeInsets insets, Rect frame, double titlebarLeading) {
+void SafeAreas::emitInsetsChange(
+    const ViewTree::Node &provider,
+    EdgeInsets insets,
+    Rect frame,
+    double titlebarLeading,
+    double titlebarTrailing) {
   if (!provider.view.eventEmitter) {
     return;
   }
@@ -107,7 +115,7 @@ void SafeAreas::emitInsetsChange(const ViewTree::Node &provider, EdgeInsets inse
           folly::dynamic::object("top", insets.top)("right", insets.right)("bottom", insets.bottom)("left", insets.left))(
           "frame",
           folly::dynamic::object("x", frame.origin.x)("y", frame.origin.y)("width", frame.size.width)(
-              "height", frame.size.height))("titlebarLeading", titlebarLeading));
+              "height", frame.size.height))("titlebarLeading", titlebarLeading)("titlebarTrailing", titlebarTrailing));
 }
 
 void SafeAreas::setStateInsets(const ViewTree::Node &view, EdgeInsets insets) {

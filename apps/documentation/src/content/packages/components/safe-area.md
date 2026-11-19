@@ -77,6 +77,10 @@ clear of them: their width in a window with no sidebar and in the sidebar pane t
 not one per pane: it holds what the most recent provider reported, so a content pane that reports
 after the sidebar sets it to `0px` until the sidebar reports again. It is `0px` on every other OS.
 
+`--safe-area-inset-titlebar-trailing` is the same measure from the pane's trailing edge, for window
+controls on that side. It is `0px` on macOS, whose controls are on the leading side, on Linux, whose
+content stays below the header bar, and on every other OS.
+
 Both components need `react-native-safe-area-context` installed; without it they render as
 unimplemented views rather than doing nothing quietly.
 

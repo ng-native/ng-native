@@ -43,10 +43,17 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   drives every request through `curl_multi`, behaving as NSURLSession does on macOS for redirects,
   timeouts (the longest silence), decoded bodies and `file:` and `data:` urls, and opening a
   WebSocket's `http` or `https` url as `ws` or `wss`, as React Native's HMR client asks. Unlike
-  macOS, its cookies last only as long as the process, and it takes a proxy only from libcurl's
-  environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY`, `NO_PROXY` and the rest), not
-  the desktop's settings. Linux is not yet an app target: the bundle it runs is exported for
-  `macos`, and menus and the libadwaita chrome come in later steps.
+  macOS, its cookies last only as long as the process, and it takes a proxy only from libcurl's environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY`, `NO_PROXY` and the rest), not the desktop's settings. Linux is not yet
+  an app target: the bundle it runs is exported for `macos`. A window is an
+  `AdwWindow` holding an `AdwHeaderBar` over a `GtkOverlay` with the surface (`screens.h`): the
+  front screen's header goes into the header bar as macOS puts it into the toolbar, in the core's
+  `headerLayout` order, with the header's subviews moved into slots of their own, each a container
+  for input, and a search bar as a `GtkSearchEntry`. A `<modal>` sheet is an `AdwDialog` in a
+  resizable window on libadwaita 1.5 and later, found at run time, and a drawn sheet on the
+  overlay on 1.4 or over a window that is not resizable, where libadwaita would open a window of
+  its own; a cover fills the overlay below the header bar. The content never runs under the
+  header bar, so each surface reports a clear safe area. A presented screen is not yet a sheet,
+  and menus, `AdwToolbarView` and the title-bar modes come in later steps.
 - `native/scripts`: fetching the pinned sources, building Hermes and building the host.
   `NGN_DESKTOP_CACHE` moves the cache and `NGN_JOBS` caps parallel compiles. `build.sh --library
   <dir>` compiles a library's component codegen and its own C++ in, as React Native's Android

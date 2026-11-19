@@ -85,3 +85,20 @@ TEST_CASE("a search bar's commands read as RNSSearchBar's, and others are ignore
   CHECK_FALSE(ngn::searchBarCommand("toggleCancelButton", folly::dynamic::array(true)));
   CHECK_FALSE(ngn::searchBarCommand("scroll", folly::dynamic::array()));
 }
+
+TEST_CASE("a front header's pieces go where the toolbar puts them, a left item replacing the back button") {
+  ngn::HeaderBar bar;
+  std::vector<ngn::HeaderSubview> subviews{{9, "right"}, {4, "left"}, {7, "searchBar"}, {5, "right"}, {6, "center"}, {8, "back"}};
+  auto layout = ngn::headerLayout(bar, subviews, true);
+  CHECK(layout == ngn::HeaderLayout{.back = false, .left = {4}, .center = {6}, .right = {5, 9}, .searchBars = {7}});
+
+  // With no left item, the back button leads while the stack can go back.
+  CHECK(ngn::headerLayout(bar, {{5, "right"}}, true).back);
+  CHECK_FALSE(ngn::headerLayout(bar, {{5, "right"}}, false).back);
+  // hideBackButton, and a left bar button, hide it too.
+  bar.hideBackButton = true;
+  CHECK_FALSE(ngn::headerLayout(bar, {}, true).back);
+  bar.hideBackButton = false;
+  bar.left = {ngn::BarButton{.id = "cancel", .title = "Cancel"}};
+  CHECK_FALSE(ngn::headerLayout(bar, {}, true).back);
+}

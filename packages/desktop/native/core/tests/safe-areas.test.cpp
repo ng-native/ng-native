@@ -31,10 +31,14 @@ struct RecordingAreas final : ngn::SafeAreas {
     auto it = margins->find(node.view.tag);
     return it == margins->end() ? std::nullopt : std::optional(it->second);
   }
-  void emitInsetsChange(const ngn::ViewTree::Node &node, EdgeInsets insets, Rect frame, double leading) override {
+  void emitInsetsChange(const ngn::ViewTree::Node &node, EdgeInsets insets, Rect frame, double leading, double trailing)
+      override {
     std::ostringstream line;
     line << "provider " << node.view.tag << " " << text(insets) << " at " << frame.origin.x << "," << frame.origin.y
          << " leading " << leading;
+    if (trailing != 0) {
+      line << " trailing " << trailing;
+    }
     out->push_back(line.str());
   }
   void setStateInsets(const ngn::ViewTree::Node &node, EdgeInsets insets) override {
@@ -147,6 +151,21 @@ TEST_CASE("the provider hears a change in the window controls' room alone") {
   auto controlsHidden = kWindow;
   controlsHidden.titlebarLeading = 0;
   f.mounting->setContainerInsets(1, controlsHidden);
+  CHECK(f.sent == Lines{"provider 2 52,0,0,0 at 0,0 leading 0"});
+}
+
+TEST_CASE("the provider hears a change in the trailing window controls' room alone, and their going") {
+  Fixture f;
+  auto header = kWindow;
+  header.titlebarLeading = 0;
+  header.titlebarTrailing = 42;
+  f.mounting->setContainerInsets(1, header);
+  auto provider = shadowView(2, "RNCSafeAreaProvider", {{0, 0}, {800, 600}});
+  f.mount({ShadowViewMutation::CreateMutation(provider), ShadowViewMutation::InsertMutation(1, provider, 0)});
+  CHECK(f.sent == Lines{"provider 2 52,0,0,0 at 0,0 leading 0 trailing 42"});
+  f.sent.clear();
+  header.titlebarTrailing = 0;
+  f.mounting->setContainerInsets(1, header);
   CHECK(f.sent == Lines{"provider 2 52,0,0,0 at 0,0 leading 0"});
 }
 

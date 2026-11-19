@@ -126,7 +126,8 @@ When the app has them installed, the host compiles in the Fabric components of
   the field is being typed in keeps it typing.
 - The window's content runs under the title bar and toolbar, and each safe-area view gets the part
   of the window's safe area it overlaps: `RNCSafeAreaProvider`'s `insetsChange` (with the window
-  controls' width as `titlebarLeading`), `RNCSafeAreaView` and `RNSSafeAreaView`.
+  controls' width as `titlebarLeading`, and `titlebarTrailing` for controls on the trailing side,
+  which a Mac window has none of), `RNCSafeAreaView` and `RNSSafeAreaView`.
 - A screen whose `stackPresentation` is not `push` is presented over its stack, as a `<modal>`
   is: `modal`, `formSheet` and `pageSheet` as a sheet on the window, `fullScreenModal`,
   `transparentModal` and the contained ones as a cover in the window, and one with an `anchor`

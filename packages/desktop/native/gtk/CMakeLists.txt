@@ -1,5 +1,6 @@
 # The GTK 4 backend and the ngn-linux binary. GTK 4.10 is the floor (el9 ships 4.12) and newer API
-# is refused at compile time; libadwaita is linked for its style manager now and the chrome later.
+# is refused at compile time; libadwaita is linked for its style manager and the header bar, and
+# newer libadwaita (AdwDialog) is found at run time.
 # Both come from pkg-config: the distribution's on Linux, Homebrew's on a Mac, where the backend
 # builds as a dev loop.
 #
@@ -17,6 +18,7 @@ add_library(ngn_gtk OBJECT
     host-sources.cpp
     image-view.cpp
     pango-text.cpp
+    screens.cpp
     scroll-view.cpp
     surface-input.cpp
     text-field.cpp
@@ -43,7 +45,7 @@ add_custom_command(TARGET ngn-linux POST_BUILD
 # backend the binary uses. Built with the core tests, and run beside them.
 if(NGN_TESTS)
   set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accessible.test.cpp tests/image-view.test.cpp tests/input.test.cpp tests/linking.test.cpp
-      tests/scroll-view.test.cpp tests/svg.test.cpp tests/text.test.cpp tests/views.test.cpp)
+      tests/screens.test.cpp tests/scroll-view.test.cpp tests/svg.test.cpp tests/text.test.cpp tests/views.test.cpp)
   add_executable(ngn_gtk_tests ${ngn_gtk_test_SRC} ../core/testing/fake-network.cpp)
   target_include_directories(ngn_gtk_tests PRIVATE ../core/tests ../core/testing)
   target_link_libraries(ngn_gtk_tests PRIVATE ngn_gtk doctest)
