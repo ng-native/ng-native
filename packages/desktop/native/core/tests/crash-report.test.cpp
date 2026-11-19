@@ -3,6 +3,7 @@
 #include <doctest/doctest.h>
 
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <signal.h>
 #include <unistd.h>
@@ -11,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <sstream>
 
 namespace {
@@ -136,5 +138,51 @@ TEST_CASE("a fatal signal still kills the process when a handler installed later
   std::error_code ignored;
   std::filesystem::remove_all(std::filesystem::temp_directory_path() / ("ngn-crash-chain-" + std::to_string(child)), ignored);
   CHECK(WIFSIGNALED(status));
+}
+
+namespace {
+
+// The child's wait status, or nothing when it is still running after `seconds` (then it is killed).
+std::optional<int> waitFor(pid_t child, int seconds) {
+  for (int i = 0; i < seconds * 20; ++i) {
+    int status = 0;
+    if (waitpid(child, &status, WNOHANG) == child) {
+      return status;
+    }
+    usleep(50 * 1000);
+  }
+  kill(child, SIGKILL);
+  waitpid(child, nullptr, 0);
+  return std::nullopt;
+}
+
+} // namespace
+
+TEST_CASE("a fatal signal kills the process in bounded time when the handler would block") {
+  auto dir = std::filesystem::temp_directory_path() / ("ngn-crash-stuck-" + std::to_string(getpid()));
+  struct Remove {
+    std::filesystem::path dir;
+    ~Remove() {
+      std::error_code ignored;
+      std::filesystem::remove_all(dir, ignored);
+    }
+  } remove{dir};
+  std::filesystem::create_directories(dir);
+  // A pipe no one reads: opening it to write blocks for good, as a lock the stack's unwinder waits
+  // on would.
+  auto path = dir / "fifo";
+  REQUIRE(mkfifo(path.c_str(), 0600) == 0);
+  pid_t child = fork();
+  REQUIRE(child >= 0);
+  if (child == 0) {
+    noCoreFile();
+    ngn::installCrashReport(path.string(), "ngn-test-host");
+    raise(SIGSEGV);
+    _exit(0);
+  }
+  auto status = waitFor(child, 10);
+  REQUIRE(status);
+  REQUIRE(WIFSIGNALED(*status));
+  CHECK(WTERMSIG(*status) == SIGSEGV);
 }
 #endif
