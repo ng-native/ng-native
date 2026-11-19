@@ -30,9 +30,10 @@ items stay in step with their bindings for as long as they are there.
 Every desktop app has App, Edit, View, Window and Help menus without writing one. A `<menu-group>`
 whose `menuRole` is `app`, `file`, `edit`, `view`, `window` or `help` adds its items to that menu; a
 `file` group goes after the App menu, and any other group after View. A group named as one of those
-menus but with no `menuRole` is a second menu of that name, and a warning says so. A `<menu-item>`
-with a `menuRole` replaces the standard item for that role, and without `(select)` does what the OS
-does for it. Settings... shows only when an item with `menuRole="settings"` has a `(select)`.
+menus but with no `menuRole` is drawn as a second menu of that name, and a warning says so (unless
+its items all have roles that move them into the default menus). A `<menu-item>` with a `menuRole`
+replaces the standard item for that role, and without `(select)` does what the OS does for it.
+Settings... shows only when an item with `menuRole="settings"` has a `(select)`.
 
 On macOS and iPadOS this is the menu bar. On iPhone and Android nothing is drawn, and each item's
 `shortcut` still works from a hardware keyboard; Android lists them in its Keyboard Shortcuts

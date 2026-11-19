@@ -412,11 +412,13 @@ export class Menus {
   private readonly unsubscribe = this.native?.subscribe((event) => this.hostSaid(event)) ?? null;
 
   constructor() {
-    // Once a label: a `<menu-group label="File">` with no role is a second File menu.
+    // Once a label: a `<menu-group label="File">` with no role that is still a group of its own
+    // once merged is drawn as a second File menu, on a host that draws a menu bar.
     const warned = new Set<string>();
     effect(() => {
+      if (!this.menuBarShown()) return;
       const defaults = defaultMenuBar(this.native?.appName || 'App');
-      for (const label of unmergedGroups(defaults, this.appGroups())) {
+      for (const label of unmergedGroups(defaults, this.menuBar())) {
         if (warned.has(label)) continue;
         warned.add(label);
         const role = defaults.find(

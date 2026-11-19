@@ -13,6 +13,10 @@ import { MenuBar, MenuGroup, MenuItem } from '../../components/src/menu.ts';
       <menu-group label="Issue">
         <menu-item label="Assign" />
       </menu-group>
+      <!-- Its one item moves into the default View menu, so no second View menu is drawn. -->
+      <menu-group label="View">
+        <menu-item label="Full Screen" menuRole="toggleFullScreen" />
+      </menu-group>
     </menu-bar>
   `,
 })

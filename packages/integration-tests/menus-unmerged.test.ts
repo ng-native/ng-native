@@ -19,11 +19,12 @@ after(() => {
   registerPlatformComponents('ios');
 });
 
-it('warns once that a File group with no menuRole is a second File menu, and not of its own groups', async () => {
+/** The warnings the fixture gives on a host that does, or does not, draw a menu bar. */
+async function warningsOn(menuBar: boolean) {
   registerPlatformComponents('macos');
   const bars: (readonly { label: string }[])[] = [];
   const native: NativeMenus = {
-    menuBar: true,
+    menuBar,
     appName: 'Atlas',
     setMenuBar: (groups) => void bars.push(groups),
     setShortcuts: () => {},
@@ -42,11 +43,24 @@ it('warns once that a File group with no menuRole is a second File menu, and not
     await settle();
   } finally {
     console.warn = warn;
+    cleanup();
   }
-  const mine = warnings.filter((line) => line.includes('menuRole'));
-  assert.equal(mine.length, 1, mine.join('\n'));
-  assert.match(mine[0]!, /<menu-group label="File"> has no menuRole/);
-  assert.match(mine[0]!, /menuRole="file"/);
-  // The menu bar does show two File menus, which is what the warning is about.
-  assert.equal(bars.at(-1)!.filter((group) => group.label === 'File').length, 2);
+  return { bars, warnings: warnings.filter((line) => line.includes('menuRole')) };
+}
+
+it('warns once that a File group with no menuRole is a second File menu, and of no other group', async () => {
+  const { bars, warnings } = await warningsOn(true);
+  assert.equal(warnings.length, 1, warnings.join('\n'));
+  assert.match(warnings[0]!, /<menu-group label="File"> has no menuRole/);
+  assert.match(warnings[0]!, /menuRole="file"/);
+  const labels = bars.at(-1)!.map((group) => group.label);
+  // The menu bar does show two File menus, which is what the warning is about; the View group,
+  // whose one item moved into the default View menu, is not drawn at all.
+  assert.equal(labels.filter((label) => label === 'File').length, 2);
+  assert.equal(labels.filter((label) => label === 'View').length, 1);
+});
+
+it('says nothing where no menu bar is drawn', async () => {
+  const { warnings } = await warningsOn(false);
+  assert.deepEqual(warnings, []);
 });

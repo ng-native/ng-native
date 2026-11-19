@@ -94,15 +94,16 @@ export const isSeparator = (entry: MenuEntry): entry is MenuSeparator => 'separa
  * gives a `print` item a handler.
  */
 /**
- * The app's groups with no `menuRole` named as one of the default menus is: each is drawn as a
- * second menu beside the default one, since only a role merges a group into its menu.
+ * The groups of a merged menu bar (`mergeMenuBar`) that have no `menuRole` and are named as one
+ * of the default menus is: each is drawn as a second menu of that name beside the default one,
+ * since only a role merges a group into its menu.
  */
 export function unmergedGroups(
   defaults: readonly MenuGroupModel[],
-  app: readonly MenuGroupModel[],
+  merged: readonly MenuGroupModel[],
 ): string[] {
   const named = new Set(defaults.map((group) => group.label.toLowerCase()));
-  return app
+  return merged
     .filter((group) => !group.menuRole && named.has(group.label.toLowerCase()))
     .map((group) => group.label);
 }
