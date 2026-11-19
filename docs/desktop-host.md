@@ -33,7 +33,9 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   through the OpenURI portal, falling back to `GtkUriLauncher` and `GtkFileLauncher`, and KeepAwake
   holds the session idle through the Inhibit portal (`system-access.h`). FileSystem's `watch` is a
   `GFileMonitor` (inotify), and its desktop and downloads folders come from the XDG user-dirs file,
-  absent when it names none (`file-system.h`). An svg
+  absent when it names none (`file-system.h`). A `GtkDropTarget` on each surface hands a drag's
+  file list or text to the core's input dispatcher, and a drag out the dispatcher starts from a
+  `[dragItem]` view is a GDK drag of a file list, a uri list and text (`drag-and-drop.h`). An svg
   draws the core's document of react-native-svg's elements (`svg.h`) with `cairo-canvas.h`, a
   cairo node in the view's snapshot, since GSK fills and strokes paths only from GTK 4.14; text in
   an svg is Pango's, and a `foreignObject`'s views are not drawn.
@@ -42,8 +44,9 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   description, level and states follow the props. GTK fixes a role when it makes the widget, so
   a view whose role changes gets a new widget in its place, with its children and the focus.
   Orca's structural navigation finds no headings or landmarks in a GTK 4 app. It
-  builds on Linux against GTK 4.10 or later and libadwaita 1.4 or later, and on a Mac against
-  Homebrew's (`brew install gtk4 libadwaita`) as a dev loop. Its HTTP and WebSocket client is the
+  builds on Linux against GTK 4.10 or later, libadwaita 1.4 or later and libsecret 0.20 or later
+  (SecureStore's, `secret-store.h`), and on a Mac against Homebrew's (`brew install gtk4
+libadwaita`) as a dev loop, without libsecret, so SecureStore is absent there. Its HTTP and WebSocket client is the
   core's libcurl one (`curl-network.h`), which the GTK build turns on (`NGN_CURL`): one thread
   drives every request through `curl_multi`, behaving as NSURLSession does on macOS for redirects,
   timeouts (the longest silence), decoded bodies and `file:` and `data:` urls, and opening a

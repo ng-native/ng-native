@@ -21,6 +21,7 @@
 #include "menus.h"
 #include "pango-text.h"
 #include "scroll-view.h"
+#include "secret-store.h"
 #include "status-notifier.h"
 #include "surface-input.h"
 #include "system-access.h"
@@ -488,6 +489,11 @@ int main(int argc, char *argv[]) {
       }
     }
   };
+  // A press that became a drag out of a `[dragItem]` view: the move that crossed the threshold
+  // starts the drag, which has the pointer from there.
+  gHost.input->onDragOut = [](facebook::react::Tag tag, const ngn::PointerInput &, const ngn::DragOutItem &item) {
+    ngn::gtk::dragOutOfPointer(gHost.backend->view(tag), item);
+  };
 
   int width = static_cast<int>(ngn::kDefaultWindowWidth), height = static_cast<int>(ngn::kDefaultWindowHeight);
   gHost.appWindow = adw_application_window_new(gHost.application);
@@ -670,6 +676,7 @@ int main(int argc, char *argv[]) {
        .tray = tray,
        .processes = processes,
        .shell = ngn::gtk::makeShellOpener(),
+       .secrets = ngn::gtk::makeSecretStore(appId, ngn::gtk::insideFlatpak()),
        .sleep = ngn::gtk::makeSleepPreventer(gHost.application),
        .notifications = [appId](std::shared_ptr<ngn::NotificationEvents>) { return ngn::gtk::makeLauncherBadgeNotifications(appId); },
        .undo = gHost.undo,
