@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Taiga",
+    "slug": "taiga-example",
+    "scheme": "taiga",
+    "newArchEnabled": true,
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "dev.angularnative.taiga"
+    },
+    "android": {
+      "package": "dev.angularnative.taiga"
+    },
+    "plugins": ["@ng-native/metro"]
+  }
+}

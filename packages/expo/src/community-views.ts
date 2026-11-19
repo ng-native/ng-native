@@ -26,7 +26,7 @@ export const NATIVE_VIEWS: Readonly<Record<string, [string, Record<string, unkno
    * `ui-slider` from `@expo/ui`, a SwiftUI slider there.
    */
   slider: ['RNCSlider', { maximumValue: 1, minimumValue: 0, step: 0 }],
-  /** `@react-native-community/datetimepicker`. iOS only: on Android the library has no view. */
+  /** `@react-native-community/datetimepicker`. iOS and macOS: on Android the library has no view. */
   'date-time-picker': ['RNDateTimePicker'],
   /**
    * `@react-native-picker/picker`, whose items are `<picker-item>` children. Absent on macOS, where
@@ -35,7 +35,7 @@ export const NATIVE_VIEWS: Readonly<Record<string, [string, Record<string, unkno
   picker: ['RNCPicker'],
   'picker-item': ['RNCPickerItem'],
   /**
-   * `@react-native-segmented-control/segmented-control`. iOS only.
+   * `@react-native-segmented-control/segmented-control`. iOS and macOS.
    *
    * A view manager from before Fabric, run through the interop layer, which only installs the
    * `onChange` block when the prop is set - as React's handler does by being there. Without it
@@ -82,4 +82,19 @@ export function registerNativeViews(...elements: readonly (keyof typeof NATIVE_V
     if (!known) throw new Error(`[angular-native] no native view is known as '${element}'`);
     registerViewName(element, known[0], known[1]);
   }
+}
+
+/** The known views already registered by a component that draws one, so each is named once. */
+const claimed = new Set<string>();
+
+/**
+ * Registers `element` the first time a component that draws it is made: importing
+ * `SegmentedControl` or `DateTimePicker` is the app asking for the view, so it never commits as an
+ * empty view for want of a `registerNativeViews` call. The engine names a node's view at commit,
+ * after its component is made, so the first one is named too.
+ */
+export function claimNativeView(element: keyof typeof NATIVE_VIEWS): void {
+  if (claimed.has(element)) return;
+  claimed.add(element);
+  registerNativeViews(element);
 }

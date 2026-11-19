@@ -37,7 +37,7 @@ function configure(backend: string, link: object) {
       'project(fixture C)',
       'add_library(react_native INTERFACE)',
       'set(NGN_BACKEND ' + backend + ')',
-      `include(${linkedModules})`,
+      `include("${linkedModules}")`,
       'message(STATUS "NGN_LINKED=[${NGN_LINKED}]")',
       '',
     ].join('\n'),
@@ -47,7 +47,9 @@ function configure(backend: string, link: object) {
     ['-S', path.join(dir, 'src'), '-B', path.join(dir, 'build'), `-DNGN_DESKTOP_LINK=${linkFile}`],
     { encoding: 'utf8' },
   );
-  return { run, linked: /NGN_LINKED=\[(.*)\]/.exec(run.stdout)?.[1] };
+  // CMake wraps a message to fit its line width, which the temp folder's path length moves.
+  const error = run.stderr.replace(/\s+/g, ' ');
+  return { run, error, linked: /NGN_LINKED=\[(.*)\]/.exec(run.stdout)?.[1] };
 }
 
 /** A library fragment declaring `target`, in a folder of its own. */
@@ -90,23 +92,25 @@ describe('cmake/linked-modules.cmake', () => {
   });
 
   it("refuses a link.json for macOS under the gtk backend, whose modules' sources are macOS's", () => {
-    const { run } = configure('gtk', {
+    const { run, error } = configure('gtk', {
       version: 1,
       os: 'macos',
       libraries: [library('rn-haptics', 'haptics_macos')],
       appModules: [],
     });
     assert.notEqual(run.status, 0);
-    assert.match(run.stderr, /links native code for macos, and the gtk backend is built for linux/);
+    assert.match(error, /links native code for macos, and the gtk backend is built for linux/);
   });
 
   it('refuses a link.json for Linux under the appkit backend', () => {
-    const { run } = configure('appkit', { version: 1, os: 'linux', libraries: [], appModules: [] });
+    const { run, error } = configure('appkit', {
+      version: 1,
+      os: 'linux',
+      libraries: [],
+      appModules: [],
+    });
     assert.notEqual(run.status, 0);
-    assert.match(
-      run.stderr,
-      /links native code for linux, and the appkit backend is built for macos/,
-    );
+    assert.match(error, /links native code for linux, and the appkit backend is built for macos/);
   });
 
   it('still reads a link.json written before it named an OS as macOS', () => {
