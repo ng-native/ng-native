@@ -1,4 +1,7 @@
-/** The Linux launcher: where a container finds a relative bundle, and that `stop` ends the whole host. */
+/**
+ * The Linux launcher: where a container finds a relative bundle and which ports it forwards, that
+ * `stop` ends the whole host, and that a crash report holds the host's last output.
+ */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -40,6 +43,45 @@ describe('linuxLaunchCommand in a container', () => {
     );
     assert.ok(launch.args.includes('http://127.0.0.1:1/x'));
     assert.equal(launch.args.filter((arg) => arg.endsWith(':ro')).length, 1);
+  });
+
+  it("forwards a loopback bundle URL's port beside the pool's and Metro's, each once", () => {
+    const script = (bundle: string) => {
+      const { args } = linuxLaunchCommand(
+        { host: '/home/u/build/gtk/ngn-linux', container: 'img', bundle, display: 'xvfb' },
+        request,
+        {},
+      );
+      return args[args.indexOf('-c') + 1];
+    };
+    assert.match(script('http://127.0.0.1:9090/main.bundle'), / 1234 8081 9090 &\n/);
+    assert.match(script('http://localhost:8081/main.bundle'), / 1234 8081 &\n/);
+    assert.match(script('http://192.168.1.2:9090/main.bundle'), / 1234 8081 &\n/);
+  });
+});
+
+describe('linuxLauncher crashReport', () => {
+  it('holds the output the host wrote after the session exited', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ngn-linux-launcher-'));
+    const stateDir = path.join(dir, 'state');
+    mkdirSync(stateDir);
+    const host = path.join(dir, 'host.sh');
+    // The last line reaches the pipe after the exit, as a crash message still in flight would.
+    writeFileSync(host, '#!/bin/bash\n(sleep 0.3; echo the last line) &\nexit 3\n', {
+      mode: 0o755,
+    });
+    const launcher = linuxLauncher({ host, container: false, display: 'inherit' });
+    const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir });
+    try {
+      assert.equal(await app.exited, 'status 3');
+      assert.match((await launcher.crashReport?.(0)) ?? '', /the last line/);
+    } finally {
+      try {
+        await app.stop();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
   });
 });
 
@@ -87,14 +129,19 @@ describe('linuxLauncher stop', () => {
       for (const pid of pids) assert.equal(await gone(pid), true, `process ${pid} outlived stop`);
       assert.equal(existsSync(stateDir), false);
     } finally {
-      for (const pid of pids) {
-        try {
-          process.kill(pid, 'SIGKILL');
-        } catch {
-          // Already gone.
+      try {
+        // A setup that failed after the start leaves the host running: stopping again is harmless.
+        await app.stop();
+      } finally {
+        for (const pid of pids) {
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch {
+            // Already gone.
+          }
         }
+        rmSync(dir, { recursive: true, force: true });
       }
-      rmSync(dir, { recursive: true, force: true });
     }
   });
 

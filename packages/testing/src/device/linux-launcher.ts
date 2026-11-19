@@ -274,12 +274,27 @@ export function linuxLaunchCommand(
       image,
       'bash',
       '-c',
-      sessionScript(display, [request.port, metroPort]),
+      sessionScript(display, forwardedPorts(request.port, metroPort, bundle)),
       'ngn-test',
       ...hostArgs,
     ],
     env: stringEnv(env),
   };
+}
+
+/**
+ * The ports the container forwards to the machine running Vitest: the pool's, Metro's, and a
+ * bundle URL's own when it names a loopback port, each once.
+ */
+function forwardedPorts(poolPort: number, metroPort: number, bundle: string): number[] {
+  const ports = [poolPort, metroPort];
+  if (/^https?:/.test(bundle)) {
+    const url = new URL(bundle);
+    if (url.port && ['127.0.0.1', 'localhost'].includes(url.hostname)) {
+      ports.push(Number(url.port));
+    }
+  }
+  return [...new Set(ports)];
 }
 
 /** The container runs as this user, so what it writes to a mount is the user's. */
@@ -355,12 +370,15 @@ async function untilGroupGone(group: number): Promise<void> {
 /** How many lines of the host's output a lost host's failure quotes. */
 const TAIL_LINES = 30;
 
+/** How long a crash report waits for the host's last output after it exits, in milliseconds. */
+const DRAIN_MS = 1000;
+
 export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
-  let tail: string[] = [];
+  // The latest launch's output: its last lines, and when its pipes closed.
+  let output = { tail: [] as string[], closed: Promise.resolve() };
   return {
     start(request): LaunchedApp {
       const launch = linuxLaunchCommand(options, request);
-      tail = [];
       const child: ChildProcess = spawn(launch.command, launch.args, {
         cwd: options.cwd,
         env: launch.env as NodeJS.ProcessEnv,
@@ -369,8 +387,17 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
         // display with it even when the script's own cleanup cannot run.
         detached: true,
       });
+      // Node can report the exit before the pipes hand over the last output, the crash message
+      // among it, so a report waits for them to close.
+      const current = {
+        tail: [] as string[],
+        closed: new Promise<void>((resolve) => child.once('close', () => resolve())),
+      };
+      output = current;
       const keep = (chunk: Buffer) => {
-        tail = [...tail, ...chunk.toString().split('\n').filter(Boolean)].slice(-TAIL_LINES);
+        current.tail = [...current.tail, ...chunk.toString().split('\n').filter(Boolean)].slice(
+          -TAIL_LINES,
+        );
       };
       child.stdout?.on('data', keep);
       child.stderr?.on('data', keep);
@@ -408,7 +435,15 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
         },
       };
     },
-    crashReport() {
+    async crashReport() {
+      // The launch asked about, before a relaunch replaces it. A process the session left holding
+      // the pipes open bounds the wait.
+      const asked = output;
+      await Promise.race([
+        asked.closed,
+        new Promise((resolve) => setTimeout(resolve, DRAIN_MS).unref()),
+      ]);
+      const { tail } = asked;
       return tail.length ? `The host's last output:\n${tail.join('\n')}` : undefined;
     },
   };
