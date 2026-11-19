@@ -201,11 +201,18 @@ bool pressesLatin(GtkWidget *widget, guint keyval, guint keycode, guint latin) {
 gboolean keyPressed(GtkEventControllerKey *, guint keyval, guint keycode, GdkModifierType state, gpointer user) {
   auto *field = static_cast<TextField *>(user);
   // GtkText's own undo and redo keys, run here so that its replay is known (a multiline field's
-  // buffer signals its own).
-  if (!field->scroll && (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) == GDK_CONTROL_MASK) {
-    bool shift = state & GDK_SHIFT_MASK;
-    const char *action = pressesLatin(field->text, keyval, keycode, GDK_KEY_z) ? (shift ? "text.redo" : "text.undo")
-                         : !shift && pressesLatin(field->text, keyval, keycode, GDK_KEY_y) ? "text.redo" : nullptr;
+  // buffer signals its own): Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z, and the Undo and Redo keys GTK 4.18
+  // and later bind.
+  if (!field->scroll) {
+    const char *action = nullptr;
+    GdkModifierType modifiers = static_cast<GdkModifierType>(state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK));
+    if (modifiers == GDK_CONTROL_MASK) {
+      bool shift = state & GDK_SHIFT_MASK;
+      action = pressesLatin(field->text, keyval, keycode, GDK_KEY_z) ? (shift ? "text.redo" : "text.undo")
+               : !shift && pressesLatin(field->text, keyval, keycode, GDK_KEY_y) ? "text.redo" : nullptr;
+    } else if (!modifiers && !(state & GDK_SHIFT_MASK)) {
+      action = keyval == GDK_KEY_Undo ? "text.undo" : keyval == GDK_KEY_Redo ? "text.redo" : nullptr;
+    }
     if (action) {
       field->replaying = true;
       gtk_widget_activate_action(field->text, action, nullptr);

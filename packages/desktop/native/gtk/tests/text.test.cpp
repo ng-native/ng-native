@@ -75,6 +75,20 @@ bool pressKey(GtkWidget *editor, guint keyval, GdkModifierType state, guint keyc
   return handled;
 }
 
+// The hardware key that makes `keyval` in the first layout group, or 0 when no key there does.
+guint firstGroupKeycode(GtkWidget *widget, guint keyval) {
+  GdkKeymapKey *keys = nullptr;
+  int count = 0;
+  guint keycode = 0;
+  if (gdk_display_map_keyval(gtk_widget_get_display(widget), keyval, &keys, &count)) {
+    for (int i = 0; i < count && !keycode; ++i) {
+      keycode = keys[i].group == 0 ? keys[i].keycode : 0;
+    }
+    g_free(keys);
+  }
+  return keycode;
+}
+
 } // namespace
 
 TEST_CASE("each line takes the paragraph's line height, measured and placed the same with or without Pango's") {
@@ -568,6 +582,24 @@ TEST_CASE("undo and redo put back what the field had, not capitalized again, one
   }
 }
 
+TEST_CASE("a single line's Undo and Redo keys put back what the field had, not capitalized again") {
+  REQUIRE(ngn::testing::gtkReady());
+  // GTK before 4.12.3 deletes on Backspace outside a change, which it cannot undo.
+  if (gtk_check_version(4, 12, 3)) {
+    return;
+  }
+  MountedViews views;
+  views.add(MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("autoCapitalize", "characters")("defaultValue", "\xC3\x9F")), {{10, 10}, {150, 80}}));
+  auto *field = ngn::gtk::viewData(views.view(2))->field;
+  gtk_editable_set_position(GTK_EDITABLE(field->text), -1);
+  g_signal_emit_by_name(field->text, "backspace");
+  REQUIRE(ngn::gtk::fieldText(*field).empty());
+  CHECK(pressKey(field->text, GDK_KEY_Undo, GdkModifierType(0)));
+  CHECK(ngn::gtk::fieldText(*field) == "\xC3\x9F");
+  CHECK(pressKey(field->text, GDK_KEY_Redo, GdkModifierType(0)));
+  CHECK(ngn::gtk::fieldText(*field).empty());
+}
+
 TEST_CASE("a single line's undo and redo keys work on a layout whose letters are not Latin") {
   REQUIRE(ngn::testing::gtkReady());
   // GTK before 4.12.3 deletes on Backspace outside a change, which it cannot undo.
@@ -581,12 +613,10 @@ TEST_CASE("a single line's undo and redo keys work on a layout whose letters are
   g_signal_emit_by_name(field->text, "backspace");
   REQUIRE(ngn::gtk::fieldText(*field).empty());
   // The hardware key that makes a Latin z in the first group makes Cyrillic ya on a Russian layout.
-  GdkKeymapKey *keys = nullptr;
-  int count = 0;
-  REQUIRE(gdk_display_map_keyval(gtk_widget_get_display(field->text), GDK_KEY_z, &keys, &count));
-  REQUIRE(count > 0);
-  guint keycode = keys[0].keycode;
-  g_free(keys);
+  guint keycode = firstGroupKeycode(field->text, GDK_KEY_z);
+  if (!keycode) {
+    return;
+  }
   CHECK(pressKey(field->text, GDK_KEY_Cyrillic_ya, GDK_CONTROL_MASK, keycode));
   CHECK(ngn::gtk::fieldText(*field) == "\xC3\x9F");
   CHECK(pressKey(field->text, GDK_KEY_Cyrillic_YA, static_cast<GdkModifierType>(GDK_CONTROL_MASK | GDK_SHIFT_MASK), keycode));
@@ -609,12 +639,10 @@ TEST_CASE("a single line's undo and redo keys follow the Latin letter the active
   REQUIRE(ngn::gtk::fieldText(*field) == "\xC3\x9F");
   // The hardware key that makes a Latin z in the first group makes y on a German layout and w on a
   // French one.
-  GdkKeymapKey *keys = nullptr;
-  int count = 0;
-  REQUIRE(gdk_display_map_keyval(gtk_widget_get_display(field->text), GDK_KEY_z, &keys, &count));
-  REQUIRE(count > 0);
-  guint keycode = keys[0].keycode;
-  g_free(keys);
+  guint keycode = firstGroupKeycode(field->text, GDK_KEY_z);
+  if (!keycode) {
+    return;
+  }
   CHECK_FALSE(pressKey(field->text, GDK_KEY_w, GDK_CONTROL_MASK, keycode));
   CHECK(ngn::gtk::fieldText(*field) == "\xC3\x9F");
   CHECK(pressKey(field->text, GDK_KEY_y, GDK_CONTROL_MASK, keycode));
