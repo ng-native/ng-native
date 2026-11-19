@@ -21,7 +21,7 @@ import {
 import path from 'node:path';
 
 /** What the cache holds, under `appkit/`: the files make-prebuilt.mjs archives. */
-export const HOST_FILES = ['ngn-macos', 'hermesc', 'Sparkle.framework'];
+export const HOST_FILES = ['ngn-macos', 'hermesc', 'hermesvm.framework', 'Sparkle.framework'];
 
 /** Bumped when the cache's layout or what the key covers changes, so older caches miss. */
 const SCHEMA = 1;
