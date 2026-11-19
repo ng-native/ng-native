@@ -920,3 +920,131 @@ TEST_CASE("a surface finalized with its window is the backend's no more, for a h
   REQUIRE(alive == nullptr);
   CHECK(backend->surfaceWidget(7) == nullptr);
 }
+
+namespace {
+
+// Whether a click in the middle of `widget` reaches it, or something in it.
+bool takesPointer(GtkWidget *window, GtkWidget *widget) {
+  graphene_point_t middle{static_cast<float>(gtk_widget_get_width(widget)) / 2, static_cast<float>(gtk_widget_get_height(widget)) / 2};
+  graphene_point_t at{};
+  if (!gtk_widget_compute_point(widget, window, &middle, &at)) {
+    return false;
+  }
+  GtkWidget *picked = gtk_widget_pick(window, at.x, at.y, GTK_PICK_DEFAULT);
+  return picked && (picked == widget || gtk_widget_is_ancestor(picked, widget));
+}
+
+// Whether Tab, walked round the window's GTK focus chain, reaches `widget` or something in it.
+bool reachedByTab(GtkWidget *window, GtkWidget *widget) {
+  for (int i = 0; i < 60; ++i) {
+    gtk_widget_child_focus(window, GTK_DIR_TAB_FORWARD);
+    GtkWidget *focus = gtk_root_get_focus(GTK_ROOT(window));
+    if (focus && (focus == widget || gtk_widget_is_ancestor(focus, widget))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+GtkWidget *buttonLabelled(GtkWidget *root, const std::string &label) {
+  for (GtkWidget *button : findAll(root, isButton)) {
+    if (labelOf(button) == label) {
+      return button;
+    }
+  }
+  return nullptr;
+}
+
+bool isWindowControlButton(GtkWidget *w) {
+  return GTK_IS_BUTTON(w) && gtk_widget_get_ancestor(w, GTK_TYPE_WINDOW_CONTROLS);
+}
+
+ShadowView focusableView(Tag tag, Rect frame) {
+  return MountedViews::shadow(tag, "View", ngn::testing::desktopViewProps(folly::dynamic::object("focusable", true)), frame);
+}
+
+} // namespace
+
+TEST_CASE("a cover or a drawn sheet holds the rest of the window still, its window controls aside, until it goes") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  // Not resizable: the sheet is drawn over the window on every libadwaita, not an AdwDialog.
+  gtk_window_set_resizable(GTK_WINDOW(views.window), FALSE);
+  GtkWidget *window = views.window;
+  GtkWidget *bar = ngn::gtk::chromeOf(views.surface)->headerBar;
+  auto notes = std::make_shared<HeaderProps>();
+  notes->bar.title = "Notes";
+  notes->bar.right = {barButton("add", "Add")};
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto config = shadow(4, "RNSScreenStackHeaderConfig", notes, {{0, 0}, {800, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {config, 3}, {focusableView(5, {{20, 80}, {100, 30}}), 3}});
+  views.settle();
+  GtkWidget *add = buttonLabelled(bar, "Add");
+  REQUIRE(add);
+  auto controls = findAll(bar, isWindowControlButton);
+  REQUIRE_FALSE(controls.empty());
+  CHECK(takesPointer(window, add));
+  CHECK(reachedByTab(window, add));
+  CHECK(reachedByTab(window, views.view(5)));
+
+  // A drawn sheet over it.
+  auto modal = shadow(6, "ModalHostView", nullptr, {{0, 0}, {800, 600}});
+  mountAll(views, {{modal, MountedViews::kSurface}, {focusableView(7, {{0, 0}, {100, 30}}), 6}});
+  views.backend->modals().settle();
+  views.settle();
+  REQUIRE_FALSE(views.backend->modals().inDialog(6));
+  CHECK_FALSE(takesPointer(window, add));
+  CHECK_FALSE(reachedByTab(window, add));
+  CHECK_FALSE(reachedByTab(window, views.view(5)));
+  CHECK(reachedByTab(window, views.view(7)));
+  // The window still closes, moves and resizes.
+  CHECK(takesPointer(window, controls.front()));
+  // An item the header gains while the sheet is up is held too.
+  auto more = std::make_shared<HeaderProps>(*notes);
+  more->bar.right = {barButton("add", "Add"), barButton("share", "Share")};
+  views.update(config, more);
+  views.settle();
+  GtkWidget *share = buttonLabelled(bar, "Share");
+  REQUIRE(share);
+  CHECK_FALSE(takesPointer(window, share));
+  CHECK_FALSE(reachedByTab(window, share));
+
+  // Gone: the window takes input again.
+  views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, modal, 1), ShadowViewMutation::DeleteMutation(modal)});
+  views.settle();
+  CHECK(takesPointer(window, share));
+  CHECK(reachedByTab(window, share));
+  CHECK(reachedByTab(window, views.view(5)));
+
+  // A cover holds it the same way, and a sheet over the cover holds the cover too.
+  auto cover = shadow(8, "ModalHostView", nullptr, {{0, 0}, {800, 600}});
+  views.mount({ShadowViewMutation::CreateMutation(cover)});
+  ngn::DesktopProps asCover;
+  asCover.presentation = ngn::ModalPresentation::Cover;
+  views.backend->updateDesktopProps(MountedViews::kSurface, 8, asCover);
+  views.mount({ShadowViewMutation::InsertMutation(MountedViews::kSurface, cover, 1)});
+  mountAll(views, {{focusableView(9, {{0, 0}, {100, 30}}), 8}});
+  views.backend->modals().settle();
+  views.settle();
+  REQUIRE(views.backend->modals().slotOf(8));
+  CHECK_FALSE(takesPointer(window, share));
+  CHECK_FALSE(reachedByTab(window, share));
+  CHECK_FALSE(reachedByTab(window, views.view(5)));
+  CHECK(reachedByTab(window, views.view(9)));
+  auto over = shadow(10, "ModalHostView", nullptr, {{0, 0}, {800, 600}});
+  mountAll(views, {{over, MountedViews::kSurface}, {focusableView(11, {{0, 0}, {100, 30}}), 10}});
+  views.backend->modals().settle();
+  views.settle();
+  CHECK(reachedByTab(window, views.view(11)));
+  CHECK_FALSE(reachedByTab(window, views.view(9)));
+  views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, over, 2), ShadowViewMutation::DeleteMutation(over)});
+  views.settle();
+  CHECK(reachedByTab(window, views.view(9)));
+  CHECK_FALSE(reachedByTab(window, share));
+  views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, cover, 1), ShadowViewMutation::DeleteMutation(cover)});
+  views.settle();
+  CHECK(takesPointer(window, share));
+  CHECK(reachedByTab(window, views.view(5)));
+}

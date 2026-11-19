@@ -208,6 +208,120 @@ bool runsUnderHeaderBar(const WindowChrome &chrome) {
   return chrome.titleBar != TitleBar::Default;
 }
 
+WindowChrome::~WindowChrome() {
+  for (const Held &h : held) {
+    g_object_unref(h.widget);
+  }
+}
+
+namespace {
+
+bool holdsWindowControls(GtkWidget *widget) {
+  if (GTK_IS_WINDOW_CONTROLS(widget)) {
+    return true;
+  }
+  for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
+    if (holdsWindowControls(child)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void holdWidget(WindowChrome &chrome, GtkWidget *widget, bool target, bool focus, bool sensitive = true) {
+  for (const auto &h : chrome.held) {
+    if (h.widget == widget) {
+      return;
+    }
+  }
+  bool primary = GTK_IS_MENU_BUTTON(widget) && gtk_menu_button_get_primary(GTK_MENU_BUTTON(widget)) != FALSE;
+  chrome.held.push_back({GTK_WIDGET(g_object_ref(widget)), gtk_widget_get_can_target(widget) != FALSE,
+                         gtk_widget_get_can_focus(widget) != FALSE, gtk_widget_get_sensitive(widget) != FALSE, primary});
+  if (!target) {
+    gtk_widget_set_can_target(widget, FALSE);
+  }
+  if (!focus) {
+    gtk_widget_set_can_focus(widget, FALSE);
+  }
+  if (!sensitive) {
+    gtk_widget_set_sensitive(widget, FALSE);
+  }
+  if (primary) {
+    // F10 opens a primary menu from anywhere in the window.
+    gtk_menu_button_set_primary(GTK_MENU_BUTTON(widget), FALSE);
+  }
+}
+
+// A header bar's items, its title among them, and not its window controls: the window still
+// moves, closes and resizes from them.
+void holdHeaderBar(WindowChrome &chrome, GtkWidget *widget) {
+  for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
+    if (GTK_IS_WINDOW_CONTROLS(child)) {
+      continue;
+    }
+    if (holdsWindowControls(child)) {
+      holdHeaderBar(chrome, child);
+    } else {
+      holdWidget(chrome, child, false, false);
+    }
+  }
+}
+
+// The header bars in `widget`'s subtree outside `front`: the window's, wherever a split view put
+// it, and a full-height sidebar's.
+void findHeaderBars(GtkWidget *widget, GtkWidget *front, std::vector<GtkWidget *> &found) {
+  for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
+    if (child == front) {
+      continue;
+    }
+    if (ADW_IS_HEADER_BAR(child)) {
+      found.push_back(child);
+    } else {
+      findHeaderBars(child, front, found);
+    }
+  }
+}
+
+} // namespace
+
+void holdChrome(GtkWidget *surface, GtkWidget *front) {
+  auto *chrome = surface ? static_cast<WindowChrome *>(g_object_get_data(G_OBJECT(surface), kChrome)) : nullptr;
+  if (!chrome) {
+    return;
+  }
+  // What was held is given back first: a header laid out again has items of its own.
+  for (const auto &h : chrome->held) {
+    gtk_widget_set_can_target(h.widget, h.target);
+    gtk_widget_set_can_focus(h.widget, h.focus);
+    gtk_widget_set_sensitive(h.widget, h.sensitive);
+    if (h.primary) {
+      gtk_menu_button_set_primary(GTK_MENU_BUTTON(h.widget), TRUE);
+    }
+    g_object_unref(h.widget);
+  }
+  chrome->held.clear();
+  if (!front) {
+    return;
+  }
+  // The layer takes the pointer over the content already: the content keeps its own, so the window
+  // controls of a header bar a split view moved into it still work.
+  GtkWidget *content = gtk_overlay_get_child(GTK_OVERLAY(chrome->overlay));
+  for (GtkWidget *child = gtk_widget_get_first_child(chrome->overlay); child; child = gtk_widget_get_next_sibling(child)) {
+    if (child != front) {
+      holdWidget(*chrome, child, child == content, false);
+    }
+  }
+  std::vector<GtkWidget *> bars;
+  findHeaderBars(chrome->toolbarView, front, bars);
+  for (GtkWidget *bar : bars) {
+    holdHeaderBar(*chrome, bar);
+  }
+  if (chrome->menuBar) {
+    // F10 opens the menu bar from anywhere in the window, so it is insensitive.
+    holdWidget(*chrome, chrome->menuBar, true, true, false);
+  }
+}
+
 namespace {
 
 // The window controls in `widget`'s subtree that show a button: the start side's and the end's,
@@ -629,6 +743,12 @@ void Headers::clear(SurfaceId surfaceId, Shown &shown, bool keepSearches) {
 }
 
 void Headers::layOut(SurfaceId surfaceId, Shown &shown) {
+  layOutBar(surfaceId, shown);
+  // A sheet or cover in front holds the new items still too.
+  backend_.modals().hold(surfaceId);
+}
+
+void Headers::layOutBar(SurfaceId surfaceId, Shown &shown) {
   // The search fields stay packed when they stay the same: one taken out loses the focus, and
   // typing into it stops.
   clear(surfaceId, shown, true);
@@ -1111,10 +1231,21 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
   if (presented.popover) {
     gtk_popover_popup(GTK_POPOVER(presented.popover));
   }
+  hold(surfaceId);
   gtk_widget_child_focus(presented.slot, GTK_DIR_TAB_FORWARD);
   if (auto emitter = std::dynamic_pointer_cast<const ModalHostViewEventEmitter>(d->emitter)) {
     emitter->onShow({});
   }
+}
+
+void Modals::hold(SurfaceId surfaceId) {
+  const Presented *front = nullptr;
+  for (const auto &[tag, presented] : presented_) {
+    if (presented.surfaceId == surfaceId && presented.layer && (!front || presented.order > front->order)) {
+      front = &presented;
+    }
+  }
+  holdChrome(backend_.surfaceWidget(surfaceId), front ? front->layer : nullptr);
 }
 
 void Modals::dress(Tag tag, Presented &p) {
@@ -1271,6 +1402,8 @@ void Modals::dismiss(Tag tag) {
     g_object_unref(p.card);
   }
   g_object_unref(p.slot);
+  // Before the focus goes back, which a held window would refuse.
+  hold(p.surfaceId);
   if (p.opener) {
     if (gtk_widget_get_root(p.opener)) {
       gtk_widget_grab_focus(p.opener);
