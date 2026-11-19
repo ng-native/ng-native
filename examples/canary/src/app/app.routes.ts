@@ -225,6 +225,7 @@ export const routes: Routes = [
     loadComponent: () => import('./gestures/gestures.ts').then((m) => m.Gestures),
   },
   { path: 'list', loadComponent: () => import('./lists/list.ts').then((m) => m.ListPage) },
+  { path: 'grid', loadComponent: () => import('./lists/grid.ts').then((m) => m.GridPage) },
   {
     path: 'components',
     loadComponent: () => import('./components/components.ts').then((m) => m.ComponentsPage),

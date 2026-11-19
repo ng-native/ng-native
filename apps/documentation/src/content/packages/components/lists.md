@@ -270,6 +270,41 @@ failed to load is retried. `viewableItemsChanged` reports which rows are current
 
 <!-- api: VirtualList -->
 
+### Columns
+
+`[virtualListNumColumns]` on the list lays items side by side, as `FlatList`'s `numColumns` does: a
+photo library or a shop's products, windowed a line at a time. `[virtualListColumnGap]` spaces the
+columns, and `rowGap` the lines:
+
+```html
+<virtual-list
+  #list
+  [items]="photos()"
+  [itemHeight]="120"
+  [rowGap]="2"
+  [virtualListNumColumns]="3"
+  [virtualListColumnGap]="2"
+>
+  @for (row of list.window(); track row.slot) {
+  <image [virtualListRow]="row" [source]="{ uri: row.item.uri }" resizeMode="cover" />
+  }
+</virtual-list>
+```
+
+Each item is still its own row of the window, with its own slot and key, so the `@for` is the
+same as a plain list's and recycling, `scrollToIndex`, viewability and `endReached` work by item.
+Items fill a line from the leading edge, so the first column is on the right in a right-to-left
+layout, and every column is the same width. A line is as tall as its tallest item, and the others
+on it stretch to that height. A sticky row takes a line to itself, so a month's header can pin
+across a whole grid while its photos scroll under it, which `SectionList` cannot do with columns.
+`contentPadding` insets the grid as it does rows.
+
+Columns are for a vertical list with `itemHeight`, as `numColumns` is vertical only in React
+Native. On a horizontal list, or rows that size themselves, the list keeps one item a line and says
+so in development. Changing the count lays the items out again at the same scroll offset.
+
+<!-- api: VirtualListNumColumns -->
+
 ## Section list
 
 `<section-list>` is `SectionList`: `sections` of `{ title, data }`, drawn from templates for the

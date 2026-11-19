@@ -159,6 +159,8 @@ export {
   type VirtualListVisiblePosition,
   type VirtualRow,
 } from './virtual-list.ts';
+export { VIRTUAL_LIST_LAYOUT, type VirtualListLayout } from './virtual-list-layout.ts';
+export { VirtualListNumColumns } from './virtual-list-num-columns.ts';
 export { type GestureBackend, type GestureSpec, type GestureTarget } from './gesture-backend.ts';
 export {
   workletScroll,
