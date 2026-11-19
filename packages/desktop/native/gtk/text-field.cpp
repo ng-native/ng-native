@@ -114,6 +114,13 @@ void redrawPlaceholder(const TextField &field) {
 void preeditChanged(GtkWidget *, const char *preedit, gpointer user) {
   auto *field = static_cast<TextField *>(user);
   field->composing = preedit && *preedit;
+  if (!field->composing && field->pendingText) {
+    auto [text, seen] = std::move(*field->pendingText);
+    field->pendingText.reset();
+    if (field->view && seen >= field->eventCount && text != fieldText(*field)) {
+      setText(*field, text);
+    }
+  }
   redrawPlaceholder(*field);
 }
 
@@ -429,8 +436,10 @@ void makeTextField(GtkWidget *widget, ViewData &view) {
     g_signal_connect_swapped(buffer, "changed", G_CALLBACK(changed), field);
     g_signal_connect_after(buffer, "changed", G_CALLBACK(restyle), field);
     g_signal_connect(buffer, "insert-text", G_CALLBACK(insertingText), field);
+    // The cursor, whether set or moved by an edit, and the selection's other end, which only a set moves.
+    g_signal_connect_swapped(buffer, "notify::cursor-position", G_CALLBACK(selectionMoved), field);
     g_signal_connect(buffer, "mark-set", G_CALLBACK(+[](GtkTextBuffer *buffer, GtkTextIter *, GtkTextMark *mark, gpointer user) {
-      if (mark == gtk_text_buffer_get_insert(buffer) || mark == gtk_text_buffer_get_selection_bound(buffer)) {
+      if (mark == gtk_text_buffer_get_selection_bound(buffer)) {
         selectionMoved(static_cast<TextField *>(user));
       }
     }), field);
@@ -443,8 +452,9 @@ void makeTextField(GtkWidget *widget, ViewData &view) {
     g_signal_connect(field->text, "insert-text", G_CALLBACK(insertingLine), field);
   }
   watch(field, field->text);
-  // Freed with the field's widget, after its last signal.
-  g_object_set_data_full(G_OBJECT(fieldWidget(*field)), "ngn-text-field-owner", field, [](gpointer p) { delete static_cast<TextField *>(p); });
+  // Freed with the editor, after its last signal. A multiline field's buffer, which can outlive it
+  // (a paste still to arrive), is disconnected from the field when its view goes.
+  g_object_set_data_full(G_OBJECT(field->text), "ngn-text-field-owner", field, [](gpointer p) { delete static_cast<TextField *>(p); });
   view.field = field;
   gtk_widget_set_parent(fieldWidget(*field), widget);
   if (props && props->text.empty() && !props->defaultValue.empty()) {
@@ -461,6 +471,9 @@ void destroyTextField(ViewData &view) {
   if (view.field) {
     // The editor may still signal as it goes (its focus leaving): the field hears nothing more.
     view.field->view = nullptr;
+    if (multiline(*view.field)) {
+      g_signal_handlers_disconnect_by_data(bufferOf(*view.field), view.field);
+    }
     view.field = nullptr;
   }
 }
@@ -510,12 +523,19 @@ void applyTextFieldProps(ViewData &view) {
     gtk_text_set_max_length(text, props->maxLength == std::numeric_limits<int>::max() ? 0 : std::max(0, props->maxLength));
     gtk_editable_set_alignment(GTK_EDITABLE(text), xalign);
   }
-  // A controlled value JavaScript set, when it has seen every change the user made and no input
-  // method is composing. Once per props: a layout update applies the same props again, which
+  // A controlled value JavaScript set, when it has seen every change the user made, held while an
+  // input method composes. Once per props: a layout update applies the same props again, which
   // must not undo a setTextAndSelection.
-  if (field.applied != view.props && controlledTextIsCurrent(props->mostRecentEventCount, field.eventCount, field.composing) && props->text != fieldText(field) &&
-      (!props->text.empty() || props->defaultValue.empty() || field.eventCount > 0)) {
-    setText(field, props->text);
+  if (field.applied != view.props) {
+    field.pendingText.reset();
+    if (controlledTextIsCurrent(props->mostRecentEventCount, field.eventCount, false) &&
+        (!props->text.empty() || props->defaultValue.empty() || field.eventCount > 0)) {
+      if (field.composing) {
+        field.pendingText.emplace(props->text, props->mostRecentEventCount);
+      } else if (props->text != fieldText(field)) {
+        setText(field, props->text);
+      }
+    }
   }
   auto before = std::dynamic_pointer_cast<const DesktopTextInputProps>(field.applied);
   if (auto range = newSelection(before.get(), *props)) {
@@ -564,12 +584,19 @@ void snapshotPlaceholder(const ViewData &view, GtkSnapshot *snapshot) {
     auto c = colorComponentsFromColor(props->placeholderTextColor);
     color = {c.red, c.green, c.blue, c.alpha};
   }
+  // Within the content box, however many lines it wraps to.
+  graphene_rect_t box;
+  graphene_rect_init(&box, static_cast<float>(insets.left), static_cast<float>(insets.top),
+                     static_cast<float>(std::max<Float>(0, view.layout.frame.size.width - insets.left - insets.right)),
+                     static_cast<float>(std::max<Float>(0, view.layout.frame.size.height - insets.top - insets.bottom)));
+  gtk_snapshot_push_clip(snapshot, &box);
   gtk_snapshot_save(snapshot);
   graphene_point_t at;
   graphene_point_init(&at, static_cast<float>(insets.left), static_cast<float>(insets.top));
   gtk_snapshot_translate(snapshot, &at);
   gtk_snapshot_append_layout(snapshot, layout, &color);
   gtk_snapshot_restore(snapshot);
+  gtk_snapshot_pop(snapshot);
   g_object_unref(layout);
 }
 
@@ -586,12 +613,14 @@ void textFieldCommand(ViewData &view, const std::string &name, const folly::dyna
     }
   } else if (name == "setTextAndSelection" && args.isArray() && args.size() >= 4) {
     // [mostRecentEventCount, value, start, end]: a value only when JavaScript has seen every change,
-    // and never over an input method's composition.
+    // held while an input method composes.
     // The count is a JavaScript number, which can arrive as a double.
     if (args[0].isNumber() && args[0].asDouble() < field.eventCount) {
       return;
     }
-    if (args[1].isString() && !field.composing) {
+    if (args[1].isString() && field.composing) {
+      field.pendingText.emplace(args[1].getString(), args[0].isNumber() ? static_cast<int>(args[0].asDouble()) : field.eventCount);
+    } else if (args[1].isString()) {
       setText(field, args[1].getString());
     }
     if (args[2].isNumber() && args[3].isNumber()) {

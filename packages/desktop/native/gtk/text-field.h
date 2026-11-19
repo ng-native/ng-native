@@ -13,7 +13,9 @@
 
 #include <gtk/gtk.h>
 
+#include <optional>
 #include <string>
+#include <utility>
 
 namespace ngn::gtk {
 
@@ -29,6 +31,10 @@ struct TextField {
   bool settingText{false};
   // Whether an input method is composing: its preedit text is not yet the field's.
   bool composing{false};
+  // A controlled value that arrived while an input method composed, with the event count it had
+  // seen: applied when composition ends, unless the user changed the text since or a newer value
+  // replaced it.
+  std::optional<std::pair<std::string, int>> pendingText;
   // The props last applied, against which a `selection` prop is new. The same props again (a
   // layout update) never put their controlled value back over a setTextAndSelection.
   facebook::react::Props::Shared applied;

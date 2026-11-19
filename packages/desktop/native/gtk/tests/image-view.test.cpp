@@ -44,6 +44,16 @@ struct ImageLoading {
   ImageLoading &operator=(const ImageLoading &) = delete;
 };
 
+// kWideRed's bytes.
+std::string widePng() {
+  std::string base64 = std::string(kWideRed).substr(std::string(kWideRed).find(',') + 1);
+  gsize length = 0;
+  guchar *png = g_base64_decode(base64.c_str(), &length);
+  std::string bytes(reinterpret_cast<char *>(png), length);
+  g_free(png);
+  return bytes;
+}
+
 // Waits for the view's load to answer, then for it to be drawn.
 void waitForLoad(MountedViews &views, Tag tag) {
   ngn::testing::runUntil([&] {
@@ -160,4 +170,36 @@ TEST_CASE("an Image's late answer for a source it no longer shows is dropped") {
   auto *data = ngn::gtk::viewData(views.view(2));
   CHECK_FALSE(data->image->texture);
   CHECK(greenish(views.pixel(50, 50)));
+}
+
+TEST_CASE("an Image decodes bytes the cache held off the UI thread, and answers in a later turn") {
+  REQUIRE(ngn::testing::gtkReady());
+  auto http = std::make_shared<ngn::testing::FakeHttp>();
+  ngn::gtk::useImageLoading(http, std::make_shared<ngn::ImageCache>("", 1 << 20));
+  struct Restore {
+    ~Restore() {
+      ngn::gtk::useImageLoading(nullptr, nullptr);
+    }
+  } restore;
+  MountedViews views;
+  auto props = imageProps(dynamic::object("source", source("https://example.com/wide.png")));
+  views.add(MountedViews::shadow(2, "Image", props, {{0, 0}, {100, 100}}));
+  REQUIRE(http->sent.size() == 1);
+  auto &callbacks = http->sent[0]->callbacks;
+  callbacks.onResponse({.status = 200});
+  callbacks.onData(widePng(), -1);
+  callbacks.onComplete("", false);
+  waitForLoad(views, 2);
+  REQUIRE(ngn::gtk::viewData(views.view(2))->image->texture);
+
+  // The same source again, from the cache: nothing is decoded or answered while the view is made.
+  views.backend->createView(MountedViews::shadow(3, "Image", props, {{0, 0}, {100, 100}}));
+  auto *data = ngn::gtk::viewData(views.view(3));
+  CHECK(http->sent.size() == 1);
+  CHECK_FALSE(data->image->texture);
+  CHECK(data->image->error.empty());
+  ngn::testing::runUntil([data] { return data->image->texture || !data->image->error.empty(); });
+  REQUIRE(data->image->texture);
+  CHECK(gdk_texture_get_width(data->image->texture) == 2);
+  views.backend->deleteView(MountedViews::kSurface, 3);
 }
