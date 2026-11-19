@@ -69,6 +69,9 @@ void viewSizeAllocate(GtkWidget *widget, int width, int height, int) {
         ngn::gtk::allocateTextField(*d, width, height);
       } else if (d->scroll && child == d->scroll->scrolled) {
         ngn::gtk::allocateScrollView(*d, width, height);
+      } else if (child == d->control) {
+        GtkAllocation all{0, 0, width, height};
+        gtk_widget_size_allocate(child, &all, -1);
       }
       continue;
     }

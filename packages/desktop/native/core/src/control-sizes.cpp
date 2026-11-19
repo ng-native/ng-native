@@ -95,11 +95,15 @@ Size ControlSizes::layoutSize(
     Tag tag,
     ControlKind kind,
     std::shared_ptr<const NativeControlProps> props,
-    const State::Shared &state) {
+    const State::Shared &state,
+    float fontScale) {
   if (!measurer_ || !props) {
     return {0, 0};
   }
   auto key = controlSizeKey(kind, *props);
+  if (fontScale != 1) {
+    key += "\x1f@" + std::to_string(fontScale);
+  }
   {
     std::lock_guard lock(mutex_);
     hold(tag, key);
@@ -110,7 +114,7 @@ Size ControlSizes::layoutSize(
       return control.size;
     }
     if (!onUiThread_()) {
-      queued_[tag] = Queued{.kind = kind, .props = std::move(props), .state = state};
+      queued_[tag] = Queued{.key = key, .kind = kind, .props = std::move(props), .state = state};
       if (!posted_ && runOnUiThread_) {
         posted_ = true;
         runOnUiThread_([weak = weak_from_this()] {
@@ -144,7 +148,7 @@ void ControlSizes::settle() {
     queued.swap(queued_);
   }
   for (const auto &[tag, request] : queued) {
-    auto key = controlSizeKey(request.kind, *request.props);
+    const auto &key = request.key;
     bool measure = false;
     {
       std::lock_guard lock(mutex_);
@@ -220,13 +224,13 @@ void ControlSizes::release(const std::string &key) {
   }
 }
 
-Size measureControl(const ShadowNode &node, ControlKind kind, const ContextContainer *context) {
+Size measureControl(const ShadowNode &node, ControlKind kind, const ContextContainer *context, float fontScale) {
   auto sizes = context ? context->find<std::shared_ptr<ControlSizes>>(kControlSizesKey) : std::nullopt;
   if (!sizes || !*sizes) {
     return {0, 0};
   }
   return (*sizes)->layoutSize(
-      node.getTag(), kind, std::static_pointer_cast<const NativeControlProps>(node.getProps()), node.getState());
+      node.getTag(), kind, std::static_pointer_cast<const NativeControlProps>(node.getProps()), node.getState(), fontScale);
 }
 
 } // namespace ngn
