@@ -35,8 +35,9 @@ struct CurlOptions {
   // cookie, or one that has expired, is never written. Empty keeps the store in memory.
   std::string cookieFile;
   // The desktop's proxies for a url, best first, as GProxyResolver and the proxy portal answer
-  // (`direct://` for none). Asked on the network thread as a request or WebSocket starts, once per
-  // origin every 30 seconds at most, unless a libcurl proxy variable is set, which wins. Unset, or answering nothing usable: libcurl's own
+  // (`direct://` for none). Asked as a request or WebSocket starts, on a thread of its own (it may
+  // block for seconds, and may run beside another lookup), once per origin every 30 seconds at most,
+  // unless a libcurl proxy variable is set, which wins. Unset, or answering nothing usable: libcurl's own
   // choice, from the environment.
   std::function<std::vector<std::string>(const std::string &url)> desktopProxies;
   // The app's name and version, which lead the User-Agent (curlUserAgent).
@@ -51,12 +52,13 @@ struct CurlOptions {
 std::string curlUserAgent(const std::string &appName, const std::string &appVersion);
 
 // The proxy libcurl takes (CURLOPT_PROXY) for desktopProxies' answer: the first it can use, with
-// GNOME's `socks://` as SOCKS 5, and `direct://` as "" (none, whatever the environment says).
+// the SOCKS 5 of GNOME's `socks://` and of `socks5://` as `socks5h://` (the proxy resolves the host,
+// as GLib's does), and `direct://` as "" (none, whatever the environment says).
 // Nothing when no entry is usable.
 std::optional<std::string> curlProxyFor(const std::vector<std::string> &proxies);
 
 // Whether any proxy variable libcurl reads is set, not empty: `http_proxy`, `https_proxy` or
-// `HTTPS_PROXY`, `all_proxy` or `ALL_PROXY` (`NO_PROXY` only excludes hosts, so it is not one).
+// `HTTPS_PROXY`, `ws_proxy`, `wss_proxy` (or their upper case), `all_proxy` or `ALL_PROXY` (`NO_PROXY` only excludes hosts, so it is not one).
 bool proxyEnvironmentSet(const std::function<std::optional<std::string>(const char *name)> &env);
 
 // The two clients over one thread, which stops once both are gone.

@@ -13,6 +13,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <deque>
 #include <filesystem>
@@ -364,7 +365,7 @@ struct Socket {
   std::string peerReason;
 };
 
-class Engine {
+class Engine : public std::enable_shared_from_this<Engine> {
  public:
   explicit Engine(CurlOptions options) : options_(std::move(options)) {
     initCurl();
@@ -460,7 +461,7 @@ class Engine {
 
   // --- HTTP ---------------------------------------------------------------------------------
 
-  void start(uint64_t id, HttpRequest request, std::shared_ptr<HttpState> state) {
+  void start(uint64_t id, HttpRequest request, std::shared_ptr<HttpState> state, bool proxyKnown = false) {
     {
       std::lock_guard lock(state->mutex);
       if (state->done) {
@@ -481,9 +482,19 @@ class Engine {
       }
       return;
     }
+    bool http = startsWithNoCase(request.url, "http:") || startsWithNoCase(request.url, "https:");
+    if (http && !proxyKnown) {
+      // The desktop's answer may take seconds: the request starts when it is in, and a cancel meanwhile
+      // is seen by the check above.
+      auto url = request.url;
+      withProxy(url, [this, id, request = std::move(request), state = std::move(state)]() mutable {
+        start(id, std::move(request), std::move(state), true);
+      });
+      return;
+    }
     auto t = std::make_unique<Transfer>();
     t->state = std::move(state);
-    t->http = startsWithNoCase(request.url, "http:") || startsWithNoCase(request.url, "https:");
+    t->http = http;
     if (request.timeoutMs > 0) {
       t->idle = milliseconds(request.timeoutMs);
     }
@@ -598,7 +609,7 @@ class Engine {
     common(e);
     // The desktop names proxies for http and https; a WebSocket starts as one of those.
     auto ws = webSocketUrl(url);
-    useProxy(e, startsWithNoCase(ws, "wss:") ? "https:" + ws.substr(4) : "http:" + ws.substr(3));
+    auto proxyUrl = startsWithNoCase(ws, "wss:") ? "https:" + ws.substr(4) : "http:" + ws.substr(3);
     curl_easy_setopt(e, CURLOPT_URL, ws.c_str());
     curl_easy_setopt(e, CURLOPT_PROTOCOLS_STR, "ws,wss");
     // The handshake through the multi handle, then frames by curl_ws_send and curl_ws_recv.
@@ -623,8 +634,17 @@ class Engine {
     curl_easy_setopt(e, CURLOPT_HTTPHEADER, s->headers);
     // The handshake carries the cookie store's cookies, as NSURLSession's does.
     useCookies(e);
-    curl_multi_add_handle(multi_, e);
+    // Held, not yet running, until the desktop's proxy is known; a send meanwhile queues, and a close
+    // ends it, as for a handshake in progress.
     sockets_[id] = std::move(s);
+    withProxy(proxyUrl, [this, id, proxyUrl] {
+      auto it = sockets_.find(id);
+      if (it == sockets_.end()) {
+        return;
+      }
+      useProxy(it->second->easy, proxyUrl);
+      curl_multi_add_handle(multi_, it->second->easy);
+    });
   }
 
   void send(uint64_t id, unsigned flags, std::string bytes) {
@@ -670,21 +690,55 @@ class Engine {
     }
   }
 
-  // The desktop's proxy for `url`, unless the environment names one (libcurl reads it itself). Asked
-  // once per origin (scheme, host and port) for kProxyKept, so a changed setting arrives within it;
-  // a redirect keeps the first url's proxy.
-  void useProxy(CURL *e, const std::string &url) {
+  static std::string originOf(const std::string &url) {
+    return url.substr(0, url.find('/', url.find("://") + 3));
+  }
+
+  // Runs `resume` on the thread once the desktop's proxy for `url`'s origin is known: at once when it
+  // is kept, else after a lookup on a thread of its own, since the answer may take a portal's PAC
+  // script and the network thread must go on serving every other transfer meanwhile. Asked once per
+  // origin (scheme, host and port) for kProxyKept, so a changed setting arrives within it; one lookup
+  // serves every request waiting on its origin.
+  void withProxy(const std::string &url, std::function<void()> resume) {
     if (!useDesktopProxies_) {
+      resume();
       return;
     }
     auto now = Clock::now();
     std::erase_if(proxies_, [now](const auto &entry) { return now - entry.second.asked >= kProxyKept; });
-    auto origin = url.substr(0, url.find('/', url.find("://") + 3));
-    auto it = proxies_.find(origin);
-    if (it == proxies_.end()) {
-      it = proxies_.emplace(origin, KeptProxy{now, curlProxyFor(options_.desktopProxies(url))}).first;
+    auto origin = originOf(url);
+    if (proxies_.contains(origin)) {
+      resume();
+      return;
     }
-    if (it->second.proxy) {
+    auto &waiting = lookups_[origin];
+    waiting.push_back(std::move(resume));
+    if (waiting.size() > 1) {
+      return;
+    }
+    // The thread holds the engine only while it posts the answer back, and a stopped engine drops it.
+    std::thread([weak = weak_from_this(), lookup = options_.desktopProxies, origin, url] {
+      auto proxy = curlProxyFor(lookup(url));
+      if (auto engine = weak.lock()) {
+        engine->post([raw = engine.get(), origin, proxy = std::move(proxy)] { raw->proxyFound(origin, proxy); });
+      }
+    }).detach();
+  }
+
+  void proxyFound(const std::string &origin, const std::optional<std::string> &proxy) {
+    proxies_[origin] = KeptProxy{Clock::now(), proxy};
+    auto waiting = std::move(lookups_[origin]);
+    lookups_.erase(origin);
+    for (auto &resume : waiting) {
+      resume();
+    }
+  }
+
+  // The kept desktop proxy for `url`, unless the environment names one (libcurl reads it itself); a
+  // redirect keeps the first url's proxy.
+  void useProxy(CURL *e, const std::string &url) {
+    auto it = proxies_.find(originOf(url));
+    if (useDesktopProxies_ && it != proxies_.end() && it->second.proxy) {
       curl_easy_setopt(e, CURLOPT_PROXY, it->second.proxy->c_str());
     }
   }
@@ -1252,6 +1306,8 @@ class Engine {
   };
   // The desktop's answers by origin, while they are fresh.
   std::map<std::string, KeptProxy> proxies_;
+  // The requests waiting on a lookup, by origin.
+  std::map<std::string, std::vector<std::function<void()>>> lookups_;
   CURLM *multi_;
   CURLSH *share_;
   // Reads and fills the store for the cookie file, with what the file last held.
@@ -1433,10 +1489,14 @@ std::optional<std::string> curlProxyFor(const std::vector<std::string> &proxies)
     if (startsWithNoCase(proxy, "direct://")) {
       return std::string();
     }
-    if (startsWithNoCase(proxy, "socks://")) {
-      return "socks5://" + proxy.substr(8);
+    // GLib's SOCKS 5 hands the proxy the host name to resolve; libcurl's `socks5://` resolves it here,
+    // so a host only the proxy's side knows would fail.
+    for (const char *scheme : {"socks://", "socks5://"}) {
+      if (startsWithNoCase(proxy, scheme)) {
+        return "socks5h://" + proxy.substr(std::strlen(scheme));
+      }
     }
-    for (const char *scheme : {"http://", "https://", "socks4://", "socks4a://", "socks5://", "socks5h://"}) {
+    for (const char *scheme : {"http://", "https://", "socks4://", "socks4a://", "socks5h://"}) {
       if (startsWithNoCase(proxy, scheme)) {
         return proxy;
       }
@@ -1446,7 +1506,7 @@ std::optional<std::string> curlProxyFor(const std::vector<std::string> &proxies)
 }
 
 bool proxyEnvironmentSet(const std::function<std::optional<std::string>(const char *name)> &env) {
-  for (const char *name : {"http_proxy", "https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"}) {
+  for (const char *name : {"http_proxy", "https_proxy", "HTTPS_PROXY", "ws_proxy", "wss_proxy", "WS_PROXY", "WSS_PROXY", "all_proxy", "ALL_PROXY"}) {
     if (auto value = env(name); value && !value->empty()) {
       return true;
     }

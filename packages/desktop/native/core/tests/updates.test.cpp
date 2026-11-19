@@ -22,7 +22,12 @@ namespace fs = std::filesystem;
 // A stand-in for the OS's crypto: the "digest" names the bytes, and a signature is good when it
 // is "signed " and the data, by the certificate "CERT".
 struct FakeCrypto final : ngn::UpdateCrypto {
+  // OpenSSL cannot hash, as with a provider configuration that leaves out the default provider.
+  bool failToHash{false};
   std::string sha256(const std::string &bytes) override {
+    if (failToHash) {
+      throw std::runtime_error("cannot hash");
+    }
     return "digest of " + bytes;
   }
   bool verifyRsaSha256(const std::string &certificate, const std::string &data, const std::string &signature) override {
@@ -488,6 +493,45 @@ TEST_CASE("a manifest whose id is not a UUID is never an update, since the id na
     CHECK_FALSE(result.isAvailable);
     CHECK(result.error.find("UUID") != std::string::npos);
   }
+}
+
+TEST_CASE("a download that cannot be hashed fails the fetch with an error, and keeps nothing") {
+  Fixture f;
+  auto client = f.client();
+  client->launch();
+  f.check(*client, kJson, folly::toJson(manifest("1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a", "1.0.0", "bundle a")));
+  f.crypto->failToHash = true;
+  auto result = f.fetch(*client, "bundle a");
+  CHECK_FALSE(result.error.empty());
+  CHECK_FALSE(result.isNew);
+  CHECK_FALSE(client->state().current);
+}
+
+TEST_CASE("an embedded bundle replaced by one of the same size and modification time still runs over the update") {
+  Fixture f;
+  auto embedded = f.dir.parent_path() / (f.dir.filename().string() + "-embedded-same.js");
+  struct Remove {
+    fs::path path;
+    ~Remove() {
+      fs::remove(path);
+    }
+  } remove{embedded};
+  fs::create_directories(f.dir);
+  std::ofstream(embedded) << "embedded v1";
+  auto config = f.config();
+  config.embeddedBundle = embedded.string();
+  {
+    ngn::UpdatesClient first(config, f.http, f.crypto);
+    first.launch();
+    f.check(first, kJson, folly::toJson(manifest("1f0e0a9c-2d3b-4c5d-8e6f-7a8b9c0d1e2a", "1.0.0", "bundle a")));
+    REQUIRE(f.fetch(first, "bundle a").isNew);
+  }
+  auto time = fs::last_write_time(embedded);
+  std::ofstream(embedded, std::ios::trunc) << "embedded v2";
+  fs::last_write_time(embedded, time);
+  ngn::UpdatesClient second(config, f.http, f.crypto);
+  CHECK(second.launch() == embedded.string());
+  CHECK_FALSE(second.state().current);
 }
 
 TEST_CASE("a launch hashes the kept update again, and runs the embedded bundle when it changed on disk") {

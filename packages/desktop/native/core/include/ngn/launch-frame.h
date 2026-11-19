@@ -7,6 +7,7 @@
 // Toolkit-free.
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <optional>
 
@@ -29,6 +30,21 @@ class LaunchFrame {
     owed_.reset();
   }
 
+  // A reload's bundle is loading, and then whether it loaded. Any thread, unlike the rest. A clean
+  // quit marks the launch a success only while its bundle is loaded: a reload still under way, or
+  // one whose bundle did not load, leaves the launch mark for the next launch to roll back.
+  void bundleLoading() {
+    bundleLoaded_ = false;
+  }
+
+  void bundleLoadEnded(bool loaded) {
+    bundleLoaded_ = loaded;
+  }
+
+  bool bundleLoaded() const {
+    return bundleLoaded_;
+  }
+
   // A window shows content the instance `instance` mounted while `current` is the launch running:
   // the launch whose success timer starts now, once.
   std::optional<uint64_t> shown(uint64_t instance, uint64_t current) {
@@ -46,6 +62,7 @@ class LaunchFrame {
     uint64_t instance;
   };
   std::optional<Owed> owed_;
+  std::atomic<bool> bundleLoaded_{true};
 };
 
 } // namespace ngn

@@ -650,7 +650,10 @@ TEST_CASE("cookies over libcurl outlive the process in the cookie file, all but 
 TEST_CASE("the desktop's proxy answer becomes libcurl's: the first usable, GNOME's socks as SOCKS 5, direct as none") {
   CHECK(ngn::curlProxyFor({"http://proxy.example:3128", "direct://"}) == "http://proxy.example:3128");
   CHECK(ngn::curlProxyFor({"direct://"}) == "");
-  CHECK(ngn::curlProxyFor({"socks://proxy.example:1080"}) == "socks5://proxy.example:1080");
+  // The proxy resolves the host, as GLib's SOCKS 5 does: a host only its side knows still connects.
+  CHECK(ngn::curlProxyFor({"socks://proxy.example:1080"}) == "socks5h://proxy.example:1080");
+  CHECK(ngn::curlProxyFor({"SOCKS5://proxy.example:1080"}) == "socks5h://proxy.example:1080");
+  CHECK(ngn::curlProxyFor({"socks5h://proxy.example:1080"}) == "socks5h://proxy.example:1080");
   CHECK(ngn::curlProxyFor({"socks4a://proxy.example:1080"}) == "socks4a://proxy.example:1080");
   CHECK(ngn::curlProxyFor({"HTTPS://proxy.example"}) == "HTTPS://proxy.example");
   CHECK(ngn::curlProxyFor({"pac+http://wpad/wpad.dat", "http://proxy.example:3128"}) == "http://proxy.example:3128");
@@ -668,7 +671,7 @@ TEST_CASE("a libcurl proxy variable set, not empty, is the environment's proxy; 
   CHECK_FALSE(ngn::proxyEnvironmentSet(env({})));
   CHECK_FALSE(ngn::proxyEnvironmentSet(env({{"NO_PROXY", "localhost"}, {"no_proxy", "localhost"}})));
   CHECK_FALSE(ngn::proxyEnvironmentSet(env({{"https_proxy", ""}})));
-  for (const char *name : {"http_proxy", "https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"}) {
+  for (const char *name : {"http_proxy", "https_proxy", "HTTPS_PROXY", "ws_proxy", "wss_proxy", "WS_PROXY", "WSS_PROXY", "all_proxy", "ALL_PROXY"}) {
     CHECK(ngn::proxyEnvironmentSet(env({{name, "http://proxy.example:3128"}})));
   }
   // curl reads only the lower-case http_proxy, so HTTP_PROXY names no proxy.
@@ -718,7 +721,7 @@ TEST_CASE("a request over libcurl goes through the desktop's proxy for its url, 
   };
   // Clear any proxy the machine running the tests sets.
   std::vector<std::unique_ptr<ScopedEnv>> cleared;
-  for (const char *name : {"http_proxy", "https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"}) {
+  for (const char *name : {"http_proxy", "https_proxy", "HTTPS_PROXY", "ws_proxy", "wss_proxy", "WS_PROXY", "WSS_PROXY", "all_proxy", "ALL_PROXY"}) {
     cleared.push_back(std::make_unique<ScopedEnv>(name, ""));
   }
   {
@@ -747,6 +750,61 @@ TEST_CASE("a request over libcurl goes through the desktop's proxy for its url, 
     asked.clear();
     auto network = ngn::makeCurlNetwork({.desktopProxies = desktop({"direct://"})});
     CHECK(host(network, "http://proxied.invalid/echo") == "proxied.invalid");
+    std::lock_guard lock(mutex);
+    CHECK(asked.empty());
+  }
+}
+
+TEST_CASE("a slow desktop proxy lookup for one origin holds up no other transfer, and a WebSocket proxy variable stops the lookup") {
+  TestServer server;
+  auto proxy = server.url("");
+  std::promise<void> release;
+  auto released = release.get_future().share();
+  std::mutex mutex;
+  std::vector<std::string> asked;
+  auto desktop = [&](const std::string &url) -> std::vector<std::string> {
+    {
+      std::lock_guard lock(mutex);
+      asked.push_back(url);
+    }
+    if (url.find("slow.invalid") != std::string::npos) {
+      released.wait();
+      return {proxy};
+    }
+    return {"direct://"};
+  };
+  std::vector<std::unique_ptr<ScopedEnv>> cleared;
+  for (const char *name : {"http_proxy", "https_proxy", "HTTPS_PROXY", "ws_proxy", "wss_proxy", "WS_PROXY", "WSS_PROXY", "all_proxy", "ALL_PROXY"}) {
+    cleared.push_back(std::make_unique<ScopedEnv>(name, ""));
+  }
+  {
+    auto network = ngn::makeCurlNetwork({.desktopProxies = desktop});
+    auto slow = std::make_shared<Recorder>();
+    network.http->send({.url = "http://slow.invalid/echo"}, Recorder::owned(slow));
+    // The lookup for the slow origin is under way, and the network thread answers another request.
+    auto fast = std::make_shared<Recorder>();
+    network.http->send({.url = server.url("/echo")}, Recorder::owned(fast));
+    CHECK(fast->waitForComplete(5s));
+    CHECK(fast->error.empty());
+    {
+      std::lock_guard lock(slow->mutex);
+      CHECK_FALSE(slow->complete);
+    }
+    release.set_value();
+    CHECK(slow->waitForComplete());
+    CHECK(slow->error.empty());
+  }
+  {
+    // libcurl's own variable for a WebSocket's proxy is the environment's proxy: the desktop is not asked.
+    ScopedEnv env("wss_proxy", proxy);
+    {
+      std::lock_guard lock(mutex);
+      asked.clear();
+    }
+    auto network = ngn::makeCurlNetwork({.desktopProxies = desktop});
+    auto r = std::make_shared<Recorder>();
+    network.http->send({.url = server.url("/echo")}, Recorder::owned(r));
+    CHECK(r->waitForComplete());
     std::lock_guard lock(mutex);
     CHECK(asked.empty());
   }

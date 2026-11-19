@@ -235,21 +235,30 @@ std::optional<LaunchState::Update> updateFrom(const folly::dynamic &json) {
       .embedded = text("embedded")};
 }
 
-// The embedded bundle as it is on disk now, its size and modification time: a package or app
-// update that replaces it changes both. Empty for a bundle that is not a file.
-std::string fingerprintOf(const std::string &bundle) {
+// The bytes' digest as the manifest writes it, or nothing when the system's crypto cannot hash: a
+// download then fails with an error, as a hash that does not match does, instead of throwing from
+// the network's callback.
+std::optional<std::string> hashOrNothing(UpdateCrypto &crypto, const std::string &bytes) {
+  try {
+    return base64Url(crypto.sha256(bytes));
+  } catch (const std::exception &) {
+    return std::nullopt;
+  }
+}
+
+// The embedded bundle as it is on disk now, by its content: a package or app update that replaces
+// it changes the digest, even to a file of the same size and modification time (a build that
+// normalises timestamps). Empty for a bundle that is not a readable file.
+std::string fingerprintOf(const std::string &bundle, UpdateCrypto &crypto) {
   std::error_code error;
-  auto size = fs::file_size(bundle, error);
-  if (error) {
+  if (!fs::is_regular_file(bundle, error)) {
     return "";
   }
-  auto time = fs::last_write_time(bundle, error);
-  if (error) {
+  try {
+    return base64Url(crypto.sha256(readFile(bundle)));
+  } catch (const std::exception &) {
     return "";
   }
-  // libc++'s file clock counts in a 128-bit integer, which to_string has no overload for.
-  auto ticks = std::chrono::duration_cast<std::chrono::nanoseconds>(time.time_since_epoch()).count();
-  return std::to_string(size) + ":" + std::to_string(static_cast<long long>(ticks));
 }
 
 // The response body and status of one request, gathered from its callbacks.
@@ -457,7 +466,7 @@ std::optional<std::string> UpdatesClient::signatureProblem(
 }
 
 bool UpdatesClient::stale(const LaunchState::Update &update) const {
-  return update.runtimeVersion != config_.runtimeVersion || update.embedded != fingerprintOf(config_.embeddedBundle);
+  return update.runtimeVersion != config_.runtimeVersion || update.embedded != fingerprintOf(config_.embeddedBundle, *crypto_);
 }
 
 void UpdatesClient::prune(const LaunchState &state) const {
@@ -801,7 +810,7 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
           .createdAt = found.createdAt,
           .runtimeVersion = found.runtimeVersion,
           .file = found.id + "/launch-asset",
-          .embedded = fingerprintOf(config_.embeddedBundle),
+          .embedded = fingerprintOf(config_.embeddedBundle, *crypto_),
       };
       for (const auto &[file, bytes] : fetching.files) {
         writeFile(config_.directory / update.id / file, bytes);
@@ -862,7 +871,12 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
       }
     }
     download(asset.url, "the asset " + asset.key, [this, fetching, asset, path, done](std::string bytes) {
-      if (base64Url(crypto_->sha256(bytes)) != asset.hash) {
+      auto hash = hashOrNothing(*crypto_, bytes);
+      if (!hash) {
+        done({.error = "the asset " + asset.key + " could not be hashed: the update was not kept"});
+        return;
+      }
+      if (*hash != asset.hash) {
         done({.error = "the asset " + asset.key + "'s hash is not the manifest's: the update was not kept"});
         return;
       }
@@ -872,7 +886,12 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
   };
 
   download(found->launchUrl, "the launch asset", [this, fetching, done](std::string bytes) {
-    if (base64Url(crypto_->sha256(bytes)) != fetching->manifest.launchHash) {
+    auto hash = hashOrNothing(*crypto_, bytes);
+    if (!hash) {
+      done({.error = "the launch asset could not be hashed: it was not kept"});
+      return;
+    }
+    if (*hash != fetching->manifest.launchHash) {
       done({.error = "the launch asset's hash is not the manifest's: it was not kept"});
       return;
     }

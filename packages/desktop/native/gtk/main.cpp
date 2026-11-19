@@ -268,7 +268,9 @@ void reloadLaunched(uint64_t generation, uint64_t instance) {
 void reloadSameLaunch() {
   uint64_t generation = gHost.updates ? gHost.updates->launchGeneration() : 0;
   gHost.launchFrame.reloadBegan();
+  gHost.launchFrame.bundleLoading();
   gHost.runtime->reload([generation](bool loaded) {
+    gHost.launchFrame.bundleLoadEnded(loaded);
     if (!loaded) {
       fprintf(stderr, "ngn-linux: the reload could not load the bundle\n");
       return;
@@ -857,7 +859,9 @@ int main(int argc, char *argv[]) {
              setRunningBundle(next);
              // The launch the module's beginReload just began.
              uint64_t generation = gHost.updates->launchGeneration();
+             gHost.launchFrame.bundleLoading();
              gHost.runtime->reload(next, [next, done, generation](bool loaded) {
+               gHost.launchFrame.bundleLoadEnded(loaded);
                // A bundle that did not load never counts as a launch that succeeded; one that did
                // counts from the first frame its own instance mounts on screen.
                if (loaded) {
@@ -911,8 +915,11 @@ int main(int argc, char *argv[]) {
   while (!gHost.quit) {
     g_main_context_iteration(nullptr, TRUE);
   }
-  // A clean quit is no crash: the update running is not rolled back, however soon it quit.
-  gHost.updates->markLaunchSucceeded();
+  // A clean quit is no crash: the update running is not rolled back, however soon it quit. Not so
+  // while its reload is pending or its bundle did not load: that launch never ran.
+  if (gHost.launchFrame.bundleLoaded()) {
+    gHost.updates->markLaunchSucceeded();
+  }
   gHost.runtime->shutdown();
   gHost.runtime.reset();
   return 0;

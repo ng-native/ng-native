@@ -570,7 +570,9 @@ void reloadLaunched(uint64_t generation, uint64_t instance) {
 void reloadSameLaunch() {
   uint64_t generation = gHost.updates ? gHost.updates->launchGeneration() : 0;
   gHost.launchFrame.reloadBegan();
+  gHost.launchFrame.bundleLoading();
   gHost.runtime->reload([generation](bool loaded) {
+    gHost.launchFrame.bundleLoadEnded(loaded);
     if (!loaded) {
       fprintf(stderr, "ngn-macos: the reload could not load the bundle\n");
       return;
@@ -792,8 +794,9 @@ void showAppWindow() {
 }
 - (void)applicationWillTerminate:(NSNotification *)note {
   ngn::appkit::endTestLaunch();
-  // A clean quit is no crash: the update running is not rolled back, however soon it quit.
-  if (gHost.updates) {
+  // A clean quit is no crash: the update running is not rolled back, however soon it quit. Not so
+  // while its reload is pending or its bundle did not load: that launch never ran.
+  if (gHost.updates && gHost.launchFrame.bundleLoaded()) {
     gHost.updates->markLaunchSucceeded();
   }
   // The programs the app started go with it, rather than run on with no one to read them.
@@ -1213,7 +1216,9 @@ int main(int argc, const char *argv[]) {
                setRunningBundle(next);
                // The launch the module's beginReload just began.
                uint64_t generation = gHost.updates->launchGeneration();
+               gHost.launchFrame.bundleLoading();
                gHost.runtime->reload(next, [next, done, generation](bool loaded) {
+                 gHost.launchFrame.bundleLoadEnded(loaded);
                  if (!loaded) {
                    fprintf(stderr, "ngn-macos: the update's bundle %s did not load\n", next.c_str());
                  }
