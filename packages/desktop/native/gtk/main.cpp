@@ -9,16 +9,30 @@
 //
 // NGN_CAPTURE=<file.png> saves the first window's content a second after its first frame, drawn
 // in-process (capture.h).
+#include "app-info.h"
 #include "app-windows.h"
+#include "battery.h"
 #include "capture.h"
+#include "crypto.h"
+#include "file-dialogs.h"
+#include "file-system.h"
+#include "fonts.h"
 #include "gtk-backend.h"
 #include "host-sources.h"
+#include "image-manipulator.h"
 #include "image-view.h"
 #include "input-replay.h"
+#include "locales.h"
+#include "location.h"
 #include "menus.h"
+#include "network-state.h"
+#include "notifications.h"
 #include "pango-text.h"
+#include "printing.h"
 #include "scroll-view.h"
+#include "secret-store.h"
 #include "surface-input.h"
+#include "system-access.h"
 #include "view-widget.h"
 
 #include "ngn/core-modules.h"
@@ -479,6 +493,11 @@ int main(int argc, char *argv[]) {
       }
     }
   };
+  // A press that became a drag out of a `[dragItem]` view: the move that crossed the threshold
+  // starts the drag, which has the pointer from there.
+  gHost.input->onDragOut = [](facebook::react::Tag tag, const ngn::PointerInput &, const ngn::DragOutItem &item) {
+    ngn::gtk::dragOutOfPointer(gHost.backend->view(tag), item);
+  };
 
   int width = static_cast<int>(ngn::kDefaultWindowWidth), height = static_cast<int>(ngn::kDefaultWindowHeight);
   gHost.appWindow = adw_application_window_new(gHost.application);
@@ -519,7 +538,12 @@ int main(int argc, char *argv[]) {
   std::string appData = settings.test ? settings.test->applicationSupport() : joined(g_get_user_data_dir(), appId);
   std::string caches = settings.test ? settings.test->caches() : joined(g_get_user_cache_dir(), appId);
   g_mkdir_with_parents(caches.c_str(), 0700);
-  auto system = ngn::gtk::makeSystem(appId, appData);
+  // Another app's copy reaches Clipboard's listeners once its text has been read.
+  auto system = ngn::gtk::makeSystem(appId, appData, [](int64_t count) {
+    if (gHost.state) {
+      gHost.state->clipboardChangeCount.set(count);
+    }
+  });
   gHost.state = std::make_shared<ngn::HostState>();
   gHost.state->metrics.set(windowMetrics(width, height));
   if (!settings.initialUrl.empty()) {
@@ -537,31 +561,8 @@ int main(int argc, char *argv[]) {
     gHost.mounting->tree().setScrollOffset(tag, offset);
   });
 
-  static ngn::ProcessesSetup processes;
-  for (char **e = environ; e && *e; ++e) {
-    std::string entry = *e;
-    if (auto eq = entry.find('='); eq != std::string::npos) {
-      processes.environment[entry.substr(0, eq)] = entry.substr(eq + 1);
-    }
-  }
-  processes.lookup = {
-      .isExecutable = [](const std::string &path) { return access(path.c_str(), X_OK) == 0; },
-      .searchPath = os.searchPath,
-  };
-  if (!settings.capabilitiesJson.empty()) {
-    processes.capabilities = ngn::parseCapabilities(folly::parseJson(settings.capabilitiesJson));
-  }
-  auto document = joined(appData, "Documents");
-  g_mkdir_with_parents(document.c_str(), 0700);
-  ngn::FileAccess::Folders folders{
-      .cache = caches,
-      .document = document,
-      .appData = appData,
-      .temp = settings.test ? settings.test->temp() : g_get_tmp_dir(),
-      .home = g_get_home_dir(),
-      .desktop = g_get_user_special_dir(G_USER_DIRECTORY_DESKTOP) ? g_get_user_special_dir(G_USER_DIRECTORY_DESKTOP) : "",
-      .downloads = g_get_user_special_dir(G_USER_DIRECTORY_DOWNLOAD) ? g_get_user_special_dir(G_USER_DIRECTORY_DOWNLOAD) : "",
-  };
+  static ngn::ProcessesSetup processes = ngn::gtk::processesSetup(os, settings.capabilitiesJson, ngn::gtk::insideFlatpak());
+  auto folders = ngn::gtk::fileFolders(appData, caches, settings.test ? settings.test->temp() : g_get_tmp_dir());
   if (auto path = ngn::pathOfUri(bundle)) {
     // An exported bundle on disk: its assets are beside it.
     folders.bundle = directoryOf(*path);
@@ -630,6 +631,23 @@ int main(int argc, char *argv[]) {
   auto menus = std::make_shared<ngn::MenuHost>(
       gHost.gtkMenus, ngn::DefaultMenuOptions{.appName = settings.title, .developer = ngn::DevServer::fromBundleUrl(bundle).has_value(), .os = os});
   gHost.menus = menus;
+  // File > Print with no print item of the app's: what the window shows (printing.h).
+  menus->printWindow = [](std::optional<SurfaceId> surface) {
+    GtkWidget *widget = surface ? surfaceWidgetOf(*surface) : nullptr;
+    if (!widget) {
+      auto *active = gtk_application_get_active_window(gHost.application);
+      auto found = active ? surfaceOfWindow(active) : std::nullopt;
+      widget = found ? surfaceWidgetOf(*found) : nullptr;
+    }
+    if (!widget) {
+      return;
+    }
+    ngn::gtk::printWidget(widget, false, [](const std::string &error) {
+      if (!error.empty()) {
+        fprintf(stderr, "[ngn] print: %s\n", error.c_str());
+      }
+    });
+  };
   routeWindow(gHost.appSurface);
   // A view's context menu (its `contextMenu` prop), drawn where the secondary click was.
   ngn::gtk::setContextMenuShower([](GtkWidget *widget, const ngn::PointerInput &input) {
@@ -656,7 +674,7 @@ int main(int argc, char *argv[]) {
   auto updates = std::make_shared<ngn::UpdatesClient>(std::move(updatesConfig), network.http, nullptr);
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
   // is left empty, and its module answers that it is unavailable.
-  ngn::addDesktopModules(
+  auto desktopModules = ngn::addDesktopModules(
       *modules,
       {.os = os,
        .system = system,
@@ -672,15 +690,30 @@ int main(int argc, char *argv[]) {
        .tray = tray,
        .dock = dock,
        .processes = processes,
-       .notifications = [](std::shared_ptr<ngn::NotificationEvents>) { return std::shared_ptr<ngn::NotificationCenter>(); },
+       .shell = ngn::gtk::makeShellOpener(),
+       .secrets = ngn::gtk::makeSecretStore(appId, ngn::gtk::insideFlatpak()),
+       .sleep = ngn::gtk::makeSleepPreventer(gHost.application),
+       .notifications =
+           [appData](std::shared_ptr<ngn::NotificationEvents> events) {
+             return ngn::gtk::makeNotificationCenter(G_APPLICATION(gHost.application), appData, std::move(events), raiseApp);
+           },
+       .fileDialogs = ngn::gtk::makeFileDialogs(),
+       .fileWatcher = ngn::gtk::makeFileWatcher(),
+       .location = ngn::gtk::makeLocationSource(),
+       .bundle = ngn::bundleFactsOf(settings.plist),
+       .machine = ngn::gtk::machineFacts(),
        .pathMonitor = ngn::gtk::makePathMonitor(),
-       .regionCode = [system] {
-         auto locale = system->facts().locale;
-         auto dash = locale.find('-');
-         return dash == std::string::npos ? std::string() : locale.substr(dash + 1);
-       },
+       .power = ngn::gtk::makePowerSource(),
+       .fontRegistrar = ngn::gtk::makeFontRegistrar(),
+       .imageCodec = ngn::gtk::makeImageCodec(),
+       .printSystem = ngn::gtk::makePrintSystem(surfaceWidgetOf),
+       .crypto = ngn::gtk::makeCryptoSource(),
+       .locales = ngn::gtk::makeLocaleSource(),
+       .regionCode = ngn::gtk::systemRegionCode,
        .updates = updates,
        .reload = [](const std::string &next, std::function<void(bool)> done) { gHost.runtime->reload(next, std::move(done)); }});
+  // The names fonts are loaded under, which text resolves (fonts.h).
+  ngn::gtk::useFontLibrary(desktopModules.fonts);
 
   gHost.runtime = std::make_unique<ngn::Runtime>(
       gHost.mounting,

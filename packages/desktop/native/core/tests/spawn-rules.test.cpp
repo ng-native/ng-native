@@ -45,7 +45,8 @@ TEST_CASE("a declared program is an absolute normalized path or a bare name, nev
   CHECK(ngn::programProblem("/usr/bin/"));
   for (const char *shell : {"sh", "/bin/bash", "/bin/zsh", "env", "/usr/bin/env", "xargs", "sudo", "osascript", "BASH",
                             "pwsh.exe", "/usr/local/bin/fish", "nice", "/usr/bin/nice", "nohup",
-                            "/usr/bin/nohup"}) {
+                            "/usr/bin/nohup", "pkexec", "/usr/bin/busybox", "flatpak-spawn", "/usr/bin/systemd-run",
+                            "nsenter", "/usr/sbin/chroot"}) {
     CAPTURE(shell);
     CHECK(ngn::programProblem(shell));
   }
