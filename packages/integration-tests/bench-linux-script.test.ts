@@ -24,11 +24,14 @@ const bench = (await import(new URL('../../scripts/bench-linux.mjs', import.meta
   ): Promise<Record<string, number | null>>;
 };
 const image = (await import(new URL('../../scripts/linux-image.mjs', import.meta.url).href)) as {
+  selectedImage(env?: Record<string, string | undefined>): string;
   imageArguments(
     script: string,
     args: readonly string[],
     options?: {
       mounts?: readonly string[];
+      image?: string;
+      env?: Record<string, string | undefined>;
       home?: string;
       uid?: number;
       gid?: number;
@@ -223,6 +226,7 @@ describe('running in the AlmaLinux 9 image', () => {
     const args = image.imageArguments('/home/me/repo/scripts/bench-linux.mjs', ['--runs', '1'], {
       home: path.resolve(process.cwd(), '../../..'),
       mounts: [process.cwd()],
+      env: {},
       uid: 501,
       gid: 20,
       cwd: '/x',
@@ -236,6 +240,29 @@ describe('running in the AlmaLinux 9 image', () => {
       '--runs',
       '1',
     ]);
+  });
+
+  it('runs in the image NGN_LINUX_IMAGE names, such as the Fedora variant', () => {
+    const options = { home: path.resolve(process.cwd(), '../../..'), mounts: [], uid: 1, gid: 1 };
+    const run = (env: Record<string, string | undefined>) =>
+      image.imageArguments('/s.mjs', [], { ...options, env }).at(-3);
+    assert.equal(run({}), 'ngn-el9');
+    assert.equal(run({ NGN_LINUX_IMAGE: 'ngn-fedora' }), 'ngn-fedora');
+    assert.equal(
+      image
+        .imageArguments('/s.mjs', [], {
+          ...options,
+          image: 'ngn-el9',
+          env: { NGN_LINUX_IMAGE: 'ngn-fedora' },
+        })
+        .at(-3),
+      'ngn-el9',
+      'an image passed in wins',
+    );
+    // An empty name, or one docker would read as an option, fails rather than running in the default.
+    for (const bad of ['', '--privileged', 'ngn fedora']) {
+      assert.throws(() => image.selectedImage({ NGN_LINUX_IMAGE: bad }), /not an image name/);
+    }
   });
 
   it('refuses a folder the container cannot see, rather than running on an empty mount', () => {

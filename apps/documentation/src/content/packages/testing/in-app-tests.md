@@ -89,7 +89,9 @@ one, each launch starts a headless Weston of its own. `display: 'xvfb'` starts a
 On a Mac, the host runs in the AlmaLinux 9 image it is built in, `ngn-el9` from
 `packages/desktop/native/docker`, under Docker or Colima. The host binary must be in a folder the
 container can see, such as one under your home folder. The image reaches Vitest and Metro on the
-Mac through ports it forwards, so start Metro as usual. `container: false` runs the host directly.
+Mac through ports it forwards, so start Metro as usual. `container: false` runs the host directly,
+and `NGN_LINUX_IMAGE=ngn-fedora` runs it in the Fedora variant of the image
+(`Dockerfile.fedora`, built as `ngn-fedora`) instead, which has a newer GTK and libadwaita.
 
 Linux has no crash report folder, so the host writes its own as it crashes, naming the signal and
 the native stack. The failure quotes that report, then the end of the host's output, from a

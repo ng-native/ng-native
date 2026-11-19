@@ -45,8 +45,8 @@ export interface LinuxLauncherOptions {
    */
   display?: LinuxDisplay;
   /**
-   * The image to run the host in, or `false` to run it directly. Default: `ngn-el9` on any OS but
-   * Linux, and none on Linux.
+   * The image to run the host in, or `false` to run it directly. Default: `NGN_LINUX_IMAGE`, or
+   * `ngn-el9`, on any OS but Linux, and none on Linux.
    */
   container?: string | false;
   /** The container command. Default `docker`. */
@@ -213,6 +213,19 @@ export function desktopCliHost(
   return host;
 }
 
+/**
+ * The image a launch runs in off Linux: `NGN_LINUX_IMAGE`, such as `ngn-fedora` (the newer-GTK
+ * variant beside the AlmaLinux 9 one), or `ngn-el9`. An empty value is a mistake, not the default.
+ */
+export function imageNamed(env: Environment): string {
+  const named = env['NGN_LINUX_IMAGE'];
+  if (named === undefined) return 'ngn-el9';
+  if (!/^[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?$/.test(named)) {
+    throw new Error(`NGN_LINUX_IMAGE is not an image name: ${JSON.stringify(named)}.`);
+  }
+  return named;
+}
+
 /** The host, the bundle and where they run, from the options and the environment. */
 function resolveLaunch(options: LinuxLauncherOptions, env: Environment) {
   const given = options.host ?? env['NGN_DESKTOP_HOST'];
@@ -224,7 +237,7 @@ function resolveLaunch(options: LinuxLauncherOptions, env: Environment) {
   }
   const metroPort = options.metroPort ?? Number(env['RCT_METRO_PORT'] ?? 8081);
   const bundle = options.bundle ?? linuxBundleUrl(metroPort);
-  const image = options.container ?? (process.platform === 'linux' ? false : 'ngn-el9');
+  const image = options.container ?? (process.platform === 'linux' ? false : imageNamed(env));
   return {
     host: path.resolve(given),
     metroPort,

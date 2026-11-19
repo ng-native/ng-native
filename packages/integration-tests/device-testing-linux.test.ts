@@ -23,6 +23,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
   desktopCliHost,
+  imageNamed,
   linuxBundleUrl,
   linuxLaunchCommand,
   linuxLauncher,
@@ -325,6 +326,39 @@ describe('the Linux launch from another OS', () => {
       '--app-id',
       testApplicationId('r-1'),
     ]);
+  });
+
+  it('runs in the image NGN_LINUX_IMAGE names, and in ngn-el9 without it', () => {
+    assert.equal(imageNamed({}), 'ngn-el9');
+    assert.equal(imageNamed({ NGN_LINUX_IMAGE: 'ngn-fedora' }), 'ngn-fedora');
+    assert.equal(
+      imageNamed({ NGN_LINUX_IMAGE: 'registry.example/ngn/fedora:44' }),
+      'registry.example/ngn/fedora:44',
+    );
+    // An empty value, or one docker would take for an option, is a mistake and not the default.
+    for (const bad of ['', '-v /:/host', 'ngn fedora']) {
+      assert.throws(() => imageNamed({ NGN_LINUX_IMAGE: bad }), /not an image name/);
+    }
+    // The default container, off Linux: the platform is the launcher's, so it is set for the call.
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    try {
+      const request = { host: '/Users/me/b/gtk/ngn-linux' };
+      for (const [env, expected] of [
+        [{}, 'ngn-el9'],
+        [{ NGN_LINUX_IMAGE: 'ngn-fedora' }, 'ngn-fedora'],
+      ] as const) {
+        const { args } = linuxLaunchCommand(request, runRequest, env);
+        assert.equal(args[args.indexOf('bash') - 1], expected);
+      }
+      // A launcher given a container ignores the variable.
+      const given = linuxLaunchCommand({ ...request, container: 'ngn-el9' }, runRequest, {
+        NGN_LINUX_IMAGE: 'ngn-fedora',
+      });
+      assert.equal(given.args[given.args.indexOf('bash') - 1], 'ngn-el9');
+    } finally {
+      Object.defineProperty(process, 'platform', platform);
+    }
   });
 
   it("mounts a bundle file's folder, which the container could not see otherwise", () => {

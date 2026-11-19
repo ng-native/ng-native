@@ -187,7 +187,12 @@ screen reader would, with pyatspi and no screen reader (`native/scripts/atspi-ch
 packaged Linux app's host takes its settings from the `metadata.json` that `package` writes
 beside it, as a macOS app's take them from its `Info.plist`. On a Mac, run the same image with Docker, as a user other than
 root, since root reads a file whatever its mode and so fails the core tests that make one
-unreadable. The commands are in the Dockerfile's header.
+unreadable. The commands are in the Dockerfile's header. `native/docker/Dockerfile.fedora` is the same
+image on Fedora, with a newer GTK and libadwaita, where the code a newer libadwaita takes in place of
+the 1.4 fallbacks runs: the nightly workflow builds the host and runs the core and GTK tests in it.
+On a Mac, `pnpm bench:linux`, the screens-check skill's `linux` mode and `linuxLauncher()` run in
+the image `NGN_LINUX_IMAGE` names, `ngn-el9` when it is unset; `ngn-fedora` selects that one, built
+from its Dockerfile with `-t ngn-fedora`. On Linux they run where they are.
 
 `ng-native-desktop run` builds the host with `--no-tests` and `package` with `--release`: the
 published package has none of the core tests' sources, so only `test:native` and `build:host` in
