@@ -865,6 +865,76 @@ describe('windowed list options', () => {
     assert.deepEqual(placed.at(-1), ['set', offset, rows + 100 - VIEWPORT]);
   });
 
+  describe('a jump native has not yet drawn the sticky rows for', () => {
+    async function jumpable(sticky: readonly number[]) {
+      const { native, named } = recorder();
+      await boot({ height: VIEWPORT }, { nativeAnimated: native });
+      instance.sticky.set(sticky);
+      await settle();
+      await fireEvent.scroll(host, { contentOffset: { y: 5 * ITEM_HEIGHT } });
+      const offset = named('create').find(
+        ([, , config]) => (config as { offset?: number }).offset !== undefined,
+      )![1];
+      const list = (
+        instance as unknown as {
+          list(): { scrollToOffset(options: { offset: number; animated?: boolean }): void };
+        }
+      ).list();
+      const sets = () =>
+        named('set')
+          .filter(([, tag]) => tag === offset)
+          .map(([, , v]) => v);
+      return { list, sets };
+    }
+
+    it('ends with the offset of the jump native made last, after events from an earlier one', async () => {
+      const { list, sets } = await jumpable([0]);
+      list.scrollToOffset({ offset: 100 * ITEM_HEIGHT, animated: false });
+      list.scrollToOffset({ offset: 300 * ITEM_HEIGHT, animated: false });
+      await fireEvent.scroll(host, { contentOffset: { y: 100 * ITEM_HEIGHT } });
+      await settle();
+      await fireEvent.scroll(host, { contentOffset: { y: 300 * ITEM_HEIGHT } });
+      await settle();
+      assert.equal(sets().at(-1), 300 * ITEM_HEIGHT);
+    });
+
+    it('is not armed by a jump to where the list already is', async () => {
+      const { list, sets } = await jumpable([0, 30, 60]);
+      list.scrollToOffset({ offset: 5 * ITEM_HEIGHT, animated: false });
+      await settle();
+      const before = sets().length;
+      for (const y of [6, 20, 40, 70]) {
+        await fireEvent.scroll(host, { contentOffset: { y: y * ITEM_HEIGHT } });
+        await settle();
+      }
+      assert.deepEqual(sets().slice(before), []);
+    });
+
+    it('tells native nothing of an animated jump before native reports it moving', async () => {
+      const { list, sets } = await jumpable([0, 200]);
+      const before = sets().length;
+      list.scrollToOffset({ offset: 250 * ITEM_HEIGHT });
+      instance.sticky.set([0, 200, 400]);
+      await settle();
+      assert.deepEqual(sets().slice(before), []);
+    });
+
+    it('lets the user s drag take over from a jump that landed somewhere else', async () => {
+      // A content inset can put native's end past where the list worked out the jump would land.
+      const { list, sets } = await jumpable([0, 30, 60]);
+      list.scrollToOffset({ offset: 50 * ITEM_HEIGHT, animated: false });
+      await fireEvent.scroll(host, { contentOffset: { y: 50 * ITEM_HEIGHT + 34 } });
+      await settle();
+      await fireEvent(host, 'scrollBeginDrag', {});
+      const before = sets().length;
+      for (const y of [52, 60, 70]) {
+        await fireEvent.scroll(host, { contentOffset: { y: y * ITEM_HEIGHT } });
+        await settle();
+      }
+      assert.deepEqual(sets().slice(before), []);
+    });
+  });
+
   it('leaves native s offset to native while the user scrolls', async () => {
     // Mid-fling the offset here trails native's: setting it as a new sticky row arrives would
     // pull every pinned row back by the difference for a frame.
