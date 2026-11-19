@@ -16,7 +16,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
-import { linuxLaunchCommand, linuxLauncher } from './linux-launcher.ts';
+import { CRASH_MARKER, linuxLaunchCommand, linuxLauncher } from './linux-launcher.ts';
 
 const request = { port: 1234, runId: 'abc', stateDir: '/unused' };
 
@@ -83,6 +83,29 @@ describe('linuxLauncher crashReport', () => {
     try {
       assert.equal(await app.exited, 'status 3');
       assert.match((await launcher.crashReport?.(0)) ?? '', /the last line/);
+    } finally {
+      try {
+        await app.stop();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('holds an unfinished last line while a process the host left keeps the pipes open', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ngn-linux-launcher-'));
+    const stateDir = path.join(dir, 'state');
+    mkdirSync(stateDir);
+    const host = path.join(dir, 'host.sh');
+    // No line break after the message, and a child holding the pipes past the drain's wait.
+    writeFileSync(host, "#!/bin/bash\nprintf 'fatal detail' >&2\nsleep 30 &\nexit 3\n", {
+      mode: 0o755,
+    });
+    const launcher = linuxLauncher({ host, container: false, display: 'inherit' });
+    const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir });
+    try {
+      assert.equal(await app.exited, 'status 3');
+      assert.match((await launcher.crashReport?.(0)) ?? '', /fatal detail/);
     } finally {
       try {
         await app.stop();
@@ -288,4 +311,82 @@ describe('linuxLauncher stop', () => {
       }
     },
   );
+});
+
+describe('linuxLauncher crashReport', () => {
+  it('keeps stdout in the last output, finished or not, after the crash marker on stderr', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ngn-linux-launcher-'));
+    try {
+      const host = path.join(dir, 'host.sh');
+      writeFileSync(
+        host,
+        [
+          '#!/bin/bash',
+          `echo '${CRASH_MARKER}' >&2`,
+          'echo frame-1 >&2',
+          'sleep 0.2',
+          'echo stdout-line-after',
+          "printf 'stdout-unfinished'",
+          // A child holding the pipes, so the report reads the unfinished line at the deadline.
+          'sleep 30 &',
+          'exit 3',
+          '',
+        ].join('\n'),
+        { mode: 0o755 },
+      );
+      const launcher = linuxLauncher({ host, container: false, display: 'inherit' });
+      const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir: dir });
+      try {
+        await app.exited;
+        assert.equal(
+          await launcher.crashReport?.(0),
+          "The host's crash report:\nframe-1\n\nThe host's last output:\nstdout-line-after\nstdout-unfinished",
+        );
+      } finally {
+        await app.stop();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('recognises the crash marker when two chunks split it, and keeps a last unfinished line', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ngn-linux-launcher-'));
+    try {
+      const host = path.join(dir, 'host.sh');
+      const half = CRASH_MARKER.length - 8;
+      writeFileSync(
+        host,
+        [
+          '#!/bin/bash',
+          'echo before >&2',
+          `printf '%s' '${CRASH_MARKER.slice(0, half)}' >&2`,
+          'sleep 0.3',
+          `printf '%s\n' '${CRASH_MARKER.slice(half)}' >&2`,
+          'echo frame-1 >&2',
+          "printf 'last-without-newline' >&2",
+          '',
+        ].join('\n'),
+        { mode: 0o755 },
+      );
+      const launcher = linuxLauncher({ host, container: false, display: 'inherit' });
+      const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir: dir });
+      try {
+        await app.exited;
+        let report = '';
+        for (let i = 0; i < 100 && !report.includes('last-without-newline'); i++) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          report = String(await launcher.crashReport?.(0));
+        }
+        assert.equal(
+          report,
+          "The host's crash report:\nframe-1\nlast-without-newline\n\nThe host's last output:\nbefore",
+        );
+      } finally {
+        await app.stop();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
