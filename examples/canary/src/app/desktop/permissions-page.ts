@@ -10,10 +10,12 @@ import {
 } from '@angular/core';
 import { TurboModuleRegistry } from 'react-native';
 import { ScrollView, Text, View } from '@ng-native/components';
+import { CURRENT_WINDOW } from '@ng-native/device';
 import { audioPlayer, audioRecorder, recordingPermission } from '@ng-native/expo/audio';
 import { Calendar, EntityTypes } from '@ng-native/expo/calendar';
 import { registerExpoViews } from '@ng-native/expo';
 import { Camera, cameraPermission, microphonePermission } from '@ng-native/expo/camera';
+import { DocumentPicker } from '@ng-native/expo/document-picker';
 import { ImagePicker } from '@ng-native/expo/image-picker';
 import { Location } from '@ng-native/expo/location';
 import { MapView } from '@ng-native/expo/map-view';
@@ -21,6 +23,7 @@ import { MediaLibrary } from '@ng-native/expo/media-library';
 
 type Album = NonNullable<Awaited<ReturnType<MediaLibrary['album']>>>;
 import { Notifications } from '@ng-native/expo/notifications';
+import { Printing } from '@ng-native/expo/printing';
 import { Tracking } from '@ng-native/expo/tracking';
 import { NativeHeader } from '@ng-native/router';
 import { page } from '../screen-styles.ts';
@@ -97,6 +100,9 @@ export class PermissionsPage {
   private readonly picker = inject(ImagePicker);
   private readonly tracking = inject(Tracking);
   private readonly notifications = inject(Notifications);
+  private readonly documents = inject(DocumentPicker);
+  private readonly printing = inject(Printing);
+  private readonly window = inject(CURRENT_WINDOW);
   private readonly cameraAccess = cameraPermission();
   private readonly microphone = microphonePermission();
   private readonly recording = recordingPermission();
@@ -178,6 +184,8 @@ export class PermissionsPage {
         'photos-cleanup': () => this.cleanUpPhoto(),
         tracking: () => this.checkTracking(),
         notifications: () => this.checkNotifications(),
+        documents: () => this.checkDocuments(),
+        print: () => this.checkPrint(),
         status: () => this.checkStatus(),
       };
       const step = steps[check];
@@ -474,6 +482,27 @@ export class PermissionsPage {
       `tracking ask again ${await this.tracking.permission.request()} (${this.tracking.permission.status()})`,
     );
     this.note(`advertising id ${this.tracking.advertisingId()}`);
+  }
+
+  private async checkDocuments(): Promise<void> {
+    const picked = await this.documents.pick({ type: ['text/plain'], multiple: true });
+    this.note(`picked ${picked.length} ${picked.map((each) => each.name).join(', ')}`);
+    const saved = await this.documents.save({
+      suggestedName: 'ngn-perm-test.txt',
+      contents: 'saved by the canary',
+      types: ['text/plain'],
+    });
+    this.note(`saved ${saved}`);
+    const folder = await this.documents.pickDirectory();
+    this.note(`folder ${folder?.uri ?? 'none'}`);
+  }
+
+  private async checkPrint(): Promise<void> {
+    if (!this.window) throw new Error('no window to print');
+    // Once the window this page opened in has drawn.
+    await wait(1500);
+    await this.printing.print({ window: this.window });
+    this.note('print dialog closed');
   }
 
   private async checkNotifications(): Promise<void> {

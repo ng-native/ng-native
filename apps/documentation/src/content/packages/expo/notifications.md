@@ -484,6 +484,20 @@ registers only an app signed with `com.apple.developer.aps-environment`: `packag
 with Apple does. A development host has no such entitlement, so there the token rejects with what
 to do. Expo's push service does not deliver to macOS, so `getExpoPushTokenAsync` rejects.
 
+## On Linux
+
+On the GTK host `NgNativeNotifications` shows each notification through the desktop's Notification
+portal, and through GLib's own notifications (GNOME Shell's `org.gtk.Notifications`, or
+`org.freedesktop.Notifications` elsewhere) where no portal answers. Linux has no notification
+scheduler, so the host keeps the scheduled ones in `notifications.json` in the app's data folder
+and fires them from a timer while the app runs. One that came due while the app was closed shows
+once as it next launches, and a repeating one then waits for its next time. Calendar triggers match
+the local time zone. Neither desktop asks for permission, so the status is granted and the
+desktop's own settings decide whether a notification shows. A subtitle shows as the first line of
+the body. A click raises the app and is the response. The
+presented list is the host's own, of the last 64 shown. The badge count is kept but not drawn,
+and there are no remote notifications.
+
 ## Reference
 
 <!-- api: Notifications -->

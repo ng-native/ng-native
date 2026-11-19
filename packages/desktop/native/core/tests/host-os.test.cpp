@@ -113,7 +113,10 @@ TEST_CASE("a bare program name is looked for on the OS's search path") {
 }
 
 TEST_CASE("Device's OS name and a push token's type are the OS's") {
-  CHECK(ngn::makeDeviceModule({}, otherOs().name)->property("osName") == dynamic("OtherOS"));
+  CHECK(ngn::makeDeviceModule({}, otherOs())->property("osName") == dynamic("OtherOS"));
+  // An OS that makes no machines leaves the brand to the machine's maker.
+  CHECK(ngn::makeDeviceModule({.manufacturer = "LENOVO"}, otherOs())->property("brand") == dynamic("LENOVO"));
+  CHECK(ngn::makeDeviceModule({}, otherOs())->property("manufacturer") == dynamic(nullptr));
 
   ngn::DesktopModuleSources sources{
       .os = otherOs(),
