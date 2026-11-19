@@ -3,6 +3,8 @@
 // view whose role changes gets a new widget.
 #include "mounted-views.h"
 
+#include "../focus.h"
+
 #include "../accessible.h"
 #include "../text-field.h"
 
@@ -172,12 +174,15 @@ TEST_CASE("a view whose role changes keeps the focus, in itself or in a field in
   // The field still hears the user.
   CHECK(ngn::gtk::viewData(views.view(3))->field->view == ngn::gtk::viewData(views.view(3)));
 
+  ngn::gtk::trackFocus(GTK_WINDOW(views.window));
   views.update(group, desktopViewProps(dynamic::object("role", "form")("focusable", true)));
   REQUIRE(gtk_widget_grab_focus(views.view(2)));
   views.update(group, desktopViewProps(dynamic::object("role", "region")("focusable", true)));
   CHECK(roleOf(views.view(2)) == GTK_ACCESSIBLE_ROLE_REGION);
   CHECK(gtk_widget_get_focusable(views.view(2)));
   CHECK(gtk_root_get_focus(gtk_widget_get_root(views.view(2))) == views.view(2));
+  // Its focus ring moves with it.
+  CHECK(gtk_widget_has_css_class(views.view(2), "ngn-focused"));
 }
 
 TEST_CASE("a paragraph that stops saying anything is read through, and is static text again when it does") {

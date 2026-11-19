@@ -179,16 +179,22 @@ void trackFocus(GtkWindow *window) {
       g_clear_object(&previous);
       return;
     }
+    // A view whose widget was replaced as its role changed keeps the focus: it hears neither.
+    bool same = previous && view && g_object_get_data(G_OBJECT(previous), "ngn-replaced-by") == view;
     if (previous) {
       gtk_widget_remove_css_class(previous, "ngn-focused");
-      send(previous, false);
+      if (!same) {
+        send(previous, false);
+      }
       g_object_unref(previous);
     }
     g_weak_ref_set(held, view);
     if (view) {
       // The ring is the focused view's own, not its ancestors', which GTK marks focus-visible too.
       gtk_widget_add_css_class(view, "ngn-focused");
-      send(view, true);
+      if (!same) {
+        send(view, true);
+      }
     }
   }), nullptr);
 }

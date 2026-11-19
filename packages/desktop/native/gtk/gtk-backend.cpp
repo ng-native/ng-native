@@ -351,6 +351,8 @@ void GtkBackend::followRole(const ShadowView &view) {
   // The view's data (its props, state, layout and text field) goes with it; the old widget keeps
   // the new one's empty data to free.
   swapViewData(old, next);
+  // The focus moving to its replacement is no focus change for the view (focus.h).
+  g_object_set_data(G_OBJECT(old), "ngn-replaced-by", next);
   // A focused field's GtkText loses the focus as it moves and takes it back after: the app hears
   // neither.
   TextField *field = focus ? textFieldOf(focus) : nullptr;
