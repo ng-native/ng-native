@@ -2,9 +2,14 @@
 // client to build on: Linux. Built only with NGN_CURL, which the GTK backend turns on.
 //
 // One thread drives every request and connection through a curl_multi handle, so no call blocks
-// its caller, and each request's or connection's callbacks run on that thread, in order. As
+// its caller, and each request's or connection's callbacks run on that thread, in order. Two
+// exceptions: a url that does not parse fails inside send() or connect(), on the caller's thread,
+// before either returns (send() then returns no task, connect() no connection); and cancel()
+// waits for a callback of that request that is running on the thread to return, so it must not
+// be called holding a lock that callback takes. As
 // NSURLSession does on macOS: redirects are followed, a request's timeout is the longest it may go
-// without a byte in either direction, compressed bodies arrive decoded, `file:` and `data:` urls
+// without a byte in either direction (a header line counts once it is whole, as libcurl hands over
+// only whole ones), compressed bodies arrive decoded, `file:` and `data:` urls
 // answer 200 with no headers, and requests with credentials share one cookie store. Unlike macOS's,
 // that store is kept in memory for the process only, and a proxy comes only from libcurl's
 // environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY`, `NO_PROXY` and the rest), not the

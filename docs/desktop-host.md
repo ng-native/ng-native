@@ -25,12 +25,12 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   ScrollView is a `GtkScrolledWindow` whose document holds the content, telling the core's hit
   test each offset, with classic scroll bars (`gtk-overlay-scrolling` off) taking their gutter from
   the content through `scrollers.h`. An Image reads its source through the core's
-  `loadImageSource` (`image-source.h`), which keeps what a GET fetched over http(s) in memory for
-  the process in place of macOS's URL cache, and GDK decodes it off the UI thread. Linking opens
-  a url with `GtkUriLauncher`, which goes through the desktop portal inside a sandbox. An svg
-  draws the core's document of react-native-svg's elements (`svg.h`) with `cairo-canvas.h`, a
-  cairo node in the view's snapshot, since GSK fills and strokes paths only from GTK 4.14; text in
-  an svg is Pango's, and a `foreignObject`'s views are not drawn.
+  `loadImageSource` (`image-source.h`), which keeps what a GET with no body fetched over http(s)
+  in memory for the process, by its url and headers, in place of macOS's URL cache, and GDK
+  decodes it off the UI thread. Linking opens a url with `GtkUriLauncher`, which goes through the
+  desktop portal inside a sandbox. An svg draws the core's document of react-native-svg's elements
+  (`svg.h`) with `cairo-canvas.h`, a cairo node in the view's snapshot, since GSK fills and strokes
+  paths only from GTK 4.14; text in an svg is Pango's, and a `foreignObject`'s views are not drawn.
   Accessibility is GTK's own: each widget is made with the GTK role for the view's ARIA role,
   which the core's `aria-role.h` reads from its `role` or `accessibilityRole`, and its label,
   description, level and states follow the props. GTK fixes a role when it makes the widget, so
@@ -63,17 +63,19 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   its last active window, or sends `reopen` when it has none shown. `--gapplication-service` starts
   it as the D-Bus service a packaged app's `DBusActivatable` desktop entry names. A window reports
   its size, maximised and full-screen state and focus to the core's `WindowHost`, which saves the
-  size and state but no place. The host quits when the user closes the last window only when no
-  app listens and the app's own window is not shown; an app or a reload closing a window never
-  quits it. The app's menu bar is a `GMenu` built from the core's items
-  (`menus.h`), each item an action of the window's `menu` group, shown in the chrome's menu bar or
-  primary menu. GTK's popover menus take no keys, so a window's capture-phase key controller looks a
-  press up in order: the app's shortcuts (`MenuHost::keyDown`), the back and forward keys
-  (`navigationFor`), then the bar (`findMenuItem` by chord), leaving a focused text input its
-  editing keys; a bubble-phase controller gives an unused Return or Escape to the `default` or
-  `cancel` native button. Mouse buttons 8 and 9 go back and forward, and a secondary click on a
-  view with a `contextMenu` shows a `GtkPopoverMenu` there. A window shows with nothing
-  focused, as on macOS, so a header's search field does not take the focus at launch. A `<modal>`
+  size and state but no place. An app that listens decides whether closing its last window quits
+  it, by `provideAppLifecycle`'s `quitWhenLastWindowCloses`, as on macOS. With no app listening,
+  the host quits when the user closes the last window and the app's own window is not shown
+  (`WindowHost::lastWindowClosed`); a reload closing a window never quits it. The app's menu bar is
+  a `GMenu` built from the core's items (`menus.h`), each item an action of the window's `menu`
+  group, shown in the chrome's menu bar or primary menu. GTK's popover menus take no keys, so a
+  window's capture-phase key controller looks a press up in order: the app's shortcuts
+  (`MenuHost::keyDown`), the back and forward keys (`navigationFor`), then the bar (`findMenuItem`
+  by chord), leaving a focused text input its editing keys; a bubble-phase controller gives an
+  unused Return or Escape to the `default` or `cancel` native button. Mouse buttons 8 and 9 go back
+  and forward, and a secondary click on a view with a `contextMenu` shows a `GtkPopoverMenu` there.
+  A window shows with nothing focused, as on macOS, so a header's search field does not take the
+  focus at launch. A `<modal>`
   sheet, and a screen presented with `present()`, is an `AdwDialog` in the window on libadwaita
   1.5 and later, found at run time, and a drawn sheet on a dimmed overlay on 1.4; a cover fills the
   overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. A

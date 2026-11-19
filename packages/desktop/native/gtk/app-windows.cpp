@@ -192,9 +192,11 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
         // The app decides, when it listens; otherwise the window closes as the OS would close it.
         if (!host || host->closeRequested(r->surface)) {
           r->windows->close(r->surface);
-          // Linux's convention: the app quits when the user closes its last window. Only here, not
-          // in close: a reload closes the app's windows too, before it opens their replacements.
-          if (r->windows->windows_.empty() && r->windows->hooks_.lastWindowClosed) {
+          // Linux's convention: the app quits when the user closes its last window, unless an app
+          // listens, whose quitWhenLastWindowCloses decides instead (WindowHost::lastWindowClosed).
+          // Only here, not in close: a reload closes the app's windows too, before it opens their
+          // replacements.
+          if (r->windows->windows_.empty() && (!host || host->lastWindowClosed()) && r->windows->hooks_.lastWindowClosed) {
             r->windows->hooks_.lastWindowClosed();
           }
         }
