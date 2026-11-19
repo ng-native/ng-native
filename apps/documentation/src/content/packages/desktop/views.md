@@ -30,6 +30,10 @@ gradients (`background-image`) are drawn with their size, position and repeat, a
 outer or inset, is a blurred layer under the children. A view that clips its overflow also clips
 its outer shadows.
 
+An `<image>` fits its picture to its box by `resizeMode`: `cover`, `contain`, `center` or `stretch`,
+and `repeat`, which tiles the picture at its own size from the box's top left corner, as React
+Native iOS does.
+
 ## Modals
 
 A `<modal>` with `pageSheet`, `formSheet` or no presentation style is an NSWindow sheet on its
