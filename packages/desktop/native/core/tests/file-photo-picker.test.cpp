@@ -5,10 +5,15 @@
 
 #include <unistd.h>
 
+#include <chrono>
+#include <condition_variable>
 #include <filesystem>
 #include <fstream>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 using folly::dynamic;
@@ -111,11 +116,30 @@ struct Answer {
   std::optional<std::string> failure;
 };
 
+// The picker answers from a thread of its own: waits for it, for at most 10 seconds.
+template <typename T>
+struct Waited {
+  std::mutex mutex;
+  std::condition_variable changed;
+  std::optional<T> value;
+  void set(T v) {
+    std::lock_guard lock(mutex);
+    value = std::move(v);
+    changed.notify_all();
+  }
+  T get() {
+    std::unique_lock lock(mutex);
+    REQUIRE(changed.wait_for(lock, std::chrono::seconds(10), [this] { return value.has_value(); }));
+    return *value;
+  }
+};
+
 Answer ask(const ngn::NativeModule &module, const std::string &method, dynamic args = dynamic::array()) {
-  Answer answer;
-  module.callWithPromise(method, args, {.resolve = [&](dynamic v) { answer.value = v; }, .reject = [&](const std::string &m) { answer.failure = m; }});
-  REQUIRE((answer.value || answer.failure));
-  return answer;
+  auto answer = std::make_shared<Waited<Answer>>();
+  module.callWithPromise(method, args,
+                         {.resolve = [answer](dynamic v) { answer->set({.value = v}); },
+                          .reject = [answer](const std::string &m) { answer->set({.failure = m}); }});
+  return answer->get();
 }
 
 } // namespace
@@ -168,10 +192,9 @@ TEST_CASE("makeFilePhotoPicker asks the open panel for the media types, copies e
     return std::optional<std::pair<double, double>>({4032, 3024});
   });
   auto pick = [&](dynamic options) {
-    std::optional<std::optional<std::vector<ngn::PhotoPicker::Picked>>> out;
-    picker->pick(options, [&](std::optional<std::vector<ngn::PhotoPicker::Picked>> picked) { out = std::move(picked); });
-    REQUIRE(out);
-    return *out;
+    auto out = std::make_shared<Waited<std::optional<std::vector<ngn::PhotoPicker::Picked>>>>();
+    picker->pick(options, [out](std::optional<std::vector<ngn::PhotoPicker::Picked>> picked) { out->set(std::move(picked)); });
+    return out->get();
   };
 
   // Cancelled.
@@ -208,6 +231,11 @@ TEST_CASE("makeFilePhotoPicker asks the open panel for the media types, copies e
   CHECK(video.width == 640);
   CHECK(video.height == 480);
   CHECK(video.duration == doctest::Approx(3000));
+
+  // The copies are made off the thread the panel answered on.
+  auto where = std::make_shared<Waited<std::thread::id>>();
+  picker->pick(dynamic::object(), [where](auto) { where->set(std::this_thread::get_id()); });
+  CHECK(where->get() != std::this_thread::get_id());
 
   // One file however many are chosen, unless several may be; then at most selectionLimit.
   CHECK(pick(dynamic::object("mediaTypes", "videos"))->size() == 1);

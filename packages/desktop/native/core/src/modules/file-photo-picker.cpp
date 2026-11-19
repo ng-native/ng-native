@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <thread>
 
 namespace ngn {
 
@@ -233,13 +234,16 @@ class FilePhotoPicker final : public PhotoPicker, public std::enable_shared_from
       if (most > 0 && paths->size() > most) {
         paths->resize(most);
       }
-      std::vector<Picked> picked;
-      for (size_t i = 0; i < paths->size(); i++) {
-        if (auto one = self->describe((*paths)[i], i)) {
-          picked.push_back(std::move(*one));
+      // Copied on a thread of its own: the panel answers on the UI thread, and a video can be large.
+      std::thread([self, paths = std::move(*paths), done = std::move(done)] {
+        std::vector<Picked> picked;
+        for (size_t i = 0; i < paths.size(); i++) {
+          if (auto one = self->describe(paths[i], i)) {
+            picked.push_back(std::move(*one));
+          }
         }
-      }
-      done(std::move(picked));
+        done(std::move(picked));
+      }).detach();
     });
   }
 

@@ -149,10 +149,11 @@ std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoPicker>
                                                     std::optional<PickerCamera> camera = std::nullopt);
 
 // A picker over the OS's open panel, for a host with no photo library: `mediaTypes` choose the
-// filter (images, videos or both), `allowsMultipleSelection` and `selectionLimit` how many. Each
-// file chosen is copied into a folder of its own in `folder` and described there: its MIME type
-// from its name, an image's size from `imageSize` (nothing when it cannot be read), and an MP4 or
-// QuickTime video's size and duration from its own boxes (0 and no duration in another container).
+// filter (images, videos or both), `allowsMultipleSelection` and `selectionLimit` how many. On a
+// thread of its own, off the one the panel answers on, each file chosen is copied into a folder of
+// its own in `folder` and described there: its MIME type from its name, an image's size from
+// `imageSize` (nothing when it cannot be read; called on that thread), and an MP4 or QuickTime
+// video's size and duration from its own boxes (0 and no duration in another container).
 std::shared_ptr<PhotoPicker> makeFilePhotoPicker(std::shared_ptr<FileDialogs> dialogs, std::string folder,
                                                  std::function<std::optional<std::pair<double, double>>(const std::string &path)> imageSize);
 

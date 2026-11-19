@@ -1,5 +1,6 @@
 // DocumentPicker's dialogs, the clipboard and printing on GTK: the FileChooser and Print portals
 // against a stand-in, the display's GdkClipboard, and GtkPrintOperation's output as a PDF.
+#include "../app-windows.h"
 #include "../file-dialogs.h"
 #include "../host-sources.h"
 #include "../image-manipulator.h"
@@ -102,7 +103,7 @@ TEST_CASE("ImagePicker chooses images and videos through the FileChooser portal,
   auto picker = ngn::makeFilePhotoPicker(ngn::gtk::makeFileDialogs(), caches, ngn::gtk::imagePixelSize);
   std::optional<std::optional<std::vector<ngn::PhotoPicker::Picked>>> picked;
   picker->pick(folly::dynamic::object("mediaTypes", folly::dynamic::array("images", "videos"))("allowsMultipleSelection", true),
-               [&picked](auto answer) { picked = std::move(answer); });
+               [&picked](auto answer) { ngn::gtk::onMainContext([&picked, answer]() mutable { picked = std::move(answer); }); });
   ngn::testing::runUntil([&] { return picked.has_value(); });
   REQUIRE(portal.calls.size() == 1);
   CHECK(portal.calls[0].method == "OpenFile");
@@ -122,7 +123,7 @@ TEST_CASE("ImagePicker chooses images and videos through the FileChooser portal,
   // Cancelled.
   portal.response = 1;
   picked.reset();
-  picker->pick(folly::dynamic::object(), [&picked](auto answer) { picked = std::move(answer); });
+  picker->pick(folly::dynamic::object(), [&picked](auto answer) { ngn::gtk::onMainContext([&picked, answer]() mutable { picked = std::move(answer); }); });
   ngn::testing::runUntil([&] { return picked.has_value(); });
   CHECK_FALSE(*picked);
   CHECK(portal.calls.back().second == "Choose an Image");
