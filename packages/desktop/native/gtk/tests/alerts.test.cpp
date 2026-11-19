@@ -86,7 +86,9 @@ TEST_CASE("an alert over a window is an AdwAlertDialog in it on libadwaita 1.5, 
   REQUIRE(alert);
   if (ngn::gtk::haveAdwDialog()) {
     CHECK(std::string(G_OBJECT_TYPE_NAME(alert)) == "AdwAlertDialog");
-    CHECK(gtk_widget_get_root(alert) == GTK_ROOT(views.window));
+    // In the window, or, in a plain GtkWindow (this test's), a window of its own over it.
+    GtkRoot *root = gtk_widget_get_root(alert);
+    CHECK((root == GTK_ROOT(views.window) || gtk_window_get_transient_for(GTK_WINDOW(root)) == GTK_WINDOW(views.window)));
   } else {
     REQUIRE(ADW_IS_MESSAGE_DIALOG(alert));
     CHECK(gtk_window_get_transient_for(GTK_WINDOW(alert)) == GTK_WINDOW(views.window));
