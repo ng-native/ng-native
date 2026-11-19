@@ -1006,11 +1006,7 @@ export class VirtualList<T> extends ScrollViewProps {
     // changes, and after a jump the offset of a drive just made may not. The target until native
     // reports, then what it reported, which an animated scroll is still on its way from. Only
     // then, since mid-fling the offset here trails native's and would set it back a frame.
-    const from = !this.jumped
-      ? undefined
-      : this.landed
-        ? this.headerHeight() + this.lastOffset
-        : this.jumpedTo;
+    const from = !this.jumped ? undefined : this.landed ? this.landedAt : this.jumpedTo;
     this.window().forEach((row, at) => {
       const view = views[at];
       const next = this.stickyDrive(row);
@@ -1044,6 +1040,8 @@ export class VirtualList<T> extends ScrollViewProps {
   private landed = false;
   /** Where the list scrolled itself to, in the scroll view, which native reports with its event. */
   private jumpedTo = 0;
+  /** Where native's first event after it said the scroll view was, header and all. */
+  private landedAt = 0;
 
   /** Which recycling slot each rendered item holds, by key: its type, and the row it last drew. */
   private readonly recycled = new Map<
@@ -1363,7 +1361,7 @@ export class VirtualList<T> extends ScrollViewProps {
     const [x, y] = this.horizontal() ? [offset, 0] : [0, offset];
     this.jumped = true;
     this.landed = false;
-    this.jumpedTo = offset;
+    this.jumpedTo = this.reachable(offset);
     this.engine.dispatchCommand(this.node, 'scrollTo', [x, y, animated]);
   }
 
@@ -1416,7 +1414,10 @@ export class VirtualList<T> extends ScrollViewProps {
     const visible = this.indexAt(content);
     if (visible !== this.visible()) this.moveTo(visible);
     this.lastOffset = content;
-    if (this.jumped) this.landed = true;
+    if (this.jumped) {
+      this.landed = true;
+      this.landedAt = along;
+    }
     this.anchorAt(visible, content);
     // A pinned row follows the scroll continuously, so with sticky rows the offset has to be a
     // signal - and only then. Without them this stays a field, and a fling that moves no row in
@@ -1536,15 +1537,26 @@ export class VirtualList<T> extends ScrollViewProps {
     this.checkEnd(this.headerHeight() + this.lastOffset);
   }
 
+  /** The scroll view's content along the axis, header and all. */
+  private contentExtent(): number {
+    // Native's size is for the rows it last laid out; until it reports for these, their own extent.
+    const extent = this.extent();
+    const reported = this.contentSizeFor === extent ? this.contentSize : 0;
+    return reported || this.headerHeight() + extent;
+  }
+
+  /** How far toward `offset` native can scroll: it stops at its end, and says nothing of it. */
+  private reachable(offset: number): number {
+    const viewport = this.viewport();
+    const end = viewport > 0 ? Math.max(0, this.contentExtent() - viewport) : Infinity;
+    return Math.min(Math.max(0, offset), end);
+  }
+
   private checkEnd(y: number): void {
     const count = this.items().length;
     const viewport = this.viewport();
     if (!count || !viewport) return;
-    // Native's size is for the rows it last laid out; until it reports for these, their own extent.
-    const extent = this.extent();
-    const reported = this.contentSizeFor === extent ? this.contentSize : 0;
-    const total = reported || this.headerHeight() + extent;
-    const distanceFromEnd = total - (y + viewport);
+    const distanceFromEnd = this.contentExtent() - (y + viewport);
     // Away from the end again re-arms it, as React Native does, so a load that failed is retried
     // the next time the user comes back down.
     if (distanceFromEnd > this.endReachedThreshold() * viewport) {

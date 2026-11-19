@@ -760,6 +760,56 @@ describe('windowed list options', () => {
     assert.deepEqual(placed.at(-1), ['set', offset, 50 * ITEM_HEIGHT]);
   });
 
+  it('tells native the offset its landing event reported, whatever the header did since', async () => {
+    const { native, named } = recorder();
+    await boot({ height: VIEWPORT }, { nativeAnimated: native });
+    instance.sticky.set([0, 200]);
+    await settle();
+    await fireEvent.scroll(host, { contentOffset: { y: 5 * ITEM_HEIGHT } });
+    const offset = named('create').find(
+      ([, , config]) => (config as { offset?: number }).offset !== undefined,
+    )![1];
+    const list = (
+      instance as unknown as {
+        list(): { scrollToOffset(options: { offset: number; animated?: boolean }): void };
+      }
+    ).list();
+    list.scrollToOffset({ offset: 50 * ITEM_HEIGHT, animated: false });
+    // The landing event, then the header growing, both before the list renders again.
+    fabric.emit(host, 'topScroll', { contentOffset: { y: 50 * ITEM_HEIGHT } });
+    fabric.emit(host.children[0]!.children[0]!, 'topLayout', { layout: { height: 100 } });
+    instance.sticky.set([0, 200, 400]);
+    await settle();
+    const placed = named('set').filter(([, tag]) => tag === offset);
+    assert.deepEqual(placed.at(-1), ['set', offset, 50 * ITEM_HEIGHT]);
+  });
+
+  it('tells native no further than it can scroll, for a scroll past the end', async () => {
+    // Native stops at its end and sends no event, so a target past it would stay with native.
+    const { native, named } = recorder();
+    await boot({ height: VIEWPORT }, { nativeAnimated: native });
+    instance.sticky.set([0, 200]);
+    await settle();
+    await fireEvent.scroll(host, { contentOffset: { y: 5 * ITEM_HEIGHT } });
+    const offset = named('create').find(
+      ([, , config]) => (config as { offset?: number }).offset !== undefined,
+    )![1];
+    const list = (
+      instance as unknown as {
+        list(): {
+          scrollToOffset(options: { offset: number; animated?: boolean }): void;
+          items(): readonly unknown[];
+        };
+      }
+    ).list();
+    const end = list.items().length * ITEM_HEIGHT - VIEWPORT;
+    list.scrollToOffset({ offset: end + 5000, animated: false });
+    instance.sticky.set([0, 200, 400]);
+    await settle();
+    const placed = named('set').filter(([, tag]) => tag === offset);
+    assert.deepEqual(placed.at(-1), ['set', offset, end]);
+  });
+
   it('leaves native s offset to native while the user scrolls', async () => {
     // Mid-fling the offset here trails native's: setting it as a new sticky row arrives would
     // pull every pinned row back by the difference for a frame.
