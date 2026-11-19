@@ -24,6 +24,7 @@ option(NGN_RUNTIME "With NGN_BACKEND=none, build the runtime half over Hermes to
 set(RN_DIR "" CACHE PATH "The installed react-native package")
 set(NGN_SOURCES "" CACHE PATH "Sources fetched by scripts/fetch.sh (<cache>/src)")
 set(NGN_HERMES_BUILD "" CACHE PATH "Hermes built by scripts/build-hermes.sh")
+set(NGN_HERMES_PREBUILT "" CACHE PATH "React Native's prebuilt Hermes, from scripts/fetch-hermes.sh")
 foreach(var RN_DIR NGN_SOURCES)
   if(NOT IS_DIRECTORY "${${var}}")
     message(FATAL_ERROR "${var} is not set to a directory; build through scripts/build.sh")
@@ -94,6 +95,7 @@ add_library(ngn_core STATIC
     core/src/glass.cpp
     core/src/header-bar.cpp
     core/src/host-state.cpp
+    core/src/host-views.cpp
     core/src/input-dispatcher.cpp
     core/src/input-script.cpp
     core/src/key-value-store.cpp
@@ -144,6 +146,7 @@ add_library(ngn_core STATIC
     core/src/modules/core-modules.cpp
     core/src/modules/crypto.cpp
     core/src/modules/desktop-expo.cpp
+    core/src/modules/desktop-modules.cpp
     core/src/modules/file-system.cpp
     core/src/modules/fonts.cpp
     core/src/modules/image-loader.cpp
@@ -250,6 +253,9 @@ if(NGN_TESTS)
     target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit" "-framework WebKit" "-framework PDFKit" "-framework CoreImage" "-framework AuthenticationServices" "-framework AVKit" "-framework UserNotifications")
   endif()
   enable_testing()
+  if(NGN_HERMES_TEST_RPATH)
+    target_link_options(ngn_core_tests PRIVATE ${NGN_HERMES_TEST_RPATH})
+  endif()
   add_test(NAME core COMMAND ngn_core_tests)
 endif()
 

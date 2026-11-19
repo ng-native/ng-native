@@ -151,7 +151,13 @@ fi
 arch_key="${archs//;/-}"
 [ -n "$arch_key" ] || arch_key="$(uname -m)"
 hermes_args=()
-if [ "$runtime" = 1 ]; then
+if [ "$backend" = "appkit" ]; then
+  # React Native's own prebuilt Hermes, universal: with the debugger for a dev build, as React
+  # Native's Debug builds have it, and without for Release.
+  hermes_flavour=debug
+  [ "$config" = Release ] && hermes_flavour=release
+  hermes_args=(-DNGN_HERMES_PREBUILT="$("$here/fetch-hermes.sh" "$RN_PKG" "$hermes_flavour")")
+elif [ "$runtime" = 1 ]; then
   hermes="$CACHE/hermes-$arch_key"
   # Built again when missing, or built for another macOS than the host's.
   if ! "$here/hermes-built.sh" "$hermes"; then

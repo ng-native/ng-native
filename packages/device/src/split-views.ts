@@ -1,3 +1,4 @@
+import { platformOs } from './os.ts';
 import { reactNative } from './react-native.ts';
 
 interface SplitViewsModule {
@@ -14,6 +15,8 @@ const answers = new WeakMap<object, boolean>();
  * element is named, so the module is looked up each time and its constant read once.
  */
 export function nativeSplitViews(): boolean {
+  // Only iOS has the module: asking elsewhere (macOS, on every element) logs that it is missing.
+  if (platformOs() !== 'ios') return false;
   const module = reactNative()?.TurboModuleRegistry?.get?.('NgNativeSplitViews') as
     SplitViewsModule | null | undefined;
   if (!module) return false;

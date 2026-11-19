@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
+import { OS_NAMES } from '@ng-native/device';
 import { PLATFORM_EXTENSIONS, defaultOs, extensionsFor, ngNative } from '../runner/vitest.mjs';
 
 /** The engine as the setup file resolves it, so a test in a temp folder reads the same instance. */
@@ -24,12 +25,24 @@ describe('the platform extensions', () => {
     });
   });
 
+  it("cover every OS in @ng-native/device's OS_NAMES, and no other", () => {
+    assert.deepEqual(Object.keys(PLATFORM_EXTENSIONS).sort(), [...OS_NAMES].sort());
+  });
+
   it('put each platform extension ahead of the plain ones', () => {
     const macos = extensionsFor('macos');
     assert.ok(macos.indexOf('.macos.ts') < macos.indexOf('.ios.ts'));
     assert.ok(macos.indexOf('.ios.ts') < macos.indexOf('.native.ts'));
     assert.ok(macos.indexOf('.native.ts') < macos.indexOf('.ts'));
     assert.ok(!extensionsFor('android').includes('.ios.ts'));
+  });
+});
+
+describe('an os the preset does not know', () => {
+  it('fails the config, naming it, rather than testing as iOS', () => {
+    const plugin = ngNative({ os: 'windows' as never });
+    const config = plugin.config as (config: object) => unknown;
+    assert.throws(() => config({ root: tmpdir() }), /os: 'windows'.*ios, android, macos, web/);
   });
 });
 
