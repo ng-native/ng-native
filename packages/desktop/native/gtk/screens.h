@@ -171,8 +171,12 @@ class Modals {
   bool pressDefault(Tag tag);
   // Escape over a surface's modals: asks to close the one presented last.
   void requestCloseFront(SurfaceId surfaceId);
+  // Return over a surface's modals: presses the default button of the one presented last. Whether it had one.
+  bool pressDefaultFront(SurfaceId surfaceId);
 
  private:
+  // The tag of the modal presented last on a surface, or 0.
+  Tag frontOf(SurfaceId surfaceId) const;
   struct Presented {
     SurfaceId surfaceId;
     ModalPresentation presentation{ModalPresentation::Sheet};

@@ -800,16 +800,25 @@ bool Modals::pressDefault(Tag tag) {
   return false;
 }
 
-void Modals::requestCloseFront(SurfaceId surfaceId) {
+Tag Modals::frontOf(SurfaceId surfaceId) const {
   const std::pair<const Tag, Presented> *front = nullptr;
   for (const auto &entry : presented_) {
     if (entry.second.surfaceId == surfaceId && (!front || entry.second.order > front->second.order)) {
       front = &entry;
     }
   }
-  if (front) {
-    requestClose(front->first);
+  return front ? front->first : 0;
+}
+
+void Modals::requestCloseFront(SurfaceId surfaceId) {
+  if (Tag front = frontOf(surfaceId)) {
+    requestClose(front);
   }
+}
+
+bool Modals::pressDefaultFront(SurfaceId surfaceId) {
+  Tag front = frontOf(surfaceId);
+  return front && pressDefault(front);
 }
 
 void Modals::present(SurfaceId surfaceId, Tag tag) {
@@ -909,7 +918,8 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
     gtk_overlay_add_overlay(GTK_OVERLAY(chrome->overlay), p.layer);
   }
   if (GtkWidget *keys = p.dialog ? p.dialog : p.layer) {
-    onKey(keys, "Return|KP_Enter", [this, tag] { return pressDefault(tag); });
+    // As for Escape, whichever layer's shortcut runs first, the presentation in front takes Return.
+    onKey(keys, "Return|KP_Enter", [this, surfaceId] { return pressDefaultFront(surfaceId); });
   }
   backend_.hooks.containerRoot(tag, true);
   backend_.hooks.attachInput(p.slot, surfaceId, tag);

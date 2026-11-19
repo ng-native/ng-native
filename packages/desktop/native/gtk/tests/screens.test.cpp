@@ -641,6 +641,68 @@ TEST_CASE("Escape asks the modal in front to close, whichever layer's shortcut r
                ShadowViewMutation::RemoveMutation(MountedViews::kSurface, back, 0), ShadowViewMutation::DeleteMutation(back)});
 }
 
+TEST_CASE("Return presses the default button of the modal in front, whichever layer's shortcut runs") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 800, 600);
+  // Not resizable: the sheets are drawn over the window, not AdwDialogs.
+  gtk_window_set_resizable(GTK_WINDOW(views.window), FALSE);
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {800, 600}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {800, 600}});
+  auto firstConfig = shadow(4, "RNSScreenStackHeaderConfig", header("Notes"), {{0, 0}, {800, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {firstConfig, 3}});
+
+  auto withDefault = [](const std::string &id) {
+    auto props = std::make_shared<HeaderProps>();
+    props->bar.title = id;
+    props->bar.right = {barButton(id, "Save")};
+    return props;
+  };
+  auto back = shadow(7, "RNSScreen", presented("formSheet"), {{0, 0}, {800, 600}});
+  auto backConfig = shadow(8, "RNSScreenStackHeaderConfig", withDefault("back-save"), {{0, 0}, {800, 44}});
+  mountAll(views, {{back, 2}, {backConfig, 7}});
+  views.backend->modals().settle();
+  auto front = shadow(9, "RNSScreen", presented("formSheet"), {{0, 0}, {800, 600}});
+  auto frontConfig = shadow(10, "RNSScreenStackHeaderConfig", withDefault("front-save"), {{0, 0}, {800, 44}});
+  mountAll(views, {{front, 2}, {frontConfig, 9}});
+  views.backend->modals().settle();
+  REQUIRE_FALSE(views.backend->modals().inDialog(7));
+  REQUIRE_FALSE(views.backend->modals().inDialog(9));
+  SentEvents<> backSent(*ngn::gtk::viewData(views.view(8)));
+  SentEvents<> frontSent(*ngn::gtk::viewData(views.view(10)));
+
+  // The back sheet's layer registered its Return first, so GTK runs it first.
+  GtkWidget *slot = views.backend->modals().slotOf(7);
+  REQUIRE(slot);
+  GtkWidget *overlay = ngn::gtk::chromeOf(views.surface)->overlay;
+  GtkWidget *layer = slot;
+  while (layer && gtk_widget_get_parent(layer) != overlay) {
+    layer = gtk_widget_get_parent(layer);
+  }
+  REQUIRE(layer);
+  GListModel *controllers = gtk_widget_observe_controllers(layer);
+  bool ran = false;
+  for (guint i = 0; i < g_list_model_get_n_items(controllers); ++i) {
+    auto *controller = g_list_model_get_item(controllers, i);
+    if (GTK_IS_SHORTCUT_CONTROLLER(controller)) {
+      auto *shortcut = GTK_SHORTCUT(g_list_model_get_item(G_LIST_MODEL(controller), 0));
+      char *label = gtk_shortcut_trigger_to_string(gtk_shortcut_get_trigger(shortcut));
+      if (std::string(label).find("Return") != std::string::npos) {
+        ran = gtk_shortcut_action_activate(gtk_shortcut_get_action(shortcut), GtkShortcutActionFlags(0), layer, nullptr);
+      }
+      g_free(label);
+      g_object_unref(shortcut);
+    }
+    g_object_unref(controller);
+  }
+  g_object_unref(controllers);
+  CHECK(ran);
+  CHECK(frontSent.count("topPressHeaderBarButtonItem") == 1);
+  CHECK(backSent.count("topPressHeaderBarButtonItem") == 0);
+  views.mount({ShadowViewMutation::RemoveMutation(2, front, 2), ShadowViewMutation::DeleteMutation(front),
+               ShadowViewMutation::RemoveMutation(2, back, 1), ShadowViewMutation::DeleteMutation(back)});
+}
+
 TEST_CASE("a surface finalized with its window is the backend's no more, for a header or modal let go of later") {
   REQUIRE(ngn::testing::gtkReady());
   auto backend = std::make_shared<ngn::gtk::GtkBackend>();
