@@ -720,7 +720,7 @@ TEST_CASE("a disabled submenu leaves none of its entries to choose") {
   auto config = shadow(4, "RNSScreenStackHeaderConfig", props, {{0, 0}, {400, 44}});
   mountAll(views, {{stack, MountedViews::kSurface}, {screen, 2}, {config, 3}});
 
-  auto menus = findAll(bar, [](GtkWidget *w) -> bool { return GTK_IS_MENU_BUTTON(w); });
+  auto menus = findAll(bar, [](GtkWidget *w) -> bool { return GTK_IS_MENU_BUTTON(w) && gtk_widget_get_visible(w); });
   REQUIRE(menus.size() == 1);
   GMenuModel *model = gtk_menu_button_get_menu_model(GTK_MENU_BUTTON(menus[0]));
   auto *group = G_ACTION_GROUP(g_object_get_data(G_OBJECT(menus[0]), "ngn-menu-actions"));
