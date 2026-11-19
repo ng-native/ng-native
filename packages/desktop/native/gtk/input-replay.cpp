@@ -12,6 +12,7 @@
 
 #ifdef GDK_WINDOWING_X11
 #include <gdk/x11/gdkx.h>
+#include <X11/XKBlib.h>
 #include <X11/keysym.h>
 #endif
 
@@ -50,18 +51,32 @@ const XTest &xtest() {
 struct Replay {
   // Cleared if the window goes before the script ends.
   GtkWidget *window{nullptr};
+  // The window's display, kept to post to after the window goes.
+  GdkDisplay *display{nullptr};
   InputScript script;
   size_t at{0};
   std::function<void()> done;
   // Set when the window unrealizes: a destroyed window a caller still holds is not a finished script.
   bool closed{false};
   gulong unrealizeHandler{0};
+  // Whether the script's press of the primary button is not yet released. The X server holds a
+  // posted press for every client until its release, so a script that stops before its `up`, its
+  // window closed, releases it.
+  bool pressed{false};
   ~Replay() {
     if (window) {
       if (unrealizeHandler) {
         g_signal_handler_disconnect(window, unrealizeHandler);
       }
       g_object_remove_weak_pointer(G_OBJECT(window), reinterpret_cast<gpointer *>(&window));
+    }
+    if (display) {
+      if (pressed && !gdk_display_is_closed(display)) {
+        Display *x = gdk_x11_display_get_xdisplay(display);
+        xtest().button(x, 1, False, 0);
+        XFlush(x);
+      }
+      g_object_unref(display);
     }
   }
 };
@@ -107,15 +122,17 @@ unsigned long keysymOf(const std::string &key) {
   return gdk_unicode_to_keyval(c);
 }
 
-// The key that types `keysym` in the keyboard map's first group, and its level: 0 alone, 1 with
-// Shift, 2 with AltGr (ISO_Level3_Shift), 3 with both. None when no key in that group types it.
-std::optional<GdkKeymapKey> keyFor(GdkDisplay *display, unsigned long keysym) {
+// The key that types `keysym`, and its group and level: 0 alone, 1 with Shift, 2 with AltGr
+// (ISO_Level3_Shift), 3 with both. One in the `active` group if any, else in the lowest group.
+// None when no key types it.
+std::optional<GdkKeymapKey> keyFor(GdkDisplay *display, unsigned long keysym, int active) {
   GdkKeymapKey *keys = nullptr;
   int count = 0;
   std::optional<GdkKeymapKey> best;
+  auto rank = [active](const GdkKeymapKey &k) { return std::make_pair(k.group == active ? -1 : k.group, k.level); };
   if (gdk_display_map_keyval(display, static_cast<guint>(keysym), &keys, &count)) {
     for (int i = 0; i < count; ++i) {
-      if (keys[i].group == 0 && keys[i].level < 4 && (!best || keys[i].level < best->level)) {
+      if (keys[i].level < 4 && (!best || rank(keys[i]) < rank(*best))) {
         best = keys[i];
       }
     }
@@ -124,11 +141,14 @@ std::optional<GdkKeymapKey> keyFor(GdkDisplay *display, unsigned long keysym) {
   return best;
 }
 
-// A key down and up, at the level that types it, with the script's modifiers held too: command is
-// Linux's primary modifier, Ctrl.
+// A key down and up, in the group and at the level that types it, with the script's modifiers held
+// too: command is Linux's primary modifier, Ctrl. A key in another group than the active one is
+// posted with its group locked, and the keyboard's group put back after.
 void pressKey(GdkDisplay *gdkDisplay, unsigned long keysym, unsigned modifiers) {
   Display *display = gdk_x11_display_get_xdisplay(gdkDisplay);
-  auto key = keyFor(gdkDisplay, keysym);
+  XkbStateRec state{};
+  XkbGetState(display, XkbUseCoreKbd, &state);
+  auto key = keyFor(gdkDisplay, keysym, state.group);
   unsigned level3 = key && key->level >= 2 ? XKeysymToKeycode(display, XK_ISO_Level3_Shift) : 0;
   if (!key || (key->level >= 2 && level3 == 0)) {
     fprintf(stderr, "[ngn] input script: no key for keysym 0x%lx\n", keysym);
@@ -139,13 +159,17 @@ void pressKey(GdkDisplay *gdkDisplay, unsigned long keysym, unsigned modifiers) 
   if (modifiers & InputStep::Option) held.push_back(XKeysymToKeycode(display, XK_Alt_L));
   if ((modifiers & InputStep::Shift) || (key->level & 1)) held.push_back(XKeysymToKeycode(display, XK_Shift_L));
   if (level3) held.push_back(level3);
+  bool otherGroup = key->group != state.group;
+  if (otherGroup) XkbLockGroup(display, XkbUseCoreKbd, static_cast<unsigned>(key->group));
   for (unsigned m : held) xtest().key(display, m, True, 0);
   xtest().key(display, key->keycode, True, 0);
   xtest().key(display, key->keycode, False, 0);
   for (auto m = held.rbegin(); m != held.rend(); ++m) xtest().key(display, *m, False, 0);
+  if (otherGroup) XkbLockGroup(display, XkbUseCoreKbd, state.locked_group);
 }
 
-void play(GtkWidget *window, const InputStep &step) {
+void play(Replay &replay, const InputStep &step) {
+  GtkWidget *window = replay.window;
   Display *display = displayOf(window);
   switch (step.kind) {
     case InputStep::Kind::Move:
@@ -155,10 +179,12 @@ void play(GtkWidget *window, const InputStep &step) {
     case InputStep::Kind::Down:
       pointerTo(window, step);
       xtest().button(display, 1, True, 0);
+      replay.pressed = true;
       break;
     case InputStep::Kind::Up:
       pointerTo(window, step);
       xtest().button(display, 1, False, 0);
+      replay.pressed = false;
       break;
     case InputStep::Kind::Secondary:
       pointerTo(window, step);
@@ -201,7 +227,7 @@ void playNext(std::shared_ptr<Replay> replay) {
     runAfter(step.amount / 1000, [replay] { playNext(replay); });
     return;
   }
-  play(replay->window, step);
+  play(*replay, step);
   runAfter(0.03, [replay] { playNext(replay); });
 }
 
@@ -256,6 +282,7 @@ bool replayInputScript(GtkWidget *window, InputScript script, std::function<void
 #ifdef GDK_WINDOWING_X11
   auto replay = std::make_shared<Replay>();
   replay->window = window;
+  replay->display = GDK_DISPLAY(g_object_ref(gtk_widget_get_display(window)));
   replay->script = std::move(script);
   replay->done = std::move(done);
   g_object_add_weak_pointer(G_OBJECT(window), reinterpret_cast<gpointer *>(&replay->window));

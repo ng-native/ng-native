@@ -1,6 +1,6 @@
 ---
 name: screens-check
-description: Compare how a change draws the canary's screens on iOS, or on macOS, against main - the screens whose native output changed, each opened by deep link on one simulator (or as a packaged Mac app) in main's bundle and in the change's, tapped through with idb on iOS where a screen needs it, screenshotted with simctl (or screencapture -l on the host window) and compared pair by pair. Use for a change that draws (the CSS engine, components, layout, text), when asked to check a pull request's screens, or when the PR gate's native output lists changed screens.
+description: Compare how a change draws the canary's screens on iOS, or on macOS or Linux, against main - the screens whose native output changed, each opened by deep link on one simulator (or as a packaged Mac app) in main's bundle and in the change's, tapped through with idb on iOS where a screen needs it, screenshotted with simctl (or screencapture -l on the host window, or the GTK host's own in-process capture) and compared pair by pair. Use for a change that draws (the CSS engine, components, layout, text), when asked to check a pull request's screens, or when the PR gate's native output lists changed screens.
 ---
 
 # Check a change's screens
@@ -235,6 +235,54 @@ largest; say so when the change is about the other.
 
 Step 6 on a Mac: `rm -rf "$out"` after `git worktree remove` is all there is, and make sure no
 `canary` is left running (`pgrep -fl canary.app`).
+
+## Linux mode
+
+For a change that draws on the GTK host, compare the same screens as the Linux host draws them,
+main beside the change. Step 5 is unchanged, and step 1 too but for the routes: `native-output.mjs`
+renders as iOS, so a change that draws only on Linux (a `.platform-linux` rule, an
+`os === 'linux'` branch, `packages/desktop/native/gtk`) adds the routes it reaches to `ROUTES` by
+hand. The app must list `linux` in `expo.platforms` (the notes example does). Steps 2 to 4 and 6
+become:
+
+**2l. One host and one bundle per side.** Build the GTK host in each checkout in the `ngn-el9` image
+(`packages/desktop/native/docker`), one native build at a time, under the build lock, with
+`NGN_JOBS=4`; on a Linux machine `native/scripts/build.sh --backend gtk` runs as it is. A change
+that touches neither `packages/desktop/native` nor the pins reuses main's host for both sides, as
+the iOS mode reuses an `.app`. Export each side's bundle with
+`pnpm exec expo export:embed --platform linux --dev false --bundle-output "$out/$side/main.js"
+--assets-dest "$out/$side/assets"` in the app's folder.
+
+**3l. Nothing to hold still.** Each launch gets its own Xvfb at 1280 by 800 and scale 1 in the
+image, with the image's fonts and GSK's cairo renderer, so the Mac's display, fonts and appearance
+never reach the captures. On a Mac `$out`, the hosts and the bundles must be under the home folder,
+the only one Docker Desktop and Colima share with their VM.
+
+**4l. Each screen, on each side.** One launch per route, the link given as the app's initial URL
+(`--url`), and the host captures its own window in-process (`NGN_CAPTURE`) a second after its first
+frame:
+
+```sh
+for side in base change; do
+  node .claude/skills/screens-check/linux.mjs --host "$host_of_side/gtk/ngn-linux" \
+    --bundle "$out/$side/main.js" --scheme notes --out "$out/shots/$side" $(echo $ROUTES)
+done
+```
+
+The files are named as step 4 names them. A capture is the window's content at scale 1, with no
+title bar (Xvfb runs no window manager), so a change to the header bar or the window frame is
+checked by hand (`docs/linux-manual-pass.md`), and so are Wayland, fractional scale and input
+methods. For a screen that needs input first, `--input <script.input>` plays that input script
+(`NGN_INPUT_SCRIPT`, the format of `packages/desktop/native/core/include/ngn/input-script.h`: points
+in the window's content, `key` with modifiers, arrows and `type`) on each route given, and the host
+captures a second after the script has played; the capture is `<route>-<script>.png`. Under Xvfb a
+script plays through XTest. One the host refuses (`scroll`, `magnify`, `rotate` or `choose`) or does
+not finish fails the route, and so does a capture logged before the script is done. The capture is
+the surface, so a sheet, cover or popover the script opens over it is not in it: check those by
+hand.
+
+Step 6 on Linux: each launch's container is removed with it, so `rm -rf "$out"` after
+`git worktree remove` is all there is.
 
 ## 6. Clean up
 
