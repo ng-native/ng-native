@@ -274,7 +274,7 @@ jobs:
           for _ in $(seq 120); do curl -fs -o /dev/null http://127.0.0.1:8081/status && break; sleep 1; done
           curl -fs -o /dev/null --max-time 600 \
             'http://127.0.0.1:8081/.expo/.virtual-metro-entry.bundle?platform=linux&dev=true'
-          docker run --rm --network host --user "$(id -u):$(id -g)" -e HOME=/tmp -e GTK_A11Y=none \
+          docker run --rm --init --network host --user "$(id -u):$(id -g)" -e HOME=/tmp -e GTK_A11Y=none \
             -e NGN_DESKTOP_HOST="$(cat "$probe/build-dir")/gtk/ngn-linux" \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/examples/notes" ngn-el9 \
             node_modules/.bin/vitest run --project linux

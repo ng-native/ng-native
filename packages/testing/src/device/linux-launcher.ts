@@ -9,7 +9,7 @@
  * end of the host's output.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import { constants } from 'node:os';
 import path from 'node:path';
 import type { AppLauncher, LaunchRequest, LaunchedApp } from './launcher.ts';
@@ -274,12 +274,27 @@ export function linuxLaunchCommand(
       image,
       'bash',
       '-c',
-      sessionScript(display, [request.port, metroPort]),
+      sessionScript(display, forwardedPorts(request.port, metroPort, bundle)),
       'ngn-test',
       ...hostArgs,
     ],
     env: stringEnv(env),
   };
+}
+
+/**
+ * The ports the container forwards to the machine running Vitest: the pool's, Metro's, and a
+ * bundle URL's own when it names a loopback port, each once.
+ */
+function forwardedPorts(poolPort: number, metroPort: number, bundle: string): number[] {
+  const ports = [poolPort, metroPort];
+  if (/^https?:/.test(bundle)) {
+    const url = new URL(bundle);
+    if (url.port && ['127.0.0.1', 'localhost'].includes(url.hostname)) {
+      ports.push(Number(url.port));
+    }
+  }
+  return [...new Set(ports)];
 }
 
 /** The container runs as this user, so what it writes to a mount is the user's. */
@@ -308,14 +323,49 @@ function signalGroup(group: number, signal: NodeJS.Signals): void {
   }
 }
 
-/** Whether any process of the group `group` is left. */
-function groupAlive(group: number): boolean {
+/** Whether the group `group` has any process, a zombie included: the kernel's answer, at once. */
+function groupExists(group: number): boolean {
   try {
     process.kill(-group, 0);
     return true;
   } catch {
     return false;
   }
+}
+
+/**
+ * Whether any process of the group `group` is left. A zombie is not: when the process running
+ * Vitest is PID 1 (a container started without `--init`), what the session leaves behind is
+ * reparented to it and never reaped, so the group never empties of zombies. Where `/proc` cannot
+ * be read, any process counts.
+ */
+function groupAlive(group: number): boolean {
+  if (process.platform === 'linux') {
+    const alive = liveGroupMember(group);
+    if (alive !== undefined) return alive;
+  }
+  return groupExists(group);
+}
+
+/** Whether `/proc` lists a process of group `group` that is not a zombie, or undefined without `/proc`. */
+function liveGroupMember(group: number): boolean | undefined {
+  let pids: string[];
+  try {
+    pids = readdirSync('/proc').filter((name) => /^\d+$/.test(name));
+  } catch {
+    return undefined;
+  }
+  return pids.some((pid) => {
+    let stat: string;
+    try {
+      stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    } catch {
+      return false; // Gone since the listing.
+    }
+    // `pid (comm) state ppid pgrp ...`, where comm may hold spaces and parentheses.
+    const [state, , pgrp] = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    return Number(pgrp) === group && state !== 'Z';
+  });
 }
 
 async function untilGroupGone(group: number): Promise<void> {
@@ -325,12 +375,15 @@ async function untilGroupGone(group: number): Promise<void> {
 /** How many lines of the host's output a lost host's failure quotes. */
 const TAIL_LINES = 30;
 
+/** How long a crash report waits for the host's last output after it exits, in milliseconds. */
+const DRAIN_MS = 1000;
+
 export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
-  let tail: string[] = [];
+  // The latest launch's output: its last lines, and when its pipes closed.
+  let output = { tail: [] as string[], closed: Promise.resolve() };
   return {
     start(request): LaunchedApp {
       const launch = linuxLaunchCommand(options, request);
-      tail = [];
       const child: ChildProcess = spawn(launch.command, launch.args, {
         cwd: options.cwd,
         env: launch.env as NodeJS.ProcessEnv,
@@ -339,8 +392,17 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
         // display with it even when the script's own cleanup cannot run.
         detached: true,
       });
+      // Node can report the exit before the pipes hand over the last output, the crash message
+      // among it, so a report waits for them to close.
+      const current = {
+        tail: [] as string[],
+        closed: new Promise<void>((resolve) => child.once('close', () => resolve())),
+      };
+      output = current;
       const keep = (chunk: Buffer) => {
-        tail = [...tail, ...chunk.toString().split('\n').filter(Boolean)].slice(-TAIL_LINES);
+        current.tail = [...current.tail, ...chunk.toString().split('\n').filter(Boolean)].slice(
+          -TAIL_LINES,
+        );
       };
       child.stdout?.on('data', keep);
       child.stderr?.on('data', keep);
@@ -358,16 +420,17 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
         exited,
         async stop() {
           const group = child.pid;
-          if (group !== undefined && groupAlive(group)) {
+          if (group !== undefined && groupExists(group)) {
             signalGroup(group, 'SIGTERM');
             await Promise.race([
               untilGroupGone(group),
               new Promise((resolve) => setTimeout(resolve, options.stopGraceMs ?? 3000)),
             ]);
-            if (groupAlive(group)) {
-              signalGroup(group, 'SIGKILL');
-              await untilGroupGone(group);
-            }
+            // Sent even when the scan found the group gone, since a scan can miss a process forked
+            // while it ran. Killing a group is atomic against fork, and the group only shrinks
+            // after it, so the wait that follows can trust a scan.
+            signalGroup(group, 'SIGKILL');
+            await untilGroupGone(group);
           }
           if (launch.container) {
             spawnSync(options.docker ?? 'docker', ['rm', '-f', launch.container], {
@@ -378,7 +441,15 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
         },
       };
     },
-    crashReport() {
+    async crashReport() {
+      // The launch asked about, before a relaunch replaces it. A process the session left holding
+      // the pipes open bounds the wait.
+      const asked = output;
+      await Promise.race([
+        asked.closed,
+        new Promise((resolve) => setTimeout(resolve, DRAIN_MS).unref()),
+      ]);
+      const { tail } = asked;
       return tail.length ? `The host's last output:\n${tail.join('\n')}` : undefined;
     },
   };
