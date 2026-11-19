@@ -33,6 +33,7 @@ import {
   LayoutAnimation,
   NavigationBar,
   OS,
+  OS_NAMES,
   Processes,
   SafeArea,
   Screen,
@@ -43,6 +44,7 @@ import {
   UndoStack,
   Vibration,
   supportRowOf,
+  type OsName,
 } from '@ng-native/device';
 import { AddressSearch } from '@ng-native/expo/address-search';
 import { AppInfo } from '@ng-native/expo/app-info';
@@ -84,7 +86,7 @@ import { Watch } from '@ng-native/expo/watch';
 import { FirebaseMessaging } from '@ng-native/firebase-messaging';
 import { NativeScript } from '@ng-native/nativescript';
 
-type Os = 'ios' | 'android' | 'macos' | 'web';
+type Os = OsName;
 
 /**
  * Each service: its token, the source file and class that declare its methods, and the OSes it is
@@ -388,7 +390,7 @@ async function settled(value: unknown): Promise<unknown> {
 describe('every service', () => {
   for (const [name, { token, madeWithModule }] of Object.entries(SERVICES)) {
     it(`${name}: available is a Signal<boolean> on every OS`, () => {
-      for (const os of ['ios', 'android', 'macos', 'web'] as const) {
+      for (const os of OS_NAMES) {
         // Without its module where it is written for, or has a desktop source, a test is a
         // misconfiguration.
         if (madeWithModule && os !== 'web') continue;

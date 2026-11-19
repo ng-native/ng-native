@@ -29,6 +29,7 @@ export const MINIMUM_MACOS = '14.0';
 export const DEFAULT_OUTPUT = 'dist/macos';
 
 const FORMATS = ['app', 'dmg', 'mas'];
+const HERMES_FRAMEWORK = 'hermesvm.framework';
 
 export const PACKAGE_USAGE = `Usage: ng-native-desktop package [--format app|dmg|mas] [--output <dir>] [--feed-url <url> [--sparkle-key <key>]] [--skip-notarize]
 
@@ -439,16 +440,18 @@ function signsInWithApple(sys, expo, format) {
  * network, the files the user picks, and the app's identity on the team. `appleSignIn` adds Sign
  * in with Apple and `push` remote notifications (production APNs, which both distribution formats
  * use), and either adds to a `dmg` the app's identity on the team, which its profile is for.
+ * `loadsAdHocFramework` turns off library validation in an ad hoc signed `dmg`, which loads its
+ * embedded Hermes framework with no team to check it against.
  *
  * @param {DesktopAppConfig} config
  * @param {'app' | 'dmg' | 'mas'} format
- * @param {{ bundleIdentifier: string, team?: string, appleSignIn?: boolean, push?: boolean }} identity
+ * @param {{ bundleIdentifier: string, team?: string, appleSignIn?: boolean, push?: boolean, loadsAdHocFramework?: boolean }} identity
  * @returns {string | null}
  */
 export function entitlements(
   config,
   format,
-  { bundleIdentifier, team, appleSignIn = false, push = false },
+  { bundleIdentifier, team, appleSignIn = false, push = false, loadsAdHocFramework = false },
 ) {
   if (format === 'app') return null;
   /** @type {import('./plist.mjs').PlistDict} */
@@ -458,6 +461,7 @@ export function entitlements(
   if (appleSignIn) granted['com.apple.developer.applesignin'] = ['Default'];
   if (push) granted['com.apple.developer.aps-environment'] = 'production';
   if (format === 'dmg') {
+    if (loadsAdHocFramework) granted['com.apple.security.cs.disable-library-validation'] = true;
     if (!appleSignIn && !push) return plist(granted);
     return plist({
       ...granted,
@@ -725,6 +729,7 @@ export async function packageApp(options, sys) {
   sys.copy(path.join(buildDir, 'appkit', 'ngn-macos'), executable);
   // Local symbols only, which nothing resolves at run time; the exported ones stay.
   expectSuccess(sys.run('strip', ['-x', executable]), `strip could not strip ${executable}.`);
+  const hermes = embedHermes(sys, buildDir, contents);
   const iconName = config.icon
     ? compileIcon(sys, path.resolve(cwd, config.icon), resources, staging)
     : null;
@@ -746,7 +751,7 @@ export async function packageApp(options, sys) {
 
   const made = [app];
   if (options.format === 'app') {
-    expectSuccess(sys.run('codesign', ['--force', '--sign', '-', app]), 'codesign failed.');
+    signAdHoc(sys, app, hermes);
   } else if (options.format === 'dmg' && keys) {
     made.push(
       ...shipDmg(sys, {
@@ -759,10 +764,13 @@ export async function packageApp(options, sys) {
         options,
         signIn,
         push,
+        hermes,
       }),
     );
   } else if (keys) {
-    made.push(shipMas(sys, { config, app, output, staging, bundleIdentifier, keys, signIn, push }));
+    made.push(
+      shipMas(sys, { config, app, output, staging, bundleIdentifier, keys, signIn, push, hermes }),
+    );
   }
   for (const file of made) console.log(path.relative(cwd, file));
   return 0;
@@ -784,6 +792,36 @@ function fallbackIdentifier(format, expo) {
   }
   const slug = (expo.slug ?? expo.name ?? 'app').toLowerCase().replace(/[^a-z0-9]/g, '');
   return `dev.ngnative.${slug || 'app'}`;
+}
+
+/**
+ * An `app` build's ad hoc signature, for this Mac: the embedded Hermes framework first, then the app.
+ *
+ * @param {System} sys
+ * @param {string} app
+ * @param {string | null} hermes
+ */
+function signAdHoc(sys, app, hermes) {
+  for (const target of hermes ? [hermes, app] : [app]) {
+    expectSuccess(sys.run('codesign', ['--force', '--sign', '-', target]), 'codesign failed.');
+  }
+}
+
+/**
+ * React Native's Hermes framework, which a host built against it links, from the host build into
+ * the app's Frameworks, where the binary's rpath finds it. Null for a host with Hermes linked in.
+ *
+ * @param {System} sys
+ * @param {string} buildDir
+ * @param {string} contents
+ * @returns {string | null} the embedded framework
+ */
+function embedHermes(sys, buildDir, contents) {
+  const hermes = path.join(buildDir, 'appkit', HERMES_FRAMEWORK);
+  if (!sys.exists(hermes)) return null;
+  const embedded = path.join(contents, 'Frameworks', HERMES_FRAMEWORK);
+  sys.copy(hermes, embedded);
+  return embedded;
 }
 
 /**
@@ -811,12 +849,12 @@ function embedSparkle(sys, buildDir, contents) {
  * only a real identity can get.
  *
  * @param {System} sys
- * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>>, options: PackageCommand, signIn: boolean, push: boolean }} build
+ * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>>, options: PackageCommand, signIn: boolean, push: boolean, hermes: string | null }} build
  * @returns {string[]} the files made beside the app
  */
 function shipDmg(
   sys,
-  { config, app, output, staging, bundleIdentifier, keys, options, signIn, push },
+  { config, app, output, staging, bundleIdentifier, keys, options, signIn, push, hermes },
 ) {
   if (signIn || push) embedProfile(sys, keys, app);
   const file = path.join(staging, 'entitlements.plist');
@@ -825,6 +863,8 @@ function shipDmg(
     team: keys.team,
     appleSignIn: signIn,
     push,
+    // An ad hoc signature has no team for library validation to match the framework against.
+    loadsAdHocFramework: Boolean(hermes) && keys.identity === '-',
   });
   sys.writeFile(file, /** @type {string} */ (granted));
   const timestamp = keys.identity === '-' ? '--timestamp=none' : '--timestamp';
@@ -843,6 +883,9 @@ function shipDmg(
       ]),
       `codesign could not sign ${path.basename(target)}.`,
     );
+  // Nested code before the app, with the app's identity: the hardened runtime loads a framework
+  // only from the app's own team.
+  if (hermes) sign(hermes);
   if (options.feedUrl) signSparkle(path.join(app, 'Contents', 'Frameworks', 'Sparkle.framework'));
   sign(app, ['--entitlements', file]);
 
@@ -935,9 +978,12 @@ function embedProfile(sys, keys, app) {
  * Embeds the provisioning profile, signs inside the App Sandbox and makes the installer package.
  *
  * @param {System} sys
- * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>>, signIn: boolean, push: boolean }} build
+ * @param {{ config: DesktopAppConfig, app: string, output: string, staging: string, bundleIdentifier: string, keys: NonNullable<ReturnType<typeof credentials>>, signIn: boolean, push: boolean, hermes: string | null }} build
  */
-function shipMas(sys, { config, app, output, staging, bundleIdentifier, keys, signIn, push }) {
+function shipMas(
+  sys,
+  { config, app, output, staging, bundleIdentifier, keys, signIn, push, hermes },
+) {
   embedProfile(sys, keys, app);
   const file = path.join(staging, 'entitlements.plist');
   const granted = entitlements(config, 'mas', {
@@ -947,6 +993,12 @@ function shipMas(sys, { config, app, output, staging, bundleIdentifier, keys, si
     push,
   });
   sys.writeFile(file, /** @type {string} */ (granted));
+  if (hermes) {
+    expectSuccess(
+      sys.run('codesign', ['--force', '--timestamp', '--sign', keys.identity, hermes]),
+      `codesign could not sign ${HERMES_FRAMEWORK}.`,
+    );
+  }
   expectSuccess(
     sys.run('codesign', [
       '--force',

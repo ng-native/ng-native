@@ -1,4 +1,5 @@
 import { computed, signal, untracked, type Signal } from '@angular/core';
+import type { OsName } from '@ng-native/device';
 
 /**
  * Reaching an Expo module without importing one.
@@ -37,7 +38,7 @@ export function optional<T>(load: () => T): T | null {
 }
 
 /** The platforms an Expo module is written for, and the desktop OSes a desktop host serves. */
-export type ModulePlatform = 'ios' | 'android' | 'macos' | 'web';
+export type ModulePlatform = OsName;
 
 /** Whether `platform` is one of Apple's OSes, which share most of what iOS's native modules do. */
 export const isApple = (platform: ModulePlatform | null): boolean =>

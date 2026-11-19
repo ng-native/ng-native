@@ -19,7 +19,14 @@ import {
   type Provider,
   type Type,
 } from '@angular/core';
-import { AppWindows, OS, OS_VERSION, type AppWindow } from '@ng-native/device';
+import {
+  AppWindows,
+  OS,
+  OS_NAMES,
+  OS_VERSION,
+  type AppWindow,
+  type OsName,
+} from '@ng-native/device';
 import {
   nativePlatform,
   registerPlatformComponents,
@@ -66,7 +73,7 @@ export interface RenderOptions<T> extends EngineOptions {
 }
 
 /** The OSes a test renders as. */
-export type TestOs = 'ios' | 'android' | 'macos' | 'web';
+export type TestOs = OsName;
 
 /** What a Mac's pointer answers to `(hover)`, `(pointer)` and their `any-` forms. */
 const DESKTOP_POINTER = {
@@ -82,10 +89,16 @@ const DESKTOP_WINDOW = { width: 1024, height: 768, colorScheme: 'light' } as con
 /**
  * The OS the project's tests run as, the Vitest preset's `os` (from `expo.platforms` when unset),
  * which a render naming none renders as. Undefined outside the preset and for iOS, the default.
+ * Throws on an OS not in `OS_NAMES`, which would otherwise render as iOS.
  */
 function projectOs(): TestOs | undefined {
   const os = typeof process === 'undefined' ? undefined : process.env['NG_NATIVE_TEST_OS'];
-  return os === 'macos' || os === 'android' || os === 'web' ? os : undefined;
+  if (!os || os === 'ios') return undefined;
+  if ((OS_NAMES as readonly string[]).includes(os)) return os as TestOs;
+  throw new Error(
+    `[angular-native] NG_NATIVE_TEST_OS is '${os}', which is not an OS tests can run as: ` +
+      `${OS_NAMES.join(', ')}.`,
+  );
 }
 
 /** Render as `os` from here on. The platform to go back to, or null where there is no `os`. */
