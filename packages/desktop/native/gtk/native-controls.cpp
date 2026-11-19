@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 using facebook::react::RawEvent;
 
@@ -27,8 +28,10 @@ struct Control {
   std::string colorClass;
   // An activity indicator drawn by AdwSpinner, which has no stopped state.
   bool adwSpinner{false};
-  // A date picker's calendar.
+  // A date picker's calendar, and the app's date it last showed: the month the user browses to
+  // stays until the app's date changes.
   GtkWidget *calendar{nullptr};
+  std::optional<double> date;
 };
 
 namespace {
@@ -87,8 +90,26 @@ bool wantsAdwSpinner(const NativeControlProps &p) {
   return haveAdwSpinner() && p.hidesWhenStopped;
 }
 
+// Adwaita's stylesheet makes a stopped GtkSpinner transparent. Ours is shown stopped only when
+// asked to stay, so it draws its icon, still.
+void installStoppedSpinnerStyle() {
+  static bool installed = false;
+  if (installed || !gdk_display_get_default()) {
+    return;
+  }
+  installed = true;
+  GtkCssProvider *css = gtk_css_provider_new();
+  gtk_css_provider_load_from_data(css, "spinner.ngn-spinner:not(:checked) { opacity: 1; }", -1);
+  gtk_style_context_add_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref(css);
+}
+
 GtkWidget *makeSpinner(bool adw) {
   GtkWidget *spinner = adw ? adwFunction<GtkWidget *(*)()>("adw_spinner_new")() : gtk_spinner_new();
+  if (!adw) {
+    installStoppedSpinnerStyle();
+    gtk_widget_add_css_class(spinner, "ngn-spinner");
+  }
   gtk_widget_set_halign(spinner, GTK_ALIGN_CENTER);
   gtk_widget_set_valign(spinner, GTK_ALIGN_CENTER);
   return spinner;
@@ -204,7 +225,8 @@ bool picksDate(const NativeControlProps &p) {
   return p.mode == "date" || p.mode == "datetime";
 }
 
-// The day chosen in the calendar, at the time of day the picker held, kept within its bounds.
+// The day chosen in the calendar, at the time of day the picker held, kept within its bounds. A
+// held date GLib cannot represent (after the year 9999) has no time of day: the day's start.
 void dayChosen(Control *c) {
   const auto *p = controlProps(*c->view);
   if (!p || c->applying) {
@@ -213,15 +235,24 @@ void dayChosen(Control *c) {
   GDateTime *was = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(p->date.value_or(0) / 1000)));
   GDateTime *day = gtk_calendar_get_date(GTK_CALENDAR(c->calendar));
   GDateTime *at = g_date_time_new_local(
-      g_date_time_get_year(day), g_date_time_get_month(day), g_date_time_get_day_of_month(day), g_date_time_get_hour(was),
-      g_date_time_get_minute(was), g_date_time_get_seconds(was));
+      g_date_time_get_year(day), g_date_time_get_month(day), g_date_time_get_day_of_month(day), was ? g_date_time_get_hour(was) : 0,
+      was ? g_date_time_get_minute(was) : 0, was ? g_date_time_get_seconds(was) : 0);
   double ms = static_cast<double>(g_date_time_to_unix(at)) * 1000;
   ms = std::max(ms, p->minimumDate.value_or(ms));
   ms = std::min(ms, p->maximumDate.value_or(ms));
   // The offset at the instant sent, which a bound can move across a daylight-saving change.
   GDateTime *sent = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(ms / 1000)));
   double offset = sent ? static_cast<double>(g_date_time_get_utc_offset(sent)) / G_TIME_SPAN_MINUTE : 0;
-  g_date_time_unref(was);
+  // The calendar shows the day sent: a bound's day, not the rejected one, when the app's date
+  // stays the same and so moves nothing.
+  if (sent) {
+    c->applying = true;
+    gtk_calendar_select_day(GTK_CALENDAR(c->calendar), sent);
+    c->applying = false;
+  }
+  if (was) {
+    g_date_time_unref(was);
+  }
   g_date_time_unref(day);
   g_date_time_unref(at);
   if (sent) {
@@ -467,7 +498,10 @@ void applyControlProps(ViewData &view) {
   }
   switch (c->kind) {
     case ControlKind::Switch:
-      gtk_switch_set_active(GTK_SWITCH(w), p->value);
+      // Only a change: setting the same value ends the slide a click started, and the click with it.
+      if (static_cast<bool>(gtk_switch_get_active(GTK_SWITCH(w))) != p->value) {
+        gtk_switch_set_active(GTK_SWITCH(w), p->value);
+      }
       break;
     case ControlKind::ActivityIndicator: {
       gtk_widget_set_visible(w, p->animating || !p->hidesWhenStopped);
@@ -490,13 +524,15 @@ void applyControlProps(ViewData &view) {
       selectSegment(w, p->selectedIndex);
       break;
     case ControlKind::DatePicker: {
-      if (p->date) {
+      // Only a new date from the app moves the calendar, not another prop's update.
+      if (p->date != c->date && p->date) {
         GDateTime *at = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(*p->date / 1000)));
         if (at) {
           gtk_calendar_select_day(GTK_CALENDAR(c->calendar), at);
           g_date_time_unref(at);
         }
       }
+      c->date = p->date;
       // The time modes have nothing to pick from yet: the button shows the time alone.
       gtk_widget_set_sensitive(w, p->enabled && picksDate(*p));
       break;
