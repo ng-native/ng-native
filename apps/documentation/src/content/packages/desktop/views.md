@@ -56,10 +56,9 @@ its strip while the content fits. A scroll along an axis a scroll view cannot sc
 the one around it, so a vertical scroll over a horizontal pager moves the page, and an inverted list
 scrolls the way the user's scroll direction setting says. A trackpad drag sends `(scrollBeginDrag)`
 and `(scrollEndDrag)`, its momentum or a page settling `(momentumScrollBegin)` and
-`(momentumScrollEnd)`, and
-`pagingEnabled` settles on a page as the gesture ends, or once a mouse's wheel stops. A click focuses a
-focusable view, and a focus a key moved reports `focusVisible` and draws AppKit's focus ring
-unless the view styles `outline`.
+`(momentumScrollEnd)`, and `pagingEnabled` settles on a page as the gesture ends, or once a mouse's
+wheel stops. A click focuses a focusable view, and a focus a key moved reports `focusVisible` and
+draws AppKit's focus ring unless the view styles `outline`.
 
 ## Controls
 
