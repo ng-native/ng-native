@@ -48,15 +48,24 @@ export function joinEvents(fabric: FabricUIManager, receiver: EventReceiver): ()
   receivers.push(receiver);
   if (!dispatcher.registered) {
     dispatcher.registered = true;
-    const handler: Handler = (instanceHandle, topLevelType, nativeEvent) => {
-      const owner = ownerOf(instanceHandle);
-      const to = receivers.find((one) => one === owner) ?? (owner ? null : receivers[0]);
-      to?.dispatchEvent(instanceHandle, topLevelType, nativeEvent);
-    };
-    fabric.registerEventHandler(handler);
+    fabric.registerEventHandler(dispatchTo(receivers));
   }
   return () => {
     const at = receivers.indexOf(receiver);
     if (at !== -1) receivers.splice(at, 1);
+  };
+}
+
+/**
+ * The one handler Fabric keeps, for as long as the runtime runs. Made out here, apart from
+ * `joinEvents`, so that it holds the list and nothing else: a closure shares the scope of every
+ * other closure made in the same call, and one made there kept the first engine to join, its root
+ * and every node it committed, long after that engine left.
+ */
+function dispatchTo(receivers: readonly EventReceiver[]): Handler {
+  return (instanceHandle, topLevelType, nativeEvent) => {
+    const owner = ownerOf(instanceHandle);
+    const to = receivers.find((one) => one === owner) ?? (owner ? null : receivers[0]);
+    to?.dispatchEvent(instanceHandle, topLevelType, nativeEvent);
   };
 }

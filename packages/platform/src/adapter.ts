@@ -1037,13 +1037,30 @@ export class NativeRendererFactory implements RendererFactory2 {
   };
 
   private schedule(): void {
-    if (this.frame) return;
+    if (this.frame || this.disposed) return;
     // `requestAnimationFrame` is a global in React Native. The fallback is for Node, where the
     // suite drives `advanceTransitions` itself and this never runs.
-    const request =
-      globalThis.requestAnimationFrame ??
-      ((callback: FrameRequestCallback) => setTimeout(() => callback(Date.now()), 16));
-    this.frame = request(this.pump) as unknown as number;
+    if (globalThis.requestAnimationFrame) {
+      this.frame = globalThis.requestAnimationFrame(this.pump);
+      this.cancelFrame = globalThis.cancelAnimationFrame;
+    } else {
+      this.frame = setTimeout(() => this.pump(), 16) as unknown as number;
+      this.cancelFrame = (id) => clearTimeout(id);
+    }
+  }
+
+  /** How the frame asked for is called off: the API it was asked of. */
+  private cancelFrame: ((id: number) => void) | undefined;
+  private disposed = false;
+
+  /**
+   * The app on this factory's surface has gone: the frame it asked for is called off, and it asks
+   * for no other, so a destroyed engine is not committed again.
+   */
+  dispose(): void {
+    this.disposed = true;
+    if (this.frame) this.cancelFrame?.(this.frame);
+    this.frame = 0;
   }
 
   /**
@@ -1091,7 +1108,7 @@ export class NativeRendererFactory implements RendererFactory2 {
     this.settling = true;
     queueMicrotask(() => {
       this.settling = false;
-      if (!this.engine.pending) return;
+      if (this.disposed || !this.engine.pending) return;
       this.commit();
       if (this.engine.animating) this.schedule();
     });
@@ -1550,7 +1567,8 @@ function windowMounter(
         stopFonts();
         stopSettled();
         (elementInjector as Partial<{ destroy(): void }>).destroy?.();
-        engine.leaveEvents();
+        factory.dispose();
+        engine.dispose();
       };
       let componentRef: ComponentRef<unknown>;
       try {
@@ -1705,10 +1723,19 @@ export function mount(
   // On an OS with windows the app lives on this surface, which the host never shows, and the root
   // component is the main window's, which `AppWindows` opens. Closing a window then never ends
   // the app.
+  // The app's engine goes with the app. The runtime's event dispatcher outlives every surface on
+  // it, and an engine still joined to it, after Android recreated the activity, kept itself and
+  // every node it had committed, and took the events that have no target.
+  const applicationRef = injector.get(ApplicationRef);
+  applicationRef.onDestroy(() => {
+    factory.dispose();
+    engine.dispose();
+  });
+
   const windows = injector.get(AppWindows);
   if (windows.available()) {
     windows.launch(component, inputs, bindings);
-    return windowedResult(windows, injector.get(ApplicationRef), factory, engine);
+    return windowedResult(windows, applicationRef, factory, engine);
   }
 
   // No `hostElement`, so Angular creates the host from the selector as it does any other
@@ -1732,7 +1759,6 @@ export function mount(
 
   for (const [name, value] of Object.entries(inputs)) componentRef.setInput(name, value);
 
-  const applicationRef = injector.get(ApplicationRef);
   // The app goes with the surface it is on, which Fabric stops when, among others, Android
   // recreates the activity: see `surface-stop.ts`. What its destroy throws goes to its own
   // `ErrorHandler`, looked up while the app can still answer, rather than into Fabric's call.
