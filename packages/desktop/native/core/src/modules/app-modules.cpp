@@ -377,8 +377,10 @@ std::shared_ptr<NativeModule> makeGestureHandlerModule(const CoreModuleServices 
       // Each call is already queued for the UI thread as it is made.
       sync("flushOperations", [](const folly::dynamic &) { return folly::dynamic(nullptr); });
       // The worklet runtime's `_setGestureStateSync` is not installed: a worklet's state manager
-      // reaches the handlers through Reanimated's setGestureState instead (worklet-host.h).
-      sync("installUIRuntimeBindings", [](const folly::dynamic &) { return folly::dynamic(false); });
+      // reaches the handlers through Reanimated's setGestureState instead (worklet-host.h). The
+      // answer only decides whether the gesture handler warns, telling the app to report a bug,
+      // so it says the runtime is ready, as the gesture handler's own web module does.
+      sync("installUIRuntimeBindings", [](const folly::dynamic &) { return folly::dynamic(true); });
     }
 
     void send(const std::string &event, folly::dynamic body) const {
