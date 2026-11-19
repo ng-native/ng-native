@@ -55,6 +55,8 @@ struct Offsets {
 struct CommittedState {
   ScrollViewState data{Point{}, Rect{{0, 0}, {100, 300}}, 0};
   State::Shared state;
+  // The updates applied that gave a new state, each of which clones the scroll view's node.
+  int applied = 0;
 
   CommittedState() {
     auto processor = EventQueueProcessor(
@@ -88,6 +90,7 @@ struct CommittedState {
       return;
     }
     if (auto next = update.callback(std::make_shared<const ScrollViewState>(data))) {
+      ++applied;
       data = *std::static_pointer_cast<const ScrollViewState>(next);
     }
   }
@@ -265,6 +268,45 @@ TEST_CASE("a ScrollView's new gutter keeps an offset React Native has not applie
   REQUIRE(ngn::ScrollerGutters::shared().get(2).right > 0);
   committed.flush();
   CHECK(committed.data.contentOffset == Point{0, 100});
+}
+
+TEST_CASE("a ScrollView's new gutter still lays the content out when later moves replace its update") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkSettings *settings = gtk_settings_get_default();
+  gboolean overlay = TRUE;
+  g_object_get(settings, "gtk-overlay-scrolling", &overlay, nullptr);
+  struct Restore {
+    GtkSettings *settings;
+    gboolean overlay;
+    ~Restore() {
+      g_object_set(settings, "gtk-overlay-scrolling", overlay, nullptr);
+    }
+  } restore{settings, overlay};
+  g_object_set(settings, "gtk-overlay-scrolling", FALSE, nullptr);
+
+  CommittedState committed;
+  MountedViews views;
+  mountScrollView(views, dynamic::object("showsVerticalScrollIndicator", false), committed.state);
+  committed.flush();
+  int before = committed.applied;
+  auto scroll = views.mounting->tree().find(2)->view;
+  views.update(scroll, scrollProps(dynamic::object("showsVerticalScrollIndicator", true)));
+  REQUIRE(ngn::ScrollerGutters::shared().get(2).right > 0);
+  // Two moves that end where the state already is, each replacing the update before it.
+  views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 100, false));
+  views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 0, false));
+  views.settle();
+  committed.flush();
+  CHECK(committed.data.contentOffset == Point{0, 0});
+  // The gutter's clone still happened.
+  CHECK(committed.applied == before + 1);
+
+  // Once applied, the same two moves clone nothing more: the gutter's relayout is not owed again.
+  views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 100, false));
+  views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 0, false));
+  views.settle();
+  committed.flush();
+  CHECK(committed.applied == before + 1);
 }
 
 TEST_CASE("a ScrollView's contentOffset waits for the view to have a size") {
