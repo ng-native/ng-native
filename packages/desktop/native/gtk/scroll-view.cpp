@@ -45,15 +45,18 @@ Size viewportOf(const ScrollBox &box) {
 // the state it then holds, and a later update of the same view replaces one not yet applied: each
 // carries the offset GTK shows, compared with the state it is applied to, never with the one this
 // view last mounted. `relayout` sends it even when the offset is the state's, for a clone that
-// reads a new gutter.
+// reads a new gutter, and so does each later update until one such clone is applied.
 void syncState(const ScrollBox &box, bool relayout) {
   auto state = stateOf(*box.view);
   if (!state) {
     return;
   }
+  if (relayout) {
+    box.relayoutOwed->store(true);
+  }
   Point offset = offsetOf(box);
-  state->updateState([offset, relayout](const ScrollViewState &old) -> StateData::Shared {
-    if (!relayout && old.contentOffset == offset) {
+  state->updateState([offset, owed = box.relayoutOwed](const ScrollViewState &old) -> StateData::Shared {
+    if (!owed->exchange(false) && old.contentOffset == offset) {
       return nullptr;
     }
     auto data = std::make_shared<ScrollViewState>(old);
