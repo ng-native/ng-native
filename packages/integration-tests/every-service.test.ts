@@ -328,23 +328,85 @@ function publicMethods(file: string, cls: string): string[] {
   return names;
 }
 
-/** A device on `os` with React Native and nothing else in the app. */
-function on(os: Os | null): void {
+/**
+ * A device on `os` with React Native and nothing else in the app. With `absentByDesign`, a desktop
+ * host whose `NgNativeHost` names those modules as left out because the OS gives them no source.
+ */
+function on(os: Os | null, absentByDesign?: readonly string[]): void {
   const host = globalThis as Record<string, unknown>;
   if (os === null) {
     delete host['require'];
     return;
   }
+  const hostModule = absentByDesign && {
+    getConstants: () => ({ absentModules: absentByDesign }),
+  };
   host['require'] = (id: string) => {
     if (id === 'react-native') {
       return {
         Platform: { OS: os },
         AppState: { addEventListener: () => ({ remove() {} }) },
-        TurboModuleRegistry: { get: () => null },
+        TurboModuleRegistry: {
+          get: (name: string) => (name === 'NgNativeHost' && hostModule) || null,
+        },
       };
     }
     throw new Error(`Cannot find module '${id}'`);
   };
+}
+
+/**
+ * Services whose desktop module the core leaves out when the backend gives it no source, each with
+ * that module: absent by design there, never a host to rebuild. The GTK host gives none for all but
+ * Battery and Location.
+ */
+const LEFT_OUT_BY_DESIGN: Readonly<Record<string, string>> = {
+  AddressSearch: 'NgNativeAddressSearch',
+  AppleSignIn: 'NgNativeAppleAuthentication',
+  Battery: 'NgNativeBattery',
+  Biometrics: 'NgNativeLocalAuthentication',
+  Calendar: 'NgNativeCalendar',
+  Haptics: 'NgNativeHaptics',
+  ImagePicker: 'NgNativeImagePicker',
+  LanguageModel: 'NgNativeLocalLlm',
+  Location: 'NgNativeLocation',
+  MediaLibrary: 'NgNativeMediaLibrary',
+  ScreenCapture: 'NgNativeScreenCapture',
+  Sharing: 'NgNativeSharing',
+  SplashScreen: 'NgNativeSplashScreen',
+  TextRecognition: 'NgNativeTextRecognition',
+  Tracking: 'NgNativeTrackingTransparency',
+  UndoStack: 'NgNativeUndo',
+};
+
+/**
+ * That `name` is made on `os` with `available()` false, and that each of its public methods is
+ * inert: it answers its return type's empty value, or a promise of one, and never throws or hangs.
+ */
+async function assertAbsentAndInert(name: string, os: Os): Promise<void> {
+  const { token, file, cls } = SERVICES[name]!;
+  const service = injectService(token, {
+    providers: [{ provide: OS, useValue: os }],
+  }) as Record<string, unknown>;
+  // An answer that comes in a turn after the first read must come in false too.
+  (service['available'] as () => boolean)();
+  await settled(new Promise((resolve) => setTimeout(resolve)));
+  assert.equal((service['available'] as () => boolean)(), false, `${name}.available()`);
+  for (const method of publicMethods(file, cls)) {
+    if (NOT_INERT[name]?.includes(method)) continue;
+    const key = `${name}.${method}`;
+    const args = ARGUMENTS[key]?.(service) ?? [];
+    let answer: unknown;
+    assert.doesNotThrow(
+      () => (answer = (service[method] as (...a: unknown[]) => unknown).call(service, ...args)),
+      `${key}() throws`,
+    );
+    const value = await settled(answer).catch((error: unknown) => {
+      assert.fail(`${key}() rejects: ${String(error)}`);
+    });
+    const empty = EMPTY_ANSWERS[key] ?? isEmpty;
+    assert.ok(empty(value), `${key}() answers ${String(value)}`);
+  }
 }
 
 afterEach(() => {
@@ -408,39 +470,28 @@ describe('every service', () => {
     });
   }
 
-  for (const [name, { token, file, cls, absentOn }] of Object.entries(SERVICES)) {
+  for (const [name, { absentOn }] of Object.entries(SERVICES)) {
     for (const os of absentOn) {
       it(`${name}: absent on ${os}, with every call inert`, async () => {
         on(os);
         try {
-          const service = injectService(token, {
-            providers: [{ provide: OS, useValue: os }],
-          }) as Record<string, unknown>;
-          // An answer that comes in a turn after the first read must come in false too.
-          (service['available'] as () => boolean)();
-          await settled(new Promise((resolve) => setTimeout(resolve)));
-          assert.equal((service['available'] as () => boolean)(), false, `${name}.available()`);
-          for (const method of publicMethods(file, cls)) {
-            if (NOT_INERT[name]?.includes(method)) continue;
-            const key = `${name}.${method}`;
-            const args = ARGUMENTS[key]?.(service) ?? [];
-            let answer: unknown;
-            assert.doesNotThrow(
-              () =>
-                (answer = (service[method] as (...a: unknown[]) => unknown).call(service, ...args)),
-              `${key}() throws`,
-            );
-            const value = await settled(answer).catch((error: unknown) => {
-              assert.fail(`${key}() rejects: ${String(error)}`);
-            });
-            const empty = EMPTY_ANSWERS[key] ?? isEmpty;
-            assert.ok(empty(value), `${key}() answers ${String(value)}`);
-          }
+          await assertAbsentAndInert(name, os);
         } finally {
           on(null);
         }
       });
     }
+  }
+
+  for (const [name, hostModule] of Object.entries(LEFT_OUT_BY_DESIGN)) {
+    it(`${name}: absent on a Linux host that leaves ${hostModule} out by design, with every call inert`, async () => {
+      on('linux', Object.values(LEFT_OUT_BY_DESIGN));
+      try {
+        await assertAbsentAndInert(name, 'linux');
+      } finally {
+        on(null);
+      }
+    });
   }
 
   it('reads methods from every source, so a rename is not a silent pass', () => {
