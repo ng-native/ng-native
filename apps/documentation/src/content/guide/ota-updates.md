@@ -33,8 +33,8 @@ crashes is not run again, and an update downloaded before the app itself was upd
 a package manager or Flatpak) does not run over the new version's bundle. The [Updates](/packages/expo/updates) service is the same on the desktop:
 `check()` and `apply()`, with `enabled` false in development and without an `updates.url`. The
 host asks the server with `expo-platform` set to `macos` or `linux`. A Linux app keeps its updates
-in `$XDG_DATA_HOME/<app id>/updates`, since every Linux package installs read-only; the package
-manager or Flatpak still updates the app itself.
+in `$XDG_DATA_HOME/<app id>/updates`, outside the install folder, which a `deb`, `rpm` or Flatpak
+installs read-only; the package manager or Flatpak still updates the app itself.
 
 A `dmg` packaged with `--feed-url` also embeds Sparkle, which replaces the whole app, native code
 included, rather than its bundle: see
