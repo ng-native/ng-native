@@ -354,7 +354,7 @@ export function prepareHost(sys, options) {
   }
   const deny = config.options.deny ?? [];
   const { file, linked, hostLibraries } = writeLinks(sys, { cwd, os, deny });
-  const buildDir = hostBuildDir(sys, reactNative, {
+  const { dir: buildDir, prebuilt } = hostBuildDir(sys, reactNative, {
     ...options,
     os,
     arch: options.arch ?? linuxArch(sys),
@@ -363,7 +363,7 @@ export function prepareHost(sys, options) {
     hostLibraries,
     link: file,
   });
-  return { cwd, expo, config, buildDir, reactNative };
+  return { cwd, expo, config, buildDir, prebuilt, reactNative };
 }
 
 /**
@@ -392,8 +392,8 @@ function writeLinks(sys, { cwd, os, deny }) {
 }
 
 /**
- * The prebuilt host that fits, or the one built from source. A Linux host builds only on Linux of
- * its own architecture, so it throws for another.
+ * The prebuilt host that fits, or the one built from source, and which it is. A Linux host builds
+ * only on Linux of its own architecture, so it throws for another.
  *
  * @param {typeof system} sys
  * @param {string} reactNative
@@ -410,20 +410,23 @@ function hostBuildDir(sys, reactNative, build) {
     os,
     arch,
   });
-  if (prebuilt.dir) return prebuilt.dir;
+  if (prebuilt.dir) return { dir: prebuilt.dir, prebuilt: true };
   if (os === 'linux' && !buildsLinuxHere(sys, arch)) {
     throw new UsageError(
       `The Linux desktop host builds on Linux only for now, on the architecture it is for, and no ` +
         `prebuilt Linux ${arch} host fits this app (${prebuilt.reason}). Package on Linux on ${arch}.`,
     );
   }
-  return buildHost(
-    sys,
-    reactNative,
-    hostLibraries.map(({ dir }) => dir),
-    build,
-    build.link,
-  );
+  return {
+    dir: buildHost(
+      sys,
+      reactNative,
+      hostLibraries.map(({ dir }) => dir),
+      build,
+      build.link,
+    ),
+    prebuilt: false,
+  };
 }
 
 /**
