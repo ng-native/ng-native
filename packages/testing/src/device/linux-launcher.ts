@@ -385,12 +385,29 @@ export const CRASH_MARKER = 'ngn-test: the host left crash.txt:';
 /** How long a crash report waits for the host's last output after it exits, in milliseconds. */
 const DRAIN_MS = 1000;
 
+/** What a launch's output has said: its last lines, and the crash report it printed. */
+interface Said {
+  tail: string[];
+  crash: string[] | undefined;
+}
+
+/**
+ * Take one line of the host's output into `said`. The session script prints the crash report on
+ * stderr after its marker, so only stderr's lines from there on are the report; stdout's stay in
+ * the tail.
+ */
+function hear(said: Said, line: string, stderr: boolean): void {
+  if (stderr && said.crash) said.crash.push(line);
+  else if (stderr && line === CRASH_MARKER) said.crash = [];
+  else said.tail = [...said.tail, line].slice(-TAIL_LINES);
+}
+
 export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
-  // The latest launch's output: its last lines, the crash report it printed, and when its pipes
+  // The latest launch's output: what it said, each stream's unfinished line, and when its pipes
   // closed.
   let output = {
-    tail: [] as string[],
-    crash: undefined as string[] | undefined,
+    said: { tail: [], crash: undefined } as Said,
+    pending: [] as string[],
     closed: Promise.resolve(),
   };
   return {
@@ -407,30 +424,24 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
       // Node can report the exit before the pipes hand over the last output, the crash message
       // among it, so a report waits for them to close.
       const current = {
-        tail: [] as string[],
-        crash: undefined as string[] | undefined,
+        said: { tail: [], crash: undefined } as Said,
+        pending: ['', ''],
         closed: new Promise<void>((resolve) => child.once('close', () => resolve())),
       };
       output = current;
-      const keep = (line: string) => {
-        if (current.crash) current.crash.push(line);
-        else if (line === CRASH_MARKER) current.crash = [];
-        else current.tail = [...current.tail, line].slice(-TAIL_LINES);
-      };
       // A chunk need not end on a line break, so each stream keeps its unfinished line until the
       // rest arrives, and gives it up at the end of the stream.
-      for (const stream of [child.stdout, child.stderr]) {
-        let pending = '';
+      [child.stdout, child.stderr].forEach((stream, at) => {
         stream?.on('data', (chunk: Buffer) => {
-          const lines = (pending + chunk.toString()).split('\n');
-          pending = lines.pop() ?? '';
-          for (const line of lines) if (line) keep(line);
+          const lines = (current.pending[at] + chunk.toString()).split('\n');
+          current.pending[at] = lines.pop() ?? '';
+          for (const line of lines) if (line) hear(current.said, line, at === 1);
         });
         stream?.on('end', () => {
-          if (pending) keep(pending);
-          pending = '';
+          if (current.pending[at]) hear(current.said, current.pending[at], at === 1);
+          current.pending[at] = '';
         });
-      }
+      });
       const exited = new Promise<string>((resolve) => {
         child.once('error', (error) => resolve(`it could not be started: ${error.message}`));
         child.once('exit', (code, signal) => {
@@ -474,7 +485,14 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
         asked.closed,
         new Promise((resolve) => setTimeout(resolve, DRAIN_MS).unref()),
       ]);
-      const { tail, crash } = asked;
+      // A process still holding the pipes can leave a line unfinished: the report has it too, from
+      // a copy, so later output can still finish the line.
+      const said: Said = {
+        tail: [...asked.said.tail],
+        crash: asked.said.crash && [...asked.said.crash],
+      };
+      asked.pending.forEach((line, at) => line && hear(said, line, at === 1));
+      const { tail, crash } = said;
       const parts = [
         ...(crash?.length ? [`The host's crash report:\n${crash.join('\n')}`] : []),
         ...(tail.length ? [`The host's last output:\n${tail.join('\n')}`] : []),

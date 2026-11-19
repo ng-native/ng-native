@@ -1,5 +1,7 @@
 #include "accessible.h"
 
+#include "ngn/native-controls.h"
+
 #include <react/renderer/components/view/ViewProps.h>
 
 namespace ngn::gtk {
@@ -18,7 +20,9 @@ std::optional<AxInfo> accessibilityOf(const facebook::react::ShadowView &view) {
 GtkAccessibleRole accessibleRole(const facebook::react::ShadowView &view) {
   auto props = std::dynamic_pointer_cast<const facebook::react::ViewProps>(view.props);
   auto info = accessibilityOf(view);
-  if (!props || !info) {
+  // A native control's GTK widget is the accessible element, with its own role and state, as
+  // AppKit's control is on macOS: the view holding it is not one too.
+  if (!props || !info || controlKind(view.componentName)) {
     return GTK_ACCESSIBLE_ROLE_GENERIC;
   }
   return gtkRole(ariaRole(roleName(*props), *info));

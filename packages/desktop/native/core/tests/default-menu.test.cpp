@@ -145,3 +145,17 @@ TEST_CASE("Linux's Developer menu reloads on Ctrl+R") {
   CHECK(reload->key == "r");
   CHECK(reload->modifiers == ngn::Control);
 }
+
+TEST_CASE("Linux puts the menus in a menu bar on KDE Plasma and in the header bar's primary menu elsewhere") {
+  using ngn::MenuPlacement;
+  CHECK(ngn::linuxMenuPlacement("KDE") == MenuPlacement::MenuBar);
+  // Any entry of the list: a distribution may name its own session first.
+  CHECK(ngn::linuxMenuPlacement("Neon:KDE") == MenuPlacement::MenuBar);
+  CHECK(ngn::linuxMenuPlacement("KDE:wlroots") == MenuPlacement::MenuBar);
+  CHECK(ngn::linuxMenuPlacement("GNOME") == MenuPlacement::PrimaryMenu);
+  CHECK(ngn::linuxMenuPlacement("ubuntu:GNOME") == MenuPlacement::PrimaryMenu);
+  // A name holding KDE is not KDE, and no desktop at all is the header bar's menu.
+  CHECK(ngn::linuxMenuPlacement("KDEX:GNOME") == MenuPlacement::PrimaryMenu);
+  CHECK(ngn::linuxMenuPlacement("") == MenuPlacement::PrimaryMenu);
+  CHECK(ngn::linuxMenuPlacement("::") == MenuPlacement::PrimaryMenu);
+}

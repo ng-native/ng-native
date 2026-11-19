@@ -120,6 +120,30 @@ describe('the safe area', () => {
     assert.equal(token(), '0px');
   });
 
+  it('publishes the window controls a desktop host reports from the trailing side, and drops them when they go', async () => {
+    // A GTK window whose header bar's close button sits over the content's trailing end.
+    const engine = app.componentRef.injector.get(Engine);
+    const area = app.componentRef.injector.get(SafeArea);
+    const tokens = () => [
+      engine.token('--safe-area-inset-titlebar-leading'),
+      engine.token('--safe-area-inset-titlebar-trailing'),
+    ];
+    await fireEvent(screen.getByTestId('provider'), 'insetsChange', {
+      insets: { top: 46, right: 0, bottom: 0, left: 0 },
+      frame: { x: 0, y: 0, width: 800, height: 600 },
+      titlebarLeading: 0,
+      titlebarTrailing: 42,
+    });
+    assert.deepEqual(tokens(), ['0px', '42px']);
+    assert.equal(area.titlebarTrailing(), 42);
+    await fireEvent(screen.getByTestId('provider'), 'insetsChange', {
+      insets: { top: 0, right: 0, bottom: 0, left: 0 },
+      frame: { x: 0, y: 0, width: 800, height: 600 },
+    });
+    assert.deepEqual(tokens(), ['0px', '0px']);
+    assert.equal(area.titlebarTrailing(), 0);
+  });
+
   it('leaves the app safe area alone for a provider that only serves its own subtree', async () => {
     const area = app.componentRef.injector.get(SafeArea);
     await fireEvent(screen.getByTestId('provider'), 'insetsChange', {
@@ -267,7 +291,7 @@ describe('a safe-area provider going away', () => {
     assert.equal(screen.getByTestId('floating').props['marginBottom'], 34);
   });
 
-  it('puts back the window controls width a provider still up reported, as the newer one goes', async () => {
+  it('puts back the window controls widths a provider still up reported, as the newer one goes', async () => {
     const engine = app.componentRef.injector.get(Engine);
     app.instance.second.set(true);
     await app.detectChanges();
@@ -275,17 +299,20 @@ describe('a safe-area provider going away', () => {
       insets: { top: 52, right: 0, bottom: 0, left: 0 },
       frame: { x: 0, y: 0, width: 800, height: 600 },
       titlebarLeading: 78,
+      titlebarTrailing: 40,
     });
     await fireEvent(screen.getByTestId('second'), 'insetsChange', {
       insets: { top: 0, right: 0, bottom: 0, left: 0 },
       frame: { x: 0, y: 0, width: 400, height: 300 },
     });
     assert.equal(engine.token('--safe-area-inset-titlebar-leading'), '0px');
+    assert.equal(engine.token('--safe-area-inset-titlebar-trailing'), '0px');
 
     app.instance.second.set(false);
     await app.detectChanges();
 
     assert.equal(engine.token('--safe-area-inset-titlebar-leading'), '78px');
+    assert.equal(engine.token('--safe-area-inset-titlebar-trailing'), '40px');
   });
 
   it('puts back the latest report of the providers still up, never one that went', () => {

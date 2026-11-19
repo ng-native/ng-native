@@ -3,6 +3,7 @@
 #pragma once
 
 #include <react/renderer/core/Props.h>
+#include <react/renderer/core/ReactPrimitives.h>
 #include <react/renderer/graphics/Color.h>
 
 #include <folly/dynamic.h>
@@ -104,6 +105,27 @@ std::optional<HeaderBar> headerBar(const facebook::react::Props &props);
 // Where a RNSScreenStackHeaderSubview sits: "left", "right", "center", "back" or "searchBar".
 // Nothing for other props, or without react-native-screens.
 std::optional<std::string> headerItemType(const facebook::react::Props &props);
+
+// A RNSScreenStackHeaderSubview of a header: its tag and where it sits (headerItemType).
+struct HeaderSubview {
+  facebook::react::Tag tag;
+  std::string type;
+};
+
+// Where a front header's pieces go in a window's bar, for AppKit's toolbar and GTK's header bar
+// alike: the back button first, then the left subviews and the left bar buttons; the title or the
+// center subviews; then the right bar buttons, the right subviews and the search fields. Subviews
+// of a side keep the order they were made in (their tags). A left subview or bar button replaces
+// the back button, as on iOS.
+struct HeaderLayout {
+  bool back{false};
+  std::vector<facebook::react::Tag> left;
+  std::vector<facebook::react::Tag> center;
+  std::vector<facebook::react::Tag> right;
+  std::vector<facebook::react::Tag> searchBars;
+  bool operator==(const HeaderLayout &) const = default;
+};
+HeaderLayout headerLayout(const HeaderBar &bar, std::vector<HeaderSubview> subviews, bool canGoBack);
 
 // The search field a RNSSearchBar's props describe, or nothing for other props or without
 // react-native-screens.
