@@ -87,9 +87,7 @@ is checked by the SHA-256 in `prebuilt.json`. Each release attaches both prebuil
 GitHub release.
 
 Linux has the same two flavours for each architecture, x64 and arm64, built on AlmaLinux 9 so they
-need glibc 2.34 at most, each packed with its `hermesc` and not signed. They leave out
-`react-native-worklets` and `react-native-reanimated`, which do not build into the GTK host yet, so
-an app that has either builds its own Linux host. `run` on Linux and `package
+need glibc 2.34 at most, each packed with its `hermesc` and not signed. `run` on Linux and `package
 --os linux` take the one for the architecture they need, on the same terms as above. A Mac
 packaging for Linux therefore needs no Linux machine for an app with no native desktop code of its
 own; an app with some builds its Linux host on Linux of that architecture.
