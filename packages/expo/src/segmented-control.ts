@@ -2,7 +2,8 @@
  * `<segmented-control>` with its props and its `change` event typed.
  *
  * The element is `NATIVE_VIEWS`' name for `@react-native-segmented-control/segmented-control`; this
- * only claims it so strict templates know its props. Each input goes straight to the node, and
+ * claims it so strict templates know its props, and registers it the first time one is made, so
+ * no `registerNativeViews` call is needed. Each input goes straight to the node, and
  * `change` is an output for its type only: the element's own event is what arrives, as with the
  * `@expo/ui` components in `expo-ui-components.ts`.
  *
@@ -12,6 +13,7 @@
 import { Component, input, output } from '@angular/core';
 import type { ControlSize } from '@ng-native/device';
 import type { NativeSyntheticEvent } from '@ng-native/fabric';
+import { claimNativeView } from './community-views.ts';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
 import { reportClicksOn } from './ui-click-reports.ts';
 
@@ -67,6 +69,7 @@ export class SegmentedControl {
   readonly change = output<SegmentedControlChangeEvent>();
 
   constructor() {
+    claimNativeView('segmented-control');
     reportClicksOn('topChange');
   }
 }

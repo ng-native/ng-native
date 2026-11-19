@@ -353,6 +353,8 @@ void GtkBackend::followRole(const ShadowView &view) {
   swapViewData(old, next);
   // The focus moving to its replacement is no focus change for the view (focus.h).
   g_object_set_data(G_OBJECT(old), "ngn-replaced-by", next);
+  // A state update replaces a Paragraph's widget with no props update to follow.
+  applyViewProps(next, *viewData(next));
   // A focused field's GtkText loses the focus as it moves and takes it back after: the app hears
   // neither.
   TextField *field = focus ? textFieldOf(focus) : nullptr;
@@ -364,12 +366,18 @@ void GtkBackend::followRole(const ShadowView &view) {
   }
   while (GtkWidget *child = gtk_widget_get_first_child(old)) {
     g_object_ref(child);
+    // Unparenting makes a child visible again: a covered screen stays hidden.
+    gboolean childVisible = gtk_widget_get_child_visible(child);
     gtk_widget_unparent(child);
     gtk_widget_insert_before(child, next, nullptr);
+    gtk_widget_set_child_visible(child, childVisible);
     g_object_unref(child);
   }
   it->second = next;
-  if (focus) {
+  if (field && GTK_IS_TEXT(focus)) {
+    // Focusing a GtkText selects all of it: the caret stays where the user left it.
+    gtk_text_grab_focus_without_selecting(GTK_TEXT(focus));
+  } else if (focus) {
     gtk_widget_grab_focus(focus == old ? next : focus);
   }
   if (fieldView) {

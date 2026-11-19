@@ -151,6 +151,7 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
       problems: [],
     }),
     writeFile: (file, text) => void (written[file] = String(text)),
+    mkdir: () => {},
     readBytes: () => new Uint8Array(),
     files: () => [],
     symlink: () => {},
@@ -473,6 +474,49 @@ describe('run', () => {
       { appDir: '/apps/demo', options: { os: 'linux', deny: [], builtIn: HOST_LIBRARIES } },
     ]);
     assert.equal(JSON.parse(written[linkFile('/apps/demo')]!).os, 'linux');
+  });
+
+  it('builds a Linux host from source, never taking a prebuilt one, which is a macOS host', () => {
+    const host = '/cache/rn-0.88.0/prebuilt/cccccccccccccccc/appkit/ngn-macos';
+    const files: Record<string, string> = {
+      [path.join(packageDir, 'prebuilt.json')]: JSON.stringify({
+        version: 1,
+        hosts: [
+          {
+            reactNative: '0.88.0',
+            flavour: 'debug',
+            url: 'https://e.com/h.tar.gz',
+            sha256: 'c'.repeat(64),
+            libraries: {},
+          },
+        ],
+      }),
+      '/apps/demo/node_modules/react-native/package.json': '{"version":"0.88.0"}',
+    };
+    const linux = fakeSystem({
+      platform: 'linux',
+      env: { NGN_DESKTOP_CACHE: '/cache' },
+      readFile: (file) => files[file] ?? '',
+      exists: (file) => file === host,
+      expoConfig: () => ({
+        name: 'Demo',
+        slug: 'demo',
+        platforms: ['ios', 'android', 'linux'],
+        experiments: { outOfTreePlatforms: true },
+      }),
+    });
+    const prebuiltDir = '/cache/rn-0.88.0/prebuilt/cccccccccccccccc';
+    assert.notEqual(
+      prepareHost(linux.sys, { universal: false, os: 'linux' }).buildDir,
+      prebuiltDir,
+    );
+    // The same app on a Mac takes it.
+    const mac = fakeSystem({
+      env: { NGN_DESKTOP_CACHE: '/cache' },
+      readFile: (file) => files[file] ?? '',
+      exists: (file) => file === host,
+    });
+    assert.equal(prepareHost(mac.sys, { universal: false }).buildDir, prebuiltDir);
   });
 
   it('checks the Expo config for the OS being built, and the machine it builds on', () => {
