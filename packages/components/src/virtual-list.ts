@@ -517,7 +517,14 @@ export class VirtualList<T> extends ScrollViewProps {
   /** The line an item is on: the item itself, when each has a line to itself. */
   private lineOf(index: number): number {
     const lines = this.lines();
-    return lines ? lines.of[index]! : index;
+    // An index past the items, a sticky one given for rows not there yet, is past the last line.
+    return lines ? (lines.of[index] ?? lines.starts.length) : index;
+  }
+
+  /** Whether a row is on the list's last line, which no separator comes after. */
+  private onLastLine(index: number): boolean {
+    const lines = this.lines();
+    return lines ? lines.of[index] === lines.starts.length - 1 : index >= this.items().length - 1;
   }
 
   /** The first item on a line, or the item count for a line past the last. */
@@ -752,7 +759,10 @@ export class VirtualList<T> extends ScrollViewProps {
     const index = this.heldIndex(anchor, items);
     if (index === 'start') return this.showStart();
     if (index < 0) return this.atOffset();
-    const held = this.topOf(index) + anchor.within;
+    // No further than the end: native stops there, and the window must be built for where it is.
+    const viewport = this.viewport();
+    const end = viewport > 0 ? Math.max(0, this.extent() - viewport) : Infinity;
+    const held = Math.min(this.topOf(index) + anchor.within, end);
     if (Math.abs(held - this.lastOffset) > HOLD_TOLERANCE) {
       this.pendingScroll = { offset: held, animated: false };
       this.lastOffset = held;
@@ -760,7 +770,8 @@ export class VirtualList<T> extends ScrollViewProps {
     // The window is built from the row the held offset lands in, which is not the anchored one
     // when that row came out shorter than the way into it: a new column count can move an item
     // off a line made tall by another item, onto a short one.
-    const top = Math.max(0, Math.min(this.indexAt(held), items.length - 1));
+    // In a single column the anchored row is kept, so a row scrolled to stays held there.
+    const top = this.lines() ? Math.max(0, Math.min(this.indexAt(held), items.length - 1)) : index;
     if (top === index) {
       this.anchor = { ...anchor, items, index };
       return index;
@@ -1294,7 +1305,7 @@ export class VirtualList<T> extends ScrollViewProps {
     const items = this.items();
     const gaps: Gap<T>[] = [];
     for (const row of this.window()) {
-      if (row.parked || row.index >= items.length - 1) continue;
+      if (row.parked || this.onLastLine(row.index)) continue;
       const style = this.measuring() ? this.measuredGapStyle(row) : this.gapStyle(row);
       if (!style) continue;
       const trailingItem = items[row.index + 1]!;
@@ -1466,7 +1477,8 @@ export class VirtualList<T> extends ScrollViewProps {
     this.lastOffset = offset;
     this.anchor = { key: this.keyAt(index), within, items, index };
     this.jumpTo(index);
-    this.moveTo(index);
+    // The start of its line, which is what a scroll event there gives, so the fill keeps its way.
+    this.moveTo(this.lineStart(this.lineOf(index)));
     this.scrollToOffset({ offset: this.headerHeight() + offset, animated: options.animated });
   }
 

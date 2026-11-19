@@ -4,6 +4,7 @@ import { View } from '../../components/src/view.ts';
 import {
   VirtualList,
   VirtualListRow,
+  VirtualListSeparator,
   type VirtualItemHeight,
   type VirtualListPadding,
 } from '../../components/src/virtual-list.ts';
@@ -29,6 +30,7 @@ interface Tile {
       [stickyIndices]="sticky()"
       [horizontal]="horizontal()"
       [itemVisiblePercentThreshold]="50"
+      [windowSize]="windowSize()"
       [virtualListNumColumns]="columns()"
       [virtualListColumnGap]="columnGap()"
       (viewableItemsChanged)="viewable.set($event.viewable.map(indexOf))"
@@ -54,6 +56,7 @@ export class VirtualColumns {
   readonly columnGap = signal(0);
   readonly sticky = signal<readonly number[]>([]);
   readonly horizontal = signal(false);
+  readonly windowSize = signal(5);
   readonly viewable = signal<readonly number[]>([]);
   readonly ends: number[] = [];
   readonly indexOf = (row: { index: number }) => row.index;
@@ -86,4 +89,32 @@ export class VirtualColumnsMeasured {
 
 function tiles(count: number): Tile[] {
   return Array.from({ length: count }, (_, id) => ({ id, label: `tile ${id}` }));
+}
+
+/** Six items in three columns, with a separator between rows. */
+@Component({
+  selector: 'x-virtual-columns-separated',
+  imports: [VirtualList, VirtualListNumColumns, VirtualListSeparator, Text, View],
+  template: `
+    <virtual-list
+      #list
+      [items]="tiles"
+      [itemHeight]="40"
+      [virtualListNumColumns]="3"
+      [style]="fill"
+    >
+      <ng-template virtualListSeparator let-index="leadingIndex"
+        ><view [nativeID]="'sep' + index"></view
+      ></ng-template>
+      @for (row of list.window(); track row.slot) {
+        <view [style]="row.style"
+          ><text>{{ row.item.label }}</text></view
+        >
+      }
+    </virtual-list>
+  `,
+})
+export class VirtualColumnsSeparated {
+  readonly tiles = tiles(6);
+  readonly fill = { flex: 1 };
 }

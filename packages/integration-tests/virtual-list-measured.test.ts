@@ -271,6 +271,20 @@ describe('virtual list with measured rows', () => {
     unmount();
   });
 
+  it('holds a row scrolled to with a viewOffset while the rows above it are measured', async () => {
+    const { instance, scrolls, measure, unmount } = await boot('Measured');
+    (
+      instance.list() as unknown as {
+        scrollToIndex(options: { index: number; viewOffset: number; animated: boolean }): void;
+      }
+    ).scrollToIndex({ index: 50, viewOffset: 150, animated: false });
+    await settle();
+    await measure(48, ESTIMATE + 30);
+    await measure(49, ESTIMATE + 30);
+    assert.deepEqual(scrolls().at(-1)!.args, [0, 50 * ESTIMATE + 60 - 150, false]);
+    unmount();
+  });
+
   it('does not correct for rows below the one on screen', async () => {
     const { scroll, scrolls, measureAll, unmount } = await boot('Measured');
     await measureAll(() => ESTIMATE);

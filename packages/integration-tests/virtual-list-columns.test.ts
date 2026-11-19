@@ -28,6 +28,8 @@ const VIEWPORT = 400;
 
 interface Instance {
   list(): { scrollToIndex(options: { index: number; animated?: boolean }): void };
+  tiles: WritableSignal<readonly { id: number; label: string }[]>;
+  windowSize: WritableSignal<number>;
   height: WritableSignal<unknown>;
   padding: WritableSignal<unknown>;
   rowGap: WritableSignal<number>;
@@ -185,6 +187,61 @@ describe('a windowed list in columns', () => {
     assert.deepEqual(instance.viewable(), range(0, 40));
   });
 
+  it('keeps a higher count near the end within the content, and renders what is on screen', async () => {
+    const { instance, shown, scroll, fabric } = await boot((page) => page.columns.set(1));
+    await scroll(3600);
+    instance.columns.set(3);
+    await settle();
+    const scrolled = fabric.commands.filter((c) => c.name === 'scrollTo').at(-1)!;
+    // 34 lines of 40 in a 400 viewport end at 960.
+    assert.ok((scrolled.args[1] as number) <= 960, `scrolled to ${scrolled.args[1]}`);
+    assert.ok(shown().includes(72), 'the rows at the end are rendered');
+  });
+
+  it('fills ahead after a jump into the middle of a line, as after one to its start', async () => {
+    const reach = async (index: number) => {
+      const { instance, shown, scroll } = await boot((page) => {
+        page.tiles.set(Array.from({ length: 3000 }, (_, id) => ({ id, label: `tile ${id}` })));
+        page.windowSize.set(3);
+      });
+      instance.list().scrollToIndex({ index, animated: false });
+      await scroll(500 * 40);
+      for (let batch = 0; batch < 8; batch++) {
+        await new Promise((done) => setTimeout(done, 60));
+        await settle();
+      }
+      return Math.max(...shown());
+    };
+    assert.equal(await reach(1501), await reach(1500));
+  });
+
+  it('draws separators between lines, not under the items of the last', async () => {
+    const rendered = await render(mod['VirtualColumnsSeparated'] as Type<unknown>);
+    const host = flatten(rendered.fabric.committed).find((n) => n.viewName === 'ScrollView')!;
+    await fireEvent(host, 'layout', { layout: { width: WIDTH, height: VIEWPORT } });
+    const separators = flatten(rendered.fabric.committed)
+      .map((n) => /^sep(\d+)$/.exec(String(n.props['nativeID'] ?? ''))?.[1])
+      .filter((index) => index !== undefined)
+      .map(Number)
+      .sort((a, b) => a - b);
+    assert.deepEqual(separators, [0, 1, 2]);
+  });
+
+  it('keeps the real sticky row pinned beside a sticky index past the end', async () => {
+    const { tile, scroll } = await boot((page) => {
+      page.tiles.set(Array.from({ length: 60 }, (_, id) => ({ id, label: `tile ${id}` })));
+      page.sticky.set([0, 500]);
+    });
+    await scroll(120);
+    assert.equal(tile(0)?.props['zIndex'], 1);
+    assert.equal(tile(0)?.props['top'], 120);
+  });
+
+  it('takes an infinite count as one column', async () => {
+    const { tile } = await boot((page) => page.columns.set(Infinity));
+    assert.equal(tile(1)?.props['top'], 40);
+  });
+
   it('puts the items back a line each, across the width, with one column', async () => {
     const { instance, tile, canvas } = await boot((page) => page.columnGap.set(6));
     instance.columns.set(1);
@@ -255,7 +312,7 @@ async function boot(
   /** The tiles in the window, without the ones parked off screen for reuse. */
   const shown = () =>
     tiles()
-      .filter((n) => !String(n.props['transform'] ?? '').includes('-100000'))
+      .filter((n) => n.props['opacity'] !== 0)
       .map((n) => Number(String(n.props['nativeID']).slice(4)))
       .sort((a, b) => a - b);
   return { fabric, instance, tile, canvas, scroll, shown };

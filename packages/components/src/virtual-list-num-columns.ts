@@ -43,7 +43,10 @@ export class VirtualListNumColumns implements VirtualListLayout {
   // Looked up once the list exists: the list injects this directive while it is being made.
   private readonly injector = inject(Injector);
 
-  readonly columns = computed(() => Math.max(1, Math.floor(this.numColumns())));
+  readonly columns = computed(() => {
+    const columns = this.numColumns();
+    return Number.isFinite(columns) ? Math.max(1, Math.floor(columns)) : 1;
+  });
 
   constructor() {
     if (typeof ngDevMode === 'undefined' || !ngDevMode) return;
