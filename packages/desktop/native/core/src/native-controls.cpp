@@ -77,7 +77,7 @@ NativeControlProps::NativeControlProps(
       controlSize(convertRawProp(context, rawProps, "controlSize", sourceProps.controlSize, ControlSize::Regular)),
       enabled(enabledFrom(context, rawProps, sourceProps.enabled)),
       title(convertRawProp(context, rawProps, "title", sourceProps.title, {})),
-      kind(convertRawProp(context, rawProps, "kind", sourceProps.kind, std::string{"default"})),
+      kind(convertRawProp(context, rawProps, "kind", sourceProps.kind, {})),
       sfSymbol(convertRawProp(context, rawProps, "sfSymbol", sourceProps.sfSymbol, {})),
       value(convertRawProp(context, rawProps, "value", sourceProps.value, false)),
       animating(convertRawProp(context, rawProps, "animating", sourceProps.animating, true)),

@@ -52,6 +52,8 @@ struct ViewData {
   TextField *field{nullptr};
   // An Image's source and the image it loaded.
   std::shared_ptr<ImageLoad> image;
+  // A native control's widget (native-controls.h), which fills the view.
+  GtkWidget *control{nullptr};
   // A ScrollView's scrolled window, which holds the document its content mounts into.
   ScrollBox *scroll{nullptr};
   // A scroll view's document: as large as the content it scrolls, which GTK reads from its measure.
