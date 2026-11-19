@@ -245,3 +245,10 @@ TEST_CASE("a paged scroll view settles on a page as the gesture ends, and its mo
   [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
   CHECK(pager.phases.lastObject.integerValue == NGNScrollPhaseMomentumEnded);
 }
+
+TEST_CASE("a touch that never moved ends no drag and settles no page") {
+  Nested list(NSMakeSize(200, 900));
+  list.scroll.pagingEnabled = YES;
+  list.send(@[ trackpad(0, 0, kCGScrollPhaseMayBegin), trackpad(0, 0, kCGScrollPhaseEnded) ]);
+  CHECK(list.phases.count == 0);
+}

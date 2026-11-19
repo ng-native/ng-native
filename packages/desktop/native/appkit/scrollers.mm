@@ -70,8 +70,23 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
   NSEvent *_heldStart;
   // The gesture under way ended in a page settling, so its momentum moves nothing.
   BOOL _settling;
+  // A drag has begun and not yet ended: an end with no beginning (a touch that never moved) reports
+  // nothing and settles nothing.
+  BOOL _dragging;
   NSPoint _velocity;
   NSTimeInterval _lastWheel;
+  // When the deltas last moved: a drag held still before it ends was not flicked.
+  NSTimeInterval _lastMove;
+  // Moved on by each page settling, so only the latest one's end is reported.
+  uint64_t _settle;
+  BOOL _settleUnderway;
+}
+
+- (void)setPagingEnabled:(BOOL)pagingEnabled {
+  _pagingEnabled = pagingEnabled;
+  if (!pagingEnabled) {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(settleOnPage) object:nil];
+  }
 }
 
 // Whether the content overflows the view along the axis the deltas mostly go along.
@@ -114,7 +129,7 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
     _passing = ![self scrollsAlong:event];
     _settling = NO;
   }
-  if (_heldStart != nil && (!still || phase != NSEventPhaseChanged)) {
+  if (_heldStart != nil && (!still || (phase != NSEventPhaseChanged && phase != NSEventPhaseStationary))) {
     NSEvent *start = _heldStart;
     _heldStart = nil;
     [self scrollDecided:start];
@@ -143,15 +158,25 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
     NSTimeInterval elapsed = std::max(scroll.timestamp - _lastWheel, 0.001);
     _lastWheel = scroll.timestamp;
     if (scroll.scrollingDeltaX != 0 || scroll.scrollingDeltaY != 0) {
-      // AppKit's deltas move the content; the offset goes the other way.
-      _velocity = NSMakePoint(-scroll.scrollingDeltaX / (elapsed * 1000), -scroll.scrollingDeltaY / (elapsed * 1000));
+      // AppKit's deltas move the content; the offset goes the other way. A mouse's are in lines.
+      CGFloat across = scroll.hasPreciseScrollingDeltas ? 1 : self.horizontalLineScroll;
+      CGFloat down = scroll.hasPreciseScrollingDeltas ? 1 : self.verticalLineScroll;
+      _velocity = NSMakePoint(-scroll.scrollingDeltaX * across / (elapsed * 1000),
+                              -scroll.scrollingDeltaY * down / (elapsed * 1000));
+      _lastMove = scroll.timestamp;
     }
   }
   [super scrollWheel:scroll];
   if (phase == NSEventPhaseBegan) {
     _velocity = NSZeroPoint;
+    _dragging = YES;
     [self report:NGNScrollPhaseDragBegan];
-  } else if (phase == NSEventPhaseEnded || phase == NSEventPhaseCancelled) {
+  } else if ((phase == NSEventPhaseEnded || phase == NSEventPhaseCancelled) && _dragging) {
+    _dragging = NO;
+    // ponytail: a tenth of a second held still is no flick; tune here if it feels off.
+    if (scroll.timestamp - _lastMove > 0.1) {
+      _velocity = NSZeroPoint;
+    }
     [self report:NGNScrollPhaseDragEnded];
     if (self.pagingEnabled) {
       _settling = YES;
@@ -176,6 +201,9 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
 
 // Animates to the page the drag points at (ngn::pagedOffset), reporting it as momentum.
 - (void)settleOnPage {
+  if (!self.pagingEnabled) {
+    return;
+  }
   NSClipView *clip = self.contentView;
   NSSize content = self.documentView.frame.size, view = clip.bounds.size;
   NSPoint from = clip.bounds.origin;
@@ -183,6 +211,12 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
       ngn::pagedOffset(from.x, _velocity.x, view.width, content.width - view.width),
       ngn::pagedOffset(from.y, _velocity.y, view.height, content.height - view.height));
   _velocity = NSZeroPoint;
+  // One settling in front of another ends the first before the second begins.
+  if (_settleUnderway) {
+    [self report:NGNScrollPhaseMomentumEnded];
+  }
+  uint64_t settle = ++_settle;
+  _settleUnderway = YES;
   [self report:NGNScrollPhaseMomentumBegan];
   __weak NGNWheelScrollView *weakSelf = self;
   [NSAnimationContext
@@ -193,6 +227,10 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
       }
       completionHandler:^{
         NGNWheelScrollView *strong = weakSelf;
+        if (strong == nil || strong->_settle != settle) {
+          return;
+        }
+        strong->_settleUnderway = NO;
         [strong reflectScrolledClipView:clip];
         [strong report:NGNScrollPhaseMomentumEnded];
       }];
