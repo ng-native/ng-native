@@ -87,6 +87,10 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. A
   `<split-view>` is an `AdwNavigationSplitView` in an `AdwBreakpointBin` (`split-view.h`), each
   pane in a page of its own as a container for input, its size going back to layout as state. The
+  window's split view runs the window's full height, as libadwaita lays a window out: each pane is
+  under a header bar of its own in an `AdwToolbarView`, and the window's header bar moves over the
+  content pane while the split view is there (not in a title-bar mode whose content runs under the
+  header bar, where it already spans the window). A menu bar stays across the top, above both panes. The
   core owns collapse (`FoldingSplit`): the bin's breakpoint, at the core's `sidebarCompactWidth`,
   only reports the width, and the split view's `collapsed` and `show-content` show the result. The
   sections are a `GtkListBox` over their frames, drawn from the core's `sourceLists`, and Show

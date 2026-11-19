@@ -139,7 +139,39 @@ SplitViews::~SplitViews() {
   }
 }
 
+void SplitViews::moveHeaderBar(Split &s, bool overContent) {
+  const WindowChrome *chrome = chromeOf(backend_.surfaceWidget(s.surfaceId));
+  if (!chrome || !s.contentToolbar) {
+    return;
+  }
+  GtkWidget *header = chrome->headerBar;
+  bool overIt = gtk_widget_is_ancestor(header, s.contentToolbar);
+  if (overIt == overContent) {
+    return;
+  }
+  g_object_ref(header);
+  if (overContent) {
+    adw_toolbar_view_remove(ADW_TOOLBAR_VIEW(chrome->toolbarView), header);
+    adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(s.contentToolbar), header);
+  } else {
+    adw_toolbar_view_remove(ADW_TOOLBAR_VIEW(s.contentToolbar), header);
+    // First again, above a menu bar.
+    GtkWidget *menuBar = chrome->menuBar;
+    if (menuBar) {
+      g_object_ref(menuBar);
+      adw_toolbar_view_remove(ADW_TOOLBAR_VIEW(chrome->toolbarView), menuBar);
+    }
+    adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(chrome->toolbarView), header);
+    if (menuBar) {
+      adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(chrome->toolbarView), menuBar);
+      g_object_unref(menuBar);
+    }
+  }
+  g_object_unref(header);
+}
+
 void SplitViews::tearDown(Split &s) {
+  moveHeaderBar(s, false);
   for (Tag pane : {s.sidebar, s.content}) {
     if (pane >= 0) {
       backend_.unhostView(pane);
@@ -168,8 +200,21 @@ void SplitViews::place(SurfaceId surfaceId, Tag split, bool window) {
     NGN_PANE_SLOT(out)->splits = this;
     return out;
   };
-  AdwNavigationPage *sidebar = adw_navigation_page_new(slot(s.sidebarSlot), "Sidebar");
-  AdwNavigationPage *content = adw_navigation_page_new(slot(s.contentSlot), "Content");
+  GtkWidget *sidebarChild = slot(s.sidebarSlot);
+  GtkWidget *contentChild = slot(s.contentSlot);
+  const WindowChrome *chrome = window ? chromeOf(backend_.surfaceWidget(surfaceId)) : nullptr;
+  bool fullHeight = chrome && !runsUnderHeaderBar(*chrome);
+  if (fullHeight) {
+    sidebarChild = adw_toolbar_view_new();
+    s.sidebarHeader = adw_header_bar_new();
+    adw_header_bar_set_show_title(ADW_HEADER_BAR(s.sidebarHeader), FALSE);
+    adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(sidebarChild), s.sidebarHeader);
+    adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(sidebarChild), s.sidebarSlot);
+    contentChild = s.contentToolbar = adw_toolbar_view_new();
+    adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(contentChild), s.contentSlot);
+  }
+  AdwNavigationPage *sidebar = adw_navigation_page_new(sidebarChild, "Sidebar");
+  AdwNavigationPage *content = adw_navigation_page_new(contentChild, "Content");
   // The router's back and forward are the only history: the stack's own pop is off.
   adw_navigation_page_set_can_pop(content, FALSE);
   adw_navigation_split_view_set_sidebar(ADW_NAVIGATION_SPLIT_VIEW(s.view), sidebar);
@@ -209,6 +254,25 @@ void SplitViews::place(SurfaceId surfaceId, Tag split, bool window) {
   }
   show(s);
   gtk_widget_queue_allocate(widget);
+  if (fullHeight) {
+    moveHeaderBar(s, true);
+    // A header bar in a page shows the page's title when it has no title widget of its own: the
+    // window's, as it showed over the whole window.
+    // libadwaita asks every page for a title, so an untitled window leaves the page's.
+    if (GtkRoot *root = gtk_widget_get_root(widget); root && GTK_IS_WINDOW(root)) {
+      g_object_bind_property_full(
+          root, "title", content, "title", G_BINDING_SYNC_CREATE,
+          +[](GBinding *, const GValue *from, GValue *to, gpointer) -> gboolean {
+            const char *title = g_value_get_string(from);
+            if (!title || !*title) {
+              return FALSE;
+            }
+            g_value_set_string(to, title);
+            return TRUE;
+          },
+          nullptr, nullptr, nullptr);
+    }
+  }
   if (window) {
     backend_.headers().refreshChrome(surfaceId);
   }
