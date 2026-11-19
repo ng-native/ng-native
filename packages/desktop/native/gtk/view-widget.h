@@ -76,8 +76,11 @@ struct ViewData {
 };
 
 // A view's widget with its accessible role, which GTK fixes as it makes it, floating: the caller
-// sinks it.
-GtkWidget *makeViewWidget(GtkAccessibleRole role = GTK_ACCESSIBLE_ROLE_GENERIC);
+// sinks it. A Paragraph's (`text`) is read by character, word and line where GTK can
+// (accessible-text.h).
+GtkWidget *makeViewWidget(GtkAccessibleRole role = GTK_ACCESSIBLE_ROLE_GENERIC, bool text = false);
+// Whether the widget is a Paragraph's, made with `text`.
+bool isTextWidget(GtkWidget *widget);
 // The widget a surface's views mount into. It fills its parent and calls `resized` with its size.
 GtkWidget *makeSurfaceWidget(facebook::react::SurfaceId surfaceId, std::function<void(int, int)> resized);
 
@@ -89,5 +92,8 @@ void swapViewData(GtkWidget *a, GtkWidget *b);
 
 // Drops a Paragraph's laid-out text, to be laid out again on its next draw.
 void forgetText(ViewData &data);
+// A Paragraph's text laid out as it draws, laying it out now if it has not been since it changed.
+// Null for any other view.
+PangoLayout *paragraphLayout(ViewData &data);
 
 } // namespace ngn::gtk

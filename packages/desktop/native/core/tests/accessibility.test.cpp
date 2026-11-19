@@ -2,6 +2,7 @@
 #include "ngn/accessibility.h"
 #include "ngn/view-tree.h"
 #include "ngn/desktop-view-props.h"
+#include "ngn/text-input.h"
 
 #include <doctest/doctest.h>
 
@@ -14,6 +15,15 @@ namespace {
 ngn::AxInfo info(folly::dynamic raw) {
   auto context = std::make_shared<const ContextContainer>();
   ngn::DesktopViewComponentDescriptor descriptor{{{}, context, nullptr}};
+  PropsParserContext parserContext{1, *context};
+  auto props = descriptor.cloneProps(parserContext, nullptr, RawProps(std::move(raw)));
+  return ngn::accessibilityInfo(static_cast<const ViewProps &>(*props));
+}
+
+// A text input's, whose field is the element on both hosts.
+ngn::AxInfo inputInfo(folly::dynamic raw) {
+  auto context = std::make_shared<const ContextContainer>();
+  ngn::DesktopTextInputComponentDescriptor descriptor{{{}, context, nullptr}};
   PropsParserContext parserContext{1, *context};
   auto props = descriptor.cloneProps(parserContext, nullptr, RawProps(std::move(raw)));
   return ngn::accessibilityInfo(static_cast<const ViewProps &>(*props));
@@ -164,6 +174,35 @@ TEST_CASE("a heading is the heading role, with its level, and still says what it
   CHECK(heading.level == 2);
   CHECK(info(folly::dynamic::object("accessibilityRole", "header")).role == AxRole::Heading);
   CHECK_FALSE(info(folly::dynamic::object("accessibilityRole", "header")).level.has_value());
+}
+
+TEST_CASE("a field says whether it is required and whether its value is refused, on a view and a text input") {
+  auto field = info(folly::dynamic::object("role", "searchbox")("accessibilityRequired", true)("accessibilityInvalid", true));
+  CHECK(field.required);
+  CHECK(field.invalid);
+  auto input = inputInfo(folly::dynamic::object("accessibilityRequired", true)("accessibilityInvalid", true));
+  CHECK(input.required);
+  CHECK(input.invalid);
+  auto plain = info(folly::dynamic::object("role", "searchbox"));
+  CHECK_FALSE(plain.required);
+  CHECK_FALSE(plain.invalid);
+  CHECK_FALSE(inputInfo(folly::dynamic::object()).required);
+}
+
+TEST_CASE("an item's place in its set and a grid's counts are read from 1, and nothing below") {
+  auto item = info(folly::dynamic::object("role", "listitem")("accessibilityPosInSet", 3)("accessibilitySetSize", 10));
+  CHECK(item.positionInSet == 3);
+  CHECK(item.setSize == 10);
+  CHECK_FALSE(item.rowCount.has_value());
+  auto grid = info(folly::dynamic::object("role", "grid")("accessibilityRowCount", 50)("accessibilityColumnCount", 4.0));
+  CHECK(grid.rowCount == 50);
+  CHECK(grid.columnCount == 4);
+  CHECK_FALSE(grid.positionInSet.has_value());
+  // ARIA's -1 is a count not known, which neither toolkit takes: said as none.
+  auto unknown = info(folly::dynamic::object("role", "grid")("accessibilityRowCount", -1)("accessibilityPosInSet", 0));
+  CHECK_FALSE(unknown.rowCount.has_value());
+  CHECK_FALSE(unknown.positionInSet.has_value());
+  CHECK(info(folly::dynamic::object("role", "listitem")("accessibilityPosInSet", 1)).positionInSet == 1);
 }
 
 TEST_CASE("every role the components take is mapped") {
