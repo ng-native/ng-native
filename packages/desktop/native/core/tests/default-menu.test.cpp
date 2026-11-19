@@ -114,3 +114,34 @@ TEST_CASE("File has Print... on Command-P, after Close Window") {
   CHECK(file[2].key == "p");
   CHECK(file[2].modifiers == ngn::Command);
 }
+
+TEST_CASE("Linux's menu bar: the app's groups, then the app's menu with About and Quit on Ctrl+Q") {
+  auto bar = ngn::defaultMenuBar({.appName = "Notes", .os = ngn::linuxOs()});
+  CHECK(titles(bar) == std::vector<std::string>{"File", "Edit", "View", "Notes"});
+  auto quit = ngn::findMenuItem(bar, MenuCommand::Quit);
+  REQUIRE(quit);
+  CHECK(quit->key == "q");
+  CHECK(quit->modifiers == ngn::Control);
+  CHECK(bar.back().items.back().command == MenuCommand::Quit);
+  // Nothing of macOS's own: no Hide, Services, Minimize, Zoom or window list.
+  for (auto command : {MenuCommand::Hide, MenuCommand::HideOthers, MenuCommand::ShowAll, MenuCommand::Minimize, MenuCommand::Zoom,
+                       MenuCommand::BringAllToFront}) {
+    CHECK_FALSE(ngn::findMenuItem(bar, command));
+  }
+  auto undo = ngn::findMenuItem(bar, MenuCommand::Undo);
+  REQUIRE(undo);
+  CHECK(undo->modifiers == ngn::Control);
+  auto back = ngn::findMenuItem(bar, MenuCommand::Back);
+  REQUIRE(back);
+  CHECK(back->key == "ArrowLeft");
+  CHECK(back->modifiers == ngn::Option);
+}
+
+TEST_CASE("Linux's Developer menu reloads on Ctrl+R") {
+  CHECK_FALSE(ngn::findMenuItem(ngn::defaultMenuBar({.appName = "Notes", .os = ngn::linuxOs()}), MenuCommand::Reload));
+  auto bar = ngn::defaultMenuBar({.appName = "Notes", .developer = true, .os = ngn::linuxOs()});
+  auto reload = ngn::findMenuItem(bar, MenuCommand::Reload);
+  REQUIRE(reload);
+  CHECK(reload->key == "r");
+  CHECK(reload->modifiers == ngn::Control);
+}

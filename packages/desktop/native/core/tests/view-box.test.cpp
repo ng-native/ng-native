@@ -513,3 +513,45 @@ TEST_CASE("a percentage radius follows the view's size") {
   // 50% of the new width.
   CHECK(calls[0].rfind("fill M100,0", 0) == 0);
 }
+
+TEST_CASE("describeBox gives each corner's radius and each side's width and colour, the logical sides by the direction") {
+  dynamic raw = dynamic::object("backgroundColor", kGreen)("borderTopLeftRadius", 4)("borderBottomRightRadius", 8)(
+      "borderTopWidth", 1)("borderStartWidth", 3)("borderStartColor", kRed)("borderTopColor", kBlue);
+  Box ltr(raw, 100, 50);
+  auto box = ngn::describeBox(ltr.view(), ltr.layout);
+  CHECK(box.bounds.width == 100);
+  CHECK(box.bounds.height == 50);
+  CHECK(box.background == 0xff00ff00u);
+  CHECK(box.radii.topLeft.x == 4);
+  CHECK(box.radii.topRight.x == 0);
+  CHECK(box.radii.bottomRight.y == 8);
+  CHECK(box.borderWidths.top == 1);
+  CHECK(box.borderWidths.left == 3);
+  CHECK(box.borderWidths.right == 0);
+  CHECK(box.borderColors.left == 0xffff0000u);
+  CHECK(box.borderColors.top == 0xff0000ffu);
+  CHECK_FALSE(box.clips);
+  CHECK(box.borderStyle == BorderStyle::Solid);
+
+  Box rtl(raw, 100, 50, LayoutDirection::RightToLeft);
+  auto mirrored = ngn::describeBox(rtl.view(), rtl.layout);
+  CHECK(mirrored.borderWidths.right == 3);
+  CHECK(mirrored.borderWidths.left == 0);
+  CHECK(mirrored.borderColors.right == 0xffff0000u);
+}
+
+TEST_CASE("describeBox keeps the shadows in CSS's order, a uniform border style, and whether the view clips") {
+  auto shadows = dynamic::array(
+      dynamic::object("offsetX", 1)("offsetY", 2)("blurRadius", 3)("spreadDistance", 4)("color", kRed),
+      dynamic::object("offsetX", 0)("offsetY", 0)("blurRadius", 6)("color", kBlue)("inset", true));
+  Box b(dynamic::object("boxShadow", shadows)("borderWidth", 2)("borderStyle", "dashed")("overflow", "hidden"), 100, 50);
+  auto box = ngn::describeBox(b.view(), b.layout);
+  REQUIRE(box.shadows.size() == 2);
+  CHECK(box.shadows[0].offsetX == 1);
+  CHECK(box.shadows[0].spreadDistance == 4);
+  CHECK_FALSE(box.shadows[0].inset);
+  CHECK(box.shadows[1].inset);
+  CHECK(box.borderStyle == BorderStyle::Dashed);
+  CHECK(box.clips);
+  CHECK_FALSE(box.background);
+}

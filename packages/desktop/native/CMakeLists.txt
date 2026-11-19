@@ -3,6 +3,8 @@
 #   core/    toolkit-free C++: mounting, the view tree and hit testing, input and hover, text
 #            measurement, the module registry and desktop view props. No AppKit, no Objective-C.
 #   appkit/  the macOS backend and the ngn-macos binary.
+#   gtk/     the Linux backend over GTK 4 and the ngn-linux binary; it also builds on a Mac against
+#            Homebrew's GTK, as a dev loop.
 #
 # scripts/build.sh is the way in: it fetches the pinned sources into the per-user cache and passes
 # their paths here. NGN_BACKEND=none builds only the core and its tests (any OS, no Hermes), which
@@ -16,8 +18,8 @@ if(APPLE)
 else()
   set(_default_backend none)
 endif()
-set(NGN_BACKEND ${_default_backend} CACHE STRING "appkit or none")
-set_property(CACHE NGN_BACKEND PROPERTY STRINGS appkit none)
+set(NGN_BACKEND ${_default_backend} CACHE STRING "appkit, gtk or none")
+set_property(CACHE NGN_BACKEND PROPERTY STRINGS appkit gtk none)
 option(NGN_TESTS "Build the core tests" ON)
 option(NGN_RUNTIME "With NGN_BACKEND=none, build the runtime half over Hermes too" OFF)
 
@@ -51,12 +53,12 @@ if(APPLE)
   # The AppKit backend, and on macOS the core tests of its window-free parts.
   enable_language(OBJC OBJCXX)
 endif()
-if(NGN_BACKEND STREQUAL "appkit")
+if(NGN_BACKEND STREQUAL "appkit" OR NGN_BACKEND STREQUAL "gtk")
   set(NGN_WITH_RUNTIME ON)
 elseif(NGN_BACKEND STREQUAL "none")
   set(NGN_WITH_RUNTIME ${NGN_RUNTIME})
 else()
-  message(FATAL_ERROR "NGN_BACKEND must be appkit or none, not ${NGN_BACKEND}")
+  message(FATAL_ERROR "NGN_BACKEND must be appkit, gtk or none, not ${NGN_BACKEND}")
 endif()
 
 # A dev build carries React Native's debugger: Hermes's CDP agents and the inspector targets that
@@ -204,8 +206,9 @@ if(NGN_TESTS)
       set_source_files_properties(${core_test_SRC} PROPERTIES COMPILE_OPTIONS -Wno-c2y-extensions)
     endif()
   endif()
-  # The AppKit backend's own logic that needs no window: on macOS only, over the system's frameworks.
-  if(APPLE)
+  # The AppKit backend's own logic that needs no window: on macOS only, over the system's frameworks,
+  # and not in a GTK build on a Mac, which tests the GTK backend instead.
+  if(APPLE AND NOT NGN_BACKEND STREQUAL "gtk")
     ngn_link_swift(ngn_core_tests)
     target_sources(ngn_core_tests PRIVATE
         appkit/updates.mm appkit/tests/update-crypto.test.mm
@@ -264,6 +267,39 @@ if(NGN_TESTS)
   add_test(NAME core COMMAND ngn_core_tests)
 endif()
 
+# --- the HTTP and WebSocket client over libcurl, for a backend whose OS has none (gtk) -------------
+# AUTO follows the backend on every configure, so a build directory reused for another backend
+# gets that backend's choice; ON or OFF is the developer's own.
+set(NGN_CURL AUTO CACHE STRING "Build the libcurl client (core/src/curl-network.cpp) and its tests: AUTO (on for gtk), ON or OFF")
+set_property(CACHE NGN_CURL PROPERTY STRINGS AUTO ON OFF)
+if(NGN_CURL STREQUAL "AUTO")
+  if(NGN_BACKEND STREQUAL "gtk")
+    set(_ngn_curl ON)
+  else()
+    set(_ngn_curl OFF)
+  endif()
+else()
+  set(_ngn_curl ${NGN_CURL})
+endif()
+if(NGN_BACKEND STREQUAL "gtk" AND NOT _ngn_curl)
+  message(FATAL_ERROR "The GTK backend's networking is the libcurl client: NGN_CURL must be AUTO or ON")
+endif()
+if(_ngn_curl)
+  include(cmake/curl.cmake)
+  add_library(ngn_curl STATIC core/src/curl-network.cpp)
+  target_link_libraries(ngn_curl PUBLIC ngn_core PRIVATE ngn_libcurl)
+  target_compile_options(ngn_curl PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter -Wno-missing-field-initializers)
+  if(NGN_TESTS)
+    # Against a local server, test-server.py, which needs python3.
+    set(_curl_tests core/tests/curl/network.test.cpp)
+    target_sources(ngn_core_tests PRIVATE ${_curl_tests})
+    target_link_libraries(ngn_core_tests PRIVATE ngn_curl)
+    set_source_files_properties(${_curl_tests} PROPERTIES
+        COMPILE_DEFINITIONS NGN_CURL_TEST_SERVER="${CMAKE_CURRENT_SOURCE_DIR}/core/tests/curl/test-server.py"
+        COMPILE_OPTIONS "${NGN_DOCTEST_SOURCE_OPTIONS}")
+  endif()
+endif()
+
 # --- the core's runtime half: ReactHost over Hermes ----------------------------------------------
 if(NGN_WITH_RUNTIME)
   add_library(ngn_core_runtime STATIC
@@ -319,4 +355,6 @@ endif()
 # --- backends -------------------------------------------------------------------------------------
 if(NGN_BACKEND STREQUAL "appkit")
   add_subdirectory(appkit)
+elseif(NGN_BACKEND STREQUAL "gtk")
+  add_subdirectory(gtk)
 endif()
