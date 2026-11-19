@@ -152,6 +152,21 @@ TEST_CASE("a covered screen is hidden without being unmounted, and shows again")
   CHECK(reddish(views.pixel(50, 50)));
 }
 
+TEST_CASE("a covered screen stays hidden when it is moved, or removed and inserted again") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto screen = MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("backgroundColor", kRed)), {{20, 20}, {60, 60}});
+  views.add(screen);
+  views.add(MountedViews::shadow(3, "View", desktopViewProps(dynamic::object("backgroundColor", kGreen)), {{150, 150}, {20, 20}}));
+  views.backend->setCovered(MountedViews::kSurface, 2, true);
+  // Moved while it has a parent: insertChild takes it out itself.
+  views.backend->insertChild(MountedViews::kSurface, MountedViews::kSurface, 2, 1);
+  CHECK_FALSE(gtk_widget_get_child_visible(views.view(2)));
+  views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, screen, 0), ShadowViewMutation::InsertMutation(MountedViews::kSurface, screen, 1)});
+  CHECK_FALSE(gtk_widget_get_child_visible(views.view(2)));
+  CHECK(views.pixel(50, 50).a == 0);
+}
+
 TEST_CASE("work queued for the UI thread runs on it, never on the thread that queued it") {
   REQUIRE(ngn::testing::gtkReady());
   std::atomic<bool> ran{false};
