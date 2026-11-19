@@ -1,11 +1,18 @@
 // react-native-screens' native stack and React Native's <modal> on GTK, over the core's screen
 // stacks (screen-stacks.h), header (header-bar.h) and modal sizing (desktop-modal.h).
 //
-// A surface's window is an AdwWindow whose content is an AdwHeaderBar over a GtkOverlay holding
-// the surface: the minimum of libadwaita's chrome the header and the modals need (AdwToolbarView
-// and the title-bar modes are later). The front screen's header goes into the header bar as the
-// AppKit host puts it into the window's toolbar: the back button, the header's subviews moved into
-// slots of their own, its bar buttons and its search fields, with the title between.
+// A surface's window is an AdwApplicationWindow whose content is an AdwToolbarView: an
+// AdwHeaderBar on top, over a GtkOverlay holding the surface. The window's title-bar mode
+// (app-windows.h's TitleBar) is how the two meet. `default` keeps the content below a raised header
+// bar; `transparent` runs it under a flat one, which the safe area's top inset clears; `hidden` does
+// the same and hides the title, keeping the window controls, as AppKit does. The front screen's
+// header goes into the header bar as the AppKit host puts it into the window's toolbar: the back
+// button, the header's subviews moved into slots of their own, its bar buttons and its search
+// fields, with the title between.
+//
+// Where the app's menus go (default-menu.h's MenuPlacement) is set up with the chrome: an empty
+// GtkPopoverMenuBar under the header bar, or a primary GtkMenuButton at its end, each hidden until
+// the window lifecycle gives it a menu.
 //
 // A <modal>, and a react-native-screens screen presented with `present()` (screen-presentation.h),
 // shows the way the macOS host shows it. A sheet is an AdwDialog inside the window on libadwaita
@@ -21,9 +28,12 @@
 // `dismissed` for a screen, which the router follows. A click outside a popover asks the same.
 #pragma once
 
+#include "ngn/app-windows.h"
+#include "ngn/default-menu.h"
 #include "ngn/desktop-modal.h"
 #include "ngn/header-bar.h"
 #include "ngn/mounting-backend.h"
+#include "ngn/safe-areas.h"
 #include "ngn/screen-presentation.h"
 #include "ngn/screen-stacks.h"
 
@@ -39,17 +49,35 @@ namespace ngn::gtk {
 
 class GtkBackend;
 
-// What a surface's window holds besides it.
-struct WindowChrome {
-  GtkWidget *headerBar{nullptr};
-  GtkWidget *overlay{nullptr};
+// How a window's chrome is made.
+struct ChromeOptions {
+  TitleBar titleBar{TitleBar::Default};
+  MenuPlacement menus{MenuPlacement::PrimaryMenu};
 };
 
-// The header bar over an overlay holding `surface`, for a window's content; the window's
+// What a surface's window holds besides it.
+struct WindowChrome {
+  GtkWidget *toolbarView{nullptr};
+  GtkWidget *headerBar{nullptr};
+  GtkWidget *overlay{nullptr};
+  // Where the menus go: the bar under the header bar, or the header bar's menu button. One of the
+  // two, hidden until it has a menu.
+  GtkWidget *menuBar{nullptr};
+  GtkWidget *primaryMenu{nullptr};
+  TitleBar titleBar{TitleBar::Default};
+};
+
+// The toolbar view holding `surface` under the header bar, for a window's content; the window's
 // chromeOf(surface) from then on.
-GtkWidget *wrapInChrome(GtkWidget *surface);
+GtkWidget *wrapInChrome(GtkWidget *surface, const ChromeOptions &options = {});
 // The chrome of `surface`'s window, or null for a surface wrapInChrome did not wrap.
 const WindowChrome *chromeOf(GtkWidget *surface);
+// Whether the surface's content runs under its header bar: `transparent` and `hidden`.
+bool runsUnderHeaderBar(const WindowChrome &chrome);
+// The surface's size and the insets its chrome gives it: none while its content stays below the
+// header bar. Under it, the top bars' height on top, and how far the window controls reach in from
+// each side (titlebarLeading and titlebarTrailing), as gtk-decoration-layout places them.
+ContainerInsets chromeInsets(GtkWidget *surface);
 
 // A slot holding one view moved out of the tree's widgets: it measures as the view's frame, or as
 // the size set on it, and puts the view at its top left.

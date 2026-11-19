@@ -46,7 +46,14 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   macOS, its cookies last only as long as the process, and it takes a proxy only from libcurl's environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY`, `NO_PROXY` and the rest), not the desktop's settings. It runs a `linux`
   bundle, which `expo export` makes once the app's `app.config.js` registers the platform
   (`@ng-native/metro/linux.cjs`). A window is an
-  `AdwWindow` holding an `AdwHeaderBar` over a `GtkOverlay` with the surface (`screens.h`): the
+  `AdwApplicationWindow` of the app's `AdwApplication`, holding an `AdwToolbarView` with an
+  `AdwHeaderBar` on top of a `GtkOverlay` with the surface (`screens.h`). Its `titleBar` decides how
+  they meet: `default` keeps the content below a raised header bar, and `transparent` runs it under
+  a flat one, as does `hidden`, which also hides the title. Content under the bar reports the bar's
+  height as its top inset, and the window controls' reach from each side, wherever
+  `gtk-decoration-layout` puts them, as `titlebarLeading` and `titlebarTrailing`. The chrome also
+  holds where the app's menus will go, hidden until it has them: a `GtkPopoverMenuBar` under the
+  header bar when `XDG_CURRENT_DESKTOP` names KDE, else a primary `GtkMenuButton` in it. The
   front screen's header goes into the header bar as macOS puts it into the toolbar, in the core's
   `headerLayout` order, with the header's subviews moved into slots of their own, each a container
   for input, a bar button's menu as a `GtkMenuButton`, the header's tint, title and background
@@ -57,9 +64,7 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   a window that is not resizable, where libadwaita would open a window of its own; a cover fills
   the overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. A
   presented screen's header is the sheet's own header bar, with Cancel at the start and bound to
-  Escape and the last right item the default on Return. The content never runs under the header
-  bar, so each surface reports a clear safe area. `AdwToolbarView` and the title-bar modes come in
-  a later step.
+  Escape and the last right item the default on Return.
 - `native/scripts`: fetching the pinned sources, building Hermes and building the host.
   `NGN_DESKTOP_CACHE` moves the cache and `NGN_JOBS` caps parallel compiles. `build.sh --library
   <dir>` compiles a library's component codegen and its own C++ in, as React Native's Android

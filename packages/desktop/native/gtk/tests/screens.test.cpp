@@ -404,7 +404,8 @@ TEST_CASE("a bar button's menu is a menu button, and the header's colours reach 
   auto config = shadow(4, "RNSScreenStackHeaderConfig", props, {{0, 0}, {400, 44}});
   mountAll(views, {{stack, MountedViews::kSurface}, {screen, 2}, {config, 3}});
 
-  auto menus = findAll(bar, [](GtkWidget *w) -> bool { return GTK_IS_MENU_BUTTON(w); });
+  // The bar button's, not the window's primary menu, hidden until the app has menus.
+  auto menus = findAll(bar, [](GtkWidget *w) -> bool { return GTK_IS_MENU_BUTTON(w) && gtk_widget_get_visible(w); });
   REQUIRE(menus.size() == 1);
   GMenuModel *model = gtk_menu_button_get_menu_model(GTK_MENU_BUTTON(menus[0]));
   REQUIRE(model);

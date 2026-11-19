@@ -24,6 +24,13 @@ double titlebarLeading(double minX, double maxX, double width, bool rightToLeft)
   return rightToLeft ? width - minX : maxX;
 }
 
+double titlebarTrailing(double minX, double maxX, double width, bool rightToLeft) {
+  if (maxX <= 0 || minX >= width) {
+    return 0;
+  }
+  return rightToLeft ? maxX : width - minX;
+}
+
 void SafeAreas::created(const ShadowView &view) {
   std::string_view name = view.componentName;
   if (name == "RNCSafeAreaProvider") {

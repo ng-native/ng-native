@@ -117,15 +117,15 @@ struct MountedViews {
   int frames = 0;
 
   // `chrome`: the surface in a header bar's AdwWindow, as the host's (screens.h), `width` by
-  // `height` below it.
-  explicit MountedViews(bool chrome = false, int width = 200, int height = 200) {
+  // `height` below it, or under it for a title bar `options` runs the content under.
+  explicit MountedViews(bool chrome = false, int width = 200, int height = 200, gtk::ChromeOptions options = {}) {
     window = chrome ? adw_window_new() : gtk_window_new();
     gtk_window_set_default_size(GTK_WINDOW(window), width, height);
     gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
     surface = gtk::makeSurfaceWidget(kSurface, nullptr);
     if (chrome) {
       gtk_widget_set_size_request(surface, width, height);
-      adw_window_set_content(ADW_WINDOW(window), gtk::wrapInChrome(surface));
+      adw_window_set_content(ADW_WINDOW(window), gtk::wrapInChrome(surface, options));
     } else {
       gtk_window_set_child(GTK_WINDOW(window), surface);
     }

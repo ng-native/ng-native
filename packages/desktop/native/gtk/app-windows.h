@@ -1,10 +1,11 @@
-// The app's windows on GTK (app-windows.h's WindowBackend): a GtkWindow per window the app opens,
-// each filled by its own surface, shown once that surface's first frame mounts. Plain GtkWindows
-// for now: the libadwaita window and its header bar come with the chrome, and size autosave,
-// title-bar modes and focus reports with the window lifecycle.
+// The app's windows on GTK (app-windows.h's WindowBackend): an AdwApplicationWindow of the app's
+// AdwApplication per window the app opens, each filled by its own surface in the chrome of its
+// title-bar mode (screens.h), and shown once that surface's first frame mounts. Size autosave and
+// focus reports come with the window lifecycle.
 #pragma once
 
 #include "ngn/app-windows.h"
+#include "ngn/default-menu.h"
 
 #include <gtk/gtk.h>
 
@@ -19,6 +20,15 @@ namespace ngn::gtk {
 // and a field's focus is the app's to give (autoFocus). A focus set before it shows stays.
 void presentWithoutInitialFocus(GtkWindow *window);
 
+// The app's AdwApplication, registered, which every window belongs to. Named by `appId` when that
+// is a valid application id, and not unique: single instance comes with the window lifecycle.
+GtkApplication *startApplication(const std::string &appId);
+
+// Calls `laidOut` each time GTK has laid out the realized `window` and is about to draw it (its
+// frame clock's paint phase), for what moves with its chrome. Returns the handler's id on that
+// clock, for whoever must stop it before `laidOut`'s captures go; 0 when the window has no clock.
+gulong afterLayout(GtkWidget *window, std::function<void()> laidOut);
+
 class GtkWindows final : public WindowBackend {
  public:
   struct Hooks {
@@ -28,6 +38,8 @@ class GtkWindows final : public WindowBackend {
     std::function<void(SurfaceId surface, int width, int height, int scale)> startSurface;
     std::function<void(SurfaceId surface, int width, int height, int scale)> resizeSurface;
     std::function<void(SurfaceId surface)> stopSurface;
+    // GTK laid out the surface's window: its chrome may have moved.
+    std::function<void(SurfaceId surface)> laidOut;
     // The app agreed to quit, or nothing was listening when it was asked to.
     std::function<void()> quit;
     // The user closed the last of these windows. The host decides: the app's own window may still
@@ -35,7 +47,12 @@ class GtkWindows final : public WindowBackend {
     std::function<void()> lastWindowClosed;
   };
 
-  explicit GtkWindows(Hooks hooks);
+  // Windows of `application`, with the app's menus where `menus` says.
+  GtkWindows(Hooks hooks, GtkApplication *application, MenuPlacement menus);
+  // Windows still open stay open, no longer calling back into these.
+  ~GtkWindows() override;
+  GtkWindows(const GtkWindows &) = delete;
+  GtkWindows &operator=(const GtkWindows &) = delete;
 
   // The host the close button asks first. Set once, before any window opens.
   void setHost(std::weak_ptr<WindowHost> host);
@@ -57,11 +74,19 @@ class GtkWindows final : public WindowBackend {
     GtkWidget *window{nullptr};
     GtkWidget *surface{nullptr};
     bool shown{false};
+    // The handlers that call back into these windows, stopped when the window closes or these go.
+    gulong scaled{0};
+    gulong closeRequested{0};
+    GdkFrameClock *clock{nullptr};
+    gulong laidOut{0};
   };
+  static void disconnect(Window &entry);
   void open(SurfaceId surface, const WindowRequest &request, const WindowPlacement &placement, std::function<void()> opened);
   void close(SurfaceId surface);
 
   Hooks hooks_;
+  GtkApplication *application_;
+  MenuPlacement menus_;
   std::weak_ptr<WindowHost> host_;
   std::map<SurfaceId, Window> windows_;
 };
