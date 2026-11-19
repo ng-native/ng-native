@@ -278,3 +278,64 @@ TEST_CASE("a paragraph whose state alone changes its role keeps its opacity") {
   CHECK(views.view(2) != before);
   CHECK(gtk_widget_get_opacity(views.view(2)) == 0);
 }
+
+namespace {
+
+// Whether `widget` has `relation` to exactly `target`.
+bool relates(GtkWidget *widget, GtkAccessibleRelation relation, GtkWidget *target) {
+  char *error = gtk_test_accessible_check_relation(GTK_ACCESSIBLE(widget), relation, target, nullptr);
+  if (error) {
+    MESSAGE(error);
+  }
+  bool ok = error == nullptr;
+  g_free(error);
+  return ok;
+}
+
+} // namespace
+
+TEST_CASE("a field is labelled and described by the views its props name, and follows them as they go") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  views.add(MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("nativeID", "name")("accessibilityLabel", "Name")), {{0, 0}, {100, 20}}));
+  views.add(MountedViews::shadow(3, "View", desktopViewProps(dynamic::object("nativeID", "hint")("accessibilityLabel", "As on your passport")), {{0, 20}, {100, 20}}));
+  auto field = MountedViews::shadow(4, "TextInput",
+      textInputProps(dynamic::object("accessibilityLabelledBy", dynamic::array("name"))("accessibilityDescribedBy", dynamic::array("hint", "missing"))),
+      {{0, 50}, {150, 40}});
+  views.add(field);
+  GtkWidget *text = ngn::gtk::viewData(views.view(4))->field->text;
+  CHECK(relates(text, GTK_ACCESSIBLE_RELATION_LABELLED_BY, views.view(2)));
+  CHECK(relates(text, GTK_ACCESSIBLE_RELATION_DESCRIBED_BY, views.view(3)));
+
+  // The view named goes: the relation goes with it.
+  auto hint = views.mounting->tree().find(3)->view;
+  views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, hint, 1), ShadowViewMutation::DeleteMutation(hint)});
+  CHECK_FALSE(gtk_test_accessible_has_relation(GTK_ACCESSIBLE(text), GTK_ACCESSIBLE_RELATION_DESCRIBED_BY));
+  CHECK(relates(text, GTK_ACCESSIBLE_RELATION_LABELLED_BY, views.view(2)));
+
+  // The props stop naming it.
+  views.update(field, textInputProps(dynamic::object()));
+  CHECK_FALSE(gtk_test_accessible_has_relation(GTK_ACCESSIBLE(text), GTK_ACCESSIBLE_RELATION_LABELLED_BY));
+}
+
+TEST_CASE("a relation moves to the new widget of a view whose role changes, at either end") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto label = MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("nativeID", "name")("accessibilityLabel", "Name")), {{0, 0}, {100, 20}});
+  views.add(label);
+  auto button = MountedViews::shadow(3, "View", desktopViewProps(dynamic::object("role", "button")("accessibilityLabelledBy", dynamic::array("name"))), {{0, 30}, {100, 20}});
+  views.add(button);
+  CHECK(relates(views.view(3), GTK_ACCESSIBLE_RELATION_LABELLED_BY, views.view(2)));
+
+  // The view named becomes a heading: the button points at its new widget.
+  GtkWidget *before = views.view(2);
+  views.update(label, desktopViewProps(dynamic::object("nativeID", "name")("accessibilityLabel", "Name")("role", "heading")));
+  REQUIRE(views.view(2) != before);
+  CHECK(relates(views.view(3), GTK_ACCESSIBLE_RELATION_LABELLED_BY, views.view(2)));
+
+  // The view naming it becomes a link: its new widget has the relation.
+  before = views.view(3);
+  views.update(button, desktopViewProps(dynamic::object("role", "link")("accessibilityLabelledBy", dynamic::array("name"))));
+  REQUIRE(views.view(3) != before);
+  CHECK(relates(views.view(3), GTK_ACCESSIBLE_RELATION_LABELLED_BY, views.view(2)));
+}

@@ -20,7 +20,9 @@ DesktopTextInputProps::DesktopTextInputProps(
     : BaseTextInputProps(context, sourceProps, rawProps),
       traits(convertRawProp(context, rawProps, sourceProps.traits, {})),
       selection(convertRawProp(context, rawProps, "selection", sourceProps.selection, std::optional<Selection>())),
-      smartQuotes(convertRawProp(context, rawProps, "smartQuotes", sourceProps.smartQuotes, std::optional<bool>())) {}
+      smartQuotes(convertRawProp(context, rawProps, "smartQuotes", sourceProps.smartQuotes, std::optional<bool>())),
+      accessibilityDescribedBy(convertRawProp(
+          context, rawProps, "accessibilityDescribedBy", sourceProps.accessibilityDescribedBy, {})) {}
 
 namespace {
 

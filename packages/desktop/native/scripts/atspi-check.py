@@ -4,8 +4,10 @@ reader reads it, with no screen reader: the host's window, and each role named i
 Fails when the host exits, draws no first frame, or the tree lacks a role. Prints the tree.
 With --tab, it then presses Tab, as a keyboard user does, and fails unless a node in the host's
 window says it is focused: the core's Tab order reached a real GTK widget that AT-SPI reports.
+With --relation, a node must have that relation (as AT-SPI names it: "described-by",
+"labelled-by") to a node with a name: a view's `aria-describedby` or `aria-labelledby` reached GTK.
 
-    dbus-run-session -- atspi-check.py <ngn-linux> <bundle.js> [--role "push button"]... [--tab]
+    dbus-run-session -- atspi-check.py <ngn-linux> <bundle.js> [--role "push button"]... [--relation described-by]... [--tab]
 
 Needs a display (Xvfb) and pyatspi. A test launch, as launch-probe.sh starts one: the host keeps its
 state in a new directory and shows no system prompt.
@@ -21,14 +23,28 @@ import time
 import pyatspi
 
 
+RELATIONS = {pyatspi.RELATION_LABELLED_BY: "labelled-by", pyatspi.RELATION_DESCRIBED_BY: "described-by"}
+
+
+def relations_of(node):
+    """The node's labelled-by and described-by relations, as (kind, target's name)."""
+    found = []
+    for relation in node.getRelationSet():
+        kind = RELATIONS.get(relation.getRelationType())
+        for i in range(relation.getNTargets() if kind else 0):
+            found.append((kind, relation.getTarget(i).name or ""))
+    return found
+
+
 def walk(node, depth, out):
     try:
         focused = node.getState().contains(pyatspi.STATE_FOCUSED)
-        out.append((depth, node.getRoleName() + (" (focused)" if focused else ""), node.name or ""))
+        out.append((depth, node.getRoleName() + (" (focused)" if focused else ""), node.name or "",
+                    relations_of(node)))
         for i in range(node.childCount):
             walk(node.getChildAtIndex(i), depth + 1, out)
     except Exception as error:  # A node can go as it is read.
-        out.append((depth, "error", str(error)))
+        out.append((depth, "error", str(error), []))
 
 
 def host_tree(pid):
@@ -48,8 +64,9 @@ def host_tree(pid):
 
 
 def print_tree(tree, stream):
-    for depth, role, name in tree:
-        print("%s%s %r" % ("  " * depth, role, name), file=stream)
+    for depth, role, name, relations in tree:
+        said = "".join(" [%s %r]" % relation for relation in relations)
+        print("%s%s %r%s" % ("  " * depth, role, name, said), file=stream)
 
 
 def check_tab(host, deadline, fail):
@@ -61,7 +78,7 @@ def check_tab(host, deadline, fail):
         pyatspi.Registry.generateKeyboardEvent(0xFF09, None, pyatspi.KEY_SYM)  # Tab
         time.sleep(1)
         tree = host_tree(host.pid) or []
-        focused = [(r, n) for _, r, n in tree if r.endswith(" (focused)")]
+        focused = [(r, n) for _, r, n, _ in tree if r.endswith(" (focused)")]
         if focused:
             print_tree(tree, sys.stdout)
             print("atspi-check: Tab focused %s %r" % (focused[0][0].split(" (")[0], focused[0][1]))
@@ -76,6 +93,8 @@ def main():
     parser.add_argument("--role", action="append", default=[], help="an AT-SPI role name the tree must hold, named")
     parser.add_argument("--seconds", type=int, default=60)
     parser.add_argument("--tab", action="store_true", help="press Tab and require a focused node")
+    parser.add_argument("--relation", action="append", default=[],
+                        help="an AT-SPI relation (described-by, labelled-by) some node must have to a named node")
     args = parser.parse_args()
 
     # The registry the host's GTK and pyatspi both find through the session bus.
@@ -109,12 +128,14 @@ def main():
             with open(log_path) as text:
                 drawn = "[ngn] first frame" in text.read()
             tree = host_tree(host.pid) if drawn else None
-            missing = [role for role in args.role if not any(r.split(" (")[0] == role and n for _, r, n in tree or [])]
+            missing = [role for role in args.role if not any(r.split(" (")[0] == role and n for _, r, n, _ in tree or [])]
+            missing += ["%s relation" % kind for kind in args.relation
+                        if not any(k == kind and target for *_, relations in tree or [] for k, target in relations)]
             if tree and not missing:
                 if args.tab:
                     return check_tab(host, deadline, fail)
                 print_tree(tree, sys.stdout)
-                print("atspi-check: %d nodes, with %s" % (len(tree), ", ".join(args.role) or "a window"))
+                print("atspi-check: %d nodes, with %s" % (len(tree), ", ".join(args.role + args.relation) or "a window"))
                 return 0
             time.sleep(0.5)
         if not tree:
