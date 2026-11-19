@@ -308,9 +308,10 @@ across a whole grid while its photos scroll under it, which `SectionList` cannot
 
 Columns are for a vertical list with `itemHeight`, as `numColumns` is vertical only in React
 Native. On a horizontal list, or rows that size themselves, the list keeps one item a line and says
-so in development. Changing the count with the same `items` lays them out again and keeps the item
-at the top of the viewport there, scrolling to where it moved. New `items` at the same time are
-placed at the same offset, unless `maintainVisibleContentPosition` holds them.
+so in development. Changing the count with the same `items` lays them out again and scrolls to
+where the item at the top of the viewport moved, as far into its new line as the viewport was into
+its old one; on a shorter line than that, the viewport shows the rows after it. New `items` at the
+same time are placed at the same offset, unless `maintainVisibleContentPosition` holds them.
 
 <!-- api: VirtualListNumColumns -->
 
