@@ -52,9 +52,13 @@ input. Scroll views follow the "Show scroll bars" setting in System Settings, ch
 overlay scrollers float over the content, and legacy ones (always shown) take their strip from it,
 so the content is laid out that much narrower or shorter. `scrollbar-width: thin` draws small
 scrollers, `none` hides them, and `scrollbar-gutter: stable` keeps a legacy vertical scroller and
-its strip while the content fits. A click focuses a
-focusable view, and a focus a key moved reports `focusVisible` and draws AppKit's focus ring
-unless the view styles `outline`.
+its strip while the content fits. A scroll along an axis a scroll view cannot scroll along goes to
+the one around it, so a vertical scroll over a horizontal pager moves the page, and an inverted list
+scrolls the way the user's scroll direction setting says. A trackpad drag sends `(scrollBeginDrag)`
+and `(scrollEndDrag)`, its momentum or a page settling `(momentumScrollBegin)` and
+`(momentumScrollEnd)`, and `pagingEnabled` settles on a page as the gesture ends, or once a mouse's
+wheel stops. A click focuses a focusable view, and a focus a key moved reports `focusVisible` and
+draws AppKit's focus ring unless the view styles `outline`.
 
 ## Controls
 
