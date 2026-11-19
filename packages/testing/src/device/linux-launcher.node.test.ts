@@ -45,6 +45,7 @@ describe('linuxLaunchCommand in a container', () => {
         cwd: '/work/app',
         bundle: 'http://127.0.0.1:1/x',
         display: 'xvfb',
+        fakeSystemUi: false,
       },
       request,
       {},
@@ -56,7 +57,13 @@ describe('linuxLaunchCommand in a container', () => {
   it("forwards a loopback bundle URL's port beside the pool's and Metro's, each once", () => {
     const script = (bundle: string) => {
       const { args } = linuxLaunchCommand(
-        { host: '/home/u/build/gtk/ngn-linux', container: 'img', bundle, display: 'xvfb' },
+        {
+          host: '/home/u/build/gtk/ngn-linux',
+          container: 'img',
+          bundle,
+          display: 'xvfb',
+          fakeSystemUi: false,
+        },
         request,
         {},
       );
@@ -78,7 +85,12 @@ describe('linuxLauncher crashReport', () => {
     writeFileSync(host, '#!/bin/bash\n(sleep 0.3; echo the last line) &\nexit 3\n', {
       mode: 0o755,
     });
-    const launcher = linuxLauncher({ host, container: false, display: 'inherit' });
+    const launcher = linuxLauncher({
+      host,
+      container: false,
+      fakeSystemUi: false,
+      display: 'inherit',
+    });
     const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir });
     try {
       assert.equal(await app.exited, 'status 3');
@@ -101,7 +113,12 @@ describe('linuxLauncher crashReport', () => {
     writeFileSync(host, "#!/bin/bash\nprintf 'fatal detail' >&2\nsleep 30 &\nexit 3\n", {
       mode: 0o755,
     });
-    const launcher = linuxLauncher({ host, container: false, display: 'inherit' });
+    const launcher = linuxLauncher({
+      host,
+      container: false,
+      fakeSystemUi: false,
+      display: 'inherit',
+    });
     const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir });
     try {
       assert.equal(await app.exited, 'status 3');
@@ -172,6 +189,7 @@ describe('linuxLauncher stop', () => {
     const launcher = linuxLauncher({
       host,
       container: false,
+      fakeSystemUi: false,
       display: 'inherit',
       stopGraceMs: 300,
     });
@@ -230,6 +248,7 @@ describe('linuxLauncher stop', () => {
       const launcher = linuxLauncher({
         host,
         container: false,
+        fakeSystemUi: false,
         display: 'inherit',
         stopGraceMs: 300,
       });
@@ -286,7 +305,7 @@ describe('linuxLauncher stop', () => {
         mkdirSync(path.join(dir, 'state'));
         const scenario = `
           const { linuxLauncher } = await import(${JSON.stringify(new URL('./linux-launcher.ts', import.meta.url).href)});
-          const launcher = linuxLauncher({ host: ${JSON.stringify(host)}, container: false, display: 'inherit', stopGraceMs: 300 });
+          const launcher = linuxLauncher({ host: ${JSON.stringify(host)}, container: false, fakeSystemUi: false, display: 'inherit', stopGraceMs: 300 });
           const app = await launcher.start({ port: 1, runId: 'reaper', stateDir: ${JSON.stringify(path.join(dir, 'state'))} });
           await new Promise((resolve) => setTimeout(resolve, 500));
           const stopped = app.stop().then(() => 'stopped');
@@ -334,7 +353,12 @@ describe('linuxLauncher crashReport', () => {
         ].join('\n'),
         { mode: 0o755 },
       );
-      const launcher = linuxLauncher({ host, container: false, display: 'inherit' });
+      const launcher = linuxLauncher({
+        host,
+        container: false,
+        fakeSystemUi: false,
+        display: 'inherit',
+      });
       const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir: dir });
       try {
         await app.exited;
@@ -369,7 +393,12 @@ describe('linuxLauncher crashReport', () => {
         ].join('\n'),
         { mode: 0o755 },
       );
-      const launcher = linuxLauncher({ host, container: false, display: 'inherit' });
+      const launcher = linuxLauncher({
+        host,
+        container: false,
+        fakeSystemUi: false,
+        display: 'inherit',
+      });
       const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir: dir });
       try {
         await app.exited;
