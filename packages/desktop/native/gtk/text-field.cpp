@@ -110,15 +110,42 @@ void redrawPlaceholder(const TextField &field) {
   }
 }
 
+void cancelPendingApply(TextField &field) {
+  if (field.applyPendingSource) {
+    g_source_remove(field.applyPendingSource);
+    field.applyPendingSource = 0;
+  }
+}
+
+// Applies the held controlled value, unless the user changed the text since it was captured.
+gboolean applyPendingText(gpointer user) {
+  auto *field = static_cast<TextField *>(user);
+  field->applyPendingSource = 0;
+  if (!field->pendingText || field->composing) {
+    return G_SOURCE_REMOVE;
+  }
+  auto pending = std::move(*field->pendingText);
+  field->pendingText.reset();
+  if (field->view && pending.seen >= field->eventCount) {
+    if (pending.text != fieldText(*field)) {
+      setText(*field, pending.text);
+    }
+    if (pending.selection) {
+      selectUnits(*field, pending.selection->first, pending.selection->second);
+    }
+  }
+  return G_SOURCE_REMOVE;
+}
+
 void preeditChanged(GtkWidget *, const char *preedit, gpointer user) {
   auto *field = static_cast<TextField *>(user);
   field->composing = preedit && *preedit;
-  if (!field->composing && field->pendingText) {
-    auto [text, seen] = std::move(*field->pendingText);
-    field->pendingText.reset();
-    if (field->view && seen >= field->eventCount && text != fieldText(*field)) {
-      setText(*field, text);
-    }
+  if (field->composing) {
+    cancelPendingApply(*field);
+  } else if (field->pendingText && !field->applyPendingSource) {
+    // An input method sends an empty preedit and then commits what was composed: apply the held
+    // value after the commit, which counts as a user change that makes it stale.
+    field->applyPendingSource = g_idle_add(applyPendingText, field);
   }
   redrawPlaceholder(*field);
 }
@@ -352,7 +379,11 @@ void makeTextField(GtkWidget *widget, ViewData &view) {
   watch(field, field->text);
   // Freed with the editor, after its last signal. A multiline field's buffer, which can outlive it
   // (a paste still to arrive), is disconnected from the field when its view goes.
-  g_object_set_data_full(G_OBJECT(field->text), "ngn-text-field-owner", field, [](gpointer p) { delete static_cast<TextField *>(p); });
+  g_object_set_data_full(G_OBJECT(field->text), "ngn-text-field-owner", field, [](gpointer p) {
+    auto *field = static_cast<TextField *>(p);
+    cancelPendingApply(*field);
+    delete field;
+  });
   view.field = field;
   gtk_widget_set_parent(fieldWidget(*field), widget);
   if (props && props->text.empty() && !props->defaultValue.empty()) {
@@ -416,11 +447,13 @@ void applyTextFieldProps(ViewData &view) {
   // input method composes. Once per props: a layout update applies the same props again, which
   // must not undo a setTextAndSelection.
   if (field.applied != view.props) {
-    field.pendingText.reset();
+    // Stale props, which cannot supersede a held value, leave it alone.
     if (controlledTextIsCurrent(props->mostRecentEventCount, field.eventCount, false) &&
         (!props->text.empty() || props->defaultValue.empty() || field.eventCount > 0)) {
+      field.pendingText.reset();
+      cancelPendingApply(field);
       if (field.composing) {
-        field.pendingText.emplace(props->text, props->mostRecentEventCount);
+        field.pendingText.emplace(TextField::Pending{props->text, props->mostRecentEventCount, std::nullopt});
       } else if (props->text != fieldText(field)) {
         setText(field, props->text);
       }
@@ -508,8 +541,17 @@ void textFieldCommand(ViewData &view, const std::string &name, const folly::dyna
       return;
     }
     if (args[1].isString() && field.composing) {
-      field.pendingText.emplace(args[1].getString(), args[0].isNumber() ? static_cast<int>(args[0].asDouble()) : field.eventCount);
-    } else if (args[1].isString()) {
+      TextField::Pending pending{
+          args[1].getString(), args[0].isNumber() ? static_cast<int>(args[0].asDouble()) : field.eventCount, std::nullopt};
+      if (args[2].isNumber() && args[3].isNumber()) {
+        pending.selection.emplace(static_cast<int>(args[2].asDouble()), static_cast<int>(args[3].asDouble()));
+      }
+      field.pendingText.emplace(std::move(pending));
+      return;
+    }
+    if (args[1].isString()) {
+      field.pendingText.reset();
+      cancelPendingApply(field);
       setText(field, args[1].getString());
     }
     if (args[2].isNumber() && args[3].isNumber()) {
