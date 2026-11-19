@@ -7,6 +7,7 @@
 #include <doctest/doctest.h>
 
 #include <array>
+#include <atomic>
 #include <cmath>
 
 using ngn::SvgBrush;
@@ -243,7 +244,7 @@ TEST_CASE("every canvas waiting for the same image is told when it loads") {
 
 namespace {
 // Answers every request for the scheme with bytes that are no image, and counts them.
-int gBrokenRequests = 0;
+std::atomic<int> gBrokenRequests{0};
 }
 
 @interface BrokenImageProtocol : NSURLProtocol
@@ -284,8 +285,12 @@ TEST_CASE("an svg image that failed to load is not asked for again on later draw
   while (gBrokenRequests == 0 && [until timeIntervalSinceNow] > 0) {
     CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, false);
   }
-  // Let the failure reach the main queue, where it is recorded.
-  CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.3, false);
+  // Wait until the loader has recorded the failure, so each redraw below meets it and not the
+  // request still in flight.
+  while (!NGNSvgImageLoadFailed(uri) && [until timeIntervalSinceNow] > 0) {
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, false);
+  }
+  REQUIRE(NGNSvgImageLoadFailed(uri));
   for (int i = 0; i < 3; i++) {
     draw();
     CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.3, false);

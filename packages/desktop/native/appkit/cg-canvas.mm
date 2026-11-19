@@ -656,6 +656,10 @@ class CGCanvas final : public ngn::SvgCanvas {
 
 } // namespace
 
+bool NGNSvgImageLoadFailed(const std::string &uri) {
+  return [failedImages() containsObject:@(uri.c_str())];
+}
+
 CGColorRef NGNCreateColor(uint32_t argb, double opacity) {
   return createColorImpl(argb, opacity);
 }
