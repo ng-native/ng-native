@@ -71,7 +71,7 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   Orca's structural navigation finds no headings or landmarks in a GTK 4 app. It
   builds on Linux against GTK 4.10 or later, libadwaita 1.4 or later and libsecret 0.20 or later
   (SecureStore's, `secret-store.h`), and on a Mac against Homebrew's (`brew install gtk4
-  libadwaita openssl@3 libnghttp2`) as a dev loop, without libsecret, so SecureStore is absent
+libadwaita openssl@3 libnghttp2`) as a dev loop, without libsecret, so SecureStore is absent
   there. Its HTTP and WebSocket client is the
   core's libcurl one (`curl-network.h`), which the GTK build turns on (`NGN_CURL`): one thread
   drives every request through `curl_multi`, behaving as NSURLSession does on macOS for redirects,
