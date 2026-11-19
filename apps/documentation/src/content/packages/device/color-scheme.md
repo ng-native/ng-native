@@ -33,9 +33,10 @@ components to render, which status bar style to request.
 theme switch: pass `'light'` or `'dark'` to force one, or `null` to follow the system again.
 
 ```ts
-import { Component, inject, signal } from '@angular/core';
+import { Component, effect, inject, untracked } from '@angular/core';
 import { Pressable, Text } from '@ng-native/components';
 import { ColorScheme, type Scheme } from '@ng-native/device';
+import { Storage } from '@ng-native/expo/async-storage';
 
 @Component({
   selector: 'app-theme-toggle',
@@ -48,8 +49,20 @@ import { ColorScheme, type Scheme } from '@ng-native/device';
   `,
 })
 export class ThemeToggle {
+  private readonly store = inject(Storage);
   protected readonly scheme = inject(ColorScheme);
-  protected readonly choice = signal<Scheme | null>(null);
+  protected readonly choice = this.store.signal<Scheme | null>('theme', null);
+
+  constructor() {
+    // The scheme kept from the last launch, once it is read back. A failed read leaves `null`,
+    // and the scheme the app started in.
+    const restore = effect(() => {
+      if (!this.store.ready()) return;
+      restore.destroy();
+      const choice = untracked(this.choice);
+      if (choice !== null) this.scheme.set(choice);
+    });
+  }
 
   protected choose(scheme: Scheme | null): void {
     this.choice.set(scheme);
@@ -59,10 +72,12 @@ export class ThemeToggle {
 ```
 
 On a device this calls React Native's `Appearance.setColorScheme`, with `null` sent as
-`'unspecified'`. That changes the window's own appearance rather than a class on the root, so the
-native chrome follows along with the app's CSS: `@media (prefers-color-scheme: dark)`,
-`light-dark()` and the root's `dark` class from `watchConditions` all switch, and so does
-`current()`.
+`'unspecified'`. On Android 12 and later, in an app built with `@ng-native/components`' native
+module (not Expo Go), it also sets the app's night mode with
+`UiModeManager.setApplicationNightMode`. That changes the window's own appearance rather than a
+class on the root, so the native chrome follows along with the app's CSS:
+`@media (prefers-color-scheme: dark)`, `light-dark()` and the root's `dark` class from
+`watchConditions` all switch, and so does `current()`.
 
 A few things to know:
 
@@ -78,8 +93,11 @@ A few things to know:
 - `current()` reports what the app is showing, not what the user chose. Once the app is forced
   into a scheme it no longer tells you what the system is set to, and it cannot tell "forced dark"
   from "following a dark system." Keep the choice in a signal of your own, as `choice` does above.
-- Nothing is saved. The next launch follows the system until the app calls `set()` again, so store
-  the choice (for example with [Storage](/packages/expo/storage)) and apply it at startup.
+- On iOS, on Android before 12 and in Expo Go nothing is saved: the next launch follows the system
+  until the app calls `set()` again. In a native build on Android 12 and later the system keeps the
+  app's night mode, so the next launch starts in the scheme last set, until `set()` or `set(null)`
+  changes it. Either way `current()` cannot say what was chosen, so store the choice (for example
+  with [Storage](/packages/expo/storage)) and apply it at startup, as the example does.
 - If the installed React Native has no `Appearance.setColorScheme`, `set()` does nothing.
 
 ## Off a device and on the web

@@ -20,6 +20,9 @@ struct TextField {
   int eventCount{0};
   // A change the backend made, which JavaScript already knows of.
   bool settingText{false};
+  // The props whose controlled value was last weighed: the same props again (a layout update)
+  // never put it back over a setTextAndSelection.
+  facebook::react::Props::Shared controlledFrom;
 };
 
 // The UTF-16 length of the first `characters` characters of `utf8`.

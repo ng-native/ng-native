@@ -108,6 +108,39 @@ TEST_CASE("setTextAndSelection selects by UTF-16 units") {
   CHECK(end == 3);
 }
 
+TEST_CASE("setTextAndSelection with a stale count, sent as a double, leaves the user's text") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  views.add(MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object()), {{10, 10}, {150, 40}}));
+  auto *data = ngn::gtk::viewData(views.view(2));
+  int position = 0;
+  gtk_editable_insert_text(GTK_EDITABLE(data->field->text), "typed", -1, &position);
+  REQUIRE(data->field->eventCount == 1);
+  views.backend->dispatchCommand(2, "setTextAndSelection", dynamic::array(0.0, "stale", 0, 0));
+  CHECK(std::string(gtk_editable_get_text(GTK_EDITABLE(data->field->text))) == "typed");
+}
+
+TEST_CASE("a layout update does not put a controlled value back over setTextAndSelection") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto input = MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("text", "seed")), {{10, 10}, {150, 40}});
+  views.add(input);
+  auto *data = ngn::gtk::viewData(views.view(2));
+  GtkEditable *text = GTK_EDITABLE(data->field->text);
+  REQUIRE(std::string(gtk_editable_get_text(text)) == "seed");
+  views.backend->dispatchCommand(2, "setTextAndSelection", dynamic::array(0, "replacement", 0, 0));
+  CHECK(std::string(gtk_editable_get_text(text)) == "replacement");
+
+  // The same props, laid out again at another size.
+  auto moved = views.mounting->tree().find(2)->view;
+  moved.layoutMetrics.frame.size = {200, 40};
+  views.backend->updateLayout(moved);
+  CHECK(std::string(gtk_editable_get_text(text)) == "replacement");
+  // New props with a value still apply it.
+  views.update(input, textInputProps(dynamic::object("text", "next")));
+  CHECK(std::string(gtk_editable_get_text(text)) == "next");
+}
+
 TEST_CASE("a text input's border and background are its view's, painted under the field") {
   REQUIRE(ngn::testing::gtkReady());
   MountedViews views;
