@@ -99,6 +99,7 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
   std::deque<std::function<void()>> tasks_;
   guint drainSource_{0};
   std::unordered_map<Tag, GtkWidget *> views_;
+  static void surfaceGone(gpointer self, GObject *surface);
   std::unordered_map<SurfaceId, GtkWidget *> surfaces_;
   struct Hosted {
     GtkWidget *placeholder;
