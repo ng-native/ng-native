@@ -1,5 +1,6 @@
 #include "host-sources.h"
 
+#include "app-info.h"
 #include "app-windows.h"
 #include "locales.h"
 #include "native-controls.h"
@@ -13,8 +14,6 @@
 #define NGN_DESKTOP_APP_INFO 1
 #endif
 #include <gtk/gtk.h>
-
-#include <sys/utsname.h>
 
 #include <atomic>
 #include <memory>
@@ -133,12 +132,17 @@ class GtkSystem final : public System {
   }
 
   DeviceFacts facts() override {
-    struct utsname name {};
-    uname(&name);
+    // The distribution's name and version, not the kernel's: Platform.Version is "24.04" on
+    // Ubuntu 24.04, as OS_VERSION reads it.
+    auto release = distroRelease();
     // The most preferred language, as Localization's first locale.
     auto languages = preferredLanguageTags(getenv("LANGUAGE") ? getenv("LANGUAGE") : "", localeOf("LC_MESSAGES"));
     std::string locale = languages.empty() ? "en" : languages.front();
-    return {.osVersion = name.release, .systemName = "Linux", .locale = locale, .rightToLeft = gtk_widget_get_default_direction() == GTK_TEXT_DIR_RTL};
+    return {.osVersion = release.versionId,
+            .systemName = release.name,
+            .interfaceIdiom = "desktop",
+            .locale = locale,
+            .rightToLeft = gtk_widget_get_default_direction() == GTK_TEXT_DIR_RTL};
   }
   void openUrl(const std::string &url, std::function<void(bool)> done) override {
     openUri(url, std::move(done));

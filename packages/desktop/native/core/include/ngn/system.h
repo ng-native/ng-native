@@ -20,6 +20,8 @@ struct DeviceFacts {
   std::string osVersion;
   // "macOS"
   std::string systemName;
+  // PlatformConstants' interfaceIdiom: "mac" on macOS, "desktop" on Linux.
+  std::string interfaceIdiom{"mac"};
   // A BCP 47 identifier such as "en-GB" (React Native's localeIdentifier uses an underscore).
   std::string locale;
   // The system's layout direction for the app's preferred language.

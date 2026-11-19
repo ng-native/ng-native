@@ -44,6 +44,15 @@ TEST_CASE("PlatformConstants reports macOS, its version and the React Native the
   CHECK(rc["prerelease"] == "rc.1");
 }
 
+TEST_CASE("PlatformConstants reports the system's own name, version and interface idiom, as Linux gives them") {
+  Fixture f;
+  f.system->deviceFacts = {.osVersion = "24.04", .systemName = "Ubuntu", .interfaceIdiom = "desktop", .locale = "en-GB"};
+  auto c = ngn::makePlatformConstants(f.services)->call("getConstants");
+  CHECK(c["systemName"] == "Ubuntu");
+  CHECK(c["osVersion"] == "24.04");
+  CHECK(c["interfaceIdiom"] == "desktop");
+}
+
 TEST_CASE("DeviceInfo gives the window's dimensions and sends them again when they change") {
   Fixture f;
   ngn::Dimensions window{.width = 1040, .height = 720, .scale = 2, .fontScale = 1};
