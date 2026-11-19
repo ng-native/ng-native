@@ -1,6 +1,7 @@
 #include "gtk-backend.h"
 
 #include "accessible.h"
+#include "accessible-text.h"
 #include "focus.h"
 #include "image-view.h"
 #include "native-controls.h"
@@ -219,7 +220,7 @@ void unparentStayingHidden(GtkWidget *widget) {
 } // namespace
 
 void GtkBackend::createView(const ShadowView &view) {
-  GtkWidget *widget = makeViewWidget(accessibleRole(view));
+  GtkWidget *widget = makeViewWidget(accessibleRole(view), std::string_view(view.componentName) == "Paragraph");
   g_object_ref_sink(widget);
   ViewData *d = viewData(widget);
   d->tag = view.tag;
@@ -357,6 +358,7 @@ void GtkBackend::updateProps(const ShadowView &view) {
 void GtkBackend::updateState(const ShadowView &view) {
   if (auto it = views_.find(view.tag); it != views_.end()) {
     ViewData *d = viewData(it->second);
+    std::string before = d->state && d->component == "Paragraph" ? paragraphText(d->state) : std::string();
     d->state = view.state;
     forgetText(*d);
     applyScrollViewState(*d);
@@ -366,7 +368,10 @@ void GtkBackend::updateState(const ShadowView &view) {
     if (auto accessibility = accessibilityOf(view)) {
       applyAccessibility(accessibleWidget(*d), *accessibility);
     }
-    gtk_widget_queue_draw(it->second);
+    if (d->component == "Paragraph" && d->state) {
+      accessibleTextChanged(d->widget, before, paragraphText(d->state));
+    }
+    gtk_widget_queue_draw(d->widget);
   }
 }
 
@@ -377,7 +382,7 @@ void GtkBackend::followRole(const ShadowView &view) {
     return;
   }
   GtkWidget *old = it->second;
-  GtkWidget *next = makeViewWidget(role);
+  GtkWidget *next = makeViewWidget(role, isTextWidget(old));
   g_object_ref_sink(next);
   // What the backend set on the old widget that the view's props and state do not set again below.
   gtk_widget_set_child_visible(next, gtk_widget_get_child_visible(old));

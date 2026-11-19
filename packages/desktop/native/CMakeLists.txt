@@ -108,6 +108,7 @@ add_library(ngn_core STATIC
     core/src/notification-schedule.cpp
     core/src/launch-settings.cpp
     core/src/live-regions.cpp
+    core/src/text-units.cpp
     core/src/accessibility-relations.cpp
     core/src/library-glue.cpp
     core/src/module-registry.cpp

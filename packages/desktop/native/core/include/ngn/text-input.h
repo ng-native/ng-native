@@ -6,6 +6,8 @@
 // React Native's BaseTextInputShadowNode over it: it measures and lays out as on iOS.
 #pragma once
 
+#include "ngn/desktop-props.h"
+
 #include <react/renderer/components/iostextinput/primitives.h>
 #include <react/renderer/components/textinput/BaseTextInputProps.h>
 #include <react/renderer/components/textinput/BaseTextInputShadowNode.h>
@@ -35,6 +37,8 @@ class DesktopTextInputProps final : public facebook::react::BaseTextInputProps {
   std::optional<bool> smartQuotes{};
   // `accessibilityDescribedBy` (`aria-describedby`), as a view's desktop props have it.
   std::vector<std::string> accessibilityDescribedBy;
+  // `aria-required`, `aria-invalid` and the rest, as a view's desktop props have them.
+  AriaFields aria;
 };
 
 extern const char DesktopTextInputComponentName[];

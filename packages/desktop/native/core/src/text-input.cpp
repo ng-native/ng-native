@@ -1,4 +1,5 @@
 #include "ngn/text-input.h"
+#include "ngn/desktop-view-props.h"
 
 #include <react/renderer/components/iostextinput/conversions.h>
 #include <react/renderer/components/iostextinput/propsConversions.h>
@@ -22,7 +23,8 @@ DesktopTextInputProps::DesktopTextInputProps(
       selection(convertRawProp(context, rawProps, "selection", sourceProps.selection, std::optional<Selection>())),
       smartQuotes(convertRawProp(context, rawProps, "smartQuotes", sourceProps.smartQuotes, std::optional<bool>())),
       accessibilityDescribedBy(convertRawProp(
-          context, rawProps, "accessibilityDescribedBy", sourceProps.accessibilityDescribedBy, {})) {}
+          context, rawProps, "accessibilityDescribedBy", sourceProps.accessibilityDescribedBy, {})),
+      aria(parseAriaFields(context, sourceProps.aria, rawProps)) {}
 
 namespace {
 

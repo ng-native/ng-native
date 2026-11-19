@@ -58,6 +58,8 @@ BOOL NGNControlShouldChangeText(
 @property (nonatomic) BOOL autoFocus;
 // Called when the field takes the keyboard.
 @property (nonatomic, copy) void (^focused)(void);
+// Whether its value is refused (aria-invalid), as VoiceOver reads it from the control.
+@property (nonatomic) BOOL invalid;
 - (void)applyOptions:(const ngn::TextInputOptions &)options;
 - (const ngn::TextInputOptions &)options;
 // Drawn in the field's font; nil colour is the system's placeholder colour.
@@ -70,6 +72,8 @@ BOOL NGNControlShouldChangeText(
 
 @interface NGNTextView : NSTextView
 @property (nonatomic) BOOL autoFocus;
+// Whether its value is refused (aria-invalid), as VoiceOver reads it.
+@property (nonatomic) BOOL invalid;
 @property (nonatomic, copy) void (^focused)(void);
 @property (nonatomic, copy, readonly) NSAttributedString *placeholder;
 - (void)applyOptions:(const ngn::TextInputOptions &)options;
