@@ -252,3 +252,16 @@ TEST_CASE("a touch that never moved ends no drag and settles no page") {
   list.send(@[ trackpad(0, 0, kCGScrollPhaseMayBegin), trackpad(0, 0, kCGScrollPhaseEnded) ]);
   CHECK(list.phases.count == 0);
 }
+
+TEST_CASE("a drag that begins after a mouse's wheel turned cancels the settling the wheel queued") {
+  Nested pager(NSMakeSize(600, 300));
+  pager.scroll.pagingEnabled = YES;
+  CGEventRef cg = CGEventCreateScrollWheelEvent(nullptr, kCGScrollEventUnitLine, 2, 0, -1);
+  NSEvent *wheel = [NSEvent eventWithCGEvent:cg];
+  CFRelease(cg);
+  pager.send(@[ wheel, trackpad(-10, 0, kCGScrollPhaseBegan), trackpad(-20, 0, kCGScrollPhaseChanged) ]);
+  // Past the wheel's wait, with the drag still under way: no settling began.
+  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.4]];
+  CHECK((pager.phases.count == 1));
+  CHECK(pager.phases[0].integerValue == NGNScrollPhaseDragBegan);
+}

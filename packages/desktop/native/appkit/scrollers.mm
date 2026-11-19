@@ -168,6 +168,8 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
   }
   [super scrollWheel:scroll];
   if (phase == NSEventPhaseBegan) {
+    // A mouse's wheel may have queued a settling: the drag now under way has its own.
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(settleOnPage) object:nil];
     _velocity = NSZeroPoint;
     _dragging = YES;
     [self report:NGNScrollPhaseDragBegan];
