@@ -108,6 +108,16 @@ void installSheetStyle() {
 
 namespace ngn::gtk {
 
+std::string colorRule(const char *name, const char *property, float red, float green, float blue, float alpha) {
+  auto byte = [](float v) { return static_cast<unsigned>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255)); };
+  // CSS wants a point, whatever the user's locale writes a decimal as.
+  char opacity[G_ASCII_DTOSTR_BUF_SIZE];
+  g_ascii_formatd(opacity, sizeof opacity, "%.3f", static_cast<double>(alpha));
+  char rule[200];
+  std::snprintf(rule, sizeof rule, ".%s { %s: rgba(%u, %u, %u, %s); }", name, property, byte(red), byte(green), byte(blue), opacity);
+  return rule;
+}
+
 std::string colorClass(const char *property, const SharedColor &color) {
   if (!color || !gdk_display_get_default()) {
     return {};
@@ -120,12 +130,9 @@ std::string colorClass(const char *property, const SharedColor &color) {
       byte(c.green), byte(c.blue), byte(c.alpha));
   static std::set<std::string> added;
   if (added.insert(name).second) {
-    char rule[160];
-    std::snprintf(
-        rule, sizeof rule, ".%s { %s: rgba(%u, %u, %u, %.3f); }", name, property, byte(c.red), byte(c.green),
-        byte(c.blue), static_cast<double>(c.alpha));
+    std::string rule = colorRule(name, property, c.red, c.green, c.blue, c.alpha);
     GtkCssProvider *css = gtk_css_provider_new();
-    gtk_css_provider_load_from_data(css, rule, -1);
+    gtk_css_provider_load_from_data(css, rule.c_str(), -1);
     gtk_style_context_add_provider_for_display(
         gdk_display_get_default(), GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     g_object_unref(css);
@@ -281,27 +288,30 @@ using CloseTarget = std::pair<Modals *, Tag>;
 // The menu entries of a bar button's menu, as a GMenu whose actions are `group`'s: choosing one
 // sends its menu id, as AppKit's menu does. An `on` entry is a stateful action, which GTK draws
 // with a check.
-void fillMenu(GMenu *menu, const HeaderMenuItem &entry, GSimpleActionGroup *group, int &next, GtkBackend &backend, Tag config) {
+void fillMenu(
+    GMenu *menu, const HeaderMenuItem &entry, GSimpleActionGroup *group, int &next, GtkBackend &backend, Tag config,
+    bool disabled = false) {
   for (const auto &child : entry.items) {
     if (child.inlineSection) {
       GMenu *section = g_menu_new();
       for (const auto &inner : child.items) {
         HeaderMenuItem one;
         one.items.push_back(inner);
-        fillMenu(section, one, group, next, backend, config);
+        fillMenu(section, one, group, next, backend, config, disabled);
       }
       g_menu_append_section(menu, nullptr, G_MENU_MODEL(section));
       g_object_unref(section);
     } else if (!child.items.empty() || child.menuId.empty()) {
       GMenu *submenu = g_menu_new();
-      fillMenu(submenu, child, group, next, backend, config);
+      // A disabled submenu has no entry that can be chosen.
+      fillMenu(submenu, child, group, next, backend, config, disabled || child.disabled);
       g_menu_append_submenu(menu, child.title.c_str(), G_MENU_MODEL(submenu));
       g_object_unref(submenu);
     } else {
       std::string name = "item" + std::to_string(next++);
       GSimpleAction *action = child.on ? g_simple_action_new_stateful(name.c_str(), nullptr, g_variant_new_boolean(TRUE))
                                        : g_simple_action_new(name.c_str(), nullptr);
-      g_simple_action_set_enabled(action, !child.disabled);
+      g_simple_action_set_enabled(action, !disabled && !child.disabled);
       g_signal_connect_data(
           action, "activate", G_CALLBACK(+[](GSimpleAction *, GVariant *, gpointer data) {
             auto *p = static_cast<PressTarget *>(data);
@@ -897,6 +907,21 @@ std::optional<Tag> Modals::front(GtkWindow *window) const {
   return front;
 }
 
+// Whether a popover on `anchor` would show: it is in a window, and nothing above it is hidden, as a
+// screen the stack covers is (setCovered). Not whether it is mapped yet, which a presentation begun
+// before the window maps is not.
+static bool anchorOnScreen(GtkWidget *anchor) {
+  if (!gtk_widget_get_root(anchor)) {
+    return false;
+  }
+  for (GtkWidget *w = anchor; w; w = gtk_widget_get_parent(w)) {
+    if (!gtk_widget_get_visible(w) || !gtk_widget_get_child_visible(w)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool Modals::pressDefault(Tag tag) {
   auto it = presented_.find(tag);
   if (it == presented_.end()) {
@@ -950,7 +975,7 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
   }
   // A popover points at its anchor; an anchor that is not on screen leaves it a sheet, as on macOS.
   GtkWidget *anchorWidget = anchor ? backend_.view(*anchor) : nullptr;
-  if (anchorWidget && !gtk_widget_get_root(anchorWidget)) {
+  if (anchorWidget && !anchorOnScreen(anchorWidget)) {
     anchorWidget = nullptr;
   }
   if (p.presentation == ModalPresentation::Popover && !anchorWidget) {
@@ -985,6 +1010,17 @@ void Modals::present(SurfaceId surfaceId, Tag tag) {
           auto *self = static_cast<CloseTarget *>(data);
           if (self->first->presented_.count(self->second)) {
             self->first->requestClose(self->second);
+            // GTK hid it to emit this. Until the app unmounts the modal, it is still presented.
+            g_idle_add_full(
+                G_PRIORITY_DEFAULT_IDLE, +[](gpointer data) -> gboolean {
+                  auto *again = static_cast<CloseTarget *>(data);
+                  auto it = again->first->presented_.find(again->second);
+                  if (it != again->first->presented_.end() && it->second.popover) {
+                    gtk_popover_popup(GTK_POPOVER(it->second.popover));
+                  }
+                  return G_SOURCE_REMOVE;
+                },
+                new CloseTarget(*self), [](gpointer data) { delete static_cast<CloseTarget *>(data); });
           }
         }),
         new CloseTarget(this, tag), [](gpointer data, GClosure *) { delete static_cast<CloseTarget *>(data); },
