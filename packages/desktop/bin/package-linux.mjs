@@ -446,6 +446,25 @@ export function linuxMetadata(config, { format, appId, updatesCertificate }) {
 }
 
 /**
+ * Why a `.deb` around a host built on this machine may not run where it installs: its `Depends`
+ * floors are those of the prebuilt host, built on AlmaLinux 9, and a host built against a newer
+ * distribution's libraries can need newer ones than they say. An rpm's own scanner reads what the
+ * host links, and a Flatpak brings its runtime, so neither is warned.
+ *
+ * @param {LinuxArch} arch
+ */
+export function selfBuiltDebWarning(arch) {
+  const m = LINUX_MINIMUMS;
+  return (
+    `No prebuilt Linux ${arch} host fits this app, so the .deb holds one built on this machine. Its ` +
+    `dependencies (glibc ${m.glibc}, GTK ${m.gtk}, libadwaita ${m.libadwaita} and GStreamer ` +
+    `${m.gstreamer} or later) hold for the prebuilt host, built on AlmaLinux 9, and the one built ` +
+    "here may need newer libraries than they say. Package on AlmaLinux 9, or use the prebuilt host, " +
+    'for a .deb that installs only where it runs.'
+  );
+}
+
+/**
  * A `.deb`'s `control` file. `Depends` names the floor the host is built for, under the package
  * names Debian 13 and Ubuntu 24.04 share.
  *
@@ -894,11 +913,11 @@ function planLinuxPackage(options, sys) {
   if (format === 'flatpak') for (const line of flatpakProblems(config)) sys.warn(line);
   const icons = expo.icon ? scaledIcons(sys, path.resolve(cwd, expo.icon)) : [];
 
-  const hosts = linuxArches(options.arch).map((arch) => ({
-    arch,
-    buildDir: prepareHost(sys, { os: 'linux', arch, release: true, universal: false, expo })
-      .buildDir,
-  }));
+  const hosts = linuxArches(options.arch).map((arch) => {
+    const host = prepareHost(sys, { os: 'linux', arch, release: true, universal: false, expo });
+    if (format === 'deb' && !host.prebuilt) sys.warn(selfBuiltDebWarning(arch));
+    return { arch, buildDir: host.buildDir };
+  });
   const app = {
     ...names,
     name: config.name,
