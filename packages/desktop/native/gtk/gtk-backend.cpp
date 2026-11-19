@@ -134,7 +134,7 @@ void GtkBackend::createView(const ShadowView &view) {
     makeScrollView(widget, *d);
     applyScrollViewState(*d);
   } else if (d->component == "Image") {
-    applyImageProps(*d, gtk_widget_get_scale_factor(widget));
+    makeImageView(widget, *d);
   }
   hideSvgElement(widget);
   applyViewProps(widget, *d);
@@ -178,6 +178,10 @@ void GtkBackend::insertChild(SurfaceId, Tag parent, Tag child, int index) {
   gtk_widget_insert_before(c->second, parentWidget, sibling);
   // Unparenting, here or in removeChild, made it visible again.
   hideSvgElement(c->second);
+  // An Image's source was picked before it had a window, at the first monitor's scale.
+  if (ViewData *d = viewData(c->second); d && d->image) {
+    applyImageProps(*d, gtk_widget_get_scale_factor(c->second));
+  }
 }
 
 void GtkBackend::removeChild(SurfaceId, Tag, Tag child, int) {
