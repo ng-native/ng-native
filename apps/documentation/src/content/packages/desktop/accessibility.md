@@ -54,8 +54,8 @@ order written. An id no view has is skipped, and one several views have names th
 macOS the text of the views named, each one's label or else the text inside it, is the view's label
 and its help, read ahead of its own `accessibilityLabel` and `accessibilityHint`, and the first view
 it is labelled by is its title element. On Linux they are GTK's labelled-by and described-by
-relations, which GTK reads the name and description from, on a text input's field for a text input. Either follows the views it names as they
-come, go or change their id.
+relations, which GTK reads the name and description from, on a text input's field for a text input.
+Either follows the views it names as they come, go or change their id.
 
 ## Actions
 
