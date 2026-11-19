@@ -44,4 +44,14 @@ class AccessibilitySettingsWatcher {
   GDBusProxy *status_{nullptr};
 };
 
+// The host's state with its accessibility settings kept in step by a watcher: made together, so
+// the state of a running app never lacks its feed. Only the instance that runs the app makes one;
+// a second launch hands its links on and exits before it has any state to feed.
+struct WatchedHostState {
+  std::shared_ptr<HostState> state;
+  std::unique_ptr<AccessibilitySettingsWatcher> accessibility;
+};
+
+WatchedHostState makeWatchedHostState();
+
 } // namespace ngn::gtk
