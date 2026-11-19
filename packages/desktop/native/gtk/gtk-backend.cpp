@@ -399,17 +399,27 @@ void GtkBackend::applyActions(ViewData &d, const AxInfo &info) {
   if (d.field || d.control) {
     return;
   }
-  applyAccessibleActions(d.widget, info, [this](GtkWidget *widget, AxVerb verb) {
-    ViewData *v = viewData(widget);
-    auto props = v ? std::dynamic_pointer_cast<const facebook::react::ViewProps>(v->props) : nullptr;
-    auto emitter = v ? std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(v->emitter) : nullptr;
-    if (!props) {
-      return false;
-    }
-    SurfaceId surface = v->surfaceId;
-    Tag tag = v->tag;
-    return performAxVerb(*props, emitter.get(), verb, [this, surface, tag] { return hooks.activate(surface, tag); });
-  });
+  applyAccessibleActions(
+      d.widget, info,
+      {.perform =
+           [this](GtkWidget *widget, AxVerb verb) {
+             ViewData *v = viewData(widget);
+             auto props = v ? std::dynamic_pointer_cast<const facebook::react::ViewProps>(v->props) : nullptr;
+             auto emitter = v ? std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(v->emitter) : nullptr;
+             if (!props) {
+               return false;
+             }
+             SurfaceId surface = v->surfaceId;
+             Tag tag = v->tag;
+             return performAxVerb(*props, emitter.get(), verb, [this, surface, tag] { return hooks.activate(surface, tag); });
+           },
+       .send =
+           [](GtkWidget *widget, const std::string &name) {
+             ViewData *v = viewData(widget);
+             auto props = v ? std::dynamic_pointer_cast<const facebook::react::ViewProps>(v->props) : nullptr;
+             auto emitter = v ? std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(v->emitter) : nullptr;
+             return props && sendAxAction(*props, emitter.get(), name);
+           }});
 }
 
 void GtkBackend::followRole(const ShadowView &view) {

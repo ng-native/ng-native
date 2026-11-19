@@ -9,7 +9,11 @@
 
 #include <dlfcn.h>
 
+#include <algorithm>
+#include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ngn::gtk {
 
@@ -115,41 +119,85 @@ namespace {
 
 struct AxActions {
   GSimpleActionGroup *group{nullptr};
-  std::function<bool(GtkWidget *, AxVerb)> perform;
+  GSimpleActionGroup *custom{nullptr};
+  AccessibleActionSinks sinks;
+  // The declared actions in `custom`: each GAction's name, and the name the app declared.
+  std::vector<std::pair<std::string, std::string>> customNames;
 };
 
 constexpr std::pair<const char *, AxVerb> kVerbs[] = {
     {"press", AxVerb::Press}, {"increment", AxVerb::Increment}, {"decrement", AxVerb::Decrement}, {"cancel", AxVerb::Cancel}};
 
+AxActions *actionsOf(GtkWidget *widget) {
+  return static_cast<AxActions *>(g_object_get_data(G_OBJECT(widget), "ngn-ax-actions"));
+}
+
+void performVerb(GSimpleAction *self, GVariant *, gpointer data) {
+  auto *widget = static_cast<GtkWidget *>(data);
+  AxActions *actions = actionsOf(widget);
+  const char *name = g_action_get_name(G_ACTION(self));
+  for (const auto &[verbName, verb] : kVerbs) {
+    if (actions && std::string_view(name) == verbName) {
+      actions->sinks.perform(widget, verb);
+    }
+  }
+}
+
+void sendCustom(GSimpleAction *self, GVariant *, gpointer data) {
+  auto *widget = static_cast<GtkWidget *>(data);
+  AxActions *actions = actionsOf(widget);
+  const char *name = g_action_get_name(G_ACTION(self));
+  for (size_t i = 0; actions && i < actions->customNames.size(); i++) {
+    if (actions->customNames[i].first == name) {
+      // A copy: the app's handler can change the view's actions, which replaces the list.
+      std::string declared = actions->customNames[i].second;
+      actions->sinks.send(widget, declared);
+      return;
+    }
+  }
+}
+
 } // namespace
 
-void applyAccessibleActions(GtkWidget *widget, const AxInfo &info, std::function<bool(GtkWidget *, AxVerb)> perform) {
-  auto *actions = static_cast<AxActions *>(g_object_get_data(G_OBJECT(widget), "ngn-ax-actions"));
-  bool offers = info.element && (info.offersPress || info.offersIncrement || info.offersCancel);
+std::vector<std::pair<std::string, std::string>> customActionNames(const std::vector<AxAction> &declared) {
+  std::vector<std::pair<std::string, std::string>> names;
+  for (const auto &action : declared) {
+    std::string name;
+    for (char c : action.name) {
+      name += g_ascii_isalnum(c) || c == '-' || c == '.' ? c : '-';
+    }
+    if (name.empty()) {
+      name = "action";
+    }
+    std::string unique = name;
+    for (int n = 2; std::any_of(names.begin(), names.end(), [&unique](const auto &taken) { return taken.first == unique; }); n++) {
+      unique = name + "-" + std::to_string(n);
+    }
+    names.emplace_back(unique, action.name);
+  }
+  return names;
+}
+
+void applyAccessibleActions(GtkWidget *widget, const AxInfo &info, AccessibleActionSinks sinks) {
+  AxActions *actions = actionsOf(widget);
+  bool offers = info.element && (info.offersPress || info.offersIncrement || info.offersCancel || !info.customActions.empty());
   if (!actions && !offers) {
     return;
   }
   if (!actions) {
-    actions = new AxActions{g_simple_action_group_new(), std::move(perform)};
+    actions = new AxActions{g_simple_action_group_new(), g_simple_action_group_new(), std::move(sinks)};
     for (const auto &[name, verb] : kVerbs) {
       GSimpleAction *action = g_simple_action_new(name, nullptr);
-      g_signal_connect(action, "activate", G_CALLBACK(+[](GSimpleAction *self, GVariant *, gpointer data) {
-        auto *widget = static_cast<GtkWidget *>(data);
-        auto *actions = static_cast<AxActions *>(g_object_get_data(G_OBJECT(widget), "ngn-ax-actions"));
-        const char *name = g_action_get_name(G_ACTION(self));
-        for (const auto &[verbName, verb] : kVerbs) {
-          if (actions && std::string_view(name) == verbName) {
-            actions->perform(widget, verb);
-          }
-        }
-      }), widget);
+      g_signal_connect(action, "activate", G_CALLBACK(performVerb), widget);
       g_action_map_add_action(G_ACTION_MAP(actions->group), G_ACTION(action));
       g_object_unref(action);
     }
     gtk_widget_insert_action_group(widget, "accessibility", G_ACTION_GROUP(actions->group));
+    gtk_widget_insert_action_group(widget, "custom", G_ACTION_GROUP(actions->custom));
     g_object_set_data_full(G_OBJECT(widget), "ngn-ax-actions", actions, +[](gpointer data) {
       auto *a = static_cast<AxActions *>(data);
       g_object_unref(a->group);
+      g_object_unref(a->custom);
       delete a;
     });
   }
@@ -160,6 +208,21 @@ void applyAccessibleActions(GtkWidget *widget, const AxInfo &info, std::function
   enable("increment", info.element && info.offersIncrement);
   enable("decrement", info.element && info.offersIncrement);
   enable("cancel", info.element && info.offersCancel);
+  // The declared actions as they are now, those gone removed, as AppKit asks for its custom actions
+  // afresh each time.
+  auto names = info.element ? customActionNames(info.customActions) : std::vector<std::pair<std::string, std::string>>{};
+  if (names != actions->customNames) {
+    for (const auto &[name, declared] : actions->customNames) {
+      g_action_map_remove_action(G_ACTION_MAP(actions->custom), name.c_str());
+    }
+    actions->customNames = std::move(names);
+    for (const auto &[name, declared] : actions->customNames) {
+      GSimpleAction *action = g_simple_action_new(name.c_str(), nullptr);
+      g_signal_connect(action, "activate", G_CALLBACK(sendCustom), widget);
+      g_action_map_add_action(G_ACTION_MAP(actions->custom), G_ACTION(action));
+      g_object_unref(action);
+    }
+  }
 }
 
 bool announceOn(GtkWidget *widget, const Announcement &announcement) {

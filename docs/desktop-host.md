@@ -42,7 +42,10 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   which implement it themselves. Announcements, a live region's and `Accessibility.announce()`'s
   through the front window, go through `gtk_accessible_announce`, found at run time on GTK 4.14
   and later, and say nothing below. A view's press, increment, decrement and cancel are its
-  widget's `accessibility` actions, which GTK lists on AT-SPI's Action interface. GTK 4 answers
+  widget's `accessibility` actions, which GTK lists on AT-SPI's Action interface, and its
+  declared actions (`accessibilityActions`) are its `custom` actions, sent to the app as
+  `onAccessibilityAction` (`sendAxAction`, which AppKit's custom actions share). GTK gives AT-SPI
+  an action's name and no label, so a screen reader reads `custom.<name>`. GTK 4 answers
   AT-SPI's `GrabFocus` with NotSupported, so a screen reader cannot move the keyboard focus. `AccessibilityInfo`'s settings (`accessibility-settings.h`) come from the settings
   portal (its reduced-motion and contrast), GTK's settings and libadwaita's high contrast, through
   the core's `linuxAccessibility`, and the screen reader from AT-SPI's `org.a11y.Status`.

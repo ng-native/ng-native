@@ -44,8 +44,8 @@ import { page } from '../screen-styles.ts';
 
         <text class="heading" role="heading" aria-level="2">Screen</text>
         <text class="body">
-          {{ screen.window().width }} x {{ screen.window().height }},
-          {{ screen.orientation() }}, {{ scale() }} pixels a point
+          {{ screen.window().width }} x {{ screen.window().height }}, {{ screen.orientation() }},
+          {{ scale() }} pixels a point
         </text>
         <text class="hint">
           The same numbers the engine answers media queries with. Reduced motion is
@@ -71,7 +71,13 @@ import { page } from '../screen-styles.ts';
           screen reader {{ on(accessibility.screenReader()) }}, reduce motion
           {{ on(accessibility.reduceMotion()) }}, bold text {{ on(accessibility.boldText()) }}
         </text>
-        <pressable class="card" role="button" (press)="announce()">
+        <pressable
+          class="card"
+          role="button"
+          [accessibilityActions]="announceActions"
+          (accessibilityAction)="announceAgain()"
+          (press)="announce()"
+        >
           <text class="button-label">Announce to a screen reader</text>
         </pressable>
 
@@ -122,6 +128,13 @@ export class DevicePage {
 
   protected announce(): void {
     this.accessibility.announce('Angular Native says hello');
+  }
+
+  /** A custom action on the same button, which a screen reader lists beside its press. */
+  protected readonly announceActions = [{ name: 'repeat', label: 'Announce again' }];
+
+  protected announceAgain(): void {
+    this.accessibility.announce('Angular Native says hello again');
   }
 
   protected openSite(): void {
