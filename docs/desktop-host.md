@@ -77,8 +77,10 @@ libadwaita`) as a dev loop, without libsecret, so SecureStore is absent there. I
   (`WindowHost::lastWindowClosed`). The app's menu bar is a `GMenu` built from the core's items
   (`menus.h`), each item an action of the window's `menu` group, shown in the chrome's menu bar or
   primary menu. GTK's popover menus take no keys, so a window's capture-phase key controller looks a
-  press up in order: the app's shortcuts (`MenuHost::keyDown`), the back and forward keys
-  (`navigationFor`), then the bar (`findMenuItem` by chord), leaving a focused text input its
+  press up in order: the app's shortcuts (`MenuHost::keyDown`), the focus keys (`focus.h`: Tab and
+  Shift-Tab over the core's `nextInTabOrder` in the focus's container, arrows over `compositeMove`,
+  each grabbing real GTK focus), the back and forward keys (`navigationFor`), then the bar
+  (`findMenuItem` by chord), leaving a focused text input its
   editing keys; a bubble-phase controller gives an unused Return or Escape to the `default` or
   `cancel` native button. Mouse buttons 8 and 9 go back and forward, and a secondary click on a
   view with a `contextMenu` shows a `GtkPopoverMenu` there. A window shows with nothing

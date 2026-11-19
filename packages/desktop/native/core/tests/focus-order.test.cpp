@@ -399,3 +399,33 @@ TEST_CASE("a composite's stop is the item that is checked, though the view takin
   t.add(6, 5, "View", view(folly::dynamic::object("focusable", true)));
   CHECK(t.order() == Tags{6});
 }
+
+TEST_CASE("a plain view takes the focus with focusable or any tabIndex, in the container it is in") {
+  ngn::DesktopProps props;
+  CHECK_FALSE(ngn::viewTakesFocus(props));
+  props.focusable = true;
+  CHECK(ngn::viewTakesFocus(props));
+  props.focusable = false;
+  CHECK_FALSE(ngn::viewTakesFocus(props));
+  props.tabIndex = -1;
+  CHECK(ngn::viewTakesFocus(props));
+
+  ngn::ViewTree tree;
+  for (Tag tag : {1, 2, 3, 4}) {
+    ShadowView view;
+    view.tag = tag;
+    tree.create(view);
+  }
+  tree.insert(1, 2, 0);
+  tree.insert(2, 3, 0);
+  tree.insert(3, 4, 0);
+  CHECK(ngn::focusContainer(tree, 4) == 1);
+  tree.addContainerRoot(2);
+  CHECK(ngn::focusContainer(tree, 4) == 2);
+  CHECK(ngn::focusContainer(tree, 2) == 2);
+  CHECK(ngn::focusContainer(tree, 1) == 1);
+  tree.removeContainerRoot(2);
+  CHECK(ngn::focusContainer(tree, 4) == 1);
+  // A view no longer in the tree is its own.
+  CHECK(ngn::focusContainer(tree, 9) == 9);
+}

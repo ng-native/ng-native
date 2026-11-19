@@ -1,6 +1,7 @@
 #include "gtk-backend.h"
 
 #include "accessible.h"
+#include "focus.h"
 #include "image-view.h"
 #include "native-controls.h"
 #include "scroll-view.h"
@@ -352,6 +353,8 @@ void GtkBackend::followRole(const ShadowView &view) {
   swapViewData(old, next);
   // A state update replaces a Paragraph's widget with no props update to follow.
   applyViewProps(next, *viewData(next));
+  // The focus moving to its replacement is no focus change for the view (focus.h).
+  g_object_set_data(G_OBJECT(old), "ngn-replaced-by", next);
   // A focused field's GtkText loses the focus as it moves and takes it back after: the app hears
   // neither.
   TextField *field = focus ? textFieldOf(focus) : nullptr;
@@ -436,6 +439,7 @@ void GtkBackend::updateDesktopProps(SurfaceId, Tag tag, const DesktopProps &prop
   if (auto it = views_.find(tag); it != views_.end()) {
     ViewData *d = viewData(it->second);
     d->desktop = props;
+    applyFocusable(it->second, *d);
     updateScrollers(*d);
   }
 }

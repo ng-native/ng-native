@@ -290,6 +290,9 @@ void routeKeys(GtkWindow *window, std::shared_ptr<KeyRouting> routing) {
         if (routing->shortcut && routing->shortcut(chord, text)) {
           return TRUE;
         }
+        if (routing->focus && routing->focus(window, keyval, state)) {
+          return TRUE;
+        }
         if (auto direction = routing->navigation ? routing->navigation(chord) : std::nullopt) {
           routing->navigate(*direction, window);
           return TRUE;
