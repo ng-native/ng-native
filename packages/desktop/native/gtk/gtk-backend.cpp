@@ -120,11 +120,14 @@ void GtkBackend::hostView(Tag tag, GtkWidget *slot) {
   GtkWidget *placeholder = makeViewWidget();
   g_object_ref_sink(placeholder);
   gtk_widget_set_child_visible(placeholder, FALSE);
+  // Unparenting makes a widget visible again: a covered screen (a tab not chosen) stays hidden.
+  gboolean childVisible = gtk_widget_get_child_visible(widget);
   if (GtkWidget *parent = gtk_widget_get_parent(widget)) {
     gtk_widget_insert_after(placeholder, parent, widget);
     gtk_widget_unparent(widget);
   }
   gtk_widget_set_parent(widget, slot);
+  gtk_widget_set_child_visible(widget, childVisible);
   hosted_[tag] = {.placeholder = placeholder, .slot = slot};
   gtk_widget_queue_resize(slot);
 }
@@ -138,10 +141,12 @@ void GtkBackend::unhostView(Tag tag) {
   hosted_.erase(it);
   GtkWidget *widget = view(tag);
   if (widget && gtk_widget_get_parent(widget) == hosted.slot) {
+    gboolean childVisible = gtk_widget_get_child_visible(widget);
     gtk_widget_unparent(widget);
     if (GtkWidget *parent = gtk_widget_get_parent(hosted.placeholder)) {
       gtk_widget_insert_after(widget, parent, hosted.placeholder);
     }
+    gtk_widget_set_child_visible(widget, childVisible);
     relayout(widget);
   }
   if (gtk_widget_get_parent(hosted.placeholder)) {

@@ -44,6 +44,8 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
     // A press a screen reader sends a view that has no handler of its own for it: a click, as
     // Space on the focused view is (InputDispatcher::activate). Whether it reached the view.
     std::function<bool(SurfaceId, Tag)> activate = [](SurfaceId, Tag) { return false; };
+    // The user chose the tab `screen` in the sidebar of the tabs host `host` (MountingManager::chooseTab).
+    std::function<void(SurfaceId, Tag host, Tag screen)> chooseTab = [](SurfaceId, Tag, Tag) {};
   } hooks;
 
   // The widget a surface's root mounts into, or null.

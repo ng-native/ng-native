@@ -511,6 +511,7 @@ int main(int argc, char *argv[]) {
             }
           },
       .activate = [](SurfaceId surface, facebook::react::Tag tag) { return gHost.input && gHost.input->activate(surface, tag); },
+      .chooseTab = [](SurfaceId surface, facebook::react::Tag host, facebook::react::Tag screen) { gHost.mounting->chooseTab(surface, host, screen); },
   };
   gHost.backend->modals().setSheetNodes([](SurfaceId surface, facebook::react::Tag tag) -> std::optional<ngn::SheetNode> {
     return gHost.runtime ? gHost.runtime->sheetNode(surface, tag) : std::nullopt;
