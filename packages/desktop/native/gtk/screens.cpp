@@ -143,11 +143,6 @@ void addClass(GtkWidget *widget, const std::string &name) {
   }
 }
 
-template <typename Fn>
-Fn adwFunction(const char *name) {
-  return reinterpret_cast<Fn>(dlsym(RTLD_DEFAULT, name));
-}
-
 } // namespace
 
 static void ngn_host_slot_class_init(NgnHostSlotClass *klass) {

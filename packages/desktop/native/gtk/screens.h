@@ -42,6 +42,8 @@
 
 #include <gtk/gtk.h>
 
+#include <dlfcn.h>
+
 #include <functional>
 #include <map>
 #include <memory>
@@ -92,6 +94,13 @@ void setSlotSize(GtkWidget *slot, std::optional<std::pair<int, int>> size);
 GtkWidget *makeSearchEntry(GtkBackend &backend, Tag tag);
 void applySearchBar(GtkWidget *entry, const facebook::react::Props &props);
 void runSearchBarCommand(GtkWidget *entry, const std::string &name, const folly::dynamic &args);
+
+// A libadwaita function newer than the 1.4 API the build targets, found at run time; null on an
+// older libadwaita.
+template <typename Fn>
+Fn adwFunction(const char *name) {
+  return reinterpret_cast<Fn>(dlsym(RTLD_DEFAULT, name));
+}
 
 // Whether AdwDialog is there to present a sheet with: libadwaita 1.5 or later at run time.
 bool haveAdwDialog();

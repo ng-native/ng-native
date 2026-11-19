@@ -33,11 +33,6 @@ struct Control {
 
 namespace {
 
-template <typename Fn>
-Fn adwFunction(const char *name) {
-  return reinterpret_cast<Fn>(dlsym(RTLD_DEFAULT, name));
-}
-
 const NativeControlProps *controlProps(const ViewData &view) {
   return dynamic_cast<const NativeControlProps *>(view.props.get());
 }

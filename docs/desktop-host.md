@@ -93,7 +93,10 @@ libadwaita`) as a dev loop, without libsecret, so SecureStore is absent there. I
   sections are a `GtkListBox` over their frames, drawn from the core's `sourceLists`, and Show
   Sidebar (F9) and the header bar's sidebar button go to the window's split view. A
   presented screen's header is the sheet's own header bar, with Cancel at the start and bound to
-  Escape and the last right item the default on Return. Close Window asks the presentation in
+  Escape and the last right item the default on Return. An alert (`alerts.h`) is an
+  `AdwAlertDialog` in the active window on libadwaita 1.5 and later, and an `AdwMessageDialog` on
+  1.4 or with no window, its buttons in GNOME's order (`gnomeAlertLayout`) and a prompt's fields in
+  it. Close Window asks the presentation in
   front of the window to close (`Modals::front`) before the window. Each tray icon is a
   StatusNotifierItem on a session-bus connection of its own (`status-notifier.h`), its menu laid
   out for `com.canonical.dbusmenu` by the core (`dbus-menu.h`); the tray module is left out when no
