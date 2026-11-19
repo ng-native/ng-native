@@ -8,6 +8,7 @@
 #include <react/renderer/attributedstring/AttributedString.h>
 #include <react/renderer/attributedstring/ParagraphAttributes.h>
 #include <react/renderer/graphics/Size.h>
+#include <react/renderer/textlayoutmanager/TextMeasureCache.h>
 #include <react/utils/ContextContainer.h>
 
 #include <memory>
@@ -24,6 +25,16 @@ class TextMeasurer {
       const facebook::react::AttributedString &text,
       const facebook::react::ParagraphAttributes &paragraph,
       facebook::react::Float maxWidth) const = 0;
+
+  // The lines the text lays out in at `width`, each with its frame and its first font's metrics,
+  // y measured from the top of the text: what a baseline and onTextLayout read. None by default,
+  // which reads as a baseline at the top.
+  virtual facebook::react::LinesMeasurements lines(
+      const facebook::react::AttributedString &text,
+      const facebook::react::ParagraphAttributes &paragraph,
+      facebook::react::Float width) const {
+    return {};
+  }
 };
 
 // The ContextContainer key the core's TextLayoutManager reads the measurer from.
