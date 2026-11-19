@@ -358,6 +358,33 @@ TEST_CASE("NgNativeUpdates answers what Updates calls, and is off in development
   CHECK(refused->find("development") != std::string::npos);
 }
 
+TEST_CASE("updates the host turns off are refused with its reason, and an app with no URL is told it has none") {
+  Fixture f;
+  auto config = f.config();
+  config.off = "Updates are off: the Linux host has no update checks yet.";
+  auto off = std::make_shared<ngn::UpdatesClient>(config, f.http, nullptr);
+  CHECK_FALSE(off->enabled());
+  CHECK(off->launch() == config.embeddedBundle);
+  auto refusal = [](const std::shared_ptr<ngn::UpdatesClient> &client) {
+    auto module = ngn::makeUpdatesModule(client, false, nullptr);
+    CHECK(module->property("isEnabled") == dynamic(false));
+    std::optional<std::string> refused;
+    module->callWithPromise("checkForUpdateAsync", dynamic::array(), {.reject = [&](const std::string &e) { refused = e; }});
+    std::optional<ngn::UpdatesClient::CheckResult> checked;
+    client->check([&](auto r) { checked = std::move(r); });
+    REQUIRE(refused);
+    REQUIRE(checked);
+    CHECK(checked->error == *refused);
+    return *refused;
+  };
+  CHECK(refusal(off) == "Updates are off: the Linux host has no update checks yet.");
+  CHECK(f.http->sent.empty());
+
+  config.url.clear();
+  auto noUrl = std::make_shared<ngn::UpdatesClient>(config, f.http, nullptr);
+  CHECK(refusal(noUrl) == "Updates are off: the app has no updates URL (updates.url in app.json).");
+}
+
 namespace {
 
 struct FakeAppUpdater final : ngn::AppUpdater {
