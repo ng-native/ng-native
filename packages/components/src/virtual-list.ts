@@ -153,6 +153,11 @@ const IN_FLOW: Record<string, unknown> = Object.freeze({});
 
 /** Points of drift below which a held position is left alone, as UIKit rounds to half-points. */
 const HOLD_TOLERANCE = 0.5;
+/**
+ * How long the JS thread has to be free of window changes before the window grows another
+ * viewport: FlatList's `updateCellsBatchingPeriod`.
+ */
+const FILL_BATCH_MS = 50;
 
 /** The row a held position is held by: its key, and how far into it the viewport starts. */
 interface Anchor<T> {
@@ -324,6 +329,14 @@ export class VirtualList<T> extends ScrollViewProps {
   readonly maintainVisibleContentPosition = input<VirtualListVisiblePosition>();
   /** Rows rendered beyond each edge of the viewport, to cover fling gaps. */
   readonly overscan = input(4, { transform: numberOr(4) });
+  /**
+   * How many viewports of rows the list renders at most, as FlatList's `windowSize`: the one on
+   * screen and the rest around it. While the JS thread is idle the window grows a viewport at a
+   * time, ahead of the scroll direction first, so a fling lands on rows already drawn. About two
+   * thirds of the extra viewports go ahead of the scroll and the rest behind. `1` renders the
+   * visible rows and the overscan only.
+   */
+  readonly windowSize = input(5, { transform: numberOr(5) });
   /** How close to the end, in viewport heights, `(endReached)` fires. RN's default is 2. */
   readonly endReachedThreshold = input(2, { transform: numberOr(2) });
 
@@ -392,6 +405,21 @@ export class VirtualList<T> extends ScrollViewProps {
   /** The offset once scrolling pauses, which the settled translate of a native-moved row is from. */
   private readonly settled = signal(0);
   private settleTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Viewports filled past the overscan, before and after the visible rows in index order. */
+  private readonly fill = signal({ before: 0, after: 0 });
+  /** The way the visible row last moved: 1 toward the end of the list, -1 toward the start. */
+  private readonly direction = signal(1);
+  /** The fill, cut to what `windowSize` allows ahead of the scroll and behind it. */
+  private readonly reach = computed(() => {
+    const { before, after } = this.fill();
+    const { ahead, behind } = this.fillCaps();
+    const forward = this.direction() > 0;
+    return {
+      before: Math.min(before, forward ? behind : ahead),
+      after: Math.min(after, forward ? ahead : behind),
+    };
+  });
+  private fillTimer: ReturnType<typeof setTimeout> | undefined;
   /** What native is moving, by row view, with the transform kept beside the translate. */
   private readonly drives = new Map<HostNode, { drive: ScrollDrive; statics: string }>();
   private readonly canvasView = viewChild.required('rows', { read: ElementRef });
@@ -733,10 +761,12 @@ export class VirtualList<T> extends ScrollViewProps {
     inject(DestroyRef).onDestroy(() => {
       stop();
       clearTimeout(this.settleTimer);
+      clearTimeout(this.fillTimer);
       this.zeroSize?.stop();
       for (const held of this.drives.values()) held.drive.stop();
     });
     if (this.zeroSize) this.checkZeroSize(this.zeroSize);
+    effect(() => this.scheduleFill());
   }
 
   /** The items the end and viewability were last checked against after a render. */
@@ -779,10 +809,12 @@ export class VirtualList<T> extends ScrollViewProps {
     if (!items.length) return null;
 
     const visible = Math.min(this.visible(), items.length - 1);
-    const first = Math.max(0, visible - overscan);
+    // In viewports, so nothing before the first layout.
+    const fill = this.reach();
     // Before the first layout we have no viewport, so render a screen's worth optimistically
     // rather than nothing: an empty first frame is worse than a few extra rows.
-    const budget = viewport > 0 ? viewport : this.heightOf(first) * overscan * 2;
+    const budget =
+      viewport > 0 ? viewport : this.heightOf(Math.max(0, visible - overscan)) * overscan * 2;
     /*
      * Measured from the top of the first *visible* row, not the first rendered one.
      *
@@ -793,6 +825,10 @@ export class VirtualList<T> extends ScrollViewProps {
      * heights they are not, and the list clips short of its own bottom.
      */
     const top = this.topOf(visible);
+    const first = Math.max(
+      0,
+      Math.min(visible - overscan, this.indexAt(top - fill.before * viewport)),
+    );
 
     let last = visible;
     while (last < items.length && this.topOf(last) < top + budget) last++;
@@ -804,7 +840,7 @@ export class VirtualList<T> extends ScrollViewProps {
      * when the visible row does.
      */
     let end = Math.min(items.length, last + overscan);
-    const deepest = top + this.heightOf(visible) + this.rowGap() + budget;
+    const deepest = top + this.heightOf(visible) + this.rowGap() + budget + fill.after * viewport;
     while (end < items.length && this.topOf(end) < deepest) end++;
     return { first, last: end };
   });
@@ -1271,7 +1307,7 @@ export class VirtualList<T> extends ScrollViewProps {
     const offset = this.topOf(index) + within;
     this.lastOffset = offset;
     this.anchor = { key: this.keyAt(index), within, items, index };
-    this.visible.set(index);
+    this.moveTo(index, true);
     this.scrollToOffset({ offset: this.headerHeight() + offset, animated: options.animated });
   }
 
@@ -1328,7 +1364,7 @@ export class VirtualList<T> extends ScrollViewProps {
     // Not clamped to the items: an input set in the same task as this event has not reached the
     // list yet, and the window clamps when it renders.
     const visible = this.indexAt(content);
-    if (visible !== this.visible()) this.visible.set(visible);
+    if (visible !== this.visible()) this.moveTo(visible);
     this.lastOffset = content;
     this.anchorAt(visible, content);
     // A pinned row follows the scroll continuously, so with sticky rows the offset has to be a
@@ -1338,6 +1374,56 @@ export class VirtualList<T> extends ScrollViewProps {
     if (this.nativeSticky && this.pinning()) this.settleAfterPause(content);
     this.checkEnd(along);
     this.announceViewable(content);
+  }
+
+  /** The most viewports rendered ahead of the scroll direction and behind it. */
+  private fillCaps(): { ahead: number; behind: number } {
+    const extra = Math.max(0, Math.floor(this.windowSize()) - 1);
+    const behind = Math.floor(extra / 3);
+    return { ahead: extra - behind, behind };
+  }
+
+  /**
+   * Move the window to a new visible row. A jump past the rendered rows starts the fill over, so
+   * it renders one viewport, not the whole filled window, in a single pass. A scroll keeps it: one
+   * past the rendered rows is a fling outrunning them, which is what the fill is for.
+   */
+  private moveTo(visible: number, jump = false): void {
+    this.turn(Math.sign(visible - this.visible()));
+    const span = this.span();
+    if (jump && span && (visible < span.first || visible >= span.last)) {
+      this.fill.set({ before: 0, after: 0 });
+    }
+    this.visible.set(visible);
+  }
+
+  /**
+   * Follow a change of scroll direction: the rows filled behind are now ahead, and those ahead are
+   * kept only up to what is kept behind.
+   */
+  private turn(direction: number): void {
+    if (!direction || direction === this.direction()) return;
+    this.direction.set(direction);
+    this.fill.set(this.reach());
+  }
+
+  /**
+   * Grow the window by a viewport once the JS thread has been free for a batch period, ahead of
+   * the scroll first. Every window change restarts the wait, so a fling is never slowed by it.
+   */
+  private scheduleFill(): void {
+    clearTimeout(this.fillTimer);
+    const reach = this.reach();
+    if (!this.span() || this.viewport() <= 0) return;
+    const { ahead, behind } = this.fillCaps();
+    const [front, back] =
+      this.direction() > 0 ? (['after', 'before'] as const) : (['before', 'after'] as const);
+    const side = reach[front] < ahead ? front : reach[back] < behind ? back : null;
+    if (!side) return;
+    this.fillTimer = setTimeout(
+      () => this.fill.set({ ...reach, [side]: reach[side] + 1 }),
+      FILL_BATCH_MS,
+    );
   }
 
   /** A pinned row's translate, settled once scrolling pauses: see `STICKY_SETTLE_MS`. */
