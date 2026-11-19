@@ -30,6 +30,9 @@ gradients (`background-image`) are drawn with their size, position and repeat, a
 outer or inset, is a blurred layer under the children. A view that clips its overflow also clips
 its outer shadows.
 
+An `<image>` with a `tintColor` shows the colour in the shape of its picture, keeping the
+picture's alpha, as React Native iOS does.
+
 ## Modals
 
 A `<modal>` with `pageSheet`, `formSheet` or no presentation style is an NSWindow sheet on its

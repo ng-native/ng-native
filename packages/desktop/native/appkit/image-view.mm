@@ -11,12 +11,50 @@
 
 using namespace facebook::react;
 
+namespace {
+
+// The image's shape filled with `tint`, at the image's own pixels: what UIKit's template rendering
+// makes of it, and what React Native iOS shows for `tintColor`. An image with no pixels to draw is
+// handed back as it is.
+NSImage *tintedImage(NSImage *image, const SharedColor &tint) {
+  CGImageRef source = [image CGImageForProposedRect:nullptr context:nil hints:nil];
+  size_t width = source ? CGImageGetWidth(source) : 0, height = source ? CGImageGetHeight(source) : 0;
+  if (width == 0 || height == 0) {
+    return image;
+  }
+  CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef context = CGBitmapContextCreate(nullptr, width, height, 8, 0, space, kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(space);
+  if (context == nullptr) {
+    return image;
+  }
+  CGRect rect = CGRectMake(0, 0, width, height);
+  CGContextDrawImage(context, rect, source);
+  // Source-in keeps the colour of the tint where the image has alpha, and the image's alpha with it.
+  CGContextSetBlendMode(context, kCGBlendModeSourceIn);
+  auto c = colorComponentsFromColor(tint);
+  CGContextSetRGBFillColor(context, c.red, c.green, c.blue, c.alpha);
+  CGContextFillRect(context, rect);
+  CGImageRef made = CGBitmapContextCreateImage(context);
+  CGContextRelease(context);
+  if (made == nullptr) {
+    return image;
+  }
+  NSImage *result = [[NSImage alloc] initWithCGImage:made size:image.size];
+  CGImageRelease(made);
+  return result;
+}
+
+} // namespace
+
 @implementation NGNImageView {
   NSString *_uri;
   // The source picked, whose method, headers and body the request carries.
   std::optional<ImageSource> _source;
   NSURLSessionDataTask *_task;
   NSImage *_image;
+  // The `tintColor` the image is shown in, if it has one.
+  SharedColor _tint;
   // Holds the image under the view's children. The view's own layer is no place for it: NGNView
   // draws its box in drawRect:, and each redraw (every layout asks for one) replaces the layer's
   // contents, so an image that loaded before the redraw was wiped.
@@ -74,6 +112,11 @@ using namespace facebook::react;
   }
   self.layer.masksToBounds = YES;
   _imageLayer.contentsGravity = self.layer.contentsGravity;
+  SharedColor tint = p->tintColor.value_or(SharedColor{});
+  if (tint != _tint) {
+    _tint = tint;
+    [self showImage];
+  }
   // The source whose scale is nearest the screen's, as React Native iOS picks.
   double screenScale = self.window ? self.window.backingScaleFactor : NSScreen.mainScreen.backingScaleFactor;
   auto source = ngn::pickImageSource(p->sources, screenScale);
@@ -89,7 +132,8 @@ using namespace facebook::react;
   [_task cancel];
   _task = nil;
   _load++;
-  _imageLayer.contents = nil;
+  _image = nil;
+  [self showImage];
   // A file is drawn only inside the file boundary, and exactly the file checked.
   std::shared_ptr<ngn::FileAccess::Use> use;
   NSString *load = _uri;
@@ -142,11 +186,19 @@ using namespace facebook::react;
   [_task resume];
 }
 
-- (void)loaded:(NSImage *)image {
-  _image = image;
+// The image on its layer, in the tint if there is one.
+- (void)showImage {
+  if (_image == nil && _imageLayer == nil) {
+    return;
+  }
   CALayer *layer = [self imageLayer];
   layer.contentsGravity = self.layer.contentsGravity;
-  layer.contents = image;
+  layer.contents = _image != nil && _tint ? tintedImage(_image, _tint) : _image;
+}
+
+- (void)loaded:(NSImage *)image {
+  _image = image;
+  [self showImage];
   if (auto e = [self imageEmitter]) {
     NSImageRep *rep = image.representations.firstObject;
     ImageSource source;
