@@ -85,12 +85,12 @@ std::vector<std::string> openUrls(const std::vector<std::string> &openArgs) {
   return urls;
 }
 
-void afterLayout(GtkWidget *window, std::function<void()> laidOut) {
+gulong afterLayout(GtkWidget *window, std::function<void()> laidOut) {
   GdkFrameClock *clock = gtk_widget_get_frame_clock(window);
   if (!clock) {
-    return;
+    return 0;
   }
-  g_signal_connect_data(
+  return g_signal_connect_data(
       clock, "paint", G_CALLBACK(+[](GdkFrameClock *, gpointer data) { (*static_cast<std::function<void()> *>(data))(); }),
       new std::function<void()>(std::move(laidOut)), [](gpointer data, GClosure *) { delete static_cast<std::function<void()> *>(data); },
       GConnectFlags(0));
@@ -121,13 +121,28 @@ void connectWindow(GtkWidget *window, const char *signal, WindowSignal data) {
 
 } // namespace
 
+bool GtkWindows::fillsScreen(GtkWindow *window) {
+  return gtk_window_is_maximized(window) || gtk_window_is_fullscreen(window);
+}
+
 GtkWindows::GtkWindows(Hooks hooks, GtkApplication *application, MenuPlacement menus)
     : hooks_(std::move(hooks)), application_(application), menus_(menus) {}
 
 GtkWindows::~GtkWindows() {
+  // Handlers first, which call back into these, then the windows still open.
   auto open = std::exchange(windows_, {});
-  for (auto &[surface, window] : open) {
-    gtk_window_destroy(GTK_WINDOW(window.window));
+  for (auto &[surface, entry] : open) {
+    disconnect(entry);
+    gtk_window_destroy(GTK_WINDOW(entry.window));
+  }
+}
+
+void GtkWindows::disconnect(Window &entry) {
+  g_clear_signal_handler(&entry.scaled, entry.window);
+  g_clear_signal_handler(&entry.closeRequested, entry.window);
+  if (entry.clock) {
+    g_clear_signal_handler(&entry.laidOut, entry.clock);
+    g_clear_object(&entry.clock);
   }
 }
 
@@ -167,6 +182,9 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
     if (hooks_.resizeSurface) {
       hooks_.resizeSurface(surface, w, h, gtk_widget_get_scale_factor(window));
     }
+    // A window that fills the screen has the size GTK allocates, which arrives after the
+    // notify::maximized or notify::fullscreened that reported the old one.
+    reportFrame(surface, true);
   });
   if (request.minWidth || request.minHeight) {
     gtk_widget_set_size_request(widget, static_cast<int>(request.minWidth.value_or(-1)), static_cast<int>(request.minHeight.value_or(-1)));
@@ -174,7 +192,8 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   adw_application_window_set_content(ADW_APPLICATION_WINDOW(window), wrapInChrome(widget, {.titleBar = request.titleBar, .menus = menus_}));
   windows_[surface] = {.window = window, .surface = widget};
   // A move to a monitor of another scale changes no size, so the surface widget does not report it.
-  g_signal_connect_data(
+  Window &entry = windows_[surface];
+  entry.scaled = g_signal_connect_data(
       window, "notify::scale-factor", G_CALLBACK(+[](GtkWidget *scaled, GParamSpec *, gpointer data) {
         auto *r = static_cast<CloseRequest *>(data);
         GtkWidget *content = r->windows->surfaceWidget(r->surface);
@@ -185,7 +204,7 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
       }),
       new CloseRequest{this, surface}, [](gpointer data, GClosure *) { delete static_cast<CloseRequest *>(data); }, GConnectFlags(0));
   auto *request_ = new CloseRequest{this, surface};
-  g_signal_connect_data(
+  entry.closeRequested = g_signal_connect_data(
       window, "close-request", G_CALLBACK(+[](GtkWindow *, gpointer data) -> gboolean {
         auto *r = static_cast<CloseRequest *>(data);
         auto host = r->windows->host_.lock();
@@ -214,11 +233,15 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   }
   // Realized, so the surface knows its scale, but not shown until its first frame mounts.
   gtk_widget_realize(window);
-  afterLayout(window, [this, surface] {
+  entry.laidOut = afterLayout(window, [this, surface] {
     if (hooks_.laidOut) {
       hooks_.laidOut(surface);
     }
   });
+  // Held with the handler, which goes before the window: the clock is its surface's until then.
+  if (entry.laidOut) {
+    entry.clock = GDK_FRAME_CLOCK(g_object_ref(gtk_widget_get_frame_clock(window)));
+  }
   if (hooks_.startSurface) {
     hooks_.startSurface(surface, width, height, gtk_widget_get_scale_factor(window));
   }
@@ -252,7 +275,7 @@ void GtkWindows::didMount(SurfaceId surface) {
   reportFrame(surface);
 }
 
-void GtkWindows::reportFrame(SurfaceId surface) {
+void GtkWindows::reportFrame(SurfaceId surface, bool onAllocation) {
   auto it = windows_.find(surface);
   auto host = host_.lock();
   // A window still waiting for its first frame has not been sized by the user.
@@ -262,16 +285,27 @@ void GtkWindows::reportFrame(SurfaceId surface) {
   GtkWindow *window = GTK_WINDOW(it->second.window);
   bool maximized = gtk_window_is_maximized(window);
   bool fullScreen = gtk_window_is_fullscreen(window);
+  bool fills = windowFills(window);
+  // An allocation of a window with a size of its own changes nothing the app was not told.
+  if (onAllocation && !fills) {
+    return;
+  }
   // The default size is the one the window has, or goes back to when it fills the screen.
   int width = 0, height = 0;
   gtk_window_get_default_size(window, &width, &height);
   WindowFrame saved{.width = static_cast<double>(width), .height = static_cast<double>(height), .maximized = maximized, .fullScreen = fullScreen};
   WindowFrame now = saved;
-  if ((maximized || fullScreen) && gtk_widget_get_width(it->second.surface) > 0) {
+  if (fills && gtk_widget_get_width(it->second.surface) > 0) {
     now.width = gtk_widget_get_width(it->second.surface);
     now.height = gtk_widget_get_height(it->second.surface);
   }
+  // Each allocation comes here, but the app hears a size once.
+  if (onAllocation && now.width == it->second.reportedWidth && now.height == it->second.reportedHeight) {
+    return;
+  }
   if (width > 0 && height > 0) {
+    it->second.reportedWidth = now.width;
+    it->second.reportedHeight = now.height;
     host->resized(surface, now, gtk_widget_get_scale_factor(it->second.window), saved);
   }
 }
@@ -315,6 +349,7 @@ void GtkWindows::close(SurfaceId surface) {
     return;
   }
   GtkWidget *window = it->second.window;
+  disconnect(it->second);
   windows_.erase(it);
   if (hooks_.stopSurface) {
     hooks_.stopSurface(surface);
