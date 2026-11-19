@@ -810,6 +810,61 @@ describe('windowed list options', () => {
     assert.deepEqual(placed.at(-1), ['set', offset, end]);
   });
 
+  it('tells native where scrollToEnd goes, in place of a jump still on its way', async () => {
+    const { native, named } = recorder();
+    await boot({ height: VIEWPORT }, { nativeAnimated: native });
+    instance.sticky.set([0, 200]);
+    await settle();
+    await fireEvent.scroll(host, { contentOffset: { y: 5 * ITEM_HEIGHT } });
+    const offset = named('create').find(
+      ([, , config]) => (config as { offset?: number }).offset !== undefined,
+    )![1];
+    const list = (
+      instance as unknown as {
+        list(): {
+          scrollToOffset(options: { offset: number; animated?: boolean }): void;
+          scrollToEnd(options?: { animated?: boolean }): void;
+          items(): readonly unknown[];
+        };
+      }
+    ).list();
+    list.scrollToOffset({ offset: 50 * ITEM_HEIGHT, animated: false });
+    list.scrollToEnd({ animated: false });
+    instance.sticky.set([0, 200, 400]);
+    await settle();
+    const end = list.items().length * ITEM_HEIGHT - VIEWPORT;
+    const placed = named('set').filter(([, tag]) => tag === offset);
+    assert.deepEqual(placed.at(-1), ['set', offset, end]);
+  });
+
+  it('counts a header that changed since native last reported its content, for a scroll past the end', async () => {
+    const { native, named } = recorder();
+    await boot({ height: VIEWPORT }, { nativeAnimated: native });
+    instance.sticky.set([0, 200]);
+    await settle();
+    await fireEvent.scroll(host, { contentOffset: { y: 5 * ITEM_HEIGHT } });
+    const offset = named('create').find(
+      ([, , config]) => (config as { offset?: number }).offset !== undefined,
+    )![1];
+    const list = (
+      instance as unknown as {
+        list(): {
+          scrollToOffset(options: { offset: number; animated?: boolean }): void;
+          items(): readonly unknown[];
+        };
+      }
+    ).list();
+    const rows = list.items().length * ITEM_HEIGHT;
+    await fireEvent(host, 'contentSizeChange', { width: 300, height: rows });
+    // The header grows; native has not reported the content again yet.
+    await fireEvent(host.children[0]!.children[0]!, 'layout', { layout: { height: 100 } });
+    list.scrollToOffset({ offset: rows + 5000, animated: false });
+    instance.sticky.set([0, 200, 400]);
+    await settle();
+    const placed = named('set').filter(([, tag]) => tag === offset);
+    assert.deepEqual(placed.at(-1), ['set', offset, rows + 100 - VIEWPORT]);
+  });
+
   it('leaves native s offset to native while the user scrolls', async () => {
     // Mid-fling the offset here trails native's: setting it as a new sticky row arrives would
     // pull every pinned row back by the difference for a frame.

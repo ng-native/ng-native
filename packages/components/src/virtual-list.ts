@@ -1359,13 +1359,12 @@ export class VirtualList<T> extends ScrollViewProps {
     const { offset, animated = true } = options;
     this.jumpTo(this.indexAt(offset - this.headerHeight()));
     const [x, y] = this.horizontal() ? [offset, 0] : [0, offset];
-    this.jumped = true;
-    this.landed = false;
-    this.jumpedTo = this.reachable(offset);
+    this.jumping(this.reachable(offset));
     this.engine.dispatchCommand(this.node, 'scrollTo', [x, y, animated]);
   }
 
   scrollToEnd(options: { animated?: boolean } = {}): void {
+    this.jumping(this.reachable(Infinity));
     this.jumpTo(this.items().length - 1);
     this.engine.dispatchCommand(this.node, 'scrollToEnd', [options.animated ?? true]);
   }
@@ -1533,22 +1532,29 @@ export class VirtualList<T> extends ScrollViewProps {
   protected onContentSize(event: NativeSyntheticEvent<{ width?: number; height?: number }>): void {
     const size = event.nativeEvent;
     this.contentSize = (this.horizontal() ? size?.width : size?.height) ?? 0;
-    this.contentSizeFor = this.extent();
+    this.contentSizeFor = this.headerHeight() + this.extent();
     this.checkEnd(this.headerHeight() + this.lastOffset);
   }
 
   /** The scroll view's content along the axis, header and all. */
   private contentExtent(): number {
     // Native's size is for the rows it last laid out; until it reports for these, their own extent.
-    const extent = this.extent();
-    const reported = this.contentSizeFor === extent ? this.contentSize : 0;
-    return reported || this.headerHeight() + extent;
+    const own = this.headerHeight() + this.extent();
+    return this.contentSizeFor === own ? this.contentSize : own;
+  }
+
+  /** The list is scrolling itself, to `to` in the scroll view, where native has not drawn yet. */
+  private jumping(to: number): void {
+    this.jumped = true;
+    this.landed = false;
+    this.jumpedTo = to;
   }
 
   /** How far toward `offset` native can scroll: it stops at its end, and says nothing of it. */
   private reachable(offset: number): number {
     const viewport = this.viewport();
-    const end = viewport > 0 ? Math.max(0, this.contentExtent() - viewport) : Infinity;
+    const total = this.contentExtent();
+    const end = viewport > 0 ? Math.max(0, total - viewport) : total;
     return Math.min(Math.max(0, offset), end);
   }
 
