@@ -357,6 +357,49 @@ size_t requestsInFlight() {
   return pending().size();
 }
 
+GVariant *property(const char *interface, const char *name) {
+  GDBusConnection *bus = connection();
+  if (!bus) {
+    return nullptr;
+  }
+  GVariant *reply = g_dbus_connection_call_sync(bus, kBusName, kObjectPath, "org.freedesktop.DBus.Properties", "Get",
+                                                g_variant_new("(ss)", interface, name), G_VARIANT_TYPE("(v)"), G_DBUS_CALL_FLAGS_NONE,
+                                                2000, nullptr, nullptr);
+  g_object_unref(bus);
+  if (!reply) {
+    return nullptr;
+  }
+  GVariant *value = nullptr;
+  g_variant_get(reply, "(v)", &value);
+  g_variant_unref(reply);
+  return value;
+}
+
+int openPipeWireRemote(const char *interface) {
+  GDBusConnection *bus = connection();
+  if (!bus) {
+    return -1;
+  }
+  GUnixFDList *fds = nullptr;
+  GVariant *reply = g_dbus_connection_call_with_unix_fd_list_sync(
+      bus, kBusName, kObjectPath, interface, "OpenPipeWireRemote", g_variant_new("(a{sv})", nullptr), G_VARIANT_TYPE("(h)"),
+      G_DBUS_CALL_FLAGS_NONE, 5000, nullptr, &fds, nullptr, nullptr);
+  g_object_unref(bus);
+  int fd = -1;
+  if (reply && fds) {
+    gint32 index = -1;
+    g_variant_get(reply, "(h)", &index);
+    fd = g_unix_fd_list_get(fds, index, nullptr);
+  }
+  if (reply) {
+    g_variant_unref(reply);
+  }
+  if (fds) {
+    g_object_unref(fds);
+  }
+  return fd;
+}
+
 void useConnection(GDBusConnection *connection) {
   g_clear_object(&gInjected);
   if (connection) {

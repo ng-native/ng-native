@@ -2,6 +2,10 @@
 
 #include "accessible.h"
 #include "image-view.h"
+#if NGN_GSTREAMER
+#include "camera.h"
+#include "video.h"
+#endif
 #include "native-controls.h"
 #include "scroll-view.h"
 #include "text-field.h"
@@ -214,6 +218,32 @@ void GtkBackend::createView(const ShadowView &view) {
     applyScrollViewState(*d);
   } else if (d->component == "Image") {
     makeImageView(widget, *d);
+#if NGN_GSTREAMER
+  } else if (d->component == VideoViewComponentName) {
+    // The view's events reach whichever emitter the view has when they come.
+    d->video = makeVideoSurface(widget, [this, tag = view.tag](const std::string &name) {
+      auto found = views_.find(tag);
+      ViewData *data = found != views_.end() ? viewData(found->second) : nullptr;
+      if (data && data->emitter) {
+        if (auto emitter = std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(data->emitter)) {
+          emitter->dispatchEvent(name, folly::dynamic::object(), facebook::react::RawEvent::Category::Discrete);
+        }
+      }
+    });
+  } else if (d->component == CameraComponentName) {
+    d->camera = makeCameraSurface(widget, view.tag, [this, tag = view.tag](const std::string &name, folly::dynamic payload) {
+      auto found = views_.find(tag);
+      ViewData *data = found != views_.end() ? viewData(found->second) : nullptr;
+      if (data && data->emitter) {
+        if (auto emitter = std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(data->emitter)) {
+          emitter->dispatchEvent(name, std::move(payload), facebook::react::RawEvent::Category::Discrete);
+        }
+      }
+    });
+    if (auto camera = std::dynamic_pointer_cast<const CameraProps>(view.props)) {
+      applyCameraSurface(*d->camera, *camera);
+    }
+#endif
   } else if (d->component == "RNSScreenStackHeaderConfig") {
     // What of a header shows is in the window's header bar: its subtree is neither drawn nor hit
     // in the content.
@@ -317,6 +347,14 @@ void GtkBackend::updateProps(const ShadowView &view) {
   if (d->image) {
     applyImageProps(*d, gtk_widget_get_scale_factor(it->second));
   }
+#if NGN_GSTREAMER
+  if (auto video = std::dynamic_pointer_cast<const VideoViewProps>(view.props); d->video && video) {
+    applyVideoSurface(*d->video, videoViewModel(video->values));
+  }
+  if (auto camera = std::dynamic_pointer_cast<const CameraProps>(view.props); d->camera && camera) {
+    applyCameraSurface(*d->camera, *camera);
+  }
+#endif
   if (GtkWidget *entry = searchEntry(view.tag); entry && view.props) {
     applySearchBar(entry, *view.props);
   }

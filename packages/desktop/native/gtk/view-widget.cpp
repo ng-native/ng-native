@@ -5,6 +5,10 @@
 #include "image-view.h"
 #include "scroll-view.h"
 #include "text-field.h"
+#if NGN_GSTREAMER
+#include "camera.h"
+#include "video.h"
+#endif
 
 #include "ngn/view-box.h"
 #include "ngn/view-transform.h"
@@ -72,6 +76,11 @@ void viewSizeAllocate(GtkWidget *widget, int width, int height, int) {
       } else if (child == d->control) {
         GtkAllocation all{0, 0, width, height};
         gtk_widget_size_allocate(child, &all, -1);
+#if NGN_GSTREAMER
+      } else if ((d->video && child == ngn::gtk::videoWidget(*d->video)) || (d->camera && child == ngn::gtk::cameraWidget(*d->camera))) {
+        GtkAllocation all{0, 0, width, height};
+        gtk_widget_size_allocate(child, &all, -1);
+#endif
       }
       continue;
     }
@@ -183,6 +192,8 @@ void viewDispose(GObject *object) {
   ngn::gtk::destroyTextField(*d);
   ngn::gtk::destroyImage(*d);
   ngn::gtk::destroyScrollView(*d);
+  d->video.reset();
+  d->camera.reset();
   while (GtkWidget *child = gtk_widget_get_first_child(widget)) {
     gtk_widget_unparent(child);
   }

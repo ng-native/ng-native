@@ -436,7 +436,7 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
     ...row(
       '`audioPlayer()`, `audioRecorder()`',
       [],
-      ['yes', 'absent', 'yes', 'yes', 'yes', 'yes'],
+      ['yes', 'yes, through GStreamer', 'yes', 'yes', 'yes', 'yes'],
       {
         audioPlayer: 'NgNativeAudio',
         audioRecorder: 'NgNativeAudio',

@@ -117,9 +117,14 @@ DesktopModules addDesktopModules(ModuleRegistry &registry, const DesktopModuleSo
       return makeImagePickerModule(photos, photos, noPrompts, camera);
     });
   } else {
-    // A picker with no library and no camera: the library half alone.
-    addSourced(s.photoPicker, "NgNativeImagePicker", [picker = s.photoPicker, noPrompts = s.noPrompts] {
-      return makeImagePickerModule(picker, nullptr, noPrompts);
+    // A picker with no photo library behind it (makeFilePhotoPicker), and the camera where the
+    // backend has one.
+    std::optional<PickerCamera> camera;
+    if (s.cameraHardware && s.audioInput && s.cameraSheet) {
+      camera = PickerCamera{.hardware = s.cameraHardware, .microphone = s.audioInput, .sheet = s.cameraSheet, .folder = s.caches + "/ImagePicker"};
+    }
+    addSourced(s.photoPicker, "NgNativeImagePicker", [picker = s.photoPicker, noPrompts = s.noPrompts, camera] {
+      return makeImagePickerModule(picker, nullptr, noPrompts, camera);
     });
   }
   addSourced(s.tracking, "NgNativeTrackingTransparency", [tracking = s.tracking, noPrompts = s.noPrompts] {

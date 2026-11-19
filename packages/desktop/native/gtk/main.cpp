@@ -11,6 +11,10 @@
 // in-process (capture.h).
 #include "app-info.h"
 #include "app-windows.h"
+#if NGN_GSTREAMER
+#include "audio.h"
+#include "camera.h"
+#endif
 #include "auth-session.h"
 #include "battery.h"
 #include "capture.h"
@@ -696,6 +700,11 @@ int main(int argc, char *argv[]) {
   updatesConfig.off = "Updates are off: the Linux host has no update checks yet.";
   auto updates = std::make_shared<ngn::UpdatesClient>(std::move(updatesConfig), network.http, nullptr);
   auto fileDialogs = ngn::gtk::makeFileDialogs();
+#if NGN_GSTREAMER
+  // The camera through the Camera portal, with the microphone a recording's sound comes from.
+  auto microphone = ngn::gtk::makeAudioInput();
+  auto cameraHardware = ngn::gtk::makeCameraHardware({.microphone = microphone});
+#endif
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
   // is left empty, and its module is not registered: JavaScript reads it as absent (NgNativeHost).
   auto desktopModules = ngn::addDesktopModules(
@@ -730,9 +739,19 @@ int main(int argc, char *argv[]) {
        .power = ngn::gtk::makePowerSource(),
        .fontRegistrar = ngn::gtk::makeFontRegistrar(),
        .authSession = gAuthSession,
+#if NGN_GSTREAMER
+       // Playback and recording through GStreamer, each left out where it is not installed.
+       .audioOutput = ngn::gtk::makeAudioOutput(),
+       .audioInput = microphone,
+       .videoOutput = ngn::gtk::makeVideoOutput(),
+#endif
        .splash = gSplash,
-       // ImagePicker's library half: the FileChooser portal over the user's files. No camera yet.
+       // ImagePicker's library half: the FileChooser portal over the user's files; its camera is the camera's.
        .photoPicker = ngn::makeFilePhotoPicker(fileDialogs, caches + "/ImagePicker", ngn::gtk::imagePixelSize),
+#if NGN_GSTREAMER
+       .cameraHardware = cameraHardware,
+       .cameraSheet = cameraHardware ? ngn::gtk::makeCameraSheet() : nullptr,
+#endif
        .imageCodec = ngn::gtk::makeImageCodec(),
        .printSystem = ngn::gtk::makePrintSystem(surfaceWidgetOf),
        .crypto = ngn::gtk::makeCryptoSource(),
@@ -740,6 +759,9 @@ int main(int argc, char *argv[]) {
        .regionCode = ngn::gtk::systemRegionCode,
        .updates = updates,
        .reload = [](const std::string &next, std::function<void(bool)> done) { gHost.runtime->reload(next, std::move(done)); }});
+#if NGN_GSTREAMER
+  ngn::gtk::useCameraHardware(cameraHardware, desktopModules.cameraViews, settings.noPrompts);
+#endif
   // The names fonts are loaded under, which text resolves (fonts.h).
   ngn::gtk::useFontLibrary(desktopModules.fonts);
 

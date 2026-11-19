@@ -31,10 +31,12 @@ G_END_DECLS
 
 namespace ngn::gtk {
 
+struct CameraSurface;
 struct ImageLoad;
 struct ScrollBox;
 class SvgImageHold;
 struct TextField;
+struct VideoSurface;
 
 struct ViewData {
   // The widget holding this data, which a view whose role changes trades for another.
@@ -58,6 +60,10 @@ struct ViewData {
   ScrollBox *scroll{nullptr};
   // A scroll view's document: as large as the content it scrolls, which GTK reads from its measure.
   ScrollBox *documentOf{nullptr};
+  // An `<expo-camera>`'s picture and running camera (camera.h).
+  std::shared_ptr<CameraSurface> camera;
+  // An `<expo-video>`'s picture and controls (video.h).
+  std::shared_ptr<VideoSurface> video;
   // An svg's document, which the core builds from the elements under it.
   std::shared_ptr<const SvgDocument> svg;
   // The images its last draw asked for, kept for it in the shared cache.
