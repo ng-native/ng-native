@@ -109,6 +109,8 @@ bool haveAdwDialog();
 // sheet the first time it is asked for; empty for no colour. The class names its colour, so its rule
 // never goes stale.
 std::string colorClass(const char *property, const facebook::react::SharedColor &color);
+// The rule colorClass adds for a class `name`: the alpha is written with a point in any locale.
+std::string colorRule(const char *name, const char *property, float red, float green, float blue, float alpha);
 
 // The header the window of each surface shows.
 class Headers {
