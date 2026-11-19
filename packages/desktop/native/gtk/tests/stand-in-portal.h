@@ -1,4 +1,5 @@
-// A portal of our own for the GTK tests: org.freedesktop.portal.Desktop's OpenURI and Inhibit over
+// A portal of our own for the GTK tests: org.freedesktop.portal.Desktop's OpenURI, Inhibit and
+// Notification over
 // a peer-to-peer connection, so no session bus is needed. The portal helper is pointed at it while
 // it lasts.
 #pragma once
@@ -59,6 +60,11 @@ inline const char *kPortalIntrospection = R"(<node>
   <interface name="org.freedesktop.portal.Inhibit">
     <method name="Inhibit"><arg type="s" direction="in"/><arg type="u" direction="in"/><arg type="a{sv}" direction="in"/><arg type="o" direction="out"/></method>
   </interface>
+  <interface name="org.freedesktop.portal.Notification">
+    <method name="AddNotification"><arg type="s" direction="in"/><arg type="a{sv}" direction="in"/></method>
+    <method name="RemoveNotification"><arg type="s" direction="in"/></method>
+    <signal name="ActionInvoked"><arg type="s"/><arg type="s"/><arg type="av"/></signal>
+  </interface>
   <interface name="org.freedesktop.portal.Request">
     <method name="Close"/>
   </interface>
@@ -74,6 +80,11 @@ struct StandInPortal {
     std::string second;
     unsigned flags{0};
     ino_t inode{0};
+    // A notification's body and default action, and whether its options had a handle_token.
+    std::string body;
+    std::string action;
+    std::string target;
+    bool token{false};
   };
 
   GDBusConnection *server{nullptr};
@@ -84,12 +95,14 @@ struct StandInPortal {
   unsigned response{0};
   // Interfaces the stand-in does not offer: their calls fail as a missing portal's do.
   bool offersOpenUri{true};
+  bool offersNotification{true};
 
   StandInPortal() {
     std::tie(server, client) = peerToPeer();
     node = g_dbus_node_info_new_for_xml(kPortalIntrospection, nullptr);
     add("org.freedesktop.portal.OpenURI", "/org/freedesktop/portal/desktop");
     add("org.freedesktop.portal.Inhibit", "/org/freedesktop/portal/desktop");
+    add("org.freedesktop.portal.Notification", "/org/freedesktop/portal/desktop");
     ngn::gtk::portal::useConnection(client);
   }
 
@@ -118,6 +131,10 @@ struct StandInPortal {
     if (method == "Close") {
       calls.push_back(call);
       g_dbus_method_invocation_return_value(invocation, nullptr);
+      return;
+    }
+    if (interface == "org.freedesktop.portal.Notification") {
+      notified(method, parameters, invocation);
       return;
     }
     if (interface == "org.freedesktop.portal.OpenURI" && !offersOpenUri) {
@@ -161,6 +178,49 @@ struct StandInPortal {
     g_variant_builder_init(&results, G_VARIANT_TYPE_VARDICT);
     g_dbus_connection_emit_signal(server, nullptr, handle.c_str(), "org.freedesktop.portal.Request", "Response",
                                   g_variant_new("(ua{sv})", response, &results), nullptr);
+  }
+
+  // AddNotification(id, notification) and RemoveNotification(id), which return at once.
+  void notified(const std::string &method, GVariant *parameters, GDBusMethodInvocation *invocation) {
+    if (!offersNotification) {
+      g_dbus_method_invocation_return_error(invocation, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_INTERFACE, "no Notification here");
+      return;
+    }
+    Call call{.method = method};
+    GVariant *id = g_variant_get_child_value(parameters, 0);
+    call.first = g_variant_get_string(id, nullptr);
+    g_variant_unref(id);
+    if (method == "AddNotification") {
+      GVariant *options = g_variant_get_child_value(parameters, 1);
+      const gchar *text = nullptr;
+      if (g_variant_lookup(options, "title", "&s", &text)) {
+        call.second = text;
+      }
+      if (g_variant_lookup(options, "body", "&s", &text)) {
+        call.body = text;
+      }
+      if (g_variant_lookup(options, "default-action", "&s", &text)) {
+        call.action = text;
+      }
+      if (GVariant *target = g_variant_lookup_value(options, "default-action-target", G_VARIANT_TYPE_STRING)) {
+        call.target = g_variant_get_string(target, nullptr);
+        g_variant_unref(target);
+      }
+      if (GVariant *token = g_variant_lookup_value(options, "handle_token", nullptr)) {
+        call.token = true;
+        g_variant_unref(token);
+      }
+      g_variant_unref(options);
+    }
+    calls.push_back(call);
+    g_dbus_method_invocation_return_value(invocation, nullptr);
+  }
+
+  // The user clicked the notification `id`: the portal tells the app, which it cannot activate.
+  void invoke(const std::string &id, const std::string &action) {
+    g_dbus_connection_emit_signal(server, nullptr, "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Notification",
+                                  "ActionInvoked", g_variant_new("(ss@av)", id.c_str(), action.c_str(), g_variant_new_array(G_VARIANT_TYPE_VARIANT, nullptr, 0)),
+                                  nullptr);
   }
 };
 

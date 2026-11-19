@@ -31,7 +31,10 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   a sandbox and outside one; where no portal answers (no session bus, as in the dev loop on a Mac),
   each caller falls back to GTK's own path. Linking and Shell open a url, a file or its folder
   through the OpenURI portal, falling back to `GtkUriLauncher` and `GtkFileLauncher`, and KeepAwake
-  holds the session idle through the Inhibit portal (`system-access.h`). FileSystem's `watch` is a
+  holds the session idle through the Inhibit portal (`system-access.h`). Notifications show through
+  the Notification portal, or GNotification where none answers, and fire from the core's
+  `notification-schedule.h`, a schedule kept in a file and run from a timer in the app, since Linux
+  has no scheduler (`notifications.h`). FileSystem's `watch` is a
   `GFileMonitor` (inotify), and its desktop and downloads folders come from the XDG user-dirs file,
   absent when it names none (`file-system.h`). A `GtkDropTarget` on each surface hands a drag's
   file list or text to the core's input dispatcher, and a drag out the dispatcher starts from a

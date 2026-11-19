@@ -188,20 +188,28 @@ void start(std::unique_ptr<Call> call) {
   GDBusConnection *bus = connection();
   if (!bus) {
     g_variant_unref(call->leading);
-    g_variant_builder_unref(call->options);
+    if (call->options) {
+      g_variant_builder_unref(call->options);
+    }
     g_clear_object(&call->fds);
     call->answer(Outcome::Absent, nullptr);
     return;
   }
+  // A method with no Request takes no handle_token: a portal that checks its options (the
+  // Notification portal's) refuses one it does not know.
   auto token = "ngn" + std::to_string(++tokens);
-  g_variant_builder_add(call->options, "{sv}", "handle_token", g_variant_new_string(token.c_str()));
+  if (call->returnsRequest && call->options) {
+    g_variant_builder_add(call->options, "{sv}", "handle_token", g_variant_new_string(token.c_str()));
+  }
   GVariantBuilder arguments;
   g_variant_builder_init(&arguments, G_VARIANT_TYPE_TUPLE);
   for (gsize i = 0, n = g_variant_n_children(call->leading); i < n; ++i) {
     g_variant_builder_add_value(&arguments, g_variant_get_child_value(call->leading, i));
   }
-  g_variant_builder_add_value(&arguments, g_variant_builder_end(call->options));
-  g_variant_builder_unref(call->options);
+  if (call->options) {
+    g_variant_builder_add_value(&arguments, g_variant_builder_end(call->options));
+    g_variant_builder_unref(call->options);
+  }
   g_variant_unref(call->leading);
 
   auto id = ++next;
@@ -286,6 +294,24 @@ GtkWindow *frontWindow() {
     }
   }
   return front;
+}
+
+std::function<void()> subscribe(const char *interface, const char *signal, std::function<void(GVariant *)> heard) {
+  GDBusConnection *bus = connection();
+  if (!bus) {
+    return [] {};
+  }
+  using Heard = std::function<void(GVariant *)>;
+  guint id = g_dbus_connection_signal_subscribe(
+      bus, gInjected ? nullptr : kBusName, interface, signal, kObjectPath, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+      +[](GDBusConnection *, const gchar *, const gchar *, const gchar *, const gchar *, GVariant *parameters, gpointer data) {
+        (*static_cast<Heard *>(data))(parameters);
+      },
+      new Heard(std::move(heard)), +[](gpointer data) { delete static_cast<Heard *>(data); });
+  return [bus, id] {
+    g_dbus_connection_signal_unsubscribe(bus, id);
+    g_object_unref(bus);
+  };
 }
 
 void close(const std::string &path) {

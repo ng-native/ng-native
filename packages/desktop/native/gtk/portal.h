@@ -22,13 +22,19 @@ using Answer = std::function<void(Outcome outcome, GVariant *results)>;
 
 // Calls `method` of `interface` (org.freedesktop.portal.OpenURI, say) with `leading` (a tuple of
 // the arguments before its options, floating or owned, consumed) and `options` (an a{sv} builder's
-// end, consumed; a handle_token is added), and with `fds` (may be null) for its `h` arguments.
-// Answers once the portal's Request has its Response. A portal with no Request (a method that
-// returns at once) answers Done with null results.
+// end, consumed; null for a method with no options; a handle_token is added when the method returns
+// a Request), and with `fds` (may be
+// null) for its `h` arguments. Answers once the portal's Request has its Response. A portal with no
+// Request (a method that returns at once, `returnsRequest` false) answers Done with null results.
 // `started`, when given, hears the Request's object path once the portal returns it: a request
 // that lasts until closed (Inhibit's) is ended with close(path).
 void request(const char *interface, const char *method, GVariant *leading, GVariantBuilder *options, GUnixFDList *fds,
              Answer answer, bool returnsRequest = true, std::function<void(const std::string &path)> started = {});
+
+// Hears each `signal` of `interface` the portal sends (Notification's ActionInvoked, say), with its
+// parameters borrowed for the call, on the main context, until the answer is called. Nothing is
+// heard where there is no session bus.
+std::function<void()> subscribe(const char *interface, const char *signal, std::function<void(GVariant *parameters)> heard);
 
 // Ends the Request at `path` (org.freedesktop.portal.Request.Close), which then never answers.
 void close(const std::string &path);

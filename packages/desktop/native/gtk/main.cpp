@@ -17,6 +17,7 @@
 #include "image-view.h"
 #include "input-replay.h"
 #include "menus.h"
+#include "notifications.h"
 #include "pango-text.h"
 #include "scroll-view.h"
 #include "secret-store.h"
@@ -614,7 +615,10 @@ int main(int argc, char *argv[]) {
        .shell = ngn::gtk::makeShellOpener(),
        .secrets = ngn::gtk::makeSecretStore(appId, ngn::gtk::insideFlatpak()),
        .sleep = ngn::gtk::makeSleepPreventer(gHost.application),
-       .notifications = [](std::shared_ptr<ngn::NotificationEvents>) { return std::shared_ptr<ngn::NotificationCenter>(); },
+       .notifications =
+           [appData](std::shared_ptr<ngn::NotificationEvents> events) {
+             return ngn::gtk::makeNotificationCenter(G_APPLICATION(gHost.application), appData, std::move(events), raiseApp);
+           },
        .fileWatcher = ngn::gtk::makeFileWatcher(),
        .pathMonitor = ngn::gtk::makePathMonitor(),
        .regionCode = [system] {
