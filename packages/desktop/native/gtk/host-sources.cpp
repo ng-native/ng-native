@@ -1,5 +1,6 @@
 #include "host-sources.h"
 
+#include "alerts.h"
 #include "app-windows.h"
 #include "native-controls.h"
 
@@ -193,8 +194,7 @@ class GtkSystem final : public System {
     });
   }
   void showAlert(const AlertRequest &request, std::function<void(int, std::string, std::string)> done) override {
-    fprintf(stderr, "[ngn] alert (no dialogs yet): %s: %s\n", request.title.c_str(), request.message.c_str());
-    done(request.cancelIndex, "", "");
+    onMainContext([request, done = std::move(done)]() mutable { ngn::gtk::showAlert(request, std::move(done), activeWindow()); });
   }
   std::optional<std::string> clipboardText() override {
     std::lock_guard lock(mutex_);
