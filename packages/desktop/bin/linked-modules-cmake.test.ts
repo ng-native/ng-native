@@ -37,7 +37,7 @@ function configure(backend: string, link: object) {
       'project(fixture C)',
       'add_library(react_native INTERFACE)',
       'set(NGN_BACKEND ' + backend + ')',
-      `include(${linkedModules})`,
+      `include("${linkedModules}")`,
       'message(STATUS "NGN_LINKED=[${NGN_LINKED}]")',
       '',
     ].join('\n'),

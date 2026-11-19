@@ -8,11 +8,17 @@
 #   /drip?n=N&ms=M  N bytes, one every M ms
 #   /stall          headers and part of the body, then silence
 #   /redirect       302 to /text; /see-other 303 and /temporary 307 to /echo; /loop 302 to itself
+#   /empty-location 302 with an empty Location and a body; /multiple-choices 300 to /text
 #   /set-cookie     sets flavour=lemon
 #   /gzip           a gzip-encoded body
-#   /ws             a WebSocket that echoes, picks the subprotocol "chat", refuses "refuse", and
-#                   answers the texts "pings" (pings seen), "fragments" (a message in two frames)
-#                   and "close-me" (a close 4000 "bye")
+#   /ws             a WebSocket that echoes, picks the subprotocol "chat", refuses "refuse", picks
+#                   "other" when offered "pick-other", and answers the texts "pings" (pings seen),
+#                   "fragments" (a message in two frames), "close-me" (a close 4000 "bye"),
+#                   "flood" (2000 one-byte texts at once) and "close-later" (reads nothing for
+#                   300 ms, closes 4000 "bye", then reads until the client's close frame and logs
+#                   it). Offered "mute", it drops the connection on a close frame; offered
+#                   "silent", it reads on without answering one.
+#   /ws-log         what the WebSockets have logged, as a JSON array
 import base64
 import gzip
 import hashlib
@@ -23,6 +29,9 @@ import sys
 import threading
 import time
 from urllib.parse import parse_qs, urlsplit
+
+LOG = []
+LOG_LOCK = threading.Lock()
 
 
 class Handler(socketserver.BaseRequestHandler):
@@ -87,6 +96,13 @@ class Handler(socketserver.BaseRequestHandler):
             self.respond(307, [('Location', '/echo')], reason='Temporary Redirect')
         elif path == '/loop':
             self.respond(302, [('Location', '/loop')], reason='Found')
+        elif path == '/empty-location':
+            self.respond(302, [('Location', '')], b'stay', reason='Found')
+        elif path == '/multiple-choices':
+            self.respond(300, [('Location', '/text')], b'choices', reason='Multiple Choices')
+        elif path == '/ws-log':
+            with LOG_LOCK:
+                self.respond(200, [('Content-Type', 'application/json')], json.dumps(LOG).encode())
         elif path == '/set-cookie':
             self.respond(200, [('Set-Cookie', 'flavour=lemon; Path=/')])
         elif path == '/gzip':
@@ -106,6 +122,8 @@ class Handler(socketserver.BaseRequestHandler):
                 f'Sec-WebSocket-Accept: {accept}\r\n')
         if 'chat' in protocols:
             head += 'Sec-WebSocket-Protocol: chat\r\n'
+        elif 'pick-other' in protocols:
+            head += 'Sec-WebSocket-Protocol: other\r\n'
         self.request.sendall((head + '\r\n').encode())
         pings = 0
         while True:
@@ -124,6 +142,22 @@ class Handler(socketserver.BaseRequestHandler):
                     self.send_frame(8, struct.pack('!H', 4000) + b'bye')
                     self.read_frame()
                     return
+                elif text == 'flood':
+                    self.request.sendall((bytes([0x81, 1]) + b"f") * 2000)
+                elif text == 'close-later':
+                    time.sleep(0.3)
+                    self.send_frame(8, struct.pack('!H', 4000) + b'bye')
+                    got = 'no close'
+                    while True:
+                        frame = self.read_frame()
+                        if frame is None:
+                            break
+                        if frame[0] == 8:
+                            got = f"close {struct.unpack('!H', frame[1][:2])[0]}" if len(frame[1]) >= 2 else 'close'
+                            break
+                    with LOG_LOCK:
+                        LOG.append(got)
+                    return
                 else:
                     self.send_frame(1, payload)
             elif opcode == 2:
@@ -132,21 +166,33 @@ class Handler(socketserver.BaseRequestHandler):
                 pings += 1
                 self.send_frame(10, payload)
             elif opcode == 8:
+                if 'mute' in protocols:
+                    return
+                if 'silent' in protocols:
+                    continue
                 self.send_frame(8, payload)
                 return
 
+    # An (opcode, payload) pair, or None once the connection ends, mid-frame included.
     def read_frame(self):
         head = self.stream.read(2)
         if len(head) < 2:
             return None
         opcode, length = head[0] & 0x0F, head[1] & 0x7F
-        if length == 126:
-            length = struct.unpack('!H', self.stream.read(2))[0]
-        elif length == 127:
-            length = struct.unpack('!Q', self.stream.read(8))[0]
+        try:
+            if length == 126:
+                length = struct.unpack('!H', self.stream.read(2))[0]
+            elif length == 127:
+                length = struct.unpack('!Q', self.stream.read(8))[0]
+        except struct.error:
+            return None
         mask = self.stream.read(4) if head[1] & 0x80 else b'\0\0\0\0'
         data = self.stream.read(length)
-        return opcode, bytes(b ^ mask[i % 4] for i, b in enumerate(data))
+        if len(mask) < 4 or len(data) < length:
+            return None
+        # Unmasked as one integer, which a 16 MB payload needs to take well under a second.
+        key = (mask * (length // 4 + 1))[:length]
+        return opcode, (int.from_bytes(data, 'big') ^ int.from_bytes(key, 'big')).to_bytes(length, 'big')
 
     def send_frame(self, opcode, payload, fin=True):
         head = bytes([(0x80 if fin else 0) | opcode])
