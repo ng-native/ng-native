@@ -24,8 +24,8 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   ScrollView is a `GtkScrolledWindow` whose document holds the content, telling the core's hit
   test each offset, with classic scroll bars (`gtk-overlay-scrolling` off) taking their gutter from
   the content through `scrollers.h`. An Image reads its source through the core's
-  `loadImageSource` (`image-source.h`), which keeps what a GET fetched over http(s) in memory for
-  the process in place of macOS's URL cache, and GDK decodes it off the UI thread. Linking opens
+  `loadImageSource` (`image-source.h`), which keeps what a GET with no body fetched over http(s)
+  in memory for the process, by its url and headers, in place of macOS's URL cache, and GDK decodes it off the UI thread. Linking opens
   a url with `GtkUriLauncher`, which goes through the desktop portal inside a sandbox.
   Accessibility is GTK's own: each widget is made with the GTK role for the view's ARIA role,
   which the core's `aria-role.h` reads from its `role` or `accessibilityRole`, and its label,

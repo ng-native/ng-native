@@ -36,6 +36,9 @@ struct ImageLoad {
 // The client and the cache every Image loads through. Without them, a load fails.
 void useImageLoading(std::shared_ptr<Http> http, std::shared_ptr<ImageCache> cache);
 
+// Loads the source the view's props pick, and picks again as the widget's scale changes: in a
+// window on another monitor, or moved to one.
+void makeImageView(GtkWidget *widget, ViewData &view);
 // Loads the source the view's props pick when it is a new request.
 void applyImageProps(ViewData &view, int screenScale);
 // Draws the loaded image inside `box`'s shape.

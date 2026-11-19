@@ -1,5 +1,6 @@
 #include "image-view.h"
 
+#include "app-windows.h"
 #include "box-paint.h"
 
 #include "ngn/file-system.h"
@@ -8,6 +9,7 @@
 #include <react/renderer/components/image/ImageEventEmitter.h>
 #include <react/renderer/components/image/ImageProps.h>
 
+#include <algorithm>
 #include <mutex>
 #include <utility>
 
@@ -44,29 +46,34 @@ void failed(ViewData &view, const std::string &message) {
 struct Answer {
   std::weak_ptr<ImageLoad> load;
   uint64_t turn;
-  GdkTexture *texture;
+  GdkTexture *texture{nullptr};
   std::string error;
+  Answer(std::weak_ptr<ImageLoad> load, uint64_t turn) : load(std::move(load)), turn(turn) {}
+  ~Answer() {
+    if (texture) {
+      g_object_unref(texture);
+    }
+  }
+  Answer(const Answer &) = delete;
+  Answer &operator=(const Answer &) = delete;
 };
 
-gboolean answered(gpointer data) {
-  std::unique_ptr<Answer> answer(static_cast<Answer *>(data));
-  auto load = answer->load.lock();
-  if (!load || load->turn != answer->turn || !load->view) {
-    if (answer->texture) {
-      g_object_unref(answer->texture);
-    }
-    return G_SOURCE_REMOVE;
+void answered(Answer &answer) {
+  auto load = answer.load.lock();
+  if (!load || load->turn != answer.turn || !load->view) {
+    return;
   }
   ViewData &view = *load->view;
-  if (!answer->texture) {
-    failed(view, answer->error);
+  if (!answer.texture) {
+    failed(view, answer.error);
   } else {
-    setTexture(*load, answer->texture);
+    GdkTexture *texture = std::exchange(answer.texture, nullptr);
+    setTexture(*load, texture);
     load->error.clear();
     if (auto e = emitterOf(view)) {
       ImageSource source;
       source.uri = load->source->uri;
-      source.size = {static_cast<Float>(gdk_texture_get_width(answer->texture)), static_cast<Float>(gdk_texture_get_height(answer->texture))};
+      source.size = {static_cast<Float>(gdk_texture_get_width(texture)), static_cast<Float>(gdk_texture_get_height(texture))};
       e->onLoad(source);
       e->onLoadEnd();
     }
@@ -74,7 +81,38 @@ gboolean answered(gpointer data) {
   if (view.widget) {
     gtk_widget_queue_draw(view.widget);
   }
-  return G_SOURCE_REMOVE;
+}
+
+// Queued for the UI thread's loop, never run in the caller's turn, which can be the UI thread's
+// own (a cache hit) or a network thread that took the main context between two of its turns.
+void answer(std::shared_ptr<Answer> answer) {
+  onMainContext([answer = std::move(answer)] { answered(*answer); });
+}
+
+struct Decode {
+  std::shared_ptr<Answer> answer;
+  std::string bytes;
+};
+
+// GDK decodes on any thread: the UI thread only draws, even for bytes the cache held.
+void decode(gpointer data, gpointer) {
+  std::unique_ptr<Decode> job(static_cast<Decode *>(data));
+  GBytes *bytes = g_bytes_new(job->bytes.data(), job->bytes.size());
+  GError *problem = nullptr;
+  job->answer->texture = gdk_texture_new_from_bytes(bytes, &problem);
+  g_bytes_unref(bytes);
+  if (!job->answer->texture) {
+    job->answer->error = std::string("Could not decode the image: ") + (problem ? problem->message : "unknown format");
+  }
+  if (problem) {
+    g_error_free(problem);
+  }
+  answer(std::move(job->answer));
+}
+
+void decodeOffThread(std::shared_ptr<Answer> answer, std::string bytes) {
+  static GThreadPool *pool = g_thread_pool_new(decode, nullptr, static_cast<gint>(std::max(1u, g_get_num_processors())), FALSE, nullptr);
+  g_thread_pool_push(pool, new Decode{std::move(answer), std::move(bytes)}, nullptr);
 }
 
 void load(ViewData &view) {
@@ -104,21 +142,13 @@ void load(ViewData &view) {
   }
   std::weak_ptr<ImageLoad> weak = view.image;
   loadImageSource(http, cache, viewFileAccess().get(), *load.source, [weak, turn](std::string bytes, const std::string &error) {
-    auto *answer = new Answer{.load = weak, .turn = turn, .texture = nullptr, .error = error};
-    if (error.empty()) {
-      // GDK decodes on any thread: the UI thread only draws.
-      GBytes *data = g_bytes_new(bytes.data(), bytes.size());
-      GError *problem = nullptr;
-      answer->texture = gdk_texture_new_from_bytes(data, &problem);
-      g_bytes_unref(data);
-      if (!answer->texture) {
-        answer->error = std::string("Could not decode the image: ") + (problem ? problem->message : "unknown format");
-      }
-      if (problem) {
-        g_error_free(problem);
-      }
+    auto reply = std::make_shared<Answer>(weak, turn);
+    if (!error.empty()) {
+      reply->error = error;
+      answer(std::move(reply));
+    } else {
+      decodeOffThread(std::move(reply), std::move(bytes));
     }
-    g_main_context_invoke(nullptr, answered, answer);
   });
 }
 
@@ -128,6 +158,15 @@ void useImageLoading(std::shared_ptr<Http> http, std::shared_ptr<ImageCache> cac
   std::lock_guard lock(gLoadingMutex);
   gHttp = std::move(http);
   gCache = std::move(cache);
+}
+
+void makeImageView(GtkWidget *widget, ViewData &view) {
+  g_signal_connect(widget, "notify::scale-factor", G_CALLBACK(+[](GtkWidget *scaled, GParamSpec *, gpointer) {
+    if (ViewData *d = viewData(scaled); d && d->image) {
+      applyImageProps(*d, gtk_widget_get_scale_factor(scaled));
+    }
+  }), nullptr);
+  applyImageProps(view, gtk_widget_get_scale_factor(widget));
 }
 
 void applyImageProps(ViewData &view, int screenScale) {

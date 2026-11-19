@@ -138,3 +138,32 @@ TEST_CASE("loadImageSource fails a source it cannot load, and one only-if-cached
   ngn::loadImageSource(http, cache, nullptr, {.uri = "data:image/png;base64,AAAA"}, answers.record());
   CHECK(http->sent.size() == 4);
 }
+
+TEST_CASE("loadImageSource keeps a GET by its headers too: other credentials never get another's bytes") {
+  auto http = std::make_shared<ngn::testing::FakeHttp>();
+  auto cache = std::make_shared<ngn::ImageCache>("", 1 << 20);
+  Answers answers;
+  ImageSource first{.uri = "https://example.com/me.png", .headers = {{"Authorization", "Bearer one"}}};
+  ngn::loadImageSource(http, cache, nullptr, first, answers.record());
+  serve(*http, 0, "ONE");
+
+  ImageSource second{.uri = "https://example.com/me.png", .headers = {{"Authorization", "Bearer two"}}};
+  ngn::loadImageSource(http, cache, nullptr, second, answers.record());
+  REQUIRE(http->sent.size() == 2);
+  CHECK(http->sent[1]->request.headers == ngn::Headers{{"Authorization", "Bearer two"}});
+  serve(*http, 1, "TWO");
+  CHECK(answers.all.back() == Answer{"TWO", ""});
+
+  // Without headers, a third request of its own; each is then answered from what it fetched.
+  ngn::loadImageSource(http, cache, nullptr, {.uri = "https://example.com/me.png"}, answers.record());
+  REQUIRE(http->sent.size() == 3);
+  serve(*http, 2, "PLAIN");
+  ngn::loadImageSource(http, cache, nullptr, first, answers.record());
+  ngn::loadImageSource(http, cache, nullptr, second, answers.record());
+  ngn::loadImageSource(http, cache, nullptr, {.uri = "https://example.com/me.png"}, answers.record());
+  CHECK(http->sent.size() == 3);
+  REQUIRE(answers.all.size() == 6);
+  CHECK(answers.all[3] == Answer{"ONE", ""});
+  CHECK(answers.all[4] == Answer{"TWO", ""});
+  CHECK(answers.all[5] == Answer{"PLAIN", ""});
+}
