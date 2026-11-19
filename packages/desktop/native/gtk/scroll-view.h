@@ -19,7 +19,9 @@
 
 #include <gtk/gtk.h>
 
+#include <atomic>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -45,6 +47,9 @@ struct ScrollBox {
   guint pendingSource{0};
   // An offset the backend set, which the state already has.
   bool settingOffset{false};
+  // A new gutter's clone of the node not yet applied: React Native replaces a state update not
+  // yet applied with the next one, which then clones in its place. Read where updates apply.
+  std::shared_ptr<std::atomic<bool>> relayoutOwed{std::make_shared<std::atomic<bool>>(false)};
 };
 
 // Told on the UI thread as a scroll view's content moves: its tag and its offset.

@@ -228,6 +228,8 @@ TEST_CASE("while an input method composes, a controlled value and setTextAndSele
     CHECK(ngn::gtk::fieldText(*field) == "a");
     g_signal_emit_by_name(field->text, "preedit-changed", "");
     CHECK_FALSE(field->composing);
+    while (g_main_context_iteration(nullptr, false)) {
+    }
     views.update(input, textInputProps(dynamic::object("multiline", multiline)("text", "d")));
     CHECK(ngn::gtk::fieldText(*field) == "d");
   }
@@ -364,7 +366,12 @@ TEST_CASE("a controlled value that waited for an input method applies when it en
     auto input = MountedViews::shadow(2, "TextInput", props(dynamic::object("text", "a")), {{10, 10}, {150, 80}});
     views.add(input);
     auto *field = ngn::gtk::viewData(views.view(2))->field;
-    auto compose = [field](const char *preedit) { g_signal_emit_by_name(field->text, "preedit-changed", preedit); };
+    // The held value applies from an idle source, after any commit that follows the empty preedit.
+    auto compose = [field](const char *preedit) {
+      g_signal_emit_by_name(field->text, "preedit-changed", preedit);
+      while (g_main_context_iteration(nullptr, false)) {
+      }
+    };
 
     // The value that arrived while composing.
     compose("ka");
@@ -418,4 +425,97 @@ TEST_CASE("a multiline placeholder taller than its field is clipped to the field
   }
   CHECK(inside > 5);
   CHECK(below == 0);
+}
+
+TEST_CASE("a commit that follows the empty preedit lands on the text the user composed against") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    auto props = [multiline](dynamic extra) {
+      extra["multiline"] = multiline;
+      return textInputProps(std::move(extra));
+    };
+    auto input = MountedViews::shadow(2, "TextInput", props(dynamic::object("text", "a")), {{10, 10}, {150, 80}});
+    views.add(input);
+    auto *field = ngn::gtk::viewData(views.view(2))->field;
+    auto pump = [] {
+      while (g_main_context_iteration(nullptr, false)) {
+      }
+    };
+    auto commit = [&](const char *text) {
+      if (multiline) {
+        gtk_text_buffer_insert_at_cursor(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), text, -1);
+      } else {
+        int position = 1;
+        gtk_editable_insert_text(GTK_EDITABLE(field->text), text, -1, &position);
+      }
+    };
+    g_signal_emit_by_name(field->text, "preedit-changed", "ka");
+    views.update(input, props(dynamic::object("text", "b")("mostRecentEventCount", 0)));
+    // The input method ends the preedit, then commits.
+    g_signal_emit_by_name(field->text, "preedit-changed", "");
+    commit("c");
+    pump();
+    CHECK(ngn::gtk::fieldText(*field) == "ac");
+    CHECK_FALSE(field->pendingText);
+  }
+}
+
+TEST_CASE("props older than a held controlled value leave it for composition's end") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    auto props = [multiline](dynamic extra) {
+      extra["multiline"] = multiline;
+      return textInputProps(std::move(extra));
+    };
+    auto input = MountedViews::shadow(2, "TextInput", props(dynamic::object("text", "a")), {{10, 10}, {150, 80}});
+    views.add(input);
+    auto *field = ngn::gtk::viewData(views.view(2))->field;
+    if (multiline) {
+      gtk_text_buffer_insert_at_cursor(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), "!", -1);
+    } else {
+      int position = 1;
+      gtk_editable_insert_text(GTK_EDITABLE(field->text), "!", -1, &position);
+    }
+    REQUIRE(field->eventCount == 1);
+    g_signal_emit_by_name(field->text, "preedit-changed", "ka");
+    views.backend->dispatchCommand(2, "setTextAndSelection", dynamic::array(1, "b", 0, 0));
+    // Props that have not seen the user's change cannot supersede the command.
+    views.update(input, props(dynamic::object("text", "a")("placeholder", "p")("mostRecentEventCount", 0)));
+    g_signal_emit_by_name(field->text, "preedit-changed", "");
+    while (g_main_context_iteration(nullptr, false)) {
+    }
+    CHECK(ngn::gtk::fieldText(*field) == "b");
+  }
+}
+
+TEST_CASE("setTextAndSelection's range applies to the text held while composing") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    auto input = MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("multiline", multiline)("text", "a")), {{10, 10}, {150, 80}});
+    views.add(input);
+    auto *field = ngn::gtk::viewData(views.view(2))->field;
+    g_signal_emit_by_name(field->text, "preedit-changed", "ka");
+    views.backend->dispatchCommand(2, "setTextAndSelection", dynamic::array(0, "abcd", 1, 3));
+    g_signal_emit_by_name(field->text, "preedit-changed", "");
+    while (g_main_context_iteration(nullptr, false)) {
+    }
+    CHECK(ngn::gtk::fieldText(*field) == "abcd");
+    int start = 0, end = 0;
+    if (multiline) {
+      GtkTextIter a, b;
+      gtk_text_buffer_get_selection_bounds(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), &a, &b);
+      start = gtk_text_iter_get_offset(&a);
+      end = gtk_text_iter_get_offset(&b);
+    } else {
+      gtk_editable_get_selection_bounds(GTK_EDITABLE(field->text), &start, &end);
+    }
+    CHECK(start == 1);
+    CHECK(end == 3);
+  }
 }
