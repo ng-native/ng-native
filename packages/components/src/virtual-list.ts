@@ -1428,6 +1428,9 @@ export class VirtualList<T> extends ScrollViewProps {
   private scheduleFill(): void {
     clearTimeout(this.fillTimer);
     const reach = this.reach();
+    // Keep a cut made by a lower windowSize, so raising it again fills a batch at a time.
+    const fill = untracked(this.fill);
+    if (fill.before !== reach.before || fill.after !== reach.after) this.fill.set(reach);
     if (!this.span() || this.viewport() <= 0) return;
     const side = this.nextFill(reach);
     if (!side) return;

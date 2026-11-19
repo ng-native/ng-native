@@ -218,6 +218,11 @@ describe('windowed list filling while idle', () => {
     instance.windowSize.set(1);
     await settle();
     assert.deepEqual(edges(fabric), [98, 111], 'lowered, it lets go of the fill at once');
+    instance.windowSize.set(5);
+    await settle();
+    assert.deepEqual(edges(fabric), [98, 111], 'raised again, it fills a batch at a time');
+    await advance(BATCH_MS);
+    assert.deepEqual(edges(fabric), [98, 120]);
   });
 
   it('leaves no batch waiting once destroyed', async () => {
