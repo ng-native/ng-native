@@ -203,3 +203,25 @@ TEST_CASE("an Image decodes bytes the cache held off the UI thread, and answers 
   CHECK(gdk_texture_get_width(data->image->texture) == 2);
   views.backend->deleteView(MountedViews::kSurface, 3);
 }
+
+TEST_CASE("an Image whose role replaces its widget still picks its source again for a new scale") {
+  REQUIRE(ngn::testing::gtkReady());
+  ImageLoading loading;
+  MountedViews views;
+  auto image = MountedViews::shadow(2, "Image", imageProps(dynamic::object("source", source(kWideRed))), {{0, 0}, {100, 100}});
+  views.add(image);
+  waitForLoad(views, 2);
+  GtkWidget *before = views.view(2);
+  views.update(image, imageProps(dynamic::object("source", source(kWideRed))("accessible", true)("accessibilityRole", "button")));
+  GtkWidget *after = views.view(2);
+  REQUIRE(after != before);
+  auto *data = ngn::gtk::viewData(after);
+  // The load the old widget made goes with the view: nothing loads again for the same source.
+  REQUIRE(data->image->texture);
+  uint64_t turn = data->image->turn;
+  // As though the source had been picked at another monitor's scale: the window moving to this
+  // one makes the replacement widget pick again.
+  data->image->source.reset();
+  g_object_notify(G_OBJECT(after), "scale-factor");
+  CHECK(data->image->turn == turn + 1);
+}
