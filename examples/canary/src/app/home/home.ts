@@ -235,6 +235,11 @@ export class Home {
     { path: '/forms', title: 'Signal forms', blurb: 'binding and validation over native controls' },
     { path: '/gestures', title: 'Gestures', blurb: 'responder system, capture, scroll blocking' },
     { path: '/list', title: 'Virtual list', blurb: '1000 rows, mixed heights, commit stats' },
+    {
+      path: '/grid',
+      title: 'Virtual grid',
+      blurb: '5,000 tiles in 2, 3 or 4 columns, months pinned across them',
+    },
     { path: '/modal', title: 'Modal', blurb: 'native presentation' },
     {
       path: '/regressions',

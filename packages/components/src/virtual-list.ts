@@ -33,6 +33,7 @@ import { STICKY_SETTLE_MS } from './sticky-headers.ts';
 import { TemplateSlot } from './template-slot.ts';
 import { ZeroSizeWarning, checksZeroSize, written } from './zero-size-warning.ts';
 import { View } from './view.ts';
+import { VIRTUAL_LIST_LAYOUT } from './virtual-list-layout.ts';
 import { ScrollViewProps } from './scroll-view-props.ts';
 import { numberOr } from './transforms.ts';
 
@@ -166,6 +167,15 @@ interface Anchor<T> {
   /** The items the anchor was taken against, to look for a successor in if its row goes. */
   readonly items: readonly T[];
   readonly index: number;
+}
+
+/**
+ * Items in columns: the line each item is on, and the first item of each line. A sticky row takes
+ * a line to itself, so lines are not every `columns` items once there is one.
+ */
+interface Lines {
+  readonly of: Int32Array;
+  readonly starts: readonly number[];
 }
 
 /** What the window is built from: the visible row and the edges of what is rendered. */
@@ -453,6 +463,70 @@ export class VirtualList<T> extends ScrollViewProps {
     return this.horizontal() ? { top, bottom } : { left, right };
   });
 
+  /** How items are laid out across the width, when a directive on the list says: see the token. */
+  private readonly columnLayout = inject(VIRTUAL_LIST_LAYOUT, { self: true, optional: true });
+
+  /**
+   * Items to a line. Only for a vertical list whose rows have known heights: a line's height
+   * would otherwise wait on every item in it measuring, and FlatList's `numColumns` is vertical
+   * only too. The directive says so in development.
+   */
+  private readonly columns = computed(() => {
+    const columns = this.columnLayout?.columns() ?? 1;
+    return this.measuring() || this.horizontal() ? 1 : columns;
+  });
+
+  /** Which line each item is on, when there is more than one to a line. */
+  private readonly lines = computed<Lines | null>(() => {
+    const columns = this.columns();
+    if (columns === 1) return null;
+    const count = this.items().length;
+    const sticky = this.nextSticky();
+    const of = new Int32Array(count);
+    const starts: number[] = [];
+    let column = columns;
+    for (let i = 0; i < count; i++) {
+      const alone = sticky.has(i);
+      if (alone || column === columns) {
+        starts.push(i);
+        column = 0;
+      }
+      of[i] = starts.length - 1;
+      column = alone ? columns : column + 1;
+    }
+    return { of, starts };
+  });
+
+  /** The props across each column, built once per change of columns, gap or padding. */
+  private readonly columnAcross = computed(() => {
+    const layout = this.columnLayout;
+    if (!layout || !this.lines()) return [];
+    const { left, right } = this.edges();
+    return Array.from({ length: this.columns() }, (_, column) =>
+      layout.across(column, left, right),
+    );
+  });
+
+  /** An item's insets across the axis: its column's, or the whole width's. */
+  private acrossOf(index: number): Record<string, unknown> {
+    const lines = this.lines();
+    if (!lines || this.nextSticky().has(index)) return this.across();
+    return this.columnAcross()[index - lines.starts[lines.of[index]!]!]!;
+  }
+
+  /** The line an item is on: the item itself, when each has a line to itself. */
+  private lineOf(index: number): number {
+    const lines = this.lines();
+    return lines ? lines.of[index]! : index;
+  }
+
+  /** The first item on a line, or the item count for a line past the last. */
+  private lineStart(line: number): number {
+    const lines = this.lines();
+    if (!lines) return Math.min(line, this.items().length);
+    return line < lines.starts.length ? lines.starts[line]! : this.items().length;
+  }
+
   /** Heights native has reported, by key. */
   private readonly measured = new Map<unknown, number>();
   /** Bumped when a measurement changes, which is what re-sizes the list. */
@@ -476,14 +550,25 @@ export class VirtualList<T> extends ScrollViewProps {
    */
   private readonly table = computed<HeightIndex | null>(() => {
     const height = this.itemHeight();
-    if (typeof height === 'number') return null;
+    const lines = this.lines();
+    if (typeof height === 'number' && !lines) return null;
 
     // Each row's entry is its size and the gap after it, so where a row starts counts the gaps
     // before it without a second table.
     const gap = this.rowGap();
     const items = this.items();
+    if (lines) {
+      // An entry a line, as tall as the tallest item on it.
+      const sizes = new Float64Array(lines.starts.length);
+      for (let i = 0; i < items.length; i++) {
+        const size = (typeof height === 'function' ? height(items[i]!, i) : height!) + gap;
+        const line = lines.of[i]!;
+        sizes[line] = Math.max(sizes[line]!, size);
+      }
+      return new HeightIndex(sizes);
+    }
     const sizes = new Float64Array(items.length);
-    if (height) {
+    if (typeof height === 'function') {
       for (let i = 0; i < items.length; i++) sizes[i] = height(items[i]!, i) + gap;
       return new HeightIndex(sizes);
     }
@@ -583,24 +668,26 @@ export class VirtualList<T> extends ScrollViewProps {
     return flip ? { ...spacing, transform: flip } : spacing;
   });
 
-  /** Top of a row: the leading padding, and every row and gap before it. */
+  /** Top of a row: the leading padding, and every row and gap before it. In columns, its line's. */
   private topOf(index: number): number {
     const table = this.layout();
-    return this.lead() + (table ? table.topOf(index) : index * this.stride());
+    return this.lead() + (table ? table.topOf(this.lineOf(index)) : index * this.stride());
   }
 
-  /** A row's own size, without the gap after it. */
+  /** A row's own size, without the gap after it. In columns, its line's. */
   private heightOf(index: number): number {
     const table = this.layout();
-    return table ? table.heightOf(index) - this.rowGap() : (this.itemHeight() as number);
+    if (!table) return this.itemHeight() as number;
+    return table.heightOf(this.lineOf(index)) - this.rowGap();
   }
 
-  /** First row whose bottom, or the gap after it, is past `y`. */
+  /** First row whose bottom, or the gap after it, is past `y`. In columns, the first on its line. */
   private indexAt(y: number): number {
     const table = this.layout();
     const along = y - this.lead();
     if (!table) return Math.max(0, Math.floor(along / this.stride()));
-    return table.indexAt(along);
+    const at = table.indexAt(along);
+    return this.lines() ? this.lineStart(at) : at;
   }
 
   // --- holding position -------------------------------------------------------------------
@@ -810,13 +897,15 @@ export class VirtualList<T> extends ScrollViewProps {
     const overscan = this.overscan();
     if (!items.length) return null;
 
-    const visible = Math.min(this.visible(), items.length - 1);
+    // Counted in lines, which are rows unless items are in columns.
+    const line = this.lineOf(Math.min(this.visible(), items.length - 1));
+    const visible = this.lineStart(line);
     // In viewports, so nothing before the first layout.
     const fill = this.reach();
     // Before the first layout we have no viewport, so render a screen's worth optimistically
     // rather than nothing: an empty first frame is worse than a few extra rows.
-    const budget =
-      viewport > 0 ? viewport : this.heightOf(Math.max(0, visible - overscan)) * overscan * 2;
+    const overscanned = this.lineStart(Math.max(0, line - overscan));
+    const budget = viewport > 0 ? viewport : this.heightOf(overscanned) * overscan * 2;
     /*
      * Measured from the top of the first *visible* row, not the first rendered one.
      *
@@ -827,10 +916,7 @@ export class VirtualList<T> extends ScrollViewProps {
      * heights they are not, and the list clips short of its own bottom.
      */
     const top = this.topOf(visible);
-    const first = Math.max(
-      0,
-      Math.min(visible - overscan, this.indexAt(top - fill.before * viewport)),
-    );
+    const first = Math.max(0, Math.min(overscanned, this.indexAt(top - fill.before * viewport)));
 
     let last = visible;
     while (last < items.length && this.topOf(last) < top + budget) last++;
@@ -841,7 +927,7 @@ export class VirtualList<T> extends ScrollViewProps {
      * from the scroll offset instead, the window would change on every scroll event rather than
      * when the visible row does.
      */
-    let end = Math.min(items.length, last + overscan);
+    let end = last < items.length ? this.lineStart(this.lineOf(last) + overscan) : items.length;
     const deepest = top + this.heightOf(visible) + this.rowGap() + budget + fill.after * viewport;
     while (end < items.length && this.topOf(end) < deepest) end++;
     return { first, last: end };
@@ -1395,7 +1481,7 @@ export class VirtualList<T> extends ScrollViewProps {
     const extent = horizontal ? 'width' : 'height';
 
     const flip = this.flipText();
-    const across = this.across();
+    const across = this.acrossOf(index);
 
     let style = this.slots.get(index);
     // The flip is part of the comparison because turning the list over changes every row, and a
