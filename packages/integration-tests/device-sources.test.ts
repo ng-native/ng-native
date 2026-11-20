@@ -127,15 +127,23 @@ describe('the accessibility source', () => {
         return { remove: () => removed.push(event) };
       },
     },
+    Dimensions: {
+      addEventListener: (event: string, handler: () => void) => {
+        dimensionsHandler = handler;
+        return { remove: () => removed.push(`dimensions ${event}`) };
+      },
+    },
     PixelRatio: { getFontScale: () => fontScale },
   });
   let announced: string[] = [];
   let removed: string[] = [];
   let handlers = new Map<string, (value: boolean) => void>();
   let appStateHandler: (state: string) => void = () => {};
+  let dimensionsHandler: () => void = () => {};
   let fontScale = 1.5;
 
   afterEach(() => {
+    dimensionsHandler = () => {};
     announced = [];
     removed = [];
     handlers = new Map();
@@ -206,6 +214,28 @@ describe('the accessibility source', () => {
     fontScale = 3;
     appStateHandler('background');
     assert.deepEqual(seen, [{ fontScale: 2 }]);
+  });
+
+  it('re-reads fontScale on a Dimensions change on Linux, where the app never reports active', () => {
+    const seen: unknown[] = [];
+    const stop = withNative({ ...native(), Platform: { OS: 'linux' } }, () =>
+      accessibilitySource().subscribe((v) => seen.push(v)),
+    );
+
+    fontScale = 2;
+    dimensionsHandler();
+    assert.deepEqual(seen, [{ fontScale: 2 }]);
+
+    stop();
+    assert.ok(removed.includes('dimensions change'), 'the Dimensions listener is removed');
+  });
+
+  it('does not listen to Dimensions off Linux', () => {
+    const stop = withNative({ ...native(), Platform: { OS: 'android' } }, () =>
+      accessibilitySource().subscribe(() => {}),
+    );
+    stop();
+    assert.ok(!removed.includes('dimensions change'));
   });
 
   it('passes an announcement through', () => {
