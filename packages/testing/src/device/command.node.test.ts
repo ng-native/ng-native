@@ -53,4 +53,33 @@ describe('a command the pool runs', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('stops what the command started too, so nothing it left writes after the stop', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ng-native-command-'));
+    try {
+      const late = path.join(dir, 'late');
+      // A shell that leaves a writer behind, as a build tool leaves its daemon or compiler.
+      const running = runCommand(
+        'sh',
+        ['-c', `(sleep 1; touch ${JSON.stringify(late)}) & sleep 30`],
+        { signal: AbortSignal.timeout(200) },
+      );
+      await assert.rejects(running, /was stopped: the run ended/);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      assert.equal(existsSync(late), false, 'the process the command started was stopped');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('kills a command that ignores the stop, after a grace period', async () => {
+    const started = Date.now();
+    // An ignored SIGTERM is inherited, so sleep ignores it as well.
+    const running = runCommand('sh', ['-c', "trap '' TERM; sleep 30"], {
+      signal: AbortSignal.timeout(100),
+    });
+    await assert.rejects(running, /was stopped: the run ended/);
+    const took = Date.now() - started;
+    assert.ok(took > 4000 && took < 15000, `killed after ${took}ms, not at once or after 30s`);
+  });
 });

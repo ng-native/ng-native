@@ -2,7 +2,7 @@
  * Running the tools a device run needs (`xcrun`, `adb`, `xcodebuild`, Expo's CLI) from the pool:
  * each command's output is kept, and a failure names the command and ends with what it printed.
  */
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 
 export interface CommandOptions {
@@ -28,12 +28,18 @@ export function runCommand(
   options: CommandOptions = {},
 ): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
+    const { signal } = options;
+    // Its own process group, so a stop reaches what it started (a Gradle daemon's client, a
+    // compiler), and nothing it left writes after the stop is answered.
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: options.env ?? process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
-      signal: options.signal,
+      detached: process.platform !== 'win32',
     });
+    const stop = () => stopGroup(child);
+    signal?.addEventListener('abort', stop, { once: true });
+    if (signal?.aborted) stop();
     let output = '';
     const keep = (chunk: Buffer) => {
       output += chunk;
@@ -41,19 +47,14 @@ export function runCommand(
     };
     child.stdout.on('data', keep);
     child.stderr.on('data', keep);
-    child.once('error', (error) => {
-      // A stop comes as an error before the command has exited; it rejects at `exit`, so what
-      // waits on it (the next prebuild, a folder removed) starts after the command's last write.
-      // Not at `close`: a process the command started can hold its output open long after.
-      if (error.name !== 'AbortError') {
-        reject(new Error(`${command} could not be started: ${error.message}`));
-      }
-    });
-    child.once('exit', () => {
-      if (options.signal?.aborted) reject(new Error(`${command} was stopped: the run ended.`));
-    });
+    child.once('error', (error) =>
+      reject(new Error(`${command} could not be started: ${error.message}`)),
+    );
+    // At `close`, once the whole group has gone: what waits on a stop (the next prebuild, a
+    // folder removed) starts after the last write.
     child.once('close', (status) => {
-      if (options.signal?.aborted) reject(new Error(`${command} was stopped: the run ended.`));
+      signal?.removeEventListener('abort', stop);
+      if (signal?.aborted) reject(new Error(`${command} was stopped: the run ended.`));
       else if (status === 0 || options.allowFailure) resolve({ status, output });
       else
         reject(
@@ -61,6 +62,31 @@ export function runCommand(
         );
     });
   });
+}
+
+/** How long a stopped group has to end on SIGTERM before it is killed. */
+const STOP_GRACE_MS = 5000;
+
+/** SIGTERM to the child's process group, then SIGKILL to whatever of it is left. */
+function stopGroup(child: ChildProcess): void {
+  if (child.pid === undefined) return;
+  if (process.platform === 'win32') {
+    child.kill();
+    return;
+  }
+  const group = -child.pid;
+  const signal = (name: NodeJS.Signals | 0) => {
+    try {
+      process.kill(group, name);
+      return true;
+    } catch {
+      return false; // The group has gone.
+    }
+  };
+  if (!signal('SIGTERM')) return;
+  setTimeout(() => {
+    if (signal(0)) signal('SIGKILL');
+  }, STOP_GRACE_MS).unref();
 }
 
 /** The last lines of some output, which is where a tool says what went wrong. */
