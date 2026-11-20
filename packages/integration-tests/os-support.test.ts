@@ -217,6 +217,43 @@ describe('each service the table lists', () => {
     assert.deepEqual(disagree, []);
   });
 
+  it('matches the GTK host: a service is on Linux exactly where the host gives its module a source', () => {
+    // The core registers a module behind addSourced only when every source it names is given;
+    // the GTK host's main.cpp gives the sources in its addDesktopModules call.
+    const core = read('packages/desktop/native/core/src/modules/desktop-modules.cpp');
+    const always = new Set([...core.matchAll(/addModule\(registry, "(\w+)"/g)].map((m) => m[1]));
+    const sourced = [...core.matchAll(/addSourced\(([^,]+), "(\w+)"/g)].map((m) => ({
+      module: m[2]!,
+      sources: [...m[1]!.matchAll(/(?:\bs\.)?(\w+)/g)].map((s) => s[1]!),
+    }));
+    assert.ok(sourced.length > 20, `read ${sourced.length} sourced modules from the core`);
+
+    const gtk = read('packages/desktop/native/gtk/main.cpp');
+    const call = gtk.slice(gtk.indexOf('ngn::addDesktopModules('));
+    const indent = /\n(\s+)\.\w+ =/.exec(call)![1]!;
+    const given = new Set(
+      [...call.matchAll(new RegExp(`\\n${indent}\\.(\\w+) =`, 'g'))].map((m) => m[1]),
+    );
+    assert.ok(given.has('updates') && given.has('crypto'), `read ${[...given]} from the GTK host`);
+
+    // Registered on every desktop host, yet there only where a source answers for it: a store
+    // review is available over a review prompt.
+    const answered: Readonly<Record<string, boolean>> = {
+      NgNativeStoreReview: given.has('reviewPrompt'),
+    };
+    const onGtk = (module: string) =>
+      answered[module] ??
+      (always.has(module) ||
+        sourced.some((m) => m.module === module && m.sources.every((s) => given.has(s))));
+    const disagree: string[] = [];
+    for (const row of OS_SUPPORT) {
+      for (const [name, module] of Object.entries(row.services ?? {})) {
+        if ((row.on.linux !== 'absent') !== onGtk(module)) disagree.push(`${name} (${module})`);
+      }
+    }
+    assert.deepEqual(disagree, []);
+  });
+
   it('reads each service from the module the table names', () => {
     for (const row of OS_SUPPORT) {
       for (const [name, module] of Object.entries(row.services ?? {})) {

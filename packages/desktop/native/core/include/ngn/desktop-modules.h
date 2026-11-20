@@ -118,6 +118,9 @@ struct DesktopModuleSources {
   std::shared_ptr<AppleIdProvider> appleId;
   std::shared_ptr<PrintSystem> printSystem;
   std::shared_ptr<ReviewPrompt> reviewPrompt;
+  // True where the backend draws map views and joins them to DesktopModules::mapViews; false leaves
+  // NgNativeMaps out, so the app's MapView reads as absent.
+  bool mapViews{false};
   std::shared_ptr<CryptoSource> crypto;
   std::shared_ptr<LocaleSource> locales;
   // The region the system is set to, read again as each runtime's Localization module starts.
