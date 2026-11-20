@@ -28,6 +28,15 @@ export function desktopHost<T = Host>(name: string): DesktopHost<T> | null {
 }
 
 /**
+ * What to do about a host built without a module or method the app calls: rebuild it for the OS
+ * the app runs on, with the template's script of that OS's name.
+ */
+export function rebuildHost(): string {
+  const { Platform } = require('react-native') as { Platform: { OS: string } };
+  return `rebuild it with "npm run ${Platform.OS}"`;
+}
+
+/**
  * The uri a source names, for a desktop host's module to open: an asset's (a number from
  * `require`), resolved as an image's is, which on macOS is a file in the app or the dev server's
  * url; a string; or an object's `uri`. Null for one that names none.

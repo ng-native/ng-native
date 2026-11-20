@@ -12,14 +12,17 @@ import { asHost } from './desktop-host-methods.ts';
 
 type Listener = (event: unknown) => void;
 
-/** A Mac whose desktop host registers `modules`, with the events the host sends on `send`. */
-function mac(modules: Record<string, object>) {
+/**
+ * A Mac, or another desktop `os`, whose desktop host registers `modules`, with the events the host
+ * sends on `send`.
+ */
+function mac(modules: Record<string, object>, os = 'macos') {
   for (const [name, fake] of Object.entries(modules)) asHost(name, fake);
   const listeners = new Map<string, Set<Listener>>();
   (globalThis as Record<string, unknown>)['require'] = (id: string) => {
     if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
     return {
-      Platform: { OS: 'macos' },
+      Platform: { OS: os },
       TurboModuleRegistry: { get: (name: string) => modules[name] ?? null },
       DeviceEventEmitter: {
         addListener: (event: string, listener: Listener) => {
@@ -1296,13 +1299,18 @@ describe('ImageEditor on macOS', () => {
     ]);
   });
 
-  it('rejects, saying to rebuild, on a host without the method an edit needs', async () => {
-    mac({ NgNativeImageManipulator: {} });
-    const { ImageEditor } = await import('@ng-native/expo/image-editor');
-    const context = injectService(ImageEditor).manipulate('file:///photo.png');
-    assert.ok(context);
-    await assert.rejects(context.renderAsync(), /no renderAsync: rebuild it/);
-  });
+  for (const os of ['macos', 'linux']) {
+    it(`rejects, saying to rebuild with npm run ${os}, on a host without the method an edit needs`, async () => {
+      mac({ NgNativeImageManipulator: {} }, os);
+      const { ImageEditor } = await import('@ng-native/expo/image-editor');
+      const context = injectService(ImageEditor).manipulate('file:///photo.png');
+      assert.ok(context);
+      await assert.rejects(
+        context.renderAsync(),
+        new RegExp(`no renderAsync: rebuild it with "npm run ${os}"`),
+      );
+    });
+  }
 });
 
 describe('AddressSearch on macOS', () => {
