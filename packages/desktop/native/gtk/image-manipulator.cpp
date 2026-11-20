@@ -37,20 +37,23 @@ GdkPixbuf *uprightPixbuf(const std::string &bytes) {
   return upright;
 }
 
-// `pixbuf`'s colour channels in a new pixbuf without alpha, or a new reference to it where it has
-// none.
+// `pixbuf`'s colour channels in a new pixbuf without alpha, a new reference to it where it has
+// none, or null where the new pixbuf cannot be allocated.
 GdkPixbuf *withoutAlpha(GdkPixbuf *pixbuf) {
   if (!gdk_pixbuf_get_has_alpha(pixbuf)) {
     return GDK_PIXBUF(g_object_ref(pixbuf));
   }
   int width = gdk_pixbuf_get_width(pixbuf), height = gdk_pixbuf_get_height(pixbuf);
   GdkPixbuf *opaque = gdk_pixbuf_new(GDK_COLORSPACE_RGB, FALSE, 8, width, height);
+  if (!opaque) {
+    return nullptr;
+  }
   const guchar *from = gdk_pixbuf_read_pixels(pixbuf);
   guchar *to = gdk_pixbuf_get_pixels(opaque);
-  int fromStride = gdk_pixbuf_get_rowstride(pixbuf), toStride = gdk_pixbuf_get_rowstride(opaque);
-  int channels = gdk_pixbuf_get_n_channels(pixbuf);
-  for (int y = 0; y < height; ++y) {
-    for (int x = 0; x < width; ++x) {
+  size_t fromStride = gdk_pixbuf_get_rowstride(pixbuf), toStride = gdk_pixbuf_get_rowstride(opaque);
+  size_t channels = gdk_pixbuf_get_n_channels(pixbuf);
+  for (size_t y = 0; y < static_cast<size_t>(height); ++y) {
+    for (size_t x = 0; x < static_cast<size_t>(width); ++x) {
       std::copy_n(from + y * fromStride + x * channels, 3, to + y * toStride + x * 3);
     }
   }
@@ -223,8 +226,8 @@ class PixbufCodec final : public ImageCodec {
       // write JPEG through glycin, whose encoder refuses an image with alpha.
       auto level = std::to_string(static_cast<int>(std::lround(std::clamp(quality, 0.0, 1.0) * 100)));
       GdkPixbuf *opaque = withoutAlpha(result);
-      saved = gdk_pixbuf_save_to_buffer(opaque, &buffer, &length, "jpeg", &error, "quality", level.c_str(), nullptr);
-      g_object_unref(opaque);
+      saved = opaque && gdk_pixbuf_save_to_buffer(opaque, &buffer, &length, "jpeg", &error, "quality", level.c_str(), nullptr);
+      g_clear_object(&opaque);
     }
     g_object_unref(result);
     if (!saved) {
