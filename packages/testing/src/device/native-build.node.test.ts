@@ -101,19 +101,40 @@ describe('the development build a device run uses', () => {
     const { root, done } = project();
     try {
       const pkg = path.join(root, 'package.json');
-      writeFileSync(pkg, '{"scripts":{"ios":"expo start --ios"}}');
+      const original = '{"scripts":{"ios":"expo start --ios"}}';
+      writeFileSync(pkg, original);
       mkdirSync(path.join(root, 'node_modules/expo/bin'), { recursive: true });
+      // Says it started, rewrites package.json, then holds until the test releases it.
       writeFileSync(
         path.join(root, 'node_modules/expo/bin/cli.js'),
         `const fs = require('fs');
+         const os = process.argv[process.argv.indexOf('-p') + 1];
+         fs.writeFileSync('started-' + os, '');
          fs.writeFileSync('package.json', '{"scripts":{"ios":"expo run:ios"}}');
-         setTimeout(() => process.exit(1), 300);`,
+         const wait = setInterval(() => {
+           if (fs.existsSync('release-' + os)) { clearInterval(wait); process.exit(1); }
+         }, 10);`,
       );
+      const seen = async (file: string, limit: number) => {
+        for (let waited = 0; waited < limit && !existsSync(file); waited += 10) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        return existsSync(file);
+      };
       const ios = nativeBuild(root, 'ios');
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      assert.ok(await seen(path.join(root, 'started-ios'), 5000), "iOS's prebuild started");
+      await seen(path.join(root, 'never'), 50);
+      assert.notEqual(readFileSync(pkg, 'utf8'), original, 'iOS has rewritten package.json');
       const android = nativeBuild(root, 'android', { abi: 'x86_64' });
-      await Promise.allSettled([ios, android]);
-      assert.equal(readFileSync(pkg, 'utf8'), '{"scripts":{"ios":"expo start --ios"}}');
+      // Without the lock Android's prebuild starts now, its snapshot already taken of the rewrite;
+      // with it, Android waits, and the bounded wait only delays this case.
+      await seen(path.join(root, 'started-android'), 500);
+      // iOS first and to its end, so a restore Android does without the lock comes last.
+      writeFileSync(path.join(root, 'release-ios'), '');
+      await ios.catch(() => {});
+      writeFileSync(path.join(root, 'release-android'), '');
+      await android.catch(() => {});
+      assert.equal(readFileSync(pkg, 'utf8'), original);
     } finally {
       done();
     }
