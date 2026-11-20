@@ -182,3 +182,13 @@ TEST_CASE("addDesktopModules makes the notification centre and push tokens over 
   CHECK(made.cameraViews);
   CHECK(made.mapViews);
 }
+
+TEST_CASE("addDesktopModules registers NgNativeMaps where the backend draws map views") {
+  ngn::ModuleRegistry registry;
+  auto given = sources();
+  given.mapViews = true;
+  auto made = ngn::addDesktopModules(registry, given);
+  auto names = registry.names();
+  CHECK(std::find(names.begin(), names.end(), "NgNativeMaps") != names.end());
+  CHECK(std::find(made.absent.begin(), made.absent.end(), "NgNativeMaps") == made.absent.end());
+}
