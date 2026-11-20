@@ -37,7 +37,10 @@ export function runCommand(
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: process.platform !== 'win32',
     });
-    const stop = () => stopGroup(child);
+    let stopped: Promise<void> = Promise.resolve();
+    const stop = () => {
+      stopped = stopGroup(child);
+    };
     signal?.addEventListener('abort', stop, { once: true });
     if (signal?.aborted) stop();
     let output = '';
@@ -50,12 +53,14 @@ export function runCommand(
     child.once('error', (error) =>
       reject(new Error(`${command} could not be started: ${error.message}`)),
     );
-    // At `close`, once the whole group has gone: what waits on a stop (the next prebuild, a
-    // folder removed) starts after the last write.
+    // A stop rejects once the whole group has gone, which `close` alone does not show (a member
+    // can let go of the output and live on): what waits on it (the next prebuild, a folder
+    // removed) starts after the last write.
     child.once('close', (status) => {
       signal?.removeEventListener('abort', stop);
-      if (signal?.aborted) reject(new Error(`${command} was stopped: the run ended.`));
-      else if (status === 0 || options.allowFailure) resolve({ status, output });
+      if (signal?.aborted) {
+        void stopped.then(() => reject(new Error(`${command} was stopped: the run ended.`)));
+      } else if (status === 0 || options.allowFailure) resolve({ status, output });
       else
         reject(
           new Error(`${[command, ...args].join(' ')} failed (status ${status}):\n${tail(output)}`),
@@ -67,8 +72,11 @@ export function runCommand(
 /** How long a stopped group has to end on SIGTERM before it is killed. */
 const STOP_GRACE_MS = 5000;
 
-/** SIGTERM to the child's process group, then SIGKILL to whatever of it is left. */
-function stopGroup(child: ChildProcess): void {
+/**
+ * SIGTERM to the child's process group, then SIGKILL to whatever of it is left; resolves once
+ * none of the group is running.
+ */
+async function stopGroup(child: ChildProcess): Promise<void> {
   if (child.pid === undefined) return;
   if (process.platform === 'win32') {
     child.kill();
@@ -84,9 +92,11 @@ function stopGroup(child: ChildProcess): void {
     }
   };
   if (!signal('SIGTERM')) return;
-  setTimeout(() => {
-    if (signal(0)) signal('SIGKILL');
-  }, STOP_GRACE_MS).unref();
+  const ends = Date.now() + STOP_GRACE_MS;
+  while (signal(0) && Date.now() < ends) await sleep(50);
+  if (!signal('SIGKILL')) return;
+  // SIGKILL cannot be ignored; the wait is bounded for a process stuck in the kernel.
+  for (let tries = 0; tries < 100 && signal(0); tries++) await sleep(50);
 }
 
 /** The last lines of some output, which is where a tool says what went wrong. */

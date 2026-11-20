@@ -82,4 +82,22 @@ describe('a command the pool runs', () => {
     const took = Date.now() - started;
     assert.ok(took > 4000 && took < 15000, `killed after ${took}ms, not at once or after 30s`);
   });
+
+  it('answers a stop only once all it started has gone, output redirected or not', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ng-native-command-'));
+    try {
+      const late = path.join(dir, 'late');
+      // A member that ignores SIGTERM and lets go of the output, so the shell's exit closes it.
+      const writer = `trap '' TERM; sleep 1; touch ${JSON.stringify(late)}`;
+      const running = runCommand(
+        'sh',
+        ['-c', `sh -c ${JSON.stringify(writer)} >/dev/null 2>&1 </dev/null & sleep 30`],
+        { signal: AbortSignal.timeout(200) },
+      );
+      await assert.rejects(running, /was stopped: the run ended/);
+      assert.equal(existsSync(late), true, 'the writer had finished when the stop was answered');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
