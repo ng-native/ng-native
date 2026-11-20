@@ -50,13 +50,19 @@ On macOS the desktop host prints with AppKit: the print dialog opens as a sheet 
 and a `printer` passed to `print()` is ignored. `printToPdf()` breaks pages where the HTML's CSS
 asks (`break-before: page`, `break-after: page`).
 
-## Printing a window on macOS
+On Linux the GTK host prints a window or an image through GTK's print dialog, which is the
+desktop's Print portal inside a Flatpak, and a PDF through the Print portal, which takes the file as
+it is; with no portal, GTK's own dialog sends the PDF to a printer that takes PDF. HTML has no
+engine to lay it out on Linux, so `print({ html })` and `printToPdf()` reject there.
+
+## Printing a window on macOS and Linux
 
 `print({ window })` prints what a window shows, drawn as it is on screen and scaled down to the
 paper, with the print dialog as a sheet on that window. A web view prints its page as WebKit's
 snapshot of it. A video, the camera preview and anything drawn with Metal print blank, since they
 draw outside the window's own drawing and capturing them would need the Screen Recording
-permission. It takes an `AppWindow`, from `AppWindows.open()` or `CURRENT_WINDOW`:
+permission. On Linux the window is drawn onto one page, scaled down to fit it. It takes an
+`AppWindow`, from `AppWindows.open()` or `CURRENT_WINDOW`:
 
 ```ts
 import { Component, inject } from '@angular/core';
@@ -76,7 +82,8 @@ export class Report {
 
 On iOS, Android and the web a window prints nothing and the call resolves.
 
-The default menu bar has File > Print... (Command-P), which prints the key window this way. An app
+The default menu bar has File > Print... (Command-P, and Ctrl+P on Linux), which prints the key
+window this way. An app
 that prints something else, such as a document, gives its own item the `print` role and a handler
 in its `<menu-bar>`; that item takes Print...'s place and Command-P, and the host leaves printing
 to it.

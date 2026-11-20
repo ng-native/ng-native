@@ -447,6 +447,23 @@ TEST_CASE("a drag goes to the nearest view under it that takes drops, entering a
   CHECK(f.input.events.size() == 2);
 }
 
+TEST_CASE("a drag whose data has not come is hit tested, and enters with the data once it has") {
+  Fixture f;
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("fileDrop", true)));
+  const std::string enter2 =
+      R"(dropEnter 2 {"files":[{"name":"notes.md","uri":"file:///Users/me/notes.md"}],"text":null,"urls":[]})";
+
+  ngn::DragItems waiting;
+  waiting.pending = true;
+  CHECK(f.input.dragOver(Fixture::at({35, 35}), waiting));
+  CHECK_FALSE(f.input.dragOver(Fixture::at({390, 290}), waiting));
+  CHECK(f.input.events.empty());
+  // The data came while the pointer stayed over the view.
+  CHECK(f.input.dragOver(Fixture::at({35, 35}), waiting));
+  CHECK(f.input.dragOver(Fixture::at({35, 35}), notes()));
+  CHECK(f.input.events == Events{enter2});
+}
+
 TEST_CASE("a drop goes to the view the drag is over, with no leave, and ends the drag") {
   Fixture f;
   setProps(f.tree, 2, desktopView(folly::dynamic::object("fileDrop", true)));

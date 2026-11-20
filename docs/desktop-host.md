@@ -25,12 +25,27 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   ScrollView is a `GtkScrolledWindow` whose document holds the content, telling the core's hit
   test each offset, with classic scroll bars (`gtk-overlay-scrolling` off) taking their gutter from
   the content through `scrollers.h`. An Image reads its source through the core's
-  `loadImageSource` (`image-source.h`), which keeps what a GET with no body fetched over http(s)
-  in memory for the process, by its url and headers, in place of macOS's URL cache, and GDK
-  decodes it off the UI thread. Linking opens a url with `GtkUriLauncher`, which goes through the
-  desktop portal inside a sandbox. An svg draws the core's document of react-native-svg's elements
-  (`svg.h`) with `cairo-canvas.h`, a cairo node in the view's snapshot, since GSK fills and strokes
-  paths only from GTK 4.14; text in an svg is Pango's, and a `foreignObject`'s views are not drawn.
+  `loadImageSource` (`image-source.h`), which keeps what a GET with no body fetched over http(s) in memory
+  for the process, by its url and headers, in place of macOS's URL cache, and GDK decodes it off the UI thread. The XDG desktop
+  portals are called through `portal.h`, one GDBus request and response routine of our own, inside
+  a sandbox and outside one; where no portal answers (no session bus, as in the dev loop on a Mac),
+  each caller falls back to GTK's own path. Linking and Shell open a url, a file or its folder
+  through the OpenURI portal, falling back to `GtkUriLauncher` and `GtkFileLauncher`, and KeepAwake
+  holds the session idle through the Inhibit portal (`system-access.h`). Notifications show through
+  the Notification portal, or GNotification where none answers, and fire from the core's
+  `notification-schedule.h`, a schedule kept in a file and run from a timer in the app, since Linux
+  has no scheduler (`notifications.h`). DocumentPicker's dialogs are the FileChooser portal's,
+  falling back to `GtkFileDialog` (`file-dialogs.h`). Printing draws a window or an image through
+  `GtkPrintOperation`, and sends a PDF to the Print portal (`printing.h`). The clipboard is the
+  display's `GdkClipboard`, whose text the system keeps as it changes, since GDK reads it
+  asynchronously (`host-sources.h`). FileSystem's `watch` is a
+  `GFileMonitor` (inotify), and its desktop and downloads folders come from the XDG user-dirs file,
+  absent when it names none (`file-system.h`). A `GtkDropTarget` on each surface hands a drag's
+  file list or text to the core's input dispatcher, and a drag out the dispatcher starts from a
+  `[dragItem]` view is a GDK drag of a file list, a uri list and text (`drag-and-drop.h`). An svg
+  draws the core's document of react-native-svg's elements (`svg.h`) with `cairo-canvas.h`, a
+  cairo node in the view's snapshot, since GSK fills and strokes paths only from GTK 4.14; text in
+  an svg is Pango's, and a `foreignObject`'s views are not drawn.
   Accessibility is GTK's own: each widget is made with the GTK role for the view's ARIA role,
   which the core's `aria-role.h` reads from its `role` or `accessibilityRole`, and its label,
   description, level and states follow the props. GTK fixes a role when it makes the widget, so
@@ -54,9 +69,10 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   does in the core's `accent-colors.h`; from 1.6 libadwaita follows the portal itself. Both read
   the portal through `settings-portal.h`.
   Orca's structural navigation finds no headings or landmarks in a GTK 4 app. It
-  builds on Linux against GTK 4.10 or later and libadwaita 1.4 or later, and on a Mac against
-  Homebrew's (`brew install gtk4 libadwaita openssl@3 libnghttp2`) as a dev loop. Its HTTP and
-  WebSocket client is the
+  builds on Linux against GTK 4.10 or later, libadwaita 1.4 or later and libsecret 0.20 or later
+  (SecureStore's, `secret-store.h`), and on a Mac against Homebrew's
+  (`brew install gtk4 libadwaita openssl@3 libnghttp2`) as a dev loop, without libsecret, so
+  SecureStore is absent there. Its HTTP and WebSocket client is the
   core's libcurl one (`curl-network.h`), which the GTK build turns on (`NGN_CURL`): one thread
   drives every request through `curl_multi`, behaving as NSURLSession does on macOS for redirects,
   timeouts (the longest silence), decoded bodies and `file:` and `data:` urls, and opening a
@@ -131,8 +147,8 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   StatusNotifierItem on a session-bus connection of its own (`status-notifier.h`), its menu laid
   out for `com.canonical.dbusmenu` by the core (`dbus-menu.h`); the tray module is left out when no
   StatusNotifierWatcher runs at launch, and the Dock's always is. The badge count goes out as the
-  `com.canonical.Unity.LauncherEntry` `Update` signal (`launcher-badge.h`), from a notification
-  centre that cannot post yet.
+  `com.canonical.Unity.LauncherEntry` `Update` signal (`launcher-badge.h`), as the
+  notification centre's `showBadge`.
 - `native/scripts`: fetching the pinned sources, building Hermes and building the host.
   `NGN_DESKTOP_CACHE` moves the cache and `NGN_JOBS` caps parallel compiles. `build.sh --library
   <dir>` compiles a library's component codegen and its own C++ in, as React Native's Android
