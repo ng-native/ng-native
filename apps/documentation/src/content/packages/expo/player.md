@@ -110,6 +110,18 @@ session, the desktop host takes the mode and changes nothing, so the same call i
 calling `expo-audio`'s `setAudioModeAsync` directly throws on macOS, where `expo-audio` is an empty
 module.
 
+On Linux the desktop host plays and records through GStreamer 1.22 or later, into PulseAudio's
+sink, which PipeWire answers too, and takes the audio mode as macOS does. A source with a stream no
+installed GStreamer plugin decodes fails with a message naming the missing decoder. RHEL 9 and its
+rebuilds ship no H.264 decoder: Cisco's openh264 plugin adds one, as `gstreamer1-plugin-openh264`
+from EPEL's `epel-cisco-openh264` repository there and from `fedora-cisco-openh264` on Fedora. A
+recording is AAC in `.m4a` or `.mp4` where an AAC encoder is installed, linear PCM in `.wav`, or
+Opus in `.ogg`.
+Linux has no microphone permission, so `recordingPermission()` reads as granted, and preparing a
+recording with no microphone present rejects, since PipeWire would record silence. A Flatpak
+reaches the sound server, to play as well as to record, only when the app has a microphone usage
+string (`NSMicrophoneUsageDescription`); without one, a Flatpak plays no sound.
+
 ## `audioRecorder(options, { statusInterval? })`
 
 `audioRecorder()` is `useAudioRecorder` and `useAudioRecorderState` for a component: a recorder
@@ -195,8 +207,8 @@ The microphone permission is **`recordingPermission()`**, a
 [`Permission`](/packages/expo/permissions): `status()`, `granted()` and `blocked()` as signals, and
 `check()`, `request()` and `ensure()`. Made in an injection context, as `VoiceNote` makes it, it
 checks a refusal again each time the app comes back to the front. On iOS, Android and the web it
-calls `expo-audio`'s own permission functions, and on macOS the desktop host's, so the same code
-runs on each. Where there is no such module, as in a test in Node, it answers denied, and
+calls `expo-audio`'s own permission functions, and on macOS and Linux the desktop host's, so the
+same code runs on each. Where there is no such module, as in a test in Node, it answers denied, and
 `blocked()` is true.
 
 ## The `<expo-video>` view

@@ -546,7 +546,7 @@ describe('the files every Linux format installs', () => {
 });
 
 describe('the package formats', () => {
-  it('writes a deb control file that depends on the GTK 4.10 and libadwaita 1.4 floor and every library the host links', () => {
+  it('writes a deb control file that depends on the GTK 4.10, libadwaita 1.4 and GStreamer 1.22 floor, every library the host links and the plugins it loads', () => {
     const control = debControl(APP, { arch: 'x64', installedKiB: 20480 });
     assert.match(control, /^Package: notes$/m);
     assert.match(control, /^Version: 2\.0\.0$/m);
@@ -555,8 +555,12 @@ describe('the package formats', () => {
     assert.match(control, /^Installed-Size: 20480$/m);
     assert.match(
       control,
-      /^Depends: libc6 \(>= 2\.34\), libgtk-4-1 \(>= 4\.10\), libadwaita-1-0 \(>= 1\.4\), libsecret-1-0, glib-networking, libssl3t64, libnghttp2-14, zlib1g, libsqlite3-0, libatomic1, libstdc\+\+6$/m,
+      /^Depends: libc6 \(>= 2\.34\), libgtk-4-1 \(>= 4\.10\), libadwaita-1-0 \(>= 1\.4\), libsecret-1-0, glib-networking, libgstreamer1\.0-0 \(>= 1\.22\), libgstreamer-plugins-base1\.0-0 \(>= 1\.22\), gstreamer1\.0-plugins-base, gstreamer1\.0-plugins-good, gstreamer1\.0-pulseaudio, libssl3t64, libnghttp2-14, zlib1g, libsqlite3-0, libatomic1, libstdc\+\+6$/m,
     );
+    // Debian's bad plugins bring openh264: a default install, which takes recommendations, must not.
+    assert.match(control, /^Suggests: gstreamer1\.0-plugins-bad$/m);
+    assert.doesNotMatch(control, /^Recommends:.*plugins-bad/m);
+    assert.doesNotMatch(control, /openh264|libav/);
     assert.match(control, /^Homepage: https:\/\/example\.com\/notes$/m);
     assert.match(
       control,
@@ -574,8 +578,12 @@ describe('the package formats', () => {
     assert.match(spec, /^Requires: libadwaita >= 1\.4$/m);
     // Loaded at run time for the desktop's proxy settings, so rpm's scanner cannot add it.
     assert.match(spec, /^Requires: glib-networking$/m);
-    // Nothing the host links needs GStreamer until the media modules use it.
-    assert.doesNotMatch(spec, /gstreamer/i);
+    // The media modules' GStreamer, and the plugins it loads rather than links.
+    assert.match(spec, /^Requires: gstreamer1 >= 1\.22$/m);
+    assert.match(spec, /^Requires: gstreamer1-plugins-base >= 1\.22$/m);
+    assert.match(spec, /^Requires: gstreamer1-plugins-good$/m);
+    assert.match(spec, /^Recommends: gstreamer1-plugins-bad-free$/m);
+    assert.doesNotMatch(spec, /openh264|libav|-devel/);
     assert.match(spec, /^%global __os_install_post %\{nil\}$/m);
     assert.match(spec, /^100%% notes$/m);
     // The build root is under the project and may have a space in its path: each command quotes it.

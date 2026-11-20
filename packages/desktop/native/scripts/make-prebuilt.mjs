@@ -101,6 +101,8 @@ const LINUX_PKG_CONFIG = [
   'openssl',
   'libnghttp2',
   'zlib',
+  'gstreamer-1.0',
+  'gstreamer-plugins-base-1.0',
 ];
 
 /** @param {string} command @param {string[]} args @param {import('node:child_process').SpawnSyncOptions} [options] */

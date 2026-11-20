@@ -16,9 +16,10 @@ FROM almalinux:9
 # what the static libcurl links dynamically (cmake/curl.cmake). Xvfb, Weston, Mesa's software
 # drivers, D-Bus and the fonts are for launching the GTK host headless, under X11 and Wayland, and
 # pyatspi reads its accessibility tree over AT-SPI as a screen reader would (atspi-check.py).
-# libsecret is SecureStore's. The English locales are for the GTK tests of a 12-hour clock (en_US)
-# beside a 24-hour one, and the German for a locale that writes neither AM nor PM (de_DE); both are
-# for the Localization tests too.
+# libsecret is SecureStore's. GStreamer's headers and its base, good and bad-free plugins are the
+# audio and video players' and recorders' (gst-playback.h), and their tests' encoders. The English
+# locales are for the GTK tests of a 12-hour clock (en_US) beside a 24-hour one, and the German for
+# a locale that writes neither AM nor PM (de_DE); both are for the Localization tests too.
 RUN dnf -y install dnf-plugins-core epel-release \
  && dnf config-manager --set-enabled crb \
  && dnf -y module enable nodejs:24 \
@@ -29,6 +30,7 @@ RUN dnf -y install dnf-plugins-core epel-release \
       bzip2 tar unzip xz \
       libatomic sqlite-devel openssl-devel libnghttp2-devel zlib-devel \
       gtk4-devel libadwaita-devel pango-devel cairo-devel libsecret-devel \
+      gstreamer1-devel gstreamer1-plugins-base-devel gstreamer1-plugins-good gstreamer1-plugins-bad-free \
       xorg-x11-server-Xvfb weston mesa-dri-drivers dbus-daemon dbus-tools at-spi2-core python3-pyatspi \
       dejavu-sans-fonts google-noto-sans-fonts glibc-langpack-en glibc-langpack-de \
  && dnf clean all

@@ -504,10 +504,12 @@ std::shared_ptr<NativeModule> makeAudioModule(std::shared_ptr<AudioOutput> outpu
             return;
           }
           recorder.recording->stop();
+          std::string error = recorder.recording->error();
           if (state->send) {
             state->send(folly::dynamic::object("type", "recordingStatusUpdate")("id", id)(
-                "status", folly::dynamic::object("id", id)("isFinished", true)("hasError", false)("error", nullptr)(
-                              "url", fileUri(recorder.path))));
+                "status", folly::dynamic::object("id", id)("isFinished", true)("hasError", !error.empty())(
+                              "error", error.empty() ? folly::dynamic(nullptr) : folly::dynamic(error))(
+                              "url", error.empty() ? folly::dynamic(fileUri(recorder.path)) : folly::dynamic(nullptr))));
           }
         });
         promise.resolve(nullptr);
