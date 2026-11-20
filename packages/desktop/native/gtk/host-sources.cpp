@@ -1,5 +1,6 @@
 #include "host-sources.h"
 
+#include "accessible.h"
 #include "alerts.h"
 #include "app-windows.h"
 #include "native-controls.h"
@@ -223,7 +224,11 @@ class GtkSystem final : public System {
     g_object_unref(loader);
     return size;
   }
-  void announce(const Announcement &) override {}
+  void announce(const Announcement &announcement) override {
+    // Through the window in front, as macOS posts it on the application: GTK announces through a
+    // widget, and reads it out from its window.
+    onMainContext([announcement] { announceOn(GTK_WIDGET(frontWindow()), announcement); });
+  }
   std::string appDataDirectory() override {
     g_mkdir_with_parents(appData_.c_str(), 0700);
     return appData_;

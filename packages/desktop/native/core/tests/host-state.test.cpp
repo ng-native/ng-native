@@ -148,4 +148,6 @@ TEST_CASE("Linux's accessibility settings: any source reducing motion reduces it
   CHECK(ngn::linuxAccessibility(sources).reduceMotion);
   sources = {.highContrast = true, .screenReader = true};
   CHECK(ngn::linuxAccessibility(sources) == ngn::AccessibilitySettings{.screenReader = true, .increaseContrast = true});
+  // The portal's contrast alone, as on a libadwaita that does not read it.
+  CHECK(ngn::linuxAccessibility(ngn::LinuxAccessibilitySources{.portalContrast = true}).increaseContrast);
 }

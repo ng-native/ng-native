@@ -5,6 +5,8 @@
 
 #include "../app-windows.h"
 
+#include "ngn/view-transform.h"
+
 #include <doctest/doctest.h>
 
 #include <atomic>
@@ -63,6 +65,37 @@ TEST_CASE("a transform moves and scales the view about its centre, as React Nati
   CHECK(bounds.origin.x == doctest::Approx(45));
   CHECK(bounds.origin.y == doctest::Approx(30));
   CHECK(bounds.size.width == doctest::Approx(40));
+}
+
+TEST_CASE("a moved, turned or skewed view draws its own paint and children through a 2D-only renderer") {
+  REQUIRE(ngn::testing::gtkReady());
+  // The pixels come from GSK's cairo renderer, which draws a 3D matrix as a pink box.
+  for (const char *name : {"translateX", "rotate", "skewX"}) {
+    CAPTURE(name);
+    dynamic step = dynamic::object(name, std::string(name) == "translateX" ? dynamic(30) : dynamic(std::string(name) == "rotate" ? "30deg" : "15deg"));
+    MountedViews views(false, 200, 200);
+    dynamic props = dynamic::object("backgroundColor", kRed)("borderRadius", 10)("transform", dynamic::array(step));
+    auto box = MountedViews::shadow(2, "View", desktopViewProps(props), {{40, 40}, {80, 60}});
+    auto inner = MountedViews::shadow(3, "View", desktopViewProps(dynamic::object("backgroundColor", kBlue)), {{30, 20}, {20, 20}});
+    views.mount({ShadowViewMutation::CreateMutation(box), ShadowViewMutation::CreateMutation(inner),
+                 ShadowViewMutation::InsertMutation(MountedViews::kSurface, box, 0), ShadowViewMutation::InsertMutation(2, inner, 0)});
+    graphene_point_t centre{40, 30}, at{};
+    REQUIRE(gtk_widget_compute_point(views.view(2), views.surface, &centre, &at));
+    CHECK(bluish(views.pixel(static_cast<int>(at.x), static_cast<int>(at.y))));
+    graphene_point_t paint{8, 30};
+    REQUIRE(gtk_widget_compute_point(views.view(2), views.surface, &paint, &at));
+    CHECK(reddish(views.pixel(static_cast<int>(at.x), static_cast<int>(at.y))));
+    // Each corner where the full matrix puts it.
+    const auto *d = ngn::gtk::viewData(views.view(2));
+    auto layer = ngn::layerTransform(*std::static_pointer_cast<const ViewProps>(d->props), d->layout);
+    REQUIRE(layer);
+    for (graphene_point_t corner : {graphene_point_t{0, 0}, graphene_point_t{80, 0}, graphene_point_t{0, 60}, graphene_point_t{80, 60}}) {
+      REQUIRE(gtk_widget_compute_point(views.view(2), views.surface, &corner, &at));
+      const auto &m = layer->matrix;
+      CHECK(at.x == doctest::Approx(40 + corner.x * m[0] + corner.y * m[4] + m[12]).epsilon(1e-3));
+      CHECK(at.y == doctest::Approx(40 + corner.x * m[1] + corner.y * m[5] + m[13]).epsilon(1e-3));
+    }
+  }
 }
 
 TEST_CASE("a view paints its background in its rounded shape and its border along its edge") {

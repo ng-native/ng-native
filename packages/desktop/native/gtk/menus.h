@@ -64,6 +64,10 @@ class GtkMenus final : public MenuBackend {
   std::shared_ptr<void> alive_{std::make_shared<int>(0)};
 };
 
+// Linux's Keyboard Shortcuts window (MenuHost::keyboardShortcuts's groups), over `parent` when
+// given: a GtkShortcutsWindow, built through GtkBuilder, which every GTK from 4.10 reads.
+GtkWidget *keyboardShortcutsWindow(const std::vector<ShortcutGroup> &groups, GtkWindow *parent);
+
 // A view's context menu at `point` in `widget`: chosen items call `chosen`. True once shown.
 bool popUpContextMenu(GtkWidget *widget, facebook::react::Point point, const std::vector<MenuItem> &items, std::function<void(const MenuItem &)> chosen);
 

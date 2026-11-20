@@ -43,6 +43,7 @@ MenuCommand roleCommand(const std::string &role) {
       {"bringAllToFront", MenuCommand::BringAllToFront},
       {"close", MenuCommand::CloseWindow},
       {"print", MenuCommand::Print},
+      {"keyboardShortcuts", MenuCommand::KeyboardShortcuts},
   };
   auto it = commands.find(role);
   return it == commands.end() ? MenuCommand::AppItem : it->second;
@@ -203,11 +204,11 @@ void MenuHost::setMenuBar(const folly::dynamic &groups) {
 }
 
 void MenuHost::setShortcuts(const folly::dynamic &shortcuts) {
-  std::vector<std::pair<std::string, KeyChord>> parsed;
+  std::vector<Shortcut> parsed;
   if (shortcuts.isArray()) {
     for (const auto &shortcut : shortcuts) {
       if (shortcut.isObject()) {
-        parsed.emplace_back(text(shortcut, "id"), parseChord(shortcut.getDefault("chord")));
+        parsed.push_back({text(shortcut, "id"), parseChord(shortcut.getDefault("chord")), text(shortcut, "label"), text(shortcut, "group")});
       }
     }
   }
@@ -232,9 +233,9 @@ bool MenuHost::keyDown(const KeyChord &pressed, bool textInputFocused) {
   std::optional<std::string> id;
   {
     std::lock_guard lock(mutex_);
-    for (const auto &[shortcutId, shortcut] : shortcuts_) {
-      if (shortcut == chord) {
-        id = shortcutId;
+    for (const auto &shortcut : shortcuts_) {
+      if (shortcut.chord == chord) {
+        id = shortcut.id;
         break;
       }
     }
@@ -244,6 +245,23 @@ bool MenuHost::keyDown(const KeyChord &pressed, bool textInputFocused) {
   }
   send(folly::dynamic::object("type", "shortcut")("id", *id)("textInputFocused", textInputFocused));
   return !(textInputFocused && editingChord(chord, options_.os));
+}
+
+std::vector<ShortcutGroup> MenuHost::keyboardShortcuts(const std::vector<MenuItem> &bar) const {
+  auto groups = menuShortcuts(bar);
+  std::lock_guard lock(mutex_);
+  for (const auto &shortcut : shortcuts_) {
+    if (shortcut.label.empty()) {
+      continue;
+    }
+    const std::string &title = shortcut.group.empty() ? options_.appName : shortcut.group;
+    auto group = std::find_if(groups.begin(), groups.end(), [&title](const ShortcutGroup &g) { return g.title == title; });
+    if (group == groups.end()) {
+      group = groups.insert(groups.end(), ShortcutGroup{.title = title});
+    }
+    group->entries.push_back({.title = shortcut.label, .chord = shortcut.chord});
+  }
+  return groups;
 }
 
 void MenuHost::navigate(NavigationDirection direction, std::optional<SurfaceId> surface, int steps) {

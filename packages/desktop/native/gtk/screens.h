@@ -49,6 +49,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <vector>
 
 namespace ngn::gtk {
 
@@ -70,6 +71,17 @@ struct WindowChrome {
   GtkWidget *menuBar{nullptr};
   GtkWidget *primaryMenu{nullptr};
   TitleBar titleBar{TitleBar::Default};
+  // The widgets a cover or drawn sheet in front holds still (Modals::hold), each with what it took
+  // before: the pointer, the focus, whether it was sensitive, and a menu button whether F10 opened it.
+  struct Held {
+    GtkWidget *widget;
+    bool target;
+    bool focus;
+    bool sensitive;
+    bool primary;
+  };
+  std::vector<Held> held;
+  ~WindowChrome();
 };
 
 // The toolbar view holding `surface` under the header bar, for a window's content; the window's
@@ -77,6 +89,10 @@ struct WindowChrome {
 GtkWidget *wrapInChrome(GtkWidget *surface, const ChromeOptions &options = {});
 // The chrome of `surface`'s window, or null for a surface wrapInChrome did not wrap.
 const WindowChrome *chromeOf(GtkWidget *surface);
+// Holds the window still around `front`, a layer on its overlay, as a sheet does on macOS: every
+// header bar's items (its window controls aside) and the menus take no pointer or keyboard, the
+// surface takes no focus, and the overlay's other layers neither. Null gives back what it held.
+void holdChrome(GtkWidget *surface, GtkWidget *front);
 // Whether the surface's content runs under its header bar: `transparent` and `hidden`.
 bool runsUnderHeaderBar(const WindowChrome &chrome);
 // The surface's size and the insets its chrome gives it: none while its content stays below the
@@ -164,6 +180,7 @@ class Headers {
     std::string background;
   };
   void layOut(SurfaceId surfaceId, Shown &shown);
+  void layOutBar(SurfaceId surfaceId, Shown &shown);
   void clear(SurfaceId surfaceId, Shown &shown, bool keepSearches = false);
   GtkWidget *headerBarOf(SurfaceId surfaceId) const;
 
@@ -210,6 +227,9 @@ class Modals {
   void requestCloseFront(SurfaceId surfaceId);
   // Return over a surface's modals: presses the default button of the one presented last. Whether it had one.
   bool pressDefaultFront(SurfaceId surfaceId);
+  // The window around the cover or drawn sheet in front holds still (holdChrome), and once none is
+  // left takes input again. Again after the header bar changes, which may have packed new items.
+  void hold(SurfaceId surfaceId);
 
  private:
   // The tag of the modal presented last on a surface, or 0.
