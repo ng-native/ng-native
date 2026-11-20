@@ -179,6 +179,9 @@ fi
 variant="$backend"
 [ "$backend" = "none" ] && [ "$runtime" = 1 ] && variant=none-runtime
 BUILD="${build_dir:-$host_dir/$variant-$arch_key-$config}"
+# One build at a time in it (build-lock.sh), held until this script and the ninja it runs end.
+. "$here/build-lock.sh"
+lock_build "$BUILD"
 cmake --log-level=WARNING -G Ninja -S "$native_dir" -B "$BUILD" \
   -DCMAKE_BUILD_TYPE="$config" \
   -DCMAKE_OSX_ARCHITECTURES="$archs" \
