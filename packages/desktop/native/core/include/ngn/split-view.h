@@ -336,6 +336,10 @@ class SourceListFolds {
 
 // The row the app has selected in `list`, if any: the last one that says so.
 std::optional<Tag> selectedRow(const SourceList &list);
+// Whether `a` and `b` differ in which row is selected and nothing else: a toolkit then moves the
+// selection rather than building the list again, which would take the rows away from under the
+// pointer that just chose one.
+bool onlySelectionDiffers(const SourceList &a, const SourceList &b);
 
 // Sizes reported as the toolkit lays out (every step of a divider drag), coalesced so layout hears
 // each view's latest at most once per display frame.

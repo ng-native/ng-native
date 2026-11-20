@@ -406,6 +406,18 @@ std::optional<Tag> selectedRow(const SourceList &list) {
   return selected;
 }
 
+bool onlySelectionDiffers(const SourceList &a, const SourceList &b) {
+  auto unselected = [](SourceList list) {
+    for (auto &group : list.groups) {
+      for (auto &row : group.rows) {
+        row.selected = false;
+      }
+    }
+    return list;
+  };
+  return a != b && unselected(a) == unselected(b);
+}
+
 bool FrameSizes::report(Tag tag, Size size) {
   bool first = pending_.empty();
   pending_[tag] = size;

@@ -44,6 +44,8 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
     // A press a screen reader sends a view that has no handler of its own for it: a click, as
     // Space on the focused view is (InputDispatcher::activate). Whether it reached the view.
     std::function<bool(SurfaceId, Tag)> activate = [](SurfaceId, Tag) { return false; };
+    // The user chose the tab `screen` in the sidebar of the tabs host `host` (MountingManager::chooseTab).
+    std::function<void(SurfaceId, Tag host, Tag screen)> chooseTab = [](SurfaceId, Tag, Tag) {};
   } hooks;
 
   // The widget a surface's root mounts into, or null.
@@ -57,6 +59,9 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
   void unhostView(Tag tag);
   // Whether the view is still in the slot it was hosted in.
   bool isHosted(Tag tag) const;
+  // `window`'s scale changed (window-scale.h): each Image in it picks its source again, as one
+  // does on macOS when its window's backing scale changes.
+  void windowRescaled(GtkWidget *window);
   // A RNSSearchBar's field, or null.
   GtkWidget *searchEntry(Tag tag) const;
   Headers &headers() {

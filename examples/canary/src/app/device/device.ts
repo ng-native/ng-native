@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import {
   Accessibility,
   AppState,
@@ -17,6 +17,7 @@ import {
   View,
 } from '@ng-native/components';
 import { NativeHeader } from '@ng-native/router';
+import { PixelRatio } from 'react-native';
 import { page } from '../screen-styles.ts';
 
 /**
@@ -43,8 +44,8 @@ import { page } from '../screen-styles.ts';
 
         <text class="heading" role="heading" aria-level="2">Screen</text>
         <text class="body">
-          {{ screen.window().width }} x {{ screen.window().height }},
-          {{ screen.orientation() }}
+          {{ screen.window().width }} x {{ screen.window().height }}, {{ screen.orientation() }},
+          {{ scale() }} pixels a point
         </text>
         <text class="hint">
           The same numbers the engine answers media queries with. Reduced motion is
@@ -70,7 +71,13 @@ import { page } from '../screen-styles.ts';
           screen reader {{ on(accessibility.screenReader()) }}, reduce motion
           {{ on(accessibility.reduceMotion()) }}, bold text {{ on(accessibility.boldText()) }}
         </text>
-        <pressable class="card" role="button" (press)="announce()">
+        <pressable
+          class="card"
+          role="button"
+          [accessibilityActions]="announceActions"
+          (accessibilityAction)="announceAgain()"
+          (press)="announce()"
+        >
           <text class="button-label">Announce to a screen reader</text>
         </pressable>
 
@@ -109,12 +116,25 @@ export class DevicePage {
 
   protected readonly page = page;
 
+  /** PixelRatio, read again on each `Dimensions` change, which a new scale is. */
+  protected readonly scale = computed(() => {
+    this.screen.display();
+    return Math.round(PixelRatio.get() * 1000) / 1000;
+  });
+
   protected on(value: boolean): string {
     return value ? 'on' : 'off';
   }
 
   protected announce(): void {
     this.accessibility.announce('Angular Native says hello');
+  }
+
+  /** A custom action on the same button, which a screen reader lists beside its press. */
+  protected readonly announceActions = [{ name: 'repeat', label: 'Announce again' }];
+
+  protected announceAgain(): void {
+    this.accessibility.announce('Angular Native says hello again');
   }
 
   protected openSite(): void {

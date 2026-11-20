@@ -16,6 +16,8 @@
 
 namespace ngn::gtk {
 
+class SettingsPortal;
+
 // Whether a gtk-interface-contrast value asks for more contrast. GtkInterfaceContrast is 0
 // unsupported, 1 no preference, 2 more, 3 less: only 2 does.
 bool gtkWantsMoreContrast(int interfaceContrast);
@@ -35,11 +37,7 @@ class AccessibilitySettingsWatcher {
 
  private:
   void readGtk();
-  // Asks the portal for one of its settings: with ReadOne, or with the older Read when `legacy`.
-  void readPortalSetting(const char *key, bool legacy);
-  // The portal's owner appeared, changed or went.
-  void portalOwnerChanged();
-  void readPortal(const char *key, GVariant *value);
+  void readPortal(const std::string &key, GVariant *value);
   void readStatus();
   void report();
 
@@ -47,9 +45,7 @@ class AccessibilitySettingsWatcher {
   LinuxAccessibilitySources sources_;
   std::optional<AccessibilitySettings> reported_;
   GCancellable *cancellable_{nullptr};
-  GDBusProxy *portal_{nullptr};
-  // Counts the owners the portal has had: a reply for an earlier one is dropped.
-  unsigned portalRead_{0};
+  std::unique_ptr<SettingsPortal> portal_;
   GDBusProxy *status_{nullptr};
 };
 
