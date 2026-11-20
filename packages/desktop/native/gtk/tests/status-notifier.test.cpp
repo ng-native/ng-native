@@ -44,9 +44,14 @@ void drop(GVariant *reply) {
 // Returns once the bus daemon has every match rule `bus` subscribed before the call: it answers a
 // connection's messages in the order they came, and a subscription sends its rule without waiting.
 void awaitMatchRules(GDBusConnection *bus) {
-  drop(g_dbus_connection_call_sync(
+  GError *error = nullptr;
+  GVariant *reply = g_dbus_connection_call_sync(
       bus, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "GetId", nullptr, nullptr, G_DBUS_CALL_FLAGS_NONE, 2000,
-      nullptr, nullptr));
+      nullptr, &error);
+  std::string message = error ? error->message : "";
+  g_clear_error(&error);
+  REQUIRE_MESSAGE(reply != nullptr, "the bus daemon did not answer GetId: ", message);
+  g_variant_unref(reply);
 }
 
 void spin(int turns = 40) {
