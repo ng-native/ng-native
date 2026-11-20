@@ -103,7 +103,9 @@ emulator at `10.0.2.2:51730`; a phone on a cable needs an address it can reach, 
 
 The same command runs on CI, with no Metro to start and no app to build first. Cache the build
 directory so a run that changes only JavaScript builds nothing; the run checks the fingerprint
-itself, so a cache that is out of date is built again, not used. With GitHub Actions:
+itself, so a cache that is out of date is built again, not used. Save the cache whether the tests
+pass or not (`actions/cache` on its own saves only when they do), or a failing test means a cold
+build on the next run. With GitHub Actions:
 
 ```yaml
 jobs:
@@ -115,12 +117,17 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
         with:
           path: node_modules/.cache/ng-native-device-tests
           key: device-tests-ios-${{ hashFiles('package-lock.json', 'app.json') }}
           restore-keys: device-tests-ios-
       - run: npx vitest run --project ios
+      - if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: node_modules/.cache/ng-native-device-tests
+          key: device-tests-ios-${{ hashFiles('package-lock.json', 'app.json') }}
 
   android:
     runs-on: ubuntu-latest
@@ -134,7 +141,7 @@ jobs:
           distribution: zulu
           java-version: 17
       - run: npm ci
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
         with:
           path: node_modules/.cache/ng-native-device-tests
           key: device-tests-android-${{ hashFiles('package-lock.json', 'app.json') }}
@@ -151,6 +158,11 @@ jobs:
           target: google_apis
           arch: x86_64
           script: npx vitest run --project android
+      - if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: node_modules/.cache/ng-native-device-tests
+          key: device-tests-android-${{ hashFiles('package-lock.json', 'app.json') }}
 ```
 
 The Android job starts the emulator with `android-emulator-runner`, and the run finds it running;

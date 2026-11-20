@@ -36,7 +36,7 @@ jobs:
 
       # Keyed by what the native half is built from (dependencies, app config, the packages' own
       # native code); the pool checks the fingerprint as well, so a stale build is rebuilt, not run.
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
         with:
           path: examples/canary/node_modules/.cache/ng-native-device-tests
           key: device-tests-ios-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}
@@ -45,6 +45,14 @@ jobs:
       - name: Run the device tests on a simulator
         working-directory: examples/canary
         run: npx vitest run --project ios
+
+      # Saved whether the tests passed or not: a screenshot that does not match is no reason to
+      # build again next time.
+      - if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: examples/canary/node_modules/.cache/ng-native-device-tests
+          key: device-tests-ios-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}
 
       - name: Upload the screenshots that did not match
         if: failure()
@@ -73,7 +81,7 @@ jobs:
           distribution: zulu
           java-version: 17
 
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
         with:
           path: examples/canary/node_modules/.cache/ng-native-device-tests
           key: device-tests-android-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}
@@ -99,6 +107,14 @@ jobs:
           emulator-boot-timeout: 180
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
           script: cd examples/canary && npx vitest run --project android
+
+      # Saved whether the tests passed or not: a screenshot that does not match is no reason to
+      # build again next time.
+      - if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: examples/canary/node_modules/.cache/ng-native-device-tests
+          key: device-tests-android-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}
 
       - name: Upload the screenshots that did not match
         if: failure()
