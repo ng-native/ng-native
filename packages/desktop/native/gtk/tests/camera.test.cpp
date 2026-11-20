@@ -38,13 +38,14 @@ struct Folder {
 };
 
 // The test camera, and the views the host would share, used for the test and dropped after it.
+// `present`: whether there is a microphone, which PipeWire records silence without.
 struct Camera {
-  std::shared_ptr<ngn::AudioInput> microphone =
-      ngn::gtk::makeAudioInput({.source = "audiotestsrc is-live=true", .microphone = [] { return true; }});
-  std::shared_ptr<ngn::CameraHardware> hardware =
-      ngn::gtk::makeCameraHardware({.source = kRed, .microphone = microphone, .microphoneSource = "audiotestsrc is-live=true"});
+  std::shared_ptr<ngn::AudioInput> microphone;
+  std::shared_ptr<ngn::CameraHardware> hardware;
   std::shared_ptr<ngn::CameraViews> views = std::make_shared<ngn::CameraViews>();
-  Camera() {
+  explicit Camera(bool present = true)
+      : microphone(ngn::gtk::makeAudioInput({.source = "audiotestsrc is-live=true", .microphone = [present] { return present; }})),
+        hardware(ngn::gtk::makeCameraHardware({.source = kRed, .microphone = microphone, .microphoneSource = "audiotestsrc is-live=true"})) {
     REQUIRE(ngn::testing::gtkReady());
     REQUIRE(hardware);
     ngn::gtk::useCameraHardware(hardware, views, false);
@@ -61,11 +62,13 @@ facebook::react::ShadowView cameraShadow(dynamic raw) {
 }
 
 dynamic ask(ngn::NativeModule &module, const std::string &method, dynamic args) {
-  std::optional<dynamic> answer;
+  // Shared with the callbacks, which may come after a wait that gave up.
+  auto answer = std::make_shared<std::optional<dynamic>>();
   module.callWithPromise(method, args,
-                         {.resolve = [&](dynamic v) { answer = v; }, .reject = [&](const std::string &m) { answer = dynamic::object("rejected", m); }});
-  ngn::testing::runUntil([&] { return answer.has_value(); });
-  return *answer;
+                         {.resolve = [answer](dynamic v) { *answer = v; },
+                          .reject = [answer](const std::string &m) { *answer = dynamic::object("rejected", m); }});
+  ngn::testing::runUntil([&] { return answer->has_value(); });
+  return **answer;
 }
 
 // The path of a file: url, its escapes undone.
@@ -224,5 +227,25 @@ TEST_CASE("ImagePicker's camera on Linux records a video in its own dialog") {
   REQUIRE(answer->first.video);
   CHECK(answer->first.video->width == 64);
   CHECK(answer->first.video->duration > 300);
+}
+TEST_CASE("Camera on Linux records without sound where there is no microphone") {
+  Camera camera(false);
+  Folder folder;
+  auto module = ngn::makeCameraModule(camera.hardware, camera.views, (folder.path / "Camera").string(), false);
+  MountedViews views;
+  views.add(cameraShadow(dynamic::object("active", true)));
+  auto *d = ngn::gtk::viewData(views.view(kCamera));
+  REQUIRE(d->camera);
+  ngn::testing::runUntil([&] { return gtk_picture_get_paintable(ngn::gtk::cameraPicture(*d->camera)) != nullptr; });
+  auto recorded = std::make_shared<std::optional<dynamic>>();
+  module->callWithPromise("record", dynamic::array(kCamera, dynamic::object("maxDuration", 0.5)),
+                          {.resolve = [recorded](dynamic v) { *recorded = v; },
+                           .reject = [recorded](const std::string &m) { *recorded = dynamic::object("rejected", m); }});
+  ngn::testing::runUntil([&] { return recorded->has_value(); });
+  REQUIRE_FALSE((*recorded)->count("rejected"));
+  auto clip = discover(pathOf((*recorded)->at("uri").asString()));
+  REQUIRE(clip);
+  CHECK(clip->width == 64);
+  CHECK_FALSE(clip->sound);
 }
 #endif

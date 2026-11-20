@@ -269,9 +269,6 @@ void GtkBackend::createView(const ShadowView &view) {
         }
       }
     });
-    if (auto video = std::dynamic_pointer_cast<const VideoViewProps>(view.props)) {
-      applyVideoSurface(*d->video, videoViewModel(video->values));
-    }
   } else if (d->component == CameraComponentName) {
     d->camera = makeCameraSurface(widget, view.tag, [this, tag = view.tag](const std::string &name, folly::dynamic payload) {
       auto found = views_.find(tag);
@@ -282,9 +279,6 @@ void GtkBackend::createView(const ShadowView &view) {
         }
       }
     });
-    if (auto camera = std::dynamic_pointer_cast<const CameraProps>(view.props)) {
-      applyCameraSurface(*d->camera, *camera);
-    }
 #endif
   } else if (d->component == "RNSScreenStackHeaderConfig") {
     // What of a header shows is in the window's header bar: its subtree is neither drawn nor hit
@@ -309,6 +303,16 @@ void GtkBackend::createView(const ShadowView &view) {
   }
   applyViewProps(widget, *d);
   views_[view.tag] = widget;
+#if NGN_GSTREAMER
+  // Once registered, so what they send at once reaches the view: a frame the player shows already,
+  // as the first, and a camera's mountError.
+  if (auto video = std::dynamic_pointer_cast<const VideoViewProps>(view.props); d->video && video) {
+    applyVideoSurface(*d->video, videoViewModel(video->values));
+  }
+  if (auto camera = std::dynamic_pointer_cast<const CameraProps>(view.props); d->camera && camera) {
+    applyCameraSurface(*d->camera, *camera);
+  }
+#endif
   if (view.tag == view.surfaceId) {
     if (auto it = surfaces_.find(view.surfaceId); it != surfaces_.end()) {
       gtk_widget_set_parent(widget, it->second);

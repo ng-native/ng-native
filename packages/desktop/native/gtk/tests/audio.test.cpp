@@ -150,11 +150,13 @@ struct Module {
   dynamic call(const std::string &method, dynamic args) { return module->call(method, args); }
   // A promise's answer once the main loop has given it; a rejection as {rejected: message}.
   dynamic ask(const std::string &method, dynamic args) {
-    std::optional<dynamic> answer;
+    // Shared with the callbacks, which may come after a wait that gave up.
+    auto answer = std::make_shared<std::optional<dynamic>>();
     module->callWithPromise(method, args,
-                            {.resolve = [&](dynamic v) { answer = v; }, .reject = [&](const std::string &m) { answer = dynamic::object("rejected", m); }});
-    ngn::testing::runUntil([&] { return answer.has_value(); });
-    return *answer;
+                            {.resolve = [answer](dynamic v) { *answer = v; },
+                             .reject = [answer](const std::string &m) { *answer = dynamic::object("rejected", m); }});
+    ngn::testing::runUntil([&] { return answer->has_value(); });
+    return **answer;
   }
   dynamic status(const dynamic &id) { return call("status", dynamic::array(id)); }
   bool finished() {
@@ -348,6 +350,20 @@ TEST_CASE("Audio on Linux pauses a playing file whose rate is set to 0") {
   m.call("play", dynamic::array(id));
   CHECK(m.status(id)["playing"] == true);
   m.call("setPlaybackRate", dynamic::array(id, 0));
+  CHECK(m.status(id)["playing"] == false);
+}
+
+TEST_CASE("Audio on Linux seeks a player whose rate is 0") {
+  Folder folder;
+  auto wav = toneFile(folder, "tone.wav", 20);
+  Module m(folder);
+  auto id = m.call("createPlayer", dynamic::array(ngn::fileUri(wav), 100));
+  ngn::testing::runUntil([&] { return m.status(id)["isLoaded"] == true; });
+  m.call("play", dynamic::array(id));
+  m.call("setPlaybackRate", dynamic::array(id, 0));
+  auto seeked = m.ask("seekTo", dynamic::array(id, 1.2));
+  CHECK_FALSE(rejected(seeked));
+  CHECK(m.status(id)["currentTime"].asDouble() == doctest::Approx(1.2).epsilon(0.05));
   CHECK(m.status(id)["playing"] == false);
 }
 

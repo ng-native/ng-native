@@ -48,6 +48,8 @@ class Playback {
     std::string audioSink;
     // The video sink, taken over; null plays no video.
     GstElement *videoSink{nullptr};
+    // A video player's: with no video sink, the source fails to load.
+    bool video{false};
     // Keeps the pitch at any rate (scaletempo).
     bool preservePitch{true};
     // Seconds between Time changes while playing; 0 sends none.
