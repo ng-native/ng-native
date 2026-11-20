@@ -1,5 +1,8 @@
 /** The pool's tool commands: their output on a failure, and stopping one as the run ends. */
 import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { describe, it } from 'node:test';
 import { runCommand } from './command.ts';
 
@@ -26,5 +29,24 @@ describe('a command the pool runs', () => {
     setTimeout(() => stop.abort(), 100);
     await assert.rejects(running, /was stopped: the run ended/);
     assert.ok(Date.now() - started < 5000, 'not after the command would have ended');
+  });
+
+  it('rejects a stop only once the command has exited', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ng-native-command-'));
+    try {
+      const done = path.join(dir, 'done');
+      // Outlives the stop by a moment, as a tool finishing a write does.
+      const script =
+        "process.on('SIGTERM', () => setTimeout(() => " +
+        `{ require('fs').writeFileSync(${JSON.stringify(done)}, ''); process.exit(1); }, 200)); ` +
+        "setTimeout(() => {}, 30000); console.log('ready')";
+      const stop = new AbortController();
+      const running = runCommand(process.execPath, ['-e', script], { signal: stop.signal });
+      setTimeout(() => stop.abort(), 300);
+      await assert.rejects(running, /was stopped: the run ended/);
+      assert.equal(existsSync(done), true, 'the command had exited');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -41,15 +41,18 @@ export function runCommand(
     };
     child.stdout.on('data', keep);
     child.stderr.on('data', keep);
-    child.once('error', (error) =>
-      reject(
-        error.name === 'AbortError'
-          ? new Error(`${command} was stopped: the run ended.`)
-          : new Error(`${command} could not be started: ${error.message}`),
-      ),
-    );
+    child.once('error', (error) => {
+      // A stop comes as an error before the command has exited; it rejects at `exit`, so what
+      // waits on it (the next prebuild, a folder removed) starts after the command's last write.
+      // Not at `close`: a process the command started can hold its output open long after.
+      if (error.name !== 'AbortError') {
+        reject(new Error(`${command} could not be started: ${error.message}`));
+      }
+    });
+    child.once('exit', () => {
+      if (options.signal?.aborted) reject(new Error(`${command} was stopped: the run ended.`));
+    });
     child.once('close', (status) => {
-      // Rejected here too, should the stop not have come as an error first.
       if (options.signal?.aborted) reject(new Error(`${command} was stopped: the run ended.`));
       else if (status === 0 || options.allowFailure) resolve({ status, output });
       else
