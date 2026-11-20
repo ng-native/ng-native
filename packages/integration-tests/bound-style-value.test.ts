@@ -187,4 +187,64 @@ export class Blank {
       /width: {3}, in a style on <view>, is no value width takes: it is blank/,
     );
   });
+  it('that is blank still lets a shorthand read the var() fallback around it', async () => {
+    const mod = await build(
+      'blank-shorthand',
+      `
+import { Component } from '@angular/core';
+import { View } from '../components/src/view.ts';
+
+@Component({
+  selector: 'x-blank-shorthand',
+  imports: [View],
+  styles: ['.b { border: 1px solid var(--extra,); }', '.sb { --extra: ; }'],
+  template: \`
+    <view nativeID="a" class="b" [style.--extra]="'  '" />
+    <view nativeID="b" class="b sb" />
+  \`,
+})
+export class BlankShorthand {}
+`,
+    );
+    const { fabric } = await render(mod['BlankShorthand'] as Type<unknown>);
+    const sheet = styleOf(fabric, 'b');
+    assert.equal(sheet['borderTopWidth'], 1, 'a blank set in a stylesheet keeps the border');
+    const bound = styleOf(fabric, 'a');
+    assert.deepEqual(
+      [bound['borderTopWidth'], bound['borderStyle']],
+      [sheet['borderTopWidth'], sheet['borderStyle']],
+      'and a bound one keeps it alike',
+    );
+  });
+
+  // A static `style="--h: ;"` never gets here: Angular's compiler leaves the empty declaration out.
+  it('that is blank in a style attribute hides the class token, as a bound one does', async () => {
+    const mod = await build(
+      'blank-attribute',
+      `
+import { Component } from '@angular/core';
+import { View } from '../components/src/view.ts';
+
+@Component({
+  selector: 'x-blank-attribute',
+  imports: [View],
+  styles: ['.outer { --h: 70px }'],
+  template: \`
+    <view class="outer">
+      <view nativeID="a" [attr.style]="'--h: ;'" [style.min-height]="'var(--h)'" />
+      <view nativeID="b" [style.--h]="'  '" [style.min-height]="'var(--h)'" />
+    </view>
+  \`,
+})
+export class BlankAttribute {}
+`,
+    );
+    const { fabric } = await render(mod['BlankAttribute'] as Type<unknown>);
+    assert.equal(styleOf(fabric, 'b')['minHeight'] ?? null, null, 'bound');
+    assert.equal(
+      styleOf(fabric, 'a')['minHeight'] ?? null,
+      null,
+      'the attribute, as Chrome leaves it unset',
+    );
+  });
 });

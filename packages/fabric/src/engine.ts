@@ -7399,8 +7399,11 @@ const emptyBrush = (value: unknown): boolean =>
   (value as { type?: unknown }).type === 0 &&
   (value as { payload?: unknown }).payload == null;
 
-/** A token set to whitespace alone: there, of no kind a declaration reads. */
-const BLANK_TOKEN: TokenValue = Object.freeze({});
+/**
+ * A token set to whitespace alone, written as the compiler writes `--x: ;`: an empty keyword, which
+ * a shorthand reading the token takes as nothing, so `1px solid var(--x,)` stays `1px solid`.
+ */
+const BLANK_TOKEN: TokenValue = Object.freeze({ keyword: '' });
 const isBlank = (value: unknown): boolean =>
   typeof value === 'string' && value !== '' && cssTrim(value) === '';
 
