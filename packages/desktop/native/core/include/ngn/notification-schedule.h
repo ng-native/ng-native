@@ -47,7 +47,8 @@ class NotificationSchedule {
   // Delivers what came due while the app was not running, and waits for the next.
   void start();
   // Schedules `request`, replacing one with its identifier; a trigger of now delivers it at once.
-  void add(const NotificationRequest &request);
+  // False when the schedule could not be written: nothing changed, and the file is as it was.
+  bool add(const NotificationRequest &request);
   std::vector<NotificationRequest> pending() const;
   void removePending(const std::vector<std::string> &identifiers);
   void removeAllPending();

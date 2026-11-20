@@ -199,6 +199,22 @@ TEST_CASE("A scheduled notification waits for its time, and one due while the ap
   g_object_unref(app);
 }
 
+TEST_CASE("A notification the schedule cannot save is reported to the caller") {
+  StandInPortal portal;
+  Folder folder;
+  GtkApplication *app = ngn::gtk::startApplication("dev.ngnative.NotifyTest", false);
+  auto events = std::make_shared<ngn::NotificationEvents>("linux");
+  auto center = ngn::gtk::makeNotificationCenter(G_APPLICATION(app), folder.path, events, [] {}, [](int) {});
+  std::filesystem::remove_all(folder.path);
+  std::optional<std::string> error;
+  center->add(request("tea", {.kind = ngn::NotificationTrigger::Kind::Interval, .seconds = 60}),
+              [&error](std::optional<std::string> e) { error = e; });
+  CHECK(error.has_value());
+  std::vector<ngn::NotificationRequest> scheduled;
+  center->pending([&scheduled](auto list) { scheduled = std::move(list); });
+  CHECK(scheduled.empty());
+}
+
 TEST_CASE("Where no portal answers, GNotification shows a notification, and the app's action is its click") {
   REQUIRE(ngn::testing::gtkReady());
   GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);

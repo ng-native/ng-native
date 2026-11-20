@@ -29,8 +29,11 @@ GdkDragAction dragOver(GtkDropTarget *target, double x, double y, gpointer user)
   s->x = x;
   s->y = y;
   s->over = true;
-  // Read ahead (preload): empty until the drag's data has come.
-  return s->input->dragOver(dropInput(*s), dropItems(gtk_drop_target_get_value(target))) ? GDK_ACTION_COPY : GdkDragAction(0);
+  // Read ahead (preload): not there until the drag's data has come, which valueCame hands on.
+  const GValue *value = gtk_drop_target_get_value(target);
+  auto items = dropItems(value);
+  items.pending = value == nullptr;
+  return s->input->dragOver(dropInput(*s), items) ? GDK_ACTION_COPY : GdkDragAction(0);
 }
 
 // The drag's data came after it entered: the view under it hears what it carries.

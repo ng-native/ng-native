@@ -119,6 +119,8 @@ TEST_CASE("a drag over a surface goes to the input sink as its container's, and 
   g_signal_emit_by_name(target, "enter", 12.0, 34.0, &action);
   CHECK(action == GDK_ACTION_COPY);
   REQUIRE(sink.over.size() == 1);
+  // No data yet: the sink hit tests the drag, and is told its enter is to wait.
+  CHECK(sink.over[0].second.pending);
   CHECK(sink.over[0].first.x == 12);
   CHECK(sink.over[0].first.y == 34);
   // No view there takes drops: the drag is refused.

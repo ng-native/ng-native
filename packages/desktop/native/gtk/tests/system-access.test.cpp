@@ -85,6 +85,28 @@ TEST_CASE("A portal request answers Absent where the portal has no such interfac
   CHECK(*outcome == ngn::gtk::portal::Outcome::Absent);
 }
 
+TEST_CASE("A portal request fails when the portal exits before it answers, and a waiting one is not timed out") {
+  StandInPortal portal;
+  portal.silent = true;
+  std::optional<ngn::gtk::portal::Outcome> outcome;
+  ngn::gtk::portal::request("org.freedesktop.portal.FileChooser", "OpenFile", g_variant_new("(ss)", "", "Open"),
+                            g_variant_builder_new(G_VARIANT_TYPE_VARDICT), nullptr,
+                            [&outcome](ngn::gtk::portal::Outcome answer, GVariant *) { outcome = answer; });
+  ngn::testing::runUntil([&portal] { return portal.calls.size() == 1; });
+  // The portal took it and the user has not chosen: still waiting.
+  for (gint64 end = g_get_monotonic_time() + 300 * 1000; g_get_monotonic_time() < end;) {
+    g_main_context_iteration(nullptr, FALSE);
+    g_usleep(1000);
+  }
+  CHECK_FALSE(outcome.has_value());
+  CHECK(ngn::gtk::portal::requestsInFlight() == 1);
+
+  portal.exit();
+  ngn::testing::runUntil([&outcome] { return outcome.has_value(); });
+  CHECK(*outcome == ngn::gtk::portal::Outcome::Failed);
+  CHECK(ngn::gtk::portal::requestsInFlight() == 0);
+}
+
 TEST_CASE("Shell opens a path, and shows one in its folder, by passing the portal the file") {
   StandInPortal portal;
   auto folder = temporaryFolder();
