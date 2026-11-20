@@ -135,10 +135,15 @@ void startTimer(const std::shared_ptr<Shared> &shared) {
 
 // A flushing, accurate seek at the rate asked for. Not under `mutex`.
 bool seekTo(const std::shared_ptr<Shared> &shared, double seconds) {
+  std::lock_guard changing(shared->changing);
   double rate;
   {
     std::lock_guard lock(shared->mutex);
-    rate = shared->rate;
+    if (!shared->alive || !shared->pipeline) {
+      return false;
+    }
+    // A rate of 0 pauses rather than seeks: the seek keeps the one the pipeline plays at.
+    rate = shared->rate > 0 ? shared->rate : shared->appliedRate;
     shared->seeking = true;
   }
   gint64 at = static_cast<gint64>(std::max(0.0, seconds) * GST_SECOND);
@@ -213,8 +218,8 @@ gboolean onMessage(GstBus *, GstMessage *message, gpointer data) {
           shared->load = PlaybackState::Load::Ready;
         }
         pending.swap(shared->pendingSeek);
-        if (!pending && shared->rate != shared->appliedRate) {
-          // A rate asked for before the source prerolled.
+        if (!pending && shared->rate > 0 && shared->rate != shared->appliedRate) {
+          // A rate asked for before the source prerolled; a rate of 0 is a pause, never a seek.
           pending = -1;
         }
         seeked = shared->seeking;
@@ -281,6 +286,11 @@ Playback::Playback(const std::string &uri, Options options, std::function<void(C
   shared_->changed = std::move(changed);
   shared_->interval = options.interval;
   shared_->file = uri.rfind("file:", 0) == 0;
+  if (options.video && !options.videoSink) {
+    shared_->load = PlaybackState::Load::Failed;
+    shared_->error = "GStreamer's appsink is not installed";
+    return;
+  }
   GstElement *pipeline = gst_element_factory_make("playbin3", nullptr);
   if (!pipeline) {
     shared_->load = PlaybackState::Load::Failed;

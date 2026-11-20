@@ -16,6 +16,7 @@
 #include "app-windows.h"
 #if NGN_GSTREAMER
 #include "audio.h"
+#include "video.h"
 #endif
 #include "auth-session.h"
 #include "battery.h"
@@ -983,6 +984,7 @@ int main(int argc, char *argv[]) {
        // Playback and recording through GStreamer, each left out where it is not installed.
        .audioOutput = ngn::gtk::makeAudioOutput(),
        .audioInput = microphone,
+       .videoOutput = ngn::gtk::makeVideoOutput(),
 #endif
        .splash = gSplash,
        // ImagePicker's library half: the FileChooser portal over the user's files. No camera yet.

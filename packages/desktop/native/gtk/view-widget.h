@@ -38,6 +38,7 @@ struct ImageLoad;
 struct ScrollBox;
 class SvgImageHold;
 struct TextField;
+struct VideoSurface;
 
 struct ViewData {
   // The widget holding this data, which a view whose role changes trades for another.
@@ -63,6 +64,8 @@ struct ViewData {
   ScrollBox *documentOf{nullptr};
   // A placed split view's AdwBreakpointBin (split-view.h), which fills the view.
   GtkWidget *split{nullptr};
+  // An `<expo-video>`'s picture and controls (video.h).
+  std::shared_ptr<VideoSurface> video;
   // An svg's document, which the core builds from the elements under it.
   std::shared_ptr<const SvgDocument> svg;
   // The images its last draw asked for, kept for it in the shared cache.
