@@ -12,6 +12,8 @@ export interface CommandOptions {
   log?: string;
   /** Resolve with the output even when the command fails. */
   allowFailure?: boolean;
+  /** Stops the command, which then rejects. */
+  signal?: AbortSignal;
 }
 
 export interface CommandResult {
@@ -30,6 +32,7 @@ export function runCommand(
       cwd: options.cwd,
       env: options.env ?? process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
+      signal: options.signal,
     });
     let output = '';
     const keep = (chunk: Buffer) => {
@@ -39,10 +42,16 @@ export function runCommand(
     child.stdout.on('data', keep);
     child.stderr.on('data', keep);
     child.once('error', (error) =>
-      reject(new Error(`${command} could not be started: ${error.message}`)),
+      reject(
+        error.name === 'AbortError'
+          ? new Error(`${command} was stopped: the run ended.`)
+          : new Error(`${command} could not be started: ${error.message}`),
+      ),
     );
     child.once('close', (status) => {
-      if (status === 0 || options.allowFailure) resolve({ status, output });
+      // Rejected here too, should the stop not have come as an error first.
+      if (options.signal?.aborted) reject(new Error(`${command} was stopped: the run ended.`));
+      else if (status === 0 || options.allowFailure) resolve({ status, output });
       else
         reject(
           new Error(`${[command, ...args].join(' ')} failed (status ${status}):\n${tail(output)}`),

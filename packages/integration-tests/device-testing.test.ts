@@ -703,6 +703,16 @@ describe('the device pool', () => {
     }
   });
 
+  it('says the app it launched did not connect, not to open one by hand', async () => {
+    const { launch } = fakeLauncher();
+    const run = await setup({ launch, connectTimeout: 100 });
+    try {
+      await assert.rejects(run.worker().worker.start(), /app the pool launched did not connect/);
+    } finally {
+      await run.done();
+    }
+  });
+
   it('answers start itself while the app it launches has yet to connect, and only once', async () => {
     const { launch } = fakeLauncher();
     const run = await setup({ launch });

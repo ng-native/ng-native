@@ -66,7 +66,11 @@ export interface DevicePoolOptions {
    * Expo's Metro config chooses it, or the project itself.
    */
   serverRoot?: string;
-  /** How long to wait for an app to connect, in milliseconds. Default 60 seconds. */
+  /**
+   * How long to wait for an app to connect, in milliseconds. Default 60 seconds for an app opened
+   * by hand, and ten minutes for one the pool launched, which can be building first (the desktop
+   * host builds itself on its first run); a launched app that exits fails at once either way.
+   */
   connectTimeout?: number;
   /**
    * How long an app may go silent while it owes Vitest an answer before the run fails as if the
@@ -206,10 +210,11 @@ class DeviceWorker implements PoolWorker {
    */
   private async connect(): Promise<void> {
     const { launch } = this.options;
-    const claim = (signal?: AbortSignal) =>
+    const claim = (signal?: AbortSignal, launched = false) =>
       this.bridge.claim((message) => this.receive(message), {
         platform: this.options.platform,
-        timeout: this.options.connectTimeout ?? 60_000,
+        timeout: this.options.connectTimeout ?? (launched ? 600_000 : 60_000),
+        launched,
         root: this.projectRoot,
         screenshots: this.options.screenshots ?? {},
         signal: signal ? AbortSignal.any([signal, this.shutdown.signal]) : this.shutdown.signal,
@@ -228,6 +233,7 @@ class DeviceWorker implements PoolWorker {
       stateDir: mkdtempSync(path.join(tmpdir(), 'ng-native-device-tests-')),
       projectRoot: this.projectRoot,
       metroPort,
+      signal: this.shutdown.signal,
     });
     this.launched = app;
     const early = app.exited.then((how) => {
@@ -240,7 +246,7 @@ class DeviceWorker implements PoolWorker {
     // An app that ended takes its claim with it: a claim left waiting would take the next app.
     const claiming = new AbortController();
     early.catch(() => claiming.abort());
-    this.session = await Promise.race([claim(claiming.signal), early]);
+    this.session = await Promise.race([claim(claiming.signal, true), early]);
     // From here a process that ends is a lost app at once, not after the silence is waited out.
     void app.exited.then((how) => {
       const session = this.session;
@@ -642,9 +648,11 @@ class Bridge {
       root,
       screenshots,
       signal,
+      launched,
     }: {
       platform?: string;
       timeout: number;
+      launched?: boolean;
       root: string;
       screenshots: ScreenshotOptions;
       signal?: AbortSignal;
@@ -664,9 +672,13 @@ class Bridge {
         cleanup();
         reject(
           new Error(
-            `No ${platform ? `${platform} ` : ''}app free on the device test pool's port ${this.port} ` +
-              `within ${timeout / 1000}s. Start Metro with EXPO_PUBLIC_DEVICE_TESTS=1 and open the ` +
-              'app on a simulator or emulator.',
+            launched
+              ? `The ${platform ?? ''} app the pool launched did not connect to port ${this.port} ` +
+                  `within ${timeout / 1000}s: it is stuck before its entry runs ` +
+                  'startDeviceTests(), or the entry does not call it under EXPO_PUBLIC_DEVICE_TESTS.'
+              : `No ${platform ? `${platform} ` : ''}app free on the device test pool's port ` +
+                  `${this.port} within ${timeout / 1000}s. Start Metro with ` +
+                  'EXPO_PUBLIC_DEVICE_TESTS=1 and open the app on a simulator or emulator.',
           ),
         );
       }, timeout);

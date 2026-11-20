@@ -33,7 +33,7 @@ export function iosSimulatorLauncher(options: IosSimulatorOptions = {}): AppLaun
     async start(request): Promise<LaunchedApp> {
       const [simulator, build] = await Promise.all([
         bootedSimulator(options.device),
-        nativeBuild(request.projectRoot, 'ios'),
+        nativeBuild(request.projectRoot, 'ios', { signal: request.signal }),
       ]);
       const plist = path.join(build.path, 'Info.plist');
       const read = async (key: string) =>

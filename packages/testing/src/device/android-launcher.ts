@@ -28,7 +28,7 @@ export function androidEmulatorLauncher(options: AndroidEmulatorOptions = {}): A
       const sdk = androidSdk();
       const [serial, build] = await Promise.all([
         runningEmulator(sdk, options.device),
-        nativeBuild(request.projectRoot, 'android', { abi: HOST_ABI }),
+        nativeBuild(request.projectRoot, 'android', { abi: HOST_ABI, signal: request.signal }),
       ]);
       const adb = async (...args: string[]) =>
         (await runCommand(path.join(sdk, 'platform-tools/adb'), ['-s', serial, ...args])).output;

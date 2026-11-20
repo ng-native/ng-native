@@ -26,7 +26,7 @@ const GENERATED = '.ng-native-generated';
 export async function nativeBuild(
   projectRoot: string,
   os: 'ios' | 'android',
-  { abi }: { abi?: string } = {},
+  { abi, signal }: { abi?: string; signal?: AbortSignal } = {},
 ): Promise<NativeBuild> {
   const key = `${os}-${await fingerprint(projectRoot, os)}${abi ? `-${abi}` : ''}`;
   const dir = path.join(projectRoot, 'node_modules/.cache/ng-native-device-tests', key);
@@ -46,13 +46,14 @@ export async function nativeBuild(
         cwd: projectRoot,
         env,
         log,
+        signal,
       });
       writeFileSync(path.join(native, GENERATED), '');
     }
     const output =
       os === 'ios'
-        ? await buildIos(native, dir, log, env)
-        : await buildAndroid(native, dir, log, abi);
+        ? await buildIos(native, dir, log, env, signal)
+        : await buildAndroid(native, dir, log, abi, signal);
     return { path: output, log };
   } catch (error) {
     throw new Error(
@@ -78,8 +79,9 @@ async function buildIos(
   dir: string,
   log: string,
   env: NodeJS.ProcessEnv,
+  signal: AbortSignal | undefined,
 ): Promise<string> {
-  await runCommand('pod', ['install'], { cwd: native, env, log });
+  await runCommand('pod', ['install'], { cwd: native, env, log, signal });
   const workspace = readdirSync(native).find((name) => name.endsWith('.xcworkspace'));
   if (!workspace) throw new Error(`No .xcworkspace in ${native}`);
   const scheme = workspace.replace(/\.xcworkspace$/, '');
@@ -105,7 +107,7 @@ async function buildIos(
       'CODE_SIGNING_ALLOWED=NO',
       'build',
     ],
-    { cwd: native, env, log },
+    { cwd: native, env, log, signal },
   );
   const products = path.join(derived, 'Build/Products/Debug-iphonesimulator');
   const app = readdirSync(products).find((name) => name.endsWith('.app'));
@@ -121,12 +123,13 @@ async function buildAndroid(
   dir: string,
   log: string,
   abi: string | undefined,
+  signal: AbortSignal | undefined,
 ): Promise<string> {
   const gradlew = path.join(native, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew');
   await runCommand(
     gradlew,
-    [':app:assembleDebug', ...(abi ? [`-PreactNativeArchitectures=${abi}`] : [])],
-    { cwd: native, env: { ...process.env, ANDROID_HOME: androidSdk() }, log },
+    [':app:assembleDebug', '--build-cache', ...(abi ? [`-PreactNativeArchitectures=${abi}`] : [])],
+    { cwd: native, env: { ...process.env, ANDROID_HOME: androidSdk() }, log, signal },
   );
   const apk = path.join(native, 'app/build/outputs/apk/debug/app-debug.apk');
   if (!existsSync(apk)) throw new Error(`Gradle made no ${apk}`);

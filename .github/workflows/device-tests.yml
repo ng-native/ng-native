@@ -30,6 +30,12 @@ jobs:
     if: github.event.pull_request.draft != true
     runs-on: macos-latest
     timeout-minutes: 45
+    env:
+      # A build that is needed compiles through ccache, read by the generated Podfile, so only the
+      # C++ whose inputs changed since the cache was saved is compiled again.
+      USE_CCACHE: '1'
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 2G
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
@@ -41,6 +47,15 @@ jobs:
           path: examples/canary/node_modules/.cache/ng-native-device-tests
           key: device-tests-ios-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}
           restore-keys: device-tests-ios-
+
+      - uses: hendrikmuhs/ccache-action@dbeefd73e8e2ffc1bbc412570072735eb4db3607 # v1.2.25
+        with:
+          key: device-tests-ios-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: device-tests-ios-
+          max-size: 2G
+
+      # React Native's ccache wrapper runs plain clang, silently, without CCACHE_BINARY.
+      - run: echo "CCACHE_BINARY=$(command -v ccache)" >> "$GITHUB_ENV"
 
       - name: Run the device tests on a simulator
         working-directory: examples/canary
@@ -80,6 +95,9 @@ jobs:
         with:
           distribution: zulu
           java-version: 17
+
+      # Gradle's dependencies and build cache, for a build that is needed.
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - uses: actions/cache/restore@v6
         with:

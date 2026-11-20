@@ -47,6 +47,8 @@ export interface LaunchRequest {
   projectRoot: string;
   /** The port of the Metro the pool started for the run, which the app loads its bundle from. */
   metroPort: number;
+  /** Aborted as the run stops: a launch still building or booting gives up. */
+  signal?: AbortSignal;
 }
 
 /** An app a launcher started. */

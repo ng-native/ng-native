@@ -165,6 +165,10 @@ jobs:
           key: device-tests-android-${{ hashFiles('package-lock.json', 'app.json') }}
 ```
 
+A build from nothing takes most of a job: about 30 minutes for iOS on GitHub's macOS runners and
+10 for Android. It is needed only when the native half changes; ccache (with `USE_CCACHE=1` and
+`CCACHE_BINARY` set) and `gradle/actions/setup-gradle` make one that is needed shorter.
+
 The Android job starts the emulator with `android-emulator-runner`, and the run finds it running;
 an emulator the run starts itself has no window when `CI` is set. Without a `device`, a CI run uses
 the simulator or emulator the runner has, so keep screenshot references to what CI runs (see
