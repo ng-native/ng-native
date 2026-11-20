@@ -67,13 +67,21 @@ Context contextOf(GtkWindow *window, GtkBackend &backend, const ViewTree &tree) 
   return c;
 }
 
-bool grab(GtkWidget *widget) {
+bool grab(const ViewData &view, bool backwards) {
+  GtkWidget *widget = focusWidget(view);
   // A key moved it: GTK draws its focus ring, as AppKit does for a focus from the keyboard.
   if (GtkRoot *root = gtk_widget_get_root(widget); root && GTK_IS_WINDOW(root)) {
     gtk_window_set_focus_visible(GTK_WINDOW(root), TRUE);
   }
   gKeyMove = true;
-  bool taken = gtk_widget_is_sensitive(widget) && gtk_widget_grab_focus(widget);
+  bool taken = false;
+  if (gtk_widget_is_sensitive(widget)) {
+    // A control that is a container (a row of segments) takes no focus itself, and grab_focus on
+    // it finds nothing: its first (or, backwards, last) segment that does is the stop.
+    taken = widget == view.control && !gtk_widget_get_focusable(widget) && gtk_widget_get_first_child(widget)
+        ? gtk_widget_child_focus(widget, backwards ? GTK_DIR_TAB_BACKWARD : GTK_DIR_TAB_FORWARD)
+        : gtk_widget_grab_focus(widget);
+  }
   gKeyMove = false;
   return taken;
 }
@@ -101,6 +109,25 @@ std::optional<CompositeKey> compositeKey(guint keyval) {
     default:
       return std::nullopt;
   }
+}
+
+// Whether a click at (x, y) in `view` is on the view itself, its own box or content that takes no
+// focus, rather than on something inside it that does (a view or a control that took the press as
+// it came up).
+bool clickIsOn(GtkWidget *view, double x, double y) {
+  GtkWidget *hit = gtk_widget_pick(view, x, y, GTK_PICK_DEFAULT);
+  for (GtkWidget *w = hit; w && w != view; w = gtk_widget_get_parent(w)) {
+    if (gtk_widget_get_focusable(w)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Whether the focus is in a popover (a date picker's calendar, a menu): GTK's own focus keeps it
+// inside until it closes.
+bool inPopover(GtkWidget *focus) {
+  return focus && gtk_widget_get_ancestor(focus, GTK_TYPE_POPOVER) != nullptr;
 }
 
 void send(GtkWidget *widget, bool focused) {
@@ -145,11 +172,11 @@ void watchFocus(GtkWidget *widget) {
   // follows a click: an inner one took it already as the press bubbled up.
   GtkGesture *click = gtk_gesture_click_new();
   gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(click), GDK_BUTTON_PRIMARY);
-  g_signal_connect(click, "pressed", G_CALLBACK(+[](GtkGestureClick *g, int, double, double, gpointer) {
+  g_signal_connect(click, "pressed", G_CALLBACK(+[](GtkGestureClick *g, int, double x, double y, gpointer) {
     GtkWidget *view = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(g));
     GtkRoot *root = gtk_widget_get_root(view);
     GtkWidget *focus = root ? gtk_root_get_focus(root) : nullptr;
-    if (gtk_widget_get_focusable(view) && focus != view && !(focus && gtk_widget_is_ancestor(focus, view))) {
+    if (gtk_widget_get_focusable(view) && focus != view && clickIsOn(view, x, y)) {
       gtk_widget_grab_focus(view);
     }
     gtk_gesture_set_state(GTK_GESTURE(g), GTK_EVENT_SEQUENCE_DENIED);
@@ -203,6 +230,11 @@ bool moveFocusByKey(GtkWindow *window, guint keyval, GdkModifierType state, GtkB
   auto mods = state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK | GDK_SHIFT_MASK);
   bool tab = keyval == GDK_KEY_Tab || keyval == GDK_KEY_ISO_Left_Tab || keyval == GDK_KEY_KP_Tab;
   if (tab && (mods & ~GDK_SHIFT_MASK) == 0) {
+    // In an open popover Tab is GTK's: it walks the popover's own widgets and stays in them, where
+    // the core's Tab order would step out to the view after the one the popover belongs to.
+    if (inPopover(gtk_root_get_focus(GTK_ROOT(window)))) {
+      return false;
+    }
     auto c = contextOf(window, backend, tree);
     if (!c.root) {
       return false;
@@ -217,7 +249,7 @@ bool moveFocusByKey(GtkWindow *window, guint keyval, GdkModifierType state, GtkB
       if (!next) {
         break;
       }
-      if (const ViewData *d = backend.data(*next); d && grab(focusWidget(*d))) {
+      if (const ViewData *d = backend.data(*next); d && grab(*d, backwards)) {
         return true;
       }
       from = next;
@@ -241,7 +273,7 @@ bool moveFocusByKey(GtkWindow *window, guint keyval, GdkModifierType state, GtkB
   }
   if (*next != *c.focused) {
     if (const ViewData *d = backend.data(*next)) {
-      grab(focusWidget(*d));
+      grab(*d, false);
     }
   }
   return true;

@@ -4,6 +4,8 @@
 
 #include "../focus.h"
 
+#include "ngn/native-controls.h"
+
 #include <doctest/doctest.h>
 
 using namespace facebook::react;
@@ -124,4 +126,89 @@ TEST_CASE("Tab stays in the container the focus is in") {
   v.views.mounting->tree().removeContainerRoot(6);
   CHECK(v.press(GDK_KEY_Tab));
   CHECK(v.focus() == v.views.view(2));
+}
+
+TEST_CASE("Tab reaches a segmented control between two buttons, in a segment, forwards and backwards") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views(false, 300, 200);
+  ngn::gtk::trackFocus(GTK_WINDOW(views.window));
+  views.add(view(2, dynamic::object("focusable", true)("role", "button"), {{0, 0}, {50, 20}}));
+  views.add(MountedViews::shadow(
+      3, "RNCSegmentedControl",
+      ngn::testing::parsedProps<ngn::SegmentedControlComponentDescriptor>(dynamic::object("values", dynamic::array("Day", "Week", "Month"))),
+      {{0, 30}, {200, 30}}));
+  views.add(view(4, dynamic::object("focusable", true)("role", "button"), {{0, 70}, {50, 20}}));
+  GtkWidget *segments = ngn::gtk::viewData(views.view(3))->control;
+  REQUIRE(segments);
+  auto press = [&](guint key, GdkModifierType state = GdkModifierType(0)) {
+    return ngn::gtk::moveFocusByKey(GTK_WINDOW(views.window), key, state, *views.backend, views.mounting->tree());
+  };
+  auto focus = [&] { return gtk_root_get_focus(GTK_ROOT(views.window)); };
+  REQUIRE(gtk_widget_grab_focus(views.view(2)));
+  CHECK(press(GDK_KEY_Tab));
+  CHECK((focus() == segments || gtk_widget_is_ancestor(focus(), segments)));
+  CHECK(press(GDK_KEY_Tab));
+  CHECK(focus() == views.view(4));
+  CHECK(press(GDK_KEY_ISO_Left_Tab, GDK_SHIFT_MASK));
+  CHECK((focus() == segments || gtk_widget_is_ancestor(focus(), segments)));
+  CHECK(press(GDK_KEY_ISO_Left_Tab, GDK_SHIFT_MASK));
+  CHECK(focus() == views.view(2));
+}
+
+TEST_CASE("a click on a view's own padding takes the focus from a view inside it, a click on that view does not") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views(false, 300, 200);
+  ngn::gtk::trackFocus(GTK_WINDOW(views.window));
+  auto outer = view(2, dynamic::object("focusable", true), {{0, 0}, {100, 100}});
+  auto inner = view(3, dynamic::object("focusable", true), {{20, 20}, {40, 40}});
+  views.add(outer);
+  views.add(inner, 2);
+  GtkWidget *a = views.view(2);
+  GtkWidget *b = views.view(3);
+  ngn::testing::runUntil([&] { return gtk_widget_get_width(a) == 100 && gtk_widget_get_width(b) == 40; });
+  GtkGesture *click = nullptr;
+  GListModel *controllers = gtk_widget_observe_controllers(a);
+  for (guint i = 0; i < g_list_model_get_n_items(controllers) && !click; i++) {
+    auto *controller = static_cast<GtkEventController *>(g_list_model_get_item(controllers, i));
+    if (GTK_IS_GESTURE_CLICK(controller)) {
+      click = GTK_GESTURE(controller);
+    }
+    g_object_unref(controller);
+  }
+  g_object_unref(controllers);
+  REQUIRE(click);
+  auto press = [&](double x, double y) { g_signal_emit_by_name(click, "pressed", 1, x, y); };
+
+  REQUIRE(gtk_widget_grab_focus(b));
+  // On the inner view, the press that came up to the outer one leaves the focus where it is.
+  press(30, 30);
+  CHECK(gtk_root_get_focus(GTK_ROOT(views.window)) == b);
+  // On the outer view's own padding it is the outer view's.
+  press(5, 5);
+  CHECK(gtk_root_get_focus(GTK_ROOT(views.window)) == a);
+}
+
+TEST_CASE("Tab in an open popover is GTK's, which keeps it in the popover, not the core's, which would leave it") {
+  REQUIRE(ngn::testing::gtkReady());
+  Views v;
+  GtkWidget *popover = gtk_popover_new();
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *first = gtk_button_new_with_label("One");
+  GtkWidget *second = gtk_button_new_with_label("Two");
+  gtk_box_append(GTK_BOX(box), first);
+  gtk_box_append(GTK_BOX(box), second);
+  gtk_popover_set_child(GTK_POPOVER(popover), box);
+  gtk_widget_set_parent(popover, v.views.view(2));
+  gtk_popover_popup(GTK_POPOVER(popover));
+  ngn::testing::runUntil([&] { return gtk_widget_get_mapped(popover); });
+  REQUIRE(gtk_widget_grab_focus(first));
+  CHECK_FALSE(v.press(GDK_KEY_Tab));
+  CHECK_FALSE(v.press(GDK_KEY_ISO_Left_Tab, GDK_SHIFT_MASK));
+  CHECK(gtk_widget_is_ancestor(v.focus(), popover));
+  // Closed, Tab is the core's again.
+  gtk_popover_popdown(GTK_POPOVER(popover));
+  REQUIRE(gtk_widget_grab_focus(v.views.view(2)));
+  CHECK(v.press(GDK_KEY_Tab));
+  CHECK(v.focus() == v.views.view(3));
+  gtk_widget_unparent(popover);
 }

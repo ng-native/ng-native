@@ -233,7 +233,7 @@ export class DesktopPage {
   }
 
   protected badgeStars(): void {
-    this.notifications.setBadge(this.stars());
+    if (this.notifications.available()) this.notifications.setBadge(this.stars());
   }
 
   protected renameCard(): void {

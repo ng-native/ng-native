@@ -49,8 +49,12 @@ On Linux the same bar is GTK's. Under KDE Plasma (`XDG_CURRENT_DESKTOP` naming K
 bar under each window's header bar; everywhere else it is the header bar's main menu, as GNOME's
 apps have it. Linux's default bar is File (Close Window on Ctrl+W, Print...), Edit, View (Back,
 Forward, Show Sidebar on F9, Full Screen on F11), the app's own menus, then a menu named for the app
-with Preferences (Ctrl+comma, shown only when the app handles `settings`), About and Quit (Ctrl+Q).
-`mod` is Ctrl. A key press goes to the app's `[shortcut]` first, then the back and forward keys
+with Preferences (shown only when the app handles `settings`), About and Quit (Ctrl+Q). Print... and
+Show Sidebar are shown, but do nothing on Linux unless the app gives a `print` or `toggleSidebar`
+item a handler. Preferences has Ctrl+comma only when the app's own `settings` item names it, as an
+app's item replaces the default one whole.
+`mod` is Ctrl. The Super key is the desktop's, so an item on `cmd` or `meta` shows no key and no
+press chooses it. A key press goes to the app's `[shortcut]` first, then the back and forward keys
 (Alt+Left and Alt+Right, a keyboard's Back and Forward keys, and mouse buttons 8 and 9), then the
 menus' keys, and a focused text input keeps Ctrl+Z, X, C, V and A. A press nothing in the window
 used then reaches its buttons: Return presses a `default` `<native-button>` and Escape a `cancel`
