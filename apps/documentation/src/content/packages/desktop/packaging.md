@@ -118,9 +118,10 @@ hands them to one already running.
   `libadwaita-1-0` 1.4, `libsecret-1-0`, `glib-networking`, GStreamer 1.22 (`libgstreamer1.0-0`,
   `libgstreamer-plugins-base1.0-0`, and the `gstreamer1.0-plugins-base`, `-plugins-good` and
   `-pulseaudio` plugins), `libssl3t64`, `libnghttp2-14`, `zlib1g`, `libsqlite3-0`, `libatomic1`
-  and `libstdc++6`, under the names Debian 13 and Ubuntu 24.04 share, and recommends
-  `gstreamer1.0-plugins-bad` and `gstreamer1.0-pipewire` (the camera's stream). It has a
-  `Maintainer`, from `--maintainer`.
+  and `libstdc++6`, under the names Debian 13 and Ubuntu 24.04 share. It recommends
+  `gstreamer1.0-pipewire` (the camera's stream), and suggests `gstreamer1.0-plugins-bad` (AAC and
+  HLS) rather than recommending it, since Debian's and Ubuntu's bad plugins depend on openh264, an
+  H.264 decoder. It has a `Maintainer`, from `--maintainer`.
 - **`rpm`** is built by `rpmbuild` for each architecture, into `/usr`. It requires `gtk4` 4.10,
   `libadwaita` 1.4, `libsecret`, `glib-networking`, GStreamer 1.22 (`gstreamer1`,
   `gstreamer1-plugins-base`) and `gstreamer1-plugins-good`, recommends

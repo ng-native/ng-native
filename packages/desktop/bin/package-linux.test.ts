@@ -557,7 +557,11 @@ describe('the package formats', () => {
       control,
       /^Depends: libc6 \(>= 2\.34\), libgtk-4-1 \(>= 4\.10\), libadwaita-1-0 \(>= 1\.4\), libsecret-1-0, glib-networking, libgstreamer1\.0-0 \(>= 1\.22\), libgstreamer-plugins-base1\.0-0 \(>= 1\.22\), gstreamer1\.0-plugins-base, gstreamer1\.0-plugins-good, gstreamer1\.0-pulseaudio, libssl3t64, libnghttp2-14, zlib1g, libsqlite3-0, libatomic1, libstdc\+\+6$/m,
     );
-    assert.match(control, /^Recommends: gstreamer1\.0-plugins-bad, gstreamer1\.0-pipewire$/m);
+    // Debian's bad plugins bring openh264: a default install, which takes recommendations, must not.
+    assert.match(control, /^Suggests: gstreamer1\.0-plugins-bad$/m);
+    assert.doesNotMatch(control, /^Recommends:.*plugins-bad/m);
+    assert.doesNotMatch(control, /openh264|libav/);
+    assert.match(control, /^Recommends: gstreamer1\.0-pipewire$/m);
     assert.equal(control.match(/^Recommends:/gm)?.length, 1);
     assert.match(control, /^Homepage: https:\/\/example\.com\/notes$/m);
     assert.match(

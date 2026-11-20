@@ -563,9 +563,11 @@ export function debControl(app, { arch, installedKiB }) {
     `Maintainer: ${app.maintainer}`,
     `Installed-Size: ${installedKiB}`,
     `Depends: ${DEB_DEPENDS.join(', ')}`,
-    // AAC and HLS, which most MP4 audio and streams need (never a patented decoder such as H.264's),
-    // and pipewiresrc, the camera's stream from the Camera portal. A field is written once.
-    'Recommends: gstreamer1.0-plugins-bad, gstreamer1.0-pipewire',
+    // AAC and HLS, which most MP4 audio and streams need. Suggested, not recommended: Debian's and
+    // Ubuntu's bad plugins depend on openh264, and a default install pulls in no H.264 decoder.
+    'Suggests: gstreamer1.0-plugins-bad',
+    // pipewiresrc, the camera's stream from the Camera portal.
+    'Recommends: gstreamer1.0-pipewire',
     'Section: misc',
     'Priority: optional',
     ...(app.homepage ? [`Homepage: ${app.homepage}`] : []),
@@ -605,6 +607,7 @@ export function rpmSpec(app, { tree }) {
     // Plugins, loaded rather than linked: PulseAudio's sink and source, WAV, Ogg, MP4 and VP9.
     'Requires: gstreamer1-plugins-good',
     // AAC and HLS, which most MP4 audio and streams need; never a patented decoder such as H.264's.
+    // Fedora's and RHEL's bad-free plugins have no H.264 decoder.
     'Recommends: gstreamer1-plugins-bad-free',
     // pipewiresrc, the camera's stream from the Camera portal.
     'Recommends: pipewire-gstreamer',

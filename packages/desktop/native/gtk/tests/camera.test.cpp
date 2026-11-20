@@ -28,7 +28,8 @@ constexpr facebook::react::Tag kCamera = 9;
 constexpr const char *kRed = "videotestsrc is-live=true pattern=4 ! video/x-raw,width=64,height=48,framerate=30/1 ! identity";
 
 struct Folder {
-  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn-camera-" + std::to_string(getpid()));
+  // With a space, as a home folder's name can have.
+  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn camera-" + std::to_string(getpid()));
   Folder() { std::filesystem::create_directories(path); }
   ~Folder() {
     std::error_code ignored;
@@ -65,6 +66,15 @@ dynamic ask(ngn::NativeModule &module, const std::string &method, dynamic args) 
                          {.resolve = [&](dynamic v) { answer = v; }, .reject = [&](const std::string &m) { answer = dynamic::object("rejected", m); }});
   ngn::testing::runUntil([&] { return answer.has_value(); });
   return *answer;
+}
+
+// The path of a file: url, its escapes undone.
+std::string pathOf(const std::string &uri) {
+  gchar *path = g_filename_from_uri(uri.c_str(), nullptr, nullptr);
+  REQUIRE_MESSAGE(path, uri);
+  std::string out = path;
+  g_free(path);
+  return out;
 }
 
 struct Clip {
@@ -122,13 +132,13 @@ TEST_CASE("Camera on Linux shows a mounted view's camera, takes its pictures and
   REQUIRE_FALSE(jpeg.count("rejected"));
   CHECK(jpeg["width"] == 64);
   CHECK(jpeg["height"] == 48);
-  std::string jpegPath = jpeg["uri"].asString().substr(7);
+  std::string jpegPath = pathOf(jpeg["uri"].asString());
   GdkPixbufFormat *format = gdk_pixbuf_get_file_info(jpegPath.c_str(), nullptr, nullptr);
   REQUIRE(format);
   CHECK(std::string(gdk_pixbuf_format_get_name(format)) == "jpeg");
   auto png = ask(*module, "takePicture", dynamic::array(kCamera, dynamic::object("imageType", "png")));
   REQUIRE_FALSE(png.count("rejected"));
-  format = gdk_pixbuf_get_file_info(png["uri"].asString().substr(7).c_str(), nullptr, nullptr);
+  format = gdk_pixbuf_get_file_info(pathOf(png["uri"].asString()).c_str(), nullptr, nullptr);
   REQUIRE(format);
   CHECK(std::string(gdk_pixbuf_format_get_name(format)) == "png");
 
@@ -141,7 +151,7 @@ TEST_CASE("Camera on Linux shows a mounted view's camera, takes its pictures and
   ask(*module, "stopRecording", dynamic::array(kCamera));
   ngn::testing::runUntil([&] { return recorded.has_value(); });
   REQUIRE_FALSE(recorded->count("rejected"));
-  auto clip = discover(recorded->at("uri").asString().substr(7));
+  auto clip = discover(pathOf(recorded->at("uri").asString()));
   REQUIRE(clip);
   CHECK(clip->width == 64);
   CHECK(clip->height == 48);

@@ -7,6 +7,8 @@
 #include "helpers.h"
 #include "mounted-views.h"
 
+#include "ngn/file-system.h"
+
 #include <doctest/doctest.h>
 #include <gst/pbutils/pbutils.h>
 
@@ -20,7 +22,8 @@ using folly::dynamic;
 namespace {
 
 struct Folder {
-  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn-audio-" + std::to_string(getpid()));
+  // With a space, as a home folder's name can have.
+  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn audio-" + std::to_string(getpid()));
   Folder() { std::filesystem::create_directories(path); }
   ~Folder() {
     std::error_code ignored;
@@ -28,12 +31,17 @@ struct Folder {
   }
 };
 
-// Runs a gst-launch line to its end: a file made for a test.
-void runPipeline(const std::string &line) {
+// Runs a gst-launch line to its end: a file made for a test, at `path` on its element named file,
+// so the path is never parsed as part of the line.
+void runPipeline(const std::string &line, const std::string &path) {
   REQUIRE(ngn::gtk::gstreamerHas({}));
   GError *error = nullptr;
   GstElement *pipeline = gst_parse_launch(line.c_str(), &error);
   REQUIRE_MESSAGE(error == nullptr, (error ? error->message : ""));
+  GstElement *file = gst_bin_get_by_name(GST_BIN(pipeline), "file");
+  REQUIRE(file);
+  g_object_set(file, "location", path.c_str(), nullptr);
+  gst_object_unref(file);
   gst_element_set_state(pipeline, GST_STATE_PLAYING);
   GstBus *bus = gst_element_get_bus(pipeline);
   GstMessage *end = gst_bus_timed_pop_filtered(bus, 10 * GST_SECOND, static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
@@ -51,7 +59,7 @@ void runPipeline(const std::string &line) {
 std::string toneFile(const Folder &folder, const char *name, int tenths) {
   auto path = (folder.path / name).string();
   runPipeline("audiotestsrc num-buffers=" + std::to_string(tenths) +
-              " samplesperbuffer=4800 ! audio/x-raw,rate=48000,channels=1 ! wavenc ! filesink location=" + path);
+              " samplesperbuffer=4800 ! audio/x-raw,rate=48000,channels=1 ! wavenc ! filesink name=file", path);
   return path;
 }
 
@@ -88,6 +96,15 @@ std::optional<Discovered> discover(const std::string &path) {
     g_object_unref(info);
   }
   g_object_unref(discoverer);
+  return out;
+}
+
+// The path of a file: url, its escapes undone.
+std::string pathOf(const std::string &uri) {
+  gchar *path = g_filename_from_uri(uri.c_str(), nullptr, nullptr);
+  REQUIRE_MESSAGE(path, uri);
+  std::string out = path;
+  g_free(path);
   return out;
 }
 
@@ -156,7 +173,7 @@ TEST_CASE("Audio on Linux loads a file, plays it at its rate to the end once, an
   Folder folder;
   auto wav = toneFile(folder, "tone.wav", 6);
   Module m(folder);
-  auto id = m.call("createPlayer", dynamic::array("file://" + wav, 100));
+  auto id = m.call("createPlayer", dynamic::array(ngn::fileUri(wav), 100));
   ngn::testing::runUntil([&] { return m.status(id)["isLoaded"] == true; });
   auto loaded = m.status(id);
   CHECK(loaded["playbackState"] == "readyToPlay");
@@ -185,7 +202,7 @@ TEST_CASE("Audio on Linux seeks a paused file, answering once the position is th
   Folder folder;
   auto wav = toneFile(folder, "tone.wav", 10);
   Module m(folder);
-  auto id = m.call("createPlayer", dynamic::array("file://" + wav, 100));
+  auto id = m.call("createPlayer", dynamic::array(ngn::fileUri(wav), 100));
   // Asked before the file has loaded: it seeks once it has.
   auto seeked = m.ask("seekTo", dynamic::array(id, 0.7));
   CHECK_FALSE(seeked.isObject());
@@ -205,7 +222,7 @@ TEST_CASE("Audio on Linux loops a looping player at its end") {
   Folder folder;
   auto wav = toneFile(folder, "tone.wav", 3);
   Module m(folder);
-  auto id = m.call("createPlayer", dynamic::array("file://" + wav, 100));
+  auto id = m.call("createPlayer", dynamic::array(ngn::fileUri(wav), 100));
   m.call("setLoop", dynamic::array(id, true));
   m.call("play", dynamic::array(id));
   ngn::testing::runUntil([&] { return m.finished(); });
@@ -226,7 +243,7 @@ TEST_CASE("Audio on Linux fails a file it cannot read, and one no decoder is ins
   g_file_set_contents(h264.c_str(), reinterpret_cast<const gchar *>(bytes), static_cast<gssize>(size), nullptr);
   g_free(bytes);
   Module m(folder);
-  auto bad = m.call("createPlayer", dynamic::array("file://" + junk, 100));
+  auto bad = m.call("createPlayer", dynamic::array(ngn::fileUri(junk), 100));
   ngn::testing::runUntil([&] { return m.status(bad)["playbackState"] == "failed"; });
   CHECK(m.status(bad)["error"].isString());
   CHECK(m.status(bad)["isLoaded"] == false);
@@ -235,7 +252,7 @@ TEST_CASE("Audio on Linux fails a file it cannot read, and one no decoder is ins
     return;
   }
   // An audio player plays no video: a playback with a video sink hears that it has no decoder for it.
-  ngn::gtk::Playback playback("file://" + h264, {.audioSink = "fakesink", .videoSink = gst_element_factory_make("fakesink", nullptr)},
+  ngn::gtk::Playback playback(ngn::fileUri(h264), {.audioSink = "fakesink", .videoSink = gst_element_factory_make("fakesink", nullptr)},
                               [](ngn::gtk::Playback::Change) {});
   ngn::testing::runUntil([&] { return playback.state().load == ngn::gtk::PlaybackState::Load::Failed; });
   CHECK(playback.state().error.find("No decoder is installed for H.264") == 0);
@@ -267,7 +284,7 @@ TEST_CASE("Audio on Linux records AAC in MPEG-4 at the settings asked, pauses wi
   CHECK(status["isRecording"] == false);
   std::string url = status["url"].asString();
   REQUIRE(url.rfind("file://", 0) == 0);
-  auto found = discover(url.substr(7));
+  auto found = discover(pathOf(url));
   REQUIRE(found);
   CHECK(found->caps.find("audio/mpeg") == 0);
   CHECK(found->rate == 22050);
@@ -285,7 +302,7 @@ TEST_CASE("Audio on Linux records linear PCM into WAV, and refuses an extension 
   m.call("record", dynamic::array(id));
   ngn::testing::runUntil([&] { return m.call("recorderStatus", dynamic::array(id))["durationMillis"].asDouble() >= 300; });
   m.ask("stopRecording", dynamic::array(id));
-  auto found = discover(m.call("recorderStatus", dynamic::array(id))["url"].asString().substr(7));
+  auto found = discover(pathOf(m.call("recorderStatus", dynamic::array(id))["url"].asString()));
   REQUIRE(found);
   // The discoverer names a WAV's stream by its container.
   CHECK(found->caps.find("audio/x-wav") == 0);
@@ -322,6 +339,49 @@ TEST_CASE("Audio on Linux counts a listed source as a microphone, but not an out
   CHECK_FALSE(check("properties, device.class=(string)monitor"));
 }
 
+TEST_CASE("Audio on Linux pauses a playing file whose rate is set to 0") {
+  Folder folder;
+  auto wav = toneFile(folder, "tone.wav", 20);
+  Module m(folder);
+  auto id = m.call("createPlayer", dynamic::array(ngn::fileUri(wav), 100));
+  ngn::testing::runUntil([&] { return m.status(id)["isLoaded"] == true; });
+  m.call("play", dynamic::array(id));
+  CHECK(m.status(id)["playing"] == true);
+  m.call("setPlaybackRate", dynamic::array(id, 0));
+  CHECK(m.status(id)["playing"] == false);
+}
+
+TEST_CASE("Audio on Linux records Opus in Ogg at its nearest rate, and PCM in AIFF big-endian") {
+  Folder folder;
+  Module m(folder);
+  // expo-audio's default 44.1 kHz, which Opus does not take.
+  auto ogg = m.call("createRecorder", dynamic::array(dynamic::object("extension", ".ogg")("sampleRate", 44100)("numberOfChannels", 1)));
+  REQUIRE_FALSE(rejected(m.ask("prepareToRecordAsync", dynamic::array(ogg))));
+  m.call("record", dynamic::array(ogg));
+  ngn::testing::runUntil([&] { return m.call("recorderStatus", dynamic::array(ogg))["durationMillis"].asDouble() >= 300; });
+  m.ask("stopRecording", dynamic::array(ogg));
+  CHECK(m.events.back()["status"]["hasError"] == false);
+  auto opus = discover(pathOf(m.call("recorderStatus", dynamic::array(ogg))["url"].asString()));
+  REQUIRE(opus);
+  CHECK(opus->caps.find("audio/x-opus") == 0);
+  CHECK(opus->seconds > 0.2);
+
+  if (!ngn::gtk::gstreamerHas({"aiffmux"})) {
+    MESSAGE("no aiffmux installed: AIFF skipped");
+    return;
+  }
+  auto aif = m.call("createRecorder", dynamic::array(dynamic::object("extension", ".aif")("sampleRate", 16000)("numberOfChannels", 1)));
+  REQUIRE_FALSE(rejected(m.ask("prepareToRecordAsync", dynamic::array(aif))));
+  m.call("record", dynamic::array(aif));
+  ngn::testing::runUntil([&] { return m.call("recorderStatus", dynamic::array(aif))["durationMillis"].asDouble() >= 300; });
+  m.ask("stopRecording", dynamic::array(aif));
+  CHECK(m.events.back()["status"]["hasError"] == false);
+  auto pcm = discover(pathOf(m.call("recorderStatus", dynamic::array(aif))["url"].asString()));
+  REQUIRE(pcm);
+  CHECK(pcm->depth == 16);
+  CHECK(pcm->rate == 16000);
+}
+
 TEST_CASE("Audio on Linux picks an encoder and muxer by the recording's extension and format") {
   REQUIRE(ngn::gtk::gstreamerHas({}));
   ngn::RecordingSettings aac;
@@ -334,6 +394,13 @@ TEST_CASE("Audio on Linux picks an encoder and muxer by the recording's extensio
   ogg.extension = ".ogg";
   CHECK(ngn::gtk::recordingElementsOf(ogg).muxer == "oggmux");
   CHECK(ngn::gtk::recordingElementsOf(ogg).encoder.rfind("opusenc", 0) == 0);
+  CHECK(ngn::gtk::recordingRateOf(ogg, ngn::gtk::recordingElementsOf(ogg)) == 48000);
+  ogg.sampleRate = 16000;
+  CHECK(ngn::gtk::recordingRateOf(ogg, ngn::gtk::recordingElementsOf(ogg)) == 16000);
+  ogg.sampleRate = 22050;
+  CHECK(ngn::gtk::recordingRateOf(ogg, ngn::gtk::recordingElementsOf(ogg)) == 24000);
+  aac.sampleRate = 22050;
+  CHECK(ngn::gtk::recordingRateOf(aac, m4a) == 22050);
   ngn::RecordingSettings flac;
   flac.extension = ".flac";
   CHECK(ngn::gtk::recordingElementsOf(flac).error.find("cannot record into a .flac file") != std::string::npos);

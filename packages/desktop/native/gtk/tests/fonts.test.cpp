@@ -14,7 +14,8 @@
 
 namespace {
 
-// The first file fontconfig knows for a family, or empty.
+// The first file fontconfig knows for a family that is still there, or empty: a copy an earlier
+// test registered stays in fontconfig's list after the test deletes it.
 std::string fileOf(const char *family) {
   FcPattern *pattern = FcNameParse(reinterpret_cast<const FcChar8 *>(family));
   FcObjectSet *objects = FcObjectSetBuild(FC_FILE, FC_FAMILY, nullptr);
@@ -22,7 +23,8 @@ std::string fileOf(const char *family) {
   std::string file;
   for (int i = 0; fonts && i < fonts->nfont && file.empty(); ++i) {
     FcChar8 *path = nullptr;
-    if (FcPatternGetString(fonts->fonts[i], FC_FILE, 0, &path) == FcResultMatch) {
+    if (FcPatternGetString(fonts->fonts[i], FC_FILE, 0, &path) == FcResultMatch &&
+        std::filesystem::exists(reinterpret_cast<const char *>(path))) {
       file = reinterpret_cast<const char *>(path);
     }
   }

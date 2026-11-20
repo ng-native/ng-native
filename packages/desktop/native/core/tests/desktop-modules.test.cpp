@@ -116,6 +116,18 @@ TEST_CASE("addDesktopModules leaves out each module the backend gives no source 
   CHECK(names[0] == made.absent[0]);
 }
 
+TEST_CASE("addDesktopModules plays audio with an output alone, and records nothing without an input") {
+  struct Output final : ngn::AudioOutput {
+    std::unique_ptr<ngn::AudioTrack> open(const std::string &, double, std::function<void(Change)>) override { return nullptr; }
+  };
+  auto given = sources();
+  given.audioOutput = std::make_shared<Output>();
+  ngn::ModuleRegistry registry;
+  ngn::addDesktopModules(registry, given);
+  auto names = registry.names();
+  CHECK(std::find(names.begin(), names.end(), "NgNativeAudio") != names.end());
+}
+
 TEST_CASE("addDesktopModules registers a module once its source is given, and no longer names it as absent") {
   auto given = sources();
   given.splash = std::make_shared<ngn::SplashGate>();

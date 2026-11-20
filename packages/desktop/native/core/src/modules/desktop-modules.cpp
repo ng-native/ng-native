@@ -21,10 +21,30 @@ std::shared_ptr<NativeModule> makeHostModule(std::vector<std::string> absent) {
   return std::make_shared<Host>(std::move(absent));
 }
 
+namespace {
+
+// The input of a backend that has none to record from: nothing to allow and no microphone.
+std::shared_ptr<AudioInput> noAudioInput() {
+  struct None final : AudioInput {
+    Access access() override { return Access::Restricted; }
+    void requestAccess(std::function<void(Access)> done) override { done(Access::Restricted); }
+    bool hasMicrophone() override { return false; }
+    std::unique_ptr<AudioRecording> prepare(const std::string &, const RecordingSettings &, std::string &error) override {
+      error = "there is no microphone to record from";
+      return nullptr;
+    }
+  };
+  return std::make_shared<None>();
+}
+
+} // namespace
+
 std::shared_ptr<NativeModule> makeDesktopImagePicker(const DesktopModuleSources &s) {
   std::optional<PickerCamera> camera;
-  if (s.cameraHardware && s.audioInput && s.cameraSheet) {
-    camera = PickerCamera{.hardware = s.cameraHardware, .microphone = s.audioInput, .sheet = s.cameraSheet, .folder = s.caches + "/ImagePicker"};
+  if (s.cameraHardware && s.cameraSheet) {
+    // With no input, a video is recorded without sound.
+    camera = PickerCamera{.hardware = s.cameraHardware, .microphone = s.audioInput ? s.audioInput : noAudioInput(), .sheet = s.cameraSheet,
+                          .folder = s.caches + "/ImagePicker"};
   }
   if (s.photos) {
     // A photo library's picker comes with its camera, or not at all.
@@ -116,7 +136,8 @@ DesktopModules addDesktopModules(ModuleRegistry &registry, const DesktopModuleSo
     return makeCalendarModule(calendars, noPrompts);
   });
   // Players and recorders end with the runtime: a reload stops what the app played.
-  addSourced(s.audioOutput && s.audioInput, "NgNativeAudio", [output = s.audioOutput, input = s.audioInput, caches = s.caches, noPrompts = s.noPrompts, files = s.files] {
+  // Playing needs only the output: with no input, a recording is refused for want of a microphone.
+  addSourced(s.audioOutput, "NgNativeAudio", [output = s.audioOutput, input = s.audioInput ? s.audioInput : noAudioInput(), caches = s.caches, noPrompts = s.noPrompts, files = s.files] {
     return makeAudioModule(output, input, caches + "/Audio", noPrompts, files);
   });
   addSourced(s.videoOutput, "NgNativeVideo", [output = s.videoOutput, files = s.files] { return makeVideoModule(output, files); });
