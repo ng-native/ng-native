@@ -10,6 +10,7 @@ import type * as browserRunner from 'vitest/internal/browser';
 import { cleanup } from './index.ts';
 import { define, isolate, rerun } from './loader.ts';
 import { installMocking, prepareMocks, restoreMocks } from './mock-registry.ts';
+import { installScreenshotMatcher, resetScreenshotNames } from './screenshot.ts';
 import type { FilePayload } from './pool.ts';
 import {
   DeviceSnapshotEnvironment,
@@ -81,6 +82,7 @@ export async function runFiles(
   };
   await runtime.setupCommonEnv?.(config);
   installMocking(runtime.vi);
+  installScreenshotMatcher();
 
   const projectModule = (name: string) => !name.startsWith('../') && !name.includes('node_modules');
 
@@ -140,6 +142,7 @@ export async function runFiles(
       await super.onAfterRunTask?.(test);
       current = undefined;
       cleanup();
+      resetScreenshotNames();
     }
 
     override async onAfterRunSuite(suite: unknown): Promise<void> {

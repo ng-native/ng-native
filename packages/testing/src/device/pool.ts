@@ -35,6 +35,11 @@ import { modulesOf, type BundleModule } from './bundle-modules.ts';
 import { mockedSpecifiers } from './mocks.ts';
 import { DEFAULT_PORT } from './port.ts';
 import { type AppLauncher, type LaunchedApp } from './launcher.ts';
+import {
+  matchScreenshot,
+  type ScreenshotOptions,
+  type ScreenshotRequest,
+} from './screenshot-baselines.ts';
 
 export type { AppLauncher, LaunchedApp, LaunchRequest } from './launcher.ts';
 
@@ -66,6 +71,8 @@ export interface DevicePoolOptions {
    * needs more.
    */
   appTimeout?: number;
+  /** What `toMatchScreenshot()` does unless a call says otherwise: see `ScreenshotOptions`. */
+  screenshots?: ScreenshotOptions;
 }
 
 export function devicePool(options: DevicePoolOptions = {}): PoolRunnerInitializer {
@@ -172,6 +179,7 @@ class DeviceWorker implements PoolWorker {
         platform: this.options.platform,
         timeout: this.options.connectTimeout ?? 60_000,
         root: this.projectRoot,
+        screenshots: this.options.screenshots ?? {},
         signal: signal ? AbortSignal.any([signal, this.shutdown.signal]) : this.shutdown.signal,
       });
     if (!launch || this.bridge.hasFree(this.options.platform)) {
@@ -486,6 +494,8 @@ interface Session {
   root: string | null;
   /** The test files the app was sent to run, which an inline snapshot is written into. */
   files: Set<string>;
+  /** The screenshot options of the worker that has the app. */
+  screenshots: ScreenshotOptions;
   lastType: string | undefined;
   lastSeen: number;
   /** The worker that has the app, and where its messages go. */
@@ -580,8 +590,15 @@ class Bridge {
       platform,
       timeout,
       root,
+      screenshots,
       signal,
-    }: { platform?: string; timeout: number; root: string; signal?: AbortSignal },
+    }: {
+      platform?: string;
+      timeout: number;
+      root: string;
+      screenshots: ScreenshotOptions;
+      signal?: AbortSignal;
+    },
   ): Promise<Session> {
     if (this.failure) return Promise.reject(this.listenError(this.failure));
     return new Promise((resolve, reject) => {
@@ -609,6 +626,7 @@ class Bridge {
           cleanup();
           session.claimant = claimant;
           session.root = root;
+          session.screenshots = screenshots;
           session.files.clear();
           resolve(session);
         },
@@ -767,6 +785,7 @@ class Bridge {
     if (request.url === '/alive') response.end();
     else if (request.url === '/rpc') this.call(session, message, response);
     else if (request.url === '/files') this.files(session, message, response);
+    else if (request.url === '/screenshot') this.screenshot(session, message, response);
     else this.poll(message as unknown as Poll, response);
   }
 
@@ -801,6 +820,32 @@ class Bridge {
     response.setHeader('content-type', 'application/json');
     try {
       response.end(JSON.stringify({ result: snapshotFile(session, message ?? {}) }));
+    } catch (error) {
+      response.end(JSON.stringify({ error: String(error) }));
+    }
+  }
+
+  /**
+   * A screenshot to compare with its reference, or record as one: only from an app a worker has,
+   * and only for a test file it was sent, whose `__screenshots__` the reference goes in.
+   */
+  private screenshot(
+    session: Session | undefined,
+    message: Record<string, unknown> | null,
+    response: ServerResponse,
+  ): void {
+    response.setHeader('content-type', 'application/json');
+    try {
+      const request = message as unknown as ScreenshotRequest;
+      const file = normalised(String(request?.file ?? ''));
+      if (!session?.claimant || !session.files.has(file)) {
+        throw new Error(`Not a test file this app was sent: ${String(request?.file)}`);
+      }
+      const result = matchScreenshot(
+        { ...request, file, platform: session.platform },
+        session.screenshots.comparatorOptions,
+      );
+      response.end(JSON.stringify({ result }));
     } catch (error) {
       response.end(JSON.stringify({ error: String(error) }));
     }
@@ -868,6 +913,7 @@ class Bridge {
       nextRequest: 1,
       root: null,
       files: new Set(),
+      screenshots: {},
       lastType: undefined,
       lastSeen: Date.now(),
       claimant: null,

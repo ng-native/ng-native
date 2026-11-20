@@ -22,6 +22,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
+import { PNG } from 'pngjs';
 import { dependents, modulesOf, scriptOf } from '@ng-native/testing/device/bundle-modules';
 import { mockedSpecifiers } from '@ng-native/testing/device/mocks';
 import { devicePool } from '@ng-native/testing/device/pool';
@@ -410,6 +411,45 @@ describe('the device pool', () => {
       symlinkSync(tmpdir(), linked);
       await refused({ op: 'write', path: join(linked, 'escape.snap'), content: '' });
       await refused({ op: 'read', path: snap }, run.app('stranger'));
+    } finally {
+      await run.done();
+    }
+  });
+
+  it("compares screenshots for the app it runs, under the project's options, in the files it sent", async () => {
+    const run = await setup({ screenshots: { comparatorOptions: { allowedMismatchedPixels: 1 } } });
+    try {
+      const { worker } = run.worker();
+      const starting = worker.start();
+      const phone = run.app('one');
+      const first = phone.poll();
+      await starting;
+      const test = join(run.root, 'src/a.device.ts');
+      worker.send(request('run', { files: [{ filepath: test }] }) as never);
+      await first;
+      const shot = (changed: number[]) => {
+        const image = new PNG({ width: 2, height: 2 });
+        for (let i = 0; i < 4; i++)
+          image.data.set([changed.includes(i) ? 255 : 0, 0, 0, 255], i * 4);
+        return PNG.sync.write(image).toString('base64');
+      };
+      const compare = (png: string, from = phone, file = test) =>
+        from.post('/screenshot', { file, name: 'card', png, update: 'new', platform: 'android' });
+      const recorded = await compare(shot([]));
+      assert.equal(recorded.result.pass, true);
+      assert.equal(
+        recorded.result.reference,
+        join(run.root, 'src/__screenshots__/a.device.ts/card-ios.png'),
+        "the app's own platform, whatever the request says",
+      );
+      assert.equal(existsSync(recorded.result.reference), true);
+      assert.equal((await compare(shot([0]))).result.pass, true, 'the project allows one pixel');
+      assert.equal((await compare(shot([0, 1]))).result.pass, false);
+      assert.match(
+        (await compare(shot([]), phone, join(run.root, 'src/dep.ts'))).error,
+        /Not a test file/,
+      );
+      assert.match((await compare(shot([]), run.app('stranger'))).error, /Not a test file/);
     } finally {
       await run.done();
     }

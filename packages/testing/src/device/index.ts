@@ -115,3 +115,11 @@ export async function press(node: FakeFabricNode): Promise<void> {
   recorder.emit(node.reactTag, 'topTouchEnd', { ...point, touches: [], changedTouches: [point] });
   await settle();
 }
+
+export {
+  screenshot,
+  type ScreenshotCaptureOptions,
+  type ScreenshotComparatorOptions,
+  type ScreenshotTarget,
+  type ToMatchScreenshotOptions,
+} from './screenshot.ts';

@@ -66,7 +66,7 @@ export function startDeviceTests(options: DeviceTestsOptions = {}): void {
     const app = mount(Number(rootTag), DeviceTestHost, recorder.fabric, options.mount ?? {});
     options.onMount?.(app);
     void rootComponent(app).then((host) => {
-      setHarness({ app, recorder, slot: () => host.slot() });
+      setHarness({ app, recorder, slot: () => host.slot(), pool: { url, session } });
       void serve(url, (status) => {
         host.status.set(status);
         app.applicationRef.tick();

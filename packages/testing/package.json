@@ -106,9 +106,11 @@
     }
   },
   "dependencies": {
+    "@blazediff/core": "1.10.0",
     "@ng-native/fabric": "workspace:*",
     "@ng-native/metro": "workspace:*",
-    "@ng-native/platform": "workspace:*"
+    "@ng-native/platform": "workspace:*",
+    "pngjs": "^7.0.0"
   },
   "peerDependencies": {
     "@angular/compiler": "^22.0.0",
@@ -138,6 +140,7 @@
     "@ng-native/components": "workspace:*",
     "@ng-native/device": "workspace:*",
     "@ng-native/router": "workspace:*",
+    "@types/pngjs": "^6.0.5",
     "vite": "^8.3.1",
     "vitest": "^5.0.2"
   },
@@ -165,6 +168,10 @@
   "files": [
     "dist",
     "runner",
-    "device"
+    "device",
+    "ios",
+    "android/build.gradle",
+    "android/src",
+    "expo-module.config.json"
   ]
 }

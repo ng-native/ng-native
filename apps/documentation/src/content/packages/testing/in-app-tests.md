@@ -77,3 +77,64 @@ it('lays the row out as native does', async () => {
 
 `screen` has the queries of the Node `screen`, `measure` is where native laid a node out, and
 `press` sends a touch through the engine. Snapshots are kept per platform.
+
+## Screenshots
+
+`toMatchScreenshot` compares what the app drew with a reference image kept beside the test, on an
+iOS simulator or an Android emulator:
+
+```ts
+import { render, screen } from '@ng-native/testing/device';
+import { expect, it } from 'vitest';
+
+it('draws the card', async () => {
+  await render(Card);
+  await expect(screen.getByTestId('card')).toMatchScreenshot('card');
+});
+```
+
+What it captures:
+
+- a node, such as `screen.getByTestId('card')`: the part of the window it covers, with whatever is
+  drawn over it;
+- a region of the window in points, `{ x, y, width, height }`, in the coordinates `measure` gives;
+- `screen`: the whole window.
+
+The capture is the app's window as iOS or Android drew it, text included. It is taken
+again until two captures in a row agree, so an animation finishes first.
+
+The reference for `card` in `card.device.ts` is
+`__screenshots__/card.device.ts/card-ios.png` (or `card-android.png`) beside the test file. Without
+a name, a screenshot is named after its test and a count. A missing reference is recorded and the
+test passes, except on CI, where it fails; `vitest -u` records every reference again. Commit the
+references.
+
+The match is exact by default: one pixel changed fails the test, and the failure writes the capture
+(`card-ios-actual.png`) and a difference (`card-ios-diff.png`) next to the reference. They go once
+the screenshot matches again. Allow a difference for every screenshot in the project, or in one
+call:
+
+```ts
+deviceTests({
+  platform: 'ios',
+  screenshots: { comparatorOptions: { allowedMismatchedPixelRatio: 0.001 } },
+});
+```
+
+```ts
+await expect(chart).toMatchScreenshot('chart', {
+  comparatorOptions: { threshold: 0.1, allowedMismatchedPixels: 20 },
+});
+```
+
+`threshold` (0 to 1) is how far a pixel's colour may move before it counts as different,
+`allowedMismatchedPixels` and `allowedMismatchedPixelRatio` how many pixels may differ, and
+`includeAA: false` leaves out pixels taken for anti-aliasing. The names are those of Vitest's
+browser mode.
+
+A device draws text and anti-aliasing a little differently from another model or OS version, so
+keep each OS's references to one simulator or emulator model and version, as CI runs them.
+
+The capture comes from a native module in `@ng-native/testing`, so rebuild the development build
+after installing or upgrading the package. It needs Android 8 (API 26) or later; Expo Go does not
+have it, and macOS does not yet.

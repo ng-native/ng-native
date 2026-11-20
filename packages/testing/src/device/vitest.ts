@@ -65,5 +65,6 @@ export function deviceTests(options: DeviceTestsOptions = {}): Plugin {
 }
 
 export { devicePool, type DevicePoolOptions } from './pool.ts';
+export type { ScreenshotComparatorOptions, ScreenshotOptions } from './screenshot-baselines.ts';
 export { macosLauncher, type MacosLauncherOptions } from './macos-launcher.ts';
 export type { AppLauncher, LaunchRequest, LaunchedApp } from './launcher.ts';
