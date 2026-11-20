@@ -3,7 +3,7 @@
  * fingerprint, which leaves out an `ios` or `android` folder the run generated.
  */
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -69,6 +69,27 @@ describe('the development build a device run uses', () => {
         { platforms: ['ios'] },
         { platforms: ['ios'], ignorePaths: ['ios/**'] },
       ]);
+    } finally {
+      done();
+    }
+  });
+
+  it('puts back the app config and scripts that prebuild rewrites, even when the build fails', async () => {
+    const { root, done } = project();
+    try {
+      const pkg = path.join(root, 'package.json');
+      writeFileSync(pkg, '{"scripts":{"ios":"expo start --ios"}}');
+      mkdirSync(path.join(root, 'node_modules/expo/bin'), { recursive: true });
+      writeFileSync(
+        path.join(root, 'node_modules/expo/bin/cli.js'),
+        `const fs = require('fs');
+         fs.writeFileSync('package.json', '{"scripts":{"ios":"expo run:ios"}}');
+         fs.writeFileSync('app.json', '{"expo":{"ios":{"bundleIdentifier":"com.someone.app"}}}');
+         process.exit(1);`,
+      );
+      await assert.rejects(nativeBuild(root, 'ios'), /build for device tests failed/);
+      assert.equal(readFileSync(pkg, 'utf8'), '{"scripts":{"ios":"expo start --ios"}}');
+      assert.equal(existsSync(path.join(root, 'app.json')), false, 'one it made is removed');
     } finally {
       done();
     }

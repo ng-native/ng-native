@@ -8,7 +8,15 @@
  * is prebuilt first, and the folder is marked as generated so its contents never change the
  * fingerprint the build is kept under.
  */
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { progress, runCommand } from './command.ts';
@@ -18,6 +26,23 @@ export interface NativeBuild {
   path: string;
   /** Where the build's output went, for a failure that needs it. */
   log: string;
+}
+
+/** The project's files `expo prebuild` writes to, kept as they were. */
+const CONFIG_FILES = ['app.json', 'app.config.js', 'app.config.ts', 'package.json'];
+
+/** Read `files` now; the function returned writes them back, and removes any that were not there. */
+function keep(projectRoot: string, files: readonly string[]): () => void {
+  const kept = files.map((file) => {
+    const full = path.join(projectRoot, file);
+    return { full, content: existsSync(full) ? readFileSync(full) : null };
+  });
+  return () => {
+    for (const { full, content } of kept) {
+      if (content === null) rmSync(full, { force: true });
+      else writeFileSync(full, content);
+    }
+  };
 }
 
 /** Left in an `ios` or `android` folder the pool generated. */
@@ -42,12 +67,19 @@ export async function nativeBuild(
   try {
     if (!existsSync(native)) {
       const expo = createRequire(path.join(projectRoot, 'package.json')).resolve('expo/bin/cli');
-      await runCommand(process.execPath, [expo, 'prebuild', '-p', os, '--no-install'], {
-        cwd: projectRoot,
-        env,
-        log,
-        signal,
-      });
+      // Prebuild rewrites the app's config and scripts (a bundle identifier, `expo run:*`): what a
+      // test run must not leave in the project's sources, so they are put back as they were.
+      const restore = keep(projectRoot, CONFIG_FILES);
+      try {
+        await runCommand(process.execPath, [expo, 'prebuild', '-p', os, '--no-install'], {
+          cwd: projectRoot,
+          env,
+          log,
+          signal,
+        });
+      } finally {
+        restore();
+      }
       writeFileSync(path.join(native, GENERATED), '');
     }
     const output =

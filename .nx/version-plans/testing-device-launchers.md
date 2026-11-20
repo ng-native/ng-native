@@ -11,3 +11,5 @@ Before, an iOS or Android project waited for an app opened by hand, loading from
 An app the pool launches, on any OS, has ten minutes to connect by default instead of 60 seconds, since the desktop host builds itself on its first run; one that exits still fails the run at once, and stopping Vitest during a build stops the build.
 
 A device project gives each test 30 seconds unless its config sets `testTimeout`, since a first render on a simulator just booted, as on CI, can take several, and a run prints what it is doing (booting, building, installing, waiting for Metro) with how long each took.
+
+A project with no `ios` or `android` folder is prebuilt for the build, with its `app.json`, `app.config.*` and `package.json` put back afterwards, so a test run leaves no change in the project's sources beyond the generated folder.

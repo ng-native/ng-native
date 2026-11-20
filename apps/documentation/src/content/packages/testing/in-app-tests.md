@@ -72,7 +72,8 @@ The first run builds the development build, which takes some minutes, and prints
 The build is kept in `node_modules/.cache/ng-native-device-tests`, by the project's native
 fingerprint (the one EAS and `expo-updates` compute), so later runs take seconds and the app is
 built again only when native code, app config or a native dependency changes. A project without
-`ios` and `android` folders is prebuilt first, as `expo run` would.
+`ios` and `android` folders is prebuilt first, as `expo run` would, and its `app.json`,
+`app.config.*` and `package.json` are left as they were.
 
 Watch mode works as for Node tests: an edit under `src` runs the tests again, in the app that is
 already open, in under a second.
