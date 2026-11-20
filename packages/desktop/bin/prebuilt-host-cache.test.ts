@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { plist } from './plist.mjs';
 
 import {
   hostInputsKey,
@@ -44,6 +45,21 @@ function fakeHost(dir: string, make = (file: string) => writeFileSync(file, path
   writeFileSync(path.join(framework, 'Versions', 'B', 'Sparkle'), 'sparkle');
   symlinkSync('B', path.join(framework, 'Versions', 'Current'));
   symlinkSync('Versions/Current/Sparkle', path.join(framework, 'Sparkle'));
+  // React Native's Hermes, a versioned framework like Sparkle's.
+  const hermes = path.join(appkit, 'hermesvm.framework');
+  mkdirSync(path.join(hermes, 'Versions', '1', 'Resources'), { recursive: true });
+  make(path.join(hermes, 'Versions', '1', 'hermesvm'));
+  writeFileSync(
+    path.join(hermes, 'Versions', '1', 'Resources', 'Info.plist'),
+    plist({
+      CFBundleExecutable: 'hermesvm',
+      CFBundleIdentifier: 'dev.hermesengine.macosx',
+      CFBundlePackageType: 'FMWK',
+    }),
+  );
+  symlinkSync('1', path.join(hermes, 'Versions', 'Current'));
+  symlinkSync('Versions/Current/hermesvm', path.join(hermes, 'hermesvm'));
+  symlinkSync('Versions/Current/Resources', path.join(hermes, 'Resources'));
   make(path.join(appkit, 'ngn-macos'));
   make(path.join(appkit, 'hermesc'));
   return appkit;
@@ -240,6 +256,7 @@ describe('make-prebuilt.mjs --host-cache', { skip: process.platform !== 'darwin'
       for (const file of [
         'appkit/ngn-macos',
         'appkit/hermesc',
+        'appkit/hermesvm.framework/hermesvm',
         'appkit/Sparkle.framework/Sparkle',
       ]) {
         assert.ok(listing.split('\n').includes(file), `${file} in ${listing}`);

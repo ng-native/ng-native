@@ -156,3 +156,33 @@ TEST_CASE("ImageEditor on Linux draws an image turned by its Exif orientation th
   g_object_unref(upright);
   CHECK_THROWS_WITH(codec->render("not an image", {}, "png", 1), "Image cannot be found");
 }
+
+TEST_CASE("ImageEditor on Linux throws when cairo cannot draw a step, rather than encode a blank image") {
+  auto codec = ngn::gtk::makeImageCodec();
+  GdkPixbuf *image = corners(40, 20);
+  auto png = encoded(image, "png");
+  g_object_unref(image);
+  // A size cairo refuses (past 32767) gives an error surface; the small crop after it would draw
+  // nothing on it and succeed.
+  CHECK_THROWS(codec->render(
+      png, {Step{.kind = Step::Kind::Resize, .size = {40000, 40000}}, Step{.kind = Step::Kind::Crop, .size = {4, 4}}}, "png", 1));
+  CHECK_THROWS(codec->render(png, {Step{.kind = Step::Kind::Resize, .size = {40000, 40000}}}, "png", 1));
+}
+
+TEST_CASE("ImageEditor on Linux keeps an upscaled image's edges opaque") {
+  auto codec = ngn::gtk::makeImageCodec();
+  GdkPixbuf *image = gdk_pixbuf_new(GDK_COLORSPACE_RGB, FALSE, 8, 4, 4);
+  gdk_pixbuf_fill(image, 0xffffffff);
+  auto png = encoded(image, "png");
+  g_object_unref(image);
+  GdkPixbuf *resized = decoded(codec->render(png, {Step{.kind = Step::Kind::Resize, .size = {40, 40}}}, "png", 1));
+  REQUIRE(gdk_pixbuf_get_has_alpha(resized));
+  auto alphaAt = [resized](int x, int y) {
+    return gdk_pixbuf_get_pixels(resized)[y * gdk_pixbuf_get_rowstride(resized) + x * gdk_pixbuf_get_n_channels(resized) + 3];
+  };
+  CHECK(alphaAt(0, 0) == 255);
+  CHECK(alphaAt(39, 39) == 255);
+  CHECK(alphaAt(0, 20) == 255);
+  CHECK(alphaAt(20, 39) == 255);
+  g_object_unref(resized);
+}

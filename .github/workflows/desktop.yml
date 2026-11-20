@@ -180,14 +180,25 @@ jobs:
       - name: Build the GTK host and run its tests
         run: |
           mkdir -p "$CCACHE_DIR" "$NGN_DESKTOP_CACHE" "$GITHUB_WORKSPACE/.linux-probe"
+          # The runner's user in the image's passwd, which dbus-daemon looks itself up in.
+          docker run --rm ngn-el9 cat /etc/passwd > "$RUNNER_TEMP/passwd"
+          echo "runner:x:$(id -u):$(id -g)::/tmp:/bin/bash" >> "$RUNNER_TEMP/passwd"
           docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
-            -e NGN_DESKTOP_CACHE -e NGN_JOBS -e NGN_COMPILER_LAUNCHER -e GITHUB_WORKSPACE \
+            -e NGN_DESKTOP_CACHE -e NGN_JOBS -e NGN_COMPILER_LAUNCHER -e GITHUB_WORKSPACE -e CI \
             -e CCACHE_DIR -e CCACHE_BASEDIR -e CCACHE_NOHASHDIR -e CCACHE_SLOPPINESS -e CCACHE_MAXSIZE \
+            -v "$RUNNER_TEMP/passwd:/etc/passwd:ro" \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
             bash -euo pipefail -c '
               ccache --zero-stats > /dev/null
               start=$(date +%s)
-              build=$(native/scripts/build.sh --backend gtk --no-debug-info | tail -n 1)
+              # With the libraries the canary uses: worklets and Reanimated, whose shared C++ needs
+              # the Linux shims (native/shim/worklets), so a change that breaks them on glibc fails
+              # here, and svg, screens and safe area, for the AT-SPI run on the canary below.
+              lib=../../examples/canary/node_modules
+              build=$(native/scripts/build.sh --backend gtk --no-debug-info \
+                --library $lib/react-native-svg --library $lib/react-native-screens \
+                --library $lib/react-native-safe-area-context \
+                --library $lib/react-native-worklets --library $lib/react-native-reanimated | tail -n 1)
               echo "Built in $(( $(date +%s) - start ))s"
               ccache --show-stats
               echo "$build" > "$GITHUB_WORKSPACE/.linux-probe/build-dir"
@@ -197,8 +208,9 @@ jobs:
               xvfb=$!
               trap "kill $xvfb" EXIT
               mkdir -p "$GITHUB_WORKSPACE/.linux-probe/gtk-tests"
+              # A session bus of their own, for the tray and the launcher badge (status-notifier.test.cpp).
               DISPLAY=:99 GDK_BACKEND=x11 NGN_GTK_TEST_SHOTS="$GITHUB_WORKSPACE/.linux-probe/gtk-tests" \
-                "$build/gtk/ngn_gtk_tests"
+                dbus-run-session -- "$build/gtk/ngn_gtk_tests"
               native/docker/glibc-floor.sh 2.34 "$build/ngn_core_tests" "$build/ngn_runtime_tests" "$build/gtk/ngn-linux" \
                 "$NGN_DESKTOP_CACHE"/*/hermes-$(uname -m)/bin/hermesc
             '
@@ -248,14 +260,39 @@ jobs:
               kill $weston
             '
           # The same app read over AT-SPI as a screen reader reads it: its buttons and its text, each
-          # named. As root: dbus-daemon will not start for a user the image has no passwd entry for.
+          # named, a row described by its preview (aria-describedby), then a Tab that must focus a node
+          # AT-SPI reports. As root: dbus-daemon will not start for a user the image has no passwd
+          # entry for.
           docker run --rm -e GITHUB_WORKSPACE \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
             bash -euo pipefail -c '
               probe="$GITHUB_WORKSPACE/.linux-probe"
+              python3 native/scripts/atspi-check.test.py
               Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
               DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
-                "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/notes/main.js" --role "push button" --role label
+                "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/notes/main.js" --role "push button" --role label --relation described-by --tab
+            '
+          # The canary's Device screen on Debian 13, whose GTK 4.18 announces and says a heading's
+          # level over AT-SPI, as el9's 4.12 does neither: a level-2 heading, its Announce button heard
+          # as an announcement (Accessibility.announce), pressed through AT-SPI as Orca presses it, and
+          # its declared action (accessibilityActions) invoked the same way, answered by another.
+          # The host is el9's, which a .deb installs on Debian 13 with DEB_DEPENDS.
+          (cd examples/canary && pnpm exec expo export:embed --platform linux --dev false \
+            --bundle-output "$probe/canary/main.js" --assets-dest "$probe/canary/assets")
+          packages=$(cd packages/desktop && node -e "import('./bin/package-linux.mjs').then((m) => console.log(m.DEB_DEPENDS.map((d) => d.split(' ')[0]).join(' ')))")
+          test -n "$packages"
+          docker run --rm -e GITHUB_WORKSPACE -e PACKAGES="$packages" \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" debian:13 \
+            bash -euo pipefail -c '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends $PACKAGES xvfb dbus at-spi2-core python3-pyatspi \
+                gir1.2-atspi-2.0 fonts-dejavu-core > /dev/null
+              probe="$GITHUB_WORKSPACE/.linux-probe"
+              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
+              DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
+                "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/canary/main.js" --url canary://device \
+                --heading 2 --announce "Announce to a screen reader" --action "Announce to a screen reader=repeat"
             '
 
       # The notes example's in-app tests on the GTK host, as `vitest --project linux` runs them
@@ -275,7 +312,7 @@ jobs:
           for _ in $(seq 120); do curl -fs -o /dev/null http://127.0.0.1:8081/status && break; sleep 1; done
           curl -fs -o /dev/null --max-time 600 \
             'http://127.0.0.1:8081/.expo/.virtual-metro-entry.bundle?platform=linux&dev=true'
-          docker run --rm --network host --user "$(id -u):$(id -g)" -e HOME=/tmp -e GTK_A11Y=none \
+          docker run --rm --init --network host --user "$(id -u):$(id -g)" -e HOME=/tmp -e GTK_A11Y=none \
             -e NGN_DESKTOP_HOST="$(cat "$probe/build-dir")/gtk/ngn-linux" \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/examples/notes" ngn-el9 \
             node_modules/.bin/vitest run --project linux
@@ -314,12 +351,12 @@ jobs:
       # installed by its action below.
       - run: brew install ninja
 
-      # Hermes and React Native's renderer are most of a cold build. A build restored from here
+      # React Native's renderer is most of a cold build. A build restored from here
       # recompiles only the files whose inputs changed; the key names the pins, and a near miss
       # restores the latest set.
       - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
         with:
-          key: desktop-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'pnpm-lock.yaml') }}
+          key: desktop-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/fetch-hermes.sh', 'pnpm-lock.yaml') }}
           restore-keys: desktop-host-${{ runner.os }}-${{ runner.arch }}-
           max-size: 1G
           save: ${{ github.event_name != 'pull_request' }}
@@ -329,7 +366,7 @@ jobs:
           path: |
             ${{ env.NGN_DESKTOP_CACHE }}/*/src
             ${{ env.NGN_DESKTOP_CACHE }}/*/hermes-*
-          key: desktop-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'pnpm-lock.yaml') }}
+          key: desktop-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/fetch-hermes.sh', 'pnpm-lock.yaml') }}
 
       - name: Build the AppKit host
         shell: bash
@@ -338,11 +375,13 @@ jobs:
           build=$(pnpm --silent --filter @ng-native/desktop build:host | tail -n 1)
           echo "Host built in $(( $(date +%s) - start ))s"
           test -x "$build/appkit/ngn-macos"
-          # Linked statically: nothing but the system's own libraries and frameworks.
-          if otool -L "$build/appkit/ngn-macos" | tail -n +2 | grep -vE '^\s+(/usr/lib/|/System/Library/)'; then
+          # Nothing but the system's own libraries and frameworks, and React Native's Hermes beside it.
+          if otool -L "$build/appkit/ngn-macos" | tail -n +2 |
+            grep -vE '^\s+(/usr/lib/|/System/Library/|@rpath/hermesvm\.framework/Versions/1/hermesvm )'; then
             echo "ngn-macos links a library from outside the system" >&2
             exit 1
           fi
+          test -d "$build/appkit/hermesvm.framework"
           echo "BUILD_DIR=$build" >> "$GITHUB_ENV"
 
       - name: Run the core tests

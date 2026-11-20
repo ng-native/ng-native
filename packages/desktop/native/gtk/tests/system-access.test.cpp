@@ -1,6 +1,8 @@
 // System access on GTK: the portal helper against a stand-in portal on a peer-to-peer connection
 // (no session bus needed), Shell's and KeepAwake's portal calls, Processes' setup, the XDG user
 // folders, and file watching through GFileMonitor.
+#include "../app-windows.h"
+#include "../auth-session.h"
 #include "../file-system.h"
 #include "../portal.h"
 #include "../system-access.h"
@@ -9,6 +11,7 @@
 
 #include "ngn/host-os.h"
 
+#include <adwaita.h>
 #include <doctest/doctest.h>
 
 #include <sys/stat.h>
@@ -74,6 +77,64 @@ TEST_CASE("Shell opens a url through the OpenURI portal, and hears the user's an
   CHECK(portal.calls.back().second == "https://example.com/b");
 }
 
+namespace {
+
+// The sign-in dialog the auth session shows, while it is up.
+G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+GtkWindow *signInDialog() {
+  GListModel *toplevels = gtk_window_get_toplevels();
+  for (guint i = 0, n = g_list_model_get_n_items(toplevels); i < n; ++i) {
+    auto *window = GTK_WINDOW(g_list_model_get_item(toplevels, i));
+    g_object_unref(window);
+    const char *heading = ADW_IS_MESSAGE_DIALOG(window) ? adw_message_dialog_get_heading(ADW_MESSAGE_DIALOG(window)) : nullptr;
+    if (heading && std::string(heading) == "Continue in Your Browser" && gtk_widget_get_visible(GTK_WIDGET(window))) {
+      return window;
+    }
+  }
+  return nullptr;
+}
+G_GNUC_END_IGNORE_DEPRECATIONS
+
+} // namespace
+
+TEST_CASE("A sign-in opens its page through the OpenURI portal, ends on the link back with its dialog gone, and the dialog's Cancel cancels") {
+  REQUIRE(ngn::testing::gtkReady());
+  StandInPortal portal;
+  auto session = ngn::gtk::makeAuthSession();
+  std::optional<std::optional<std::string>> ended;
+  auto start = [&] {
+    ended.reset();
+    session->start({.url = "https://id.example/authorize", .callbackScheme = "myapp"},
+                   [&ended](std::optional<std::string> url, std::string) { ngn::gtk::onMainContext([&ended, url] { ended = url; }); });
+  };
+  start();
+  ngn::testing::runUntil([&] { return signInDialog() != nullptr && !portal.calls.empty(); });
+  REQUIRE(portal.calls.size() == 1);
+  CHECK(portal.calls[0].method == "OpenURI");
+  CHECK(portal.calls[0].second == "https://id.example/authorize");
+  CHECK_FALSE(session->receive("otherapp://cb"));
+  CHECK(session->receive("myapp://signed-in?code=9"));
+  ngn::testing::runUntil([&] { return ended.has_value() && signInDialog() == nullptr; });
+  CHECK(*ended == std::optional<std::string>("myapp://signed-in?code=9"));
+
+  start();
+  ngn::testing::runUntil([] { return signInDialog() != nullptr; });
+  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+  adw_message_dialog_response(ADW_MESSAGE_DIALOG(signInDialog()), "cancel");
+  G_GNUC_END_IGNORE_DEPRECATIONS
+  ngn::testing::runUntil([&] { return ended.has_value(); });
+  CHECK_FALSE(*ended);
+  // The browser not opening ends it at once.
+  portal.response = 2;
+  start();
+  ngn::testing::runUntil([&] { return ended.has_value(); });
+  CHECK_FALSE(*ended);
+  for (int i = 0; i < 20; ++i) {
+    g_main_context_iteration(nullptr, FALSE);
+  }
+  CHECK(signInDialog() == nullptr);
+}
+
 TEST_CASE("A portal request answers Absent where the portal has no such interface") {
   StandInPortal portal;
   portal.offersOpenUri = false;
@@ -83,6 +144,28 @@ TEST_CASE("A portal request answers Absent where the portal has no such interfac
                             [&outcome](ngn::gtk::portal::Outcome answer, GVariant *) { outcome = answer; });
   ngn::testing::runUntil([&outcome] { return outcome.has_value(); });
   CHECK(*outcome == ngn::gtk::portal::Outcome::Absent);
+}
+
+TEST_CASE("A portal request fails when the portal exits before it answers, and a waiting one is not timed out") {
+  StandInPortal portal;
+  portal.silent = true;
+  std::optional<ngn::gtk::portal::Outcome> outcome;
+  ngn::gtk::portal::request("org.freedesktop.portal.FileChooser", "OpenFile", g_variant_new("(ss)", "", "Open"),
+                            g_variant_builder_new(G_VARIANT_TYPE_VARDICT), nullptr,
+                            [&outcome](ngn::gtk::portal::Outcome answer, GVariant *) { outcome = answer; });
+  ngn::testing::runUntil([&portal] { return portal.calls.size() == 1; });
+  // The portal took it and the user has not chosen: still waiting.
+  for (gint64 end = g_get_monotonic_time() + 300 * 1000; g_get_monotonic_time() < end;) {
+    g_main_context_iteration(nullptr, FALSE);
+    g_usleep(1000);
+  }
+  CHECK_FALSE(outcome.has_value());
+  CHECK(ngn::gtk::portal::requestsInFlight() == 1);
+
+  portal.exit();
+  ngn::testing::runUntil([&outcome] { return outcome.has_value(); });
+  CHECK(*outcome == ngn::gtk::portal::Outcome::Failed);
+  CHECK(ngn::gtk::portal::requestsInFlight() == 0);
 }
 
 TEST_CASE("Shell opens a path, and shows one in its folder, by passing the portal the file") {

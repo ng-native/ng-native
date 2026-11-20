@@ -37,13 +37,26 @@ GdkPixbuf *uprightPixbuf(const std::string &bytes) {
   return upright;
 }
 
+// Cairo reports a failure (a size it cannot allocate, say) as an error object, not null: a later
+// step drawing on it would go on to a blank image that encodes as if it were the edit.
+void throwUnlessOk(cairo_status_t status) {
+  if (status != CAIRO_STATUS_SUCCESS) {
+    throw std::runtime_error(std::string("Could not draw the image: ") + cairo_status_to_string(status));
+  }
+}
+
 cairo_surface_t *surfaceOf(GdkPixbuf *pixbuf) {
   int width = gdk_pixbuf_get_width(pixbuf), height = gdk_pixbuf_get_height(pixbuf);
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
   cairo_t *cr = cairo_create(surface);
   gdk_cairo_set_source_pixbuf(cr, pixbuf, 0, 0);
   cairo_paint(cr);
+  auto status = cairo_status(cr) != CAIRO_STATUS_SUCCESS ? cairo_status(cr) : cairo_surface_status(surface);
   cairo_destroy(cr);
+  if (status != CAIRO_STATUS_SUCCESS) {
+    cairo_surface_destroy(surface);
+    throwUnlessOk(status);
+  }
   return surface;
 }
 
@@ -60,6 +73,8 @@ cairo_surface_t *apply(cairo_surface_t *image, const ImageStep &step) {
     case ImageStep::Kind::Resize:
       cairo_scale(cr, outWidth / width, outHeight / height);
       cairo_set_source_surface(cr, image, 0, 0);
+      // The edge pixels repeat outward, so an upscale does not blend them with transparent black.
+      cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_PAD);
       cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
       break;
     case ImageStep::Kind::FlipHorizontal:
@@ -81,7 +96,12 @@ cairo_surface_t *apply(cairo_surface_t *image, const ImageStep &step) {
       break;
   }
   cairo_paint(cr);
+  auto status = cairo_status(cr) != CAIRO_STATUS_SUCCESS ? cairo_status(cr) : cairo_surface_status(out);
   cairo_destroy(cr);
+  if (status != CAIRO_STATUS_SUCCESS) {
+    cairo_surface_destroy(out);
+    throwUnlessOk(status);
+  }
   return out;
 }
 
@@ -144,10 +164,22 @@ class PixbufCodec final : public ImageCodec {
     if (!upright) {
       throw std::runtime_error("Image cannot be found");
     }
-    cairo_surface_t *image = surfaceOf(upright);
+    cairo_surface_t *image = nullptr;
+    try {
+      image = surfaceOf(upright);
+    } catch (...) {
+      g_object_unref(upright);
+      throw;
+    }
     g_object_unref(upright);
     for (const auto &step : steps) {
-      cairo_surface_t *next = apply(image, step);
+      cairo_surface_t *next = nullptr;
+      try {
+        next = apply(image, step);
+      } catch (...) {
+        cairo_surface_destroy(image);
+        throw;
+      }
       cairo_surface_destroy(image);
       image = next;
     }
@@ -186,6 +218,14 @@ class PixbufCodec final : public ImageCodec {
 
 std::shared_ptr<ImageCodec> makeImageCodec() {
   return std::make_shared<PixbufCodec>();
+}
+
+std::optional<std::pair<double, double>> imagePixelSize(const std::string &path) {
+  int width = 0, height = 0;
+  if (!gdk_pixbuf_get_file_info(path.c_str(), &width, &height) || width <= 0 || height <= 0) {
+    return std::nullopt;
+  }
+  return std::pair<double, double>(width, height);
 }
 
 } // namespace ngn::gtk

@@ -5,6 +5,8 @@
 #include "ngn/mounting-manager.h"
 
 #include <doctest/doctest.h>
+
+#include <algorithm>
 #include <react/renderer/components/view/ConcreteViewShadowNode.h>
 #include <react/renderer/core/ConcreteComponentDescriptor.h>
 #include <react/renderer/core/ConcreteState.h>
@@ -347,6 +349,37 @@ TEST_CASE("an svg is drawn again when a view in its foreignObject is relaid out 
   CHECK(svgCalls(f.backend->calls).empty());
 }
 
+TEST_CASE("a view's relations reach the backend after the transaction, and follow the view they name") {
+  Fixture f;
+  auto props = [](std::string id, std::vector<std::string> labelledBy, std::vector<std::string> describedBy) {
+    auto p = std::make_shared<ngn::DesktopViewProps>();
+    p->nativeId = std::move(id);
+    p->accessibilityLabelledBy.value = std::move(labelledBy);
+    p->desktop.accessibilityDescribedBy = std::move(describedBy);
+    return p;
+  };
+  auto label = shadowView(2, "View", {}, props("name", {}, {}));
+  auto hint = shadowView(3, "View", {}, props("hint", {}, {}));
+  auto field = shadowView(4, "View", {}, props("", {"name"}, {"hint"}));
+  f.mount({ShadowViewMutation::CreateMutation(field), ShadowViewMutation::InsertMutation(1, field, 0),
+           ShadowViewMutation::CreateMutation(label), ShadowViewMutation::InsertMutation(1, label, 1),
+           ShadowViewMutation::CreateMutation(hint), ShadowViewMutation::InsertMutation(1, hint, 2)});
+  auto &calls = f.backend->calls;
+  auto at = std::find(calls.begin(), calls.end(), "relations 4 labelledBy=2 describedBy=3");
+  REQUIRE(at != calls.end());
+  CHECK(*(at + 1) == "mounted 1");
+
+  f.backend->calls.clear();
+  f.mount({ShadowViewMutation::RemoveMutation(1, label, 1), ShadowViewMutation::DeleteMutation(label)});
+  CHECK(std::count(calls.begin(), calls.end(), "relations 4 labelledBy= describedBy=3") == 1);
+
+  f.backend->calls.clear();
+  auto plain = field;
+  plain.props = props("", {}, {});
+  f.mount({ShadowViewMutation::UpdateMutation(field, plain, 0)});
+  CHECK(std::count(calls.begin(), calls.end(), "relations 4 labelledBy= describedBy=") == 1);
+}
+
 TEST_CASE("a live region's new text is announced after the transaction that changed it") {
   Fixture f;
   auto live = [](std::string label) {
@@ -388,4 +421,28 @@ TEST_CASE("a synchronous update on the UI thread merges the changed props into t
   f.backend->calls.clear();
   f.mounting->synchronouslyUpdateViewOnUIThread(99, folly::dynamic::object("opacity", 0.5));
   CHECK(f.backend->calls.empty());
+}
+
+TEST_CASE("a synchronous update of a relation or an id reaches the backend at once") {
+  Fixture f;
+  auto props = [](std::string id) {
+    auto p = std::make_shared<ngn::DesktopViewProps>();
+    p->nativeId = std::move(id);
+    return p;
+  };
+  auto field = shadowView(4, "View", {}, props(""));
+  auto label = shadowView(2, "View", {}, props("name"));
+  f.mount({ShadowViewMutation::CreateMutation(field), ShadowViewMutation::InsertMutation(1, field, 0),
+           ShadowViewMutation::CreateMutation(label), ShadowViewMutation::InsertMutation(1, label, 1)});
+  auto &calls = f.backend->calls;
+  calls.clear();
+
+  folly::dynamic names = folly::dynamic::array("name");
+  f.mounting->synchronouslyUpdateViewOnUIThread(4, folly::dynamic::object("accessibilityLabelledBy", names));
+  CHECK(std::count(calls.begin(), calls.end(), "relations 4 labelledBy=2 describedBy=") == 1);
+
+  // The view it names takes another id: the relation goes, with no transaction.
+  calls.clear();
+  f.mounting->synchronouslyUpdateViewOnUIThread(2, folly::dynamic::object("nativeID", "other"));
+  CHECK(std::count(calls.begin(), calls.end(), "relations 4 labelledBy= describedBy=") == 1);
 }

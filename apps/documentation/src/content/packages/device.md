@@ -85,8 +85,11 @@ a device. A host app that uses islands and has such services provides it in its 
 `bootstrapApplication` providers: `{ provide: OS, useValue: 'web' }`.
 
 `OS_VERSION` is the major version of that operating system, for a default that follows what the
-platform draws in that version: `26` on iOS 26.5, and the API level on Android. It is `null` on
-the web and in a test.
+platform draws in that version: `26` on iOS 26.5, and the API level on Android. On Linux it is
+the major of the distribution's os-release `VERSION_ID`, `24` on Ubuntu 24.04, and `null` on a
+rolling release such as Arch, which has none; `Platform.constants` there names the distribution in
+`systemName` (os-release's `NAME`) and has the `interfaceIdiom` `'desktop'`. It is `null` on the
+web and in a test.
 
 A feature that needs a version of one OS checks both, since an Android API level is a number
 too. A service injects them rather than importing `Platform` from `react-native`, which a Vitest

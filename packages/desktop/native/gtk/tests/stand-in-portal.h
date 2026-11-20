@@ -106,6 +106,7 @@ struct StandInPortal {
     bool directory{false};
     std::string name;
     std::vector<std::string> types;
+    std::string filterName;
     std::string printed;
     unsigned printToken{0};
   };
@@ -134,6 +135,10 @@ struct StandInPortal {
   std::vector<std::string> closedSessions;
   // The LocationUpdated a session gets as it starts, none when empty.
   std::vector<std::pair<std::string, double>> fix;
+  // Sends that update before Start's Response, as xdg-desktop-portal can.
+  bool fixBeforeResponse{false};
+  // Takes each request and never answers it, as a portal does while the user has not chosen.
+  bool silent{false};
 
   StandInPortal() {
     std::tie(server, client) = peerToPeer();
@@ -156,6 +161,11 @@ struct StandInPortal {
     g_dbus_connection_close_sync(client, nullptr, nullptr);
     g_object_unref(client);
     g_object_unref(server);
+  }
+
+  // The portal goes away: its connection closes, with whatever it had not answered.
+  void exit() {
+    g_dbus_connection_close_sync(server, nullptr, nullptr);
   }
 
   void add(const char *interface, const std::string &path) {
@@ -216,7 +226,9 @@ struct StandInPortal {
     }
     if (GVariant *filter = g_variant_lookup_value(options, "current_filter", G_VARIANT_TYPE("(sa(us))"))) {
       GVariantIter *patterns = nullptr;
-      g_variant_get(filter, "(&sa(us))", nullptr, &patterns);
+      const gchar *filterName = nullptr;
+      g_variant_get(filter, "(&sa(us))", &filterName, &patterns);
+      call.filterName = filterName;
       guint32 kind = 0;
       const gchar *pattern = nullptr;
       while (g_variant_iter_next(patterns, "(u&s)", &kind, &pattern)) {
@@ -264,12 +276,15 @@ struct StandInPortal {
     g_variant_unref(second);
     calls.push_back(call);
     g_dbus_method_invocation_return_value(invocation, g_variant_new("(o)", handle.c_str()));
-    if (method == "Inhibit") {
+    if (method == "Inhibit" || silent) {
       // Held until closed: no Response, and a Request object to close.
       add("org.freedesktop.portal.Request", handle);
       return;
     }
     // After the reply, as xdg-desktop-portal answers once the user has chosen.
+    if (method == "Start" && response == 0 && !fix.empty() && fixBeforeResponse) {
+      update(call.first, fix);
+    }
     GVariantBuilder results;
     g_variant_builder_init(&results, G_VARIANT_TYPE_VARDICT);
     if (interface == "org.freedesktop.portal.FileChooser" && !uris.empty()) {
@@ -285,7 +300,7 @@ struct StandInPortal {
     }
     g_dbus_connection_emit_signal(server, nullptr, handle.c_str(), "org.freedesktop.portal.Request", "Response",
                                   g_variant_new("(ua{sv})", response, &results), nullptr);
-    if (method == "Start" && response == 0 && !fix.empty()) {
+    if (method == "Start" && response == 0 && !fix.empty() && !fixBeforeResponse) {
       update(call.first, fix);
     }
   }

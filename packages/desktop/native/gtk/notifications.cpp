@@ -113,7 +113,10 @@ class GtkNotificationCenter final : public NotificationCenter, public std::enabl
     done(NotificationAuthorization::Authorized);
   }
   void add(const NotificationRequest &request, std::function<void(std::optional<std::string>)> done) override {
-    schedule_->add(request);
+    if (!schedule_->add(request)) {
+      done("The notification schedule could not be saved");
+      return;
+    }
     done(std::nullopt);
   }
   void pending(std::function<void(std::vector<NotificationRequest>)> done) override {

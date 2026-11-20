@@ -23,7 +23,11 @@ TEST_CASE("the preferred languages are LANGUAGE's, then the messages locale's") 
   CHECK(ngn::preferredLanguageTags("", "fr_FR.UTF-8") == Tags{"fr-FR"});
   // glibc ignores LANGUAGE under the C locale.
   CHECK(ngn::preferredLanguageTags("de", "C.UTF-8").empty());
-  CHECK(ngn::preferredLanguageTags("::de::C", "de_DE.UTF-8") == Tags{"de", "de-DE"});
+  // gettext stops at C or POSIX: nothing after it counts, and the messages locale is not added.
+  CHECK(ngn::preferredLanguageTags("::de::C", "de_DE.UTF-8") == Tags{"de"});
+  CHECK(ngn::preferredLanguageTags("C:de", "fr_FR.UTF-8").empty());
+  CHECK(ngn::preferredLanguageTags("de:C:fr", "fr_FR.UTF-8") == Tags{"de"});
+  CHECK(ngn::preferredLanguageTags("de:POSIX.UTF-8:fr", "fr_FR.UTF-8") == Tags{"de"});
 }
 
 TEST_CASE("the region of a locale name") {
@@ -38,6 +42,12 @@ TEST_CASE("right-to-left languages") {
   CHECK(ngn::rightToLeftLanguage("fa_IR"));
   CHECK_FALSE(ngn::rightToLeftLanguage("en-GB"));
   CHECK_FALSE(ngn::rightToLeftLanguage("ku-Latn-TR"));
+  // A region writes its language in its own script: glibc's ku_TR is Latin, pa_PK Arabic.
+  CHECK_FALSE(ngn::rightToLeftLanguage(*ngn::languageTagOf("ku_TR.UTF-8")));
+  CHECK(ngn::rightToLeftLanguage(*ngn::languageTagOf("pa_PK.UTF-8")));
+  CHECK(ngn::rightToLeftLanguage("pa-Arab"));
+  CHECK(ngn::rightToLeftLanguage("ar-EG"));
+  CHECK_FALSE(ngn::rightToLeftLanguage("pa-IN"));
 }
 
 TEST_CASE("the first weekday from glibc's week-1stday and first_weekday") {

@@ -289,6 +289,8 @@ function desktopModule<T>(
   } catch (error) {
     failure = error;
   }
+  const hostModule = typeof desktop === 'string' ? desktop : DESKTOP_MODULES[module];
+  if (hostModule && absentByDesign(hostModule)) return null;
   return missing(new MissingModuleError(module, platform, failure));
 }
 
@@ -297,6 +299,22 @@ function turboModule(name: string): unknown {
   const registry = (require('react-native') as typeof import('react-native'))
     .TurboModuleRegistry as { get(name: string): unknown };
   return registry.get(name);
+}
+
+/**
+ * Whether the desktop host leaves its module `name` out by design: the OS gives it nothing to
+ * stand on, as Linux has no haptics or calendar store. The host's `NgNativeHost` names those, and
+ * the service is absent there, never a host to rebuild. A host older than `NgNativeHost` left out
+ * none, so a module missing from it is one it was built without.
+ */
+export function absentByDesign(name: string): boolean {
+  const host = optional(
+    () =>
+      turboModule('NgNativeHost') as {
+        getConstants?(): { absentModules?: readonly string[] };
+      } | null,
+  );
+  return optional(() => host?.getConstants?.().absentModules?.includes(name)) === true;
 }
 
 /** What Angular asks of any injected value, and `await` of any value: never the module's. */

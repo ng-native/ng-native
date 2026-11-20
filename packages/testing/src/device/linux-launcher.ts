@@ -11,7 +11,7 @@
  * the end of the host's output.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import { constants } from 'node:os';
 import path from 'node:path';
 import type { AppLauncher, LaunchRequest, LaunchedApp } from './launcher.ts';
@@ -51,8 +51,13 @@ export interface LinuxLauncherOptions {
   container?: string | false;
   /** The container command. Default `docker`. */
   docker?: string;
-  /** The directory the host runs in. Default: the current directory. */
+  /**
+   * The directory the host runs in, and the base a relative `bundle` file is resolved against, in a
+   * container too. Default: the current directory.
+   */
   cwd?: string;
+  /** How long `stop` waits after SIGTERM before it kills what is left, in milliseconds. Default 3000. */
+  stopGraceMs?: number;
   /** Environment added to the process's own. */
   env?: Readonly<Record<string, string>>;
 }
@@ -249,7 +254,14 @@ export function linuxLaunchCommand(
   request: LaunchRequest,
   env: Environment = process.env,
 ): LinuxLaunch {
-  const { host, metroPort, bundle, image, display } = resolveLaunch(options, env);
+  const resolved = resolveLaunch(options, env);
+  const { host, metroPort, image, display } = resolved;
+  // A bundle file is resolved against the directory the launch runs in, so the container's mount
+  // and the path the host is given name the same file. A URL is left as it is.
+  const bundle =
+    image && !/^https?:/.test(resolved.bundle)
+      ? path.resolve(options.cwd ?? process.cwd(), resolved.bundle)
+      : resolved.bundle;
   const hostArgs = [
     host,
     ...(options.args ?? []),
@@ -280,7 +292,7 @@ export function linuxLaunchCommand(
   };
   // The host's build folder, and a bundle file's folder, at the same paths.
   const mounts = [path.dirname(path.dirname(host))];
-  if (!/^https?:/.test(bundle)) mounts.push(path.dirname(path.resolve(bundle)));
+  if (!/^https?:/.test(bundle)) mounts.push(path.dirname(bundle));
   const name = `ngn-test-${request.runId}`;
   return {
     command: options.docker ?? 'docker',
@@ -292,17 +304,35 @@ export function linuxLaunchCommand(
       '--name',
       name,
       ...userArgs(),
+      // Docker Desktop resolves host.docker.internal itself; Docker Engine on Linux needs the mapping.
+      '--add-host',
+      'host.docker.internal:host-gateway',
       ...mounts.flatMap((mount) => ['-v', `${mount}:${mount}:ro`]),
       ...Object.entries(containerEnv).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
       image,
       'bash',
       '-c',
-      sessionScript(display, [request.port, metroPort]),
+      sessionScript(display, forwardedPorts(request.port, metroPort, bundle)),
       'ngn-test',
       ...hostArgs,
     ],
     env: stringEnv(env),
   };
+}
+
+/**
+ * The ports the container forwards to the machine running Vitest: the pool's, Metro's, and a
+ * bundle URL's own when it names a loopback port, each once.
+ */
+function forwardedPorts(poolPort: number, metroPort: number, bundle: string): number[] {
+  const ports = [poolPort, metroPort];
+  if (/^https?:/.test(bundle)) {
+    const url = new URL(bundle);
+    if (url.port && ['127.0.0.1', 'localhost'].includes(url.hostname)) {
+      ports.push(Number(url.port));
+    }
+  }
+  return [...new Set(ports)];
 }
 
 /** The container runs as this user, so what it writes to a mount is the user's. */
@@ -323,15 +353,97 @@ function signalName(number: number): string | undefined {
   return Object.entries(constants.signals).find(([, value]) => value === number)?.[0];
 }
 
+function signalGroup(group: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-group, signal);
+  } catch {
+    // The group is already gone.
+  }
+}
+
+/** Whether the group `group` has any process, a zombie included: the kernel's answer, at once. */
+function groupExists(group: number): boolean {
+  try {
+    process.kill(-group, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether any process of the group `group` is left. A zombie is not: when the process running
+ * Vitest is PID 1 (a container started without `--init`), what the session leaves behind is
+ * reparented to it and never reaped, so the group never empties of zombies. Where `/proc` cannot
+ * be read, any process counts.
+ */
+function groupAlive(group: number): boolean {
+  if (process.platform === 'linux') {
+    const alive = liveGroupMember(group);
+    if (alive !== undefined) return alive;
+  }
+  return groupExists(group);
+}
+
+/** Whether `/proc` lists a process of group `group` that is not a zombie, or undefined without `/proc`. */
+function liveGroupMember(group: number): boolean | undefined {
+  let pids: string[];
+  try {
+    pids = readdirSync('/proc').filter((name) => /^\d+$/.test(name));
+  } catch {
+    return undefined;
+  }
+  return pids.some((pid) => {
+    let stat: string;
+    try {
+      stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    } catch {
+      return false; // Gone since the listing.
+    }
+    // `pid (comm) state ppid pgrp ...`, where comm may hold spaces and parentheses.
+    const [state, , pgrp] = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    return Number(pgrp) === group && state !== 'Z';
+  });
+}
+
+async function untilGroupGone(group: number): Promise<void> {
+  while (groupAlive(group)) await new Promise((resolve) => setTimeout(resolve, 20));
+}
+
 /** How many lines of the host's output a lost host's failure quotes. */
 const TAIL_LINES = 30;
 
 /** The line the session script prints before the host's `crash.txt`. */
 export const CRASH_MARKER = 'ngn-test: the host left crash.txt:';
 
+/** How long a crash report waits for the host's last output after it exits, in milliseconds. */
+const DRAIN_MS = 1000;
+
+/** What a launch's output has said: its last lines, and the crash report it printed. */
+interface Said {
+  tail: string[];
+  crash: string[] | undefined;
+}
+
+/**
+ * Take one line of the host's output into `said`. The session script prints the crash report on
+ * stderr after its marker, so only stderr's lines from there on are the report; stdout's stay in
+ * the tail.
+ */
+function hear(said: Said, line: string, stderr: boolean): void {
+  if (stderr && said.crash) said.crash.push(line);
+  else if (stderr && line === CRASH_MARKER) said.crash = [];
+  else said.tail = [...said.tail, line].slice(-TAIL_LINES);
+}
+
 export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
-  let tail: string[] = [];
-  let crash: string[] | undefined;
+  // The latest launch's output: what it said, each stream's unfinished line, and when its pipes
+  // closed.
+  let output = {
+    said: { tail: [], crash: undefined } as Said,
+    pending: [] as string[],
+    closed: Promise.resolve(),
+  };
   // Asked of the desktop CLI once, at the first launch, when neither the options nor the
   // environment name it.
   let host = options.host || process.env['NGN_DESKTOP_HOST'] || undefined;
@@ -339,22 +451,35 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
     start(request): LaunchedApp {
       host ??= desktopCliHost(options.cwd);
       const launch = linuxLaunchCommand({ ...options, host }, request);
-      tail = [];
-      crash = undefined;
       const child: ChildProcess = spawn(launch.command, launch.args, {
         cwd: options.cwd,
         env: launch.env as NodeJS.ProcessEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
+        // The session script leads a process group of its own, so `stop` can end the host and the
+        // display with it even when the script's own cleanup cannot run.
+        detached: true,
       });
-      const keep = (chunk: Buffer) => {
-        for (const line of chunk.toString().split('\n').filter(Boolean)) {
-          if (crash) crash.push(line);
-          else if (line === CRASH_MARKER) crash = [];
-          else tail = [...tail, line].slice(-TAIL_LINES);
-        }
+      // Node can report the exit before the pipes hand over the last output, the crash message
+      // among it, so a report waits for them to close.
+      const current = {
+        said: { tail: [], crash: undefined } as Said,
+        pending: ['', ''],
+        closed: new Promise<void>((resolve) => child.once('close', () => resolve())),
       };
-      child.stdout?.on('data', keep);
-      child.stderr?.on('data', keep);
+      output = current;
+      // A chunk need not end on a line break, so each stream keeps its unfinished line until the
+      // rest arrives, and gives it up at the end of the stream.
+      [child.stdout, child.stderr].forEach((stream, at) => {
+        stream?.on('data', (chunk: Buffer) => {
+          const lines = (current.pending[at] + chunk.toString()).split('\n');
+          current.pending[at] = lines.pop() ?? '';
+          for (const line of lines) if (line) hear(current.said, line, at === 1);
+        });
+        stream?.on('end', () => {
+          if (current.pending[at]) hear(current.said, current.pending[at], at === 1);
+          current.pending[at] = '';
+        });
+      });
       const exited = new Promise<string>((resolve) => {
         child.once('error', (error) => resolve(`it could not be started: ${error.message}`));
         child.once('exit', (code, signal) => {
@@ -368,10 +493,18 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
       return {
         exited,
         async stop() {
-          if (child.exitCode === null && child.signalCode === null) {
-            child.kill('SIGTERM');
-            await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 3000))]);
-            if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+          const group = child.pid;
+          if (group !== undefined && groupExists(group)) {
+            signalGroup(group, 'SIGTERM');
+            await Promise.race([
+              untilGroupGone(group),
+              new Promise((resolve) => setTimeout(resolve, options.stopGraceMs ?? 3000)),
+            ]);
+            // Sent even when the scan found the group gone, since a scan can miss a process forked
+            // while it ran. Killing a group is atomic against fork, and the group only shrinks
+            // after it, so the wait that follows can trust a scan.
+            signalGroup(group, 'SIGKILL');
+            await untilGroupGone(group);
           }
           if (launch.container) {
             spawnSync(options.docker ?? 'docker', ['rm', '-f', launch.container], {
@@ -382,7 +515,22 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
         },
       };
     },
-    crashReport() {
+    async crashReport() {
+      // The launch asked about, before a relaunch replaces it. A process the session left holding
+      // the pipes open bounds the wait.
+      const asked = output;
+      await Promise.race([
+        asked.closed,
+        new Promise((resolve) => setTimeout(resolve, DRAIN_MS).unref()),
+      ]);
+      // A process still holding the pipes can leave a line unfinished: the report has it too, from
+      // a copy, so later output can still finish the line.
+      const said: Said = {
+        tail: [...asked.said.tail],
+        crash: asked.said.crash && [...asked.said.crash],
+      };
+      asked.pending.forEach((line, at) => line && hear(said, line, at === 1));
+      const { tail, crash } = said;
       const parts = [
         ...(crash?.length ? [`The host's crash report:\n${crash.join('\n')}`] : []),
         ...(tail.length ? [`The host's last output:\n${tail.join('\n')}`] : []),

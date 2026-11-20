@@ -17,7 +17,7 @@ Tailwind cannot infer what platform it is running on, so the variants match a cl
 puts it there itself - on a device from `nativePlatform()`, and `platform-web` from
 `@ng-native/web`'s `mount` - so `ios:`, `android:`, `macos:`, `linux:`, `desktop:` (macOS and
 Linux), `web:` and `native:` (any OS but the web, the desktop OSes included) work with nothing to
-set up. Linux has no desktop host yet, so `linux:` matches only in a test that renders as Linux.
+set up. `linux:` matches in the GTK host on Linux and in a test that renders as Linux.
 A variant whose class is never present simply never matches rather than erroring - `ios:pt-2` in a
 shared class string is not a mistake on a web page, it is just not an iPhone.
 

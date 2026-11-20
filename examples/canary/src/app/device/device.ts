@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import {
   Accessibility,
   AppState,
@@ -17,6 +17,7 @@ import {
   View,
 } from '@ng-native/components';
 import { NativeHeader } from '@ng-native/router';
+import { PixelRatio } from 'react-native';
 import { page } from '../screen-styles.ts';
 
 /**
@@ -41,10 +42,10 @@ import { page } from '../screen-styles.ts';
           theme, or turn on Reduce Motion and they follow.
         </text>
 
-        <text class="heading">Screen</text>
+        <text class="heading" role="heading" aria-level="2">Screen</text>
         <text class="body">
-          {{ screen.window().width }} x {{ screen.window().height }},
-          {{ screen.orientation() }}
+          {{ screen.window().width }} x {{ screen.window().height }}, {{ screen.orientation() }},
+          {{ scale() }} pixels a point
         </text>
         <text class="hint">
           The same numbers the engine answers media queries with. Reduced motion is
@@ -52,7 +53,7 @@ import { page } from '../screen-styles.ts';
           reduce) reads it too.
         </text>
 
-        <text class="heading">Safe area</text>
+        <text class="heading" role="heading" aria-level="2">Safe area</text>
         <text class="body">
           top {{ insets().top }}, bottom {{ insets().bottom }}, left {{ insets().left }}, right
           {{ insets().right }}
@@ -62,19 +63,25 @@ import { page } from '../screen-styles.ts';
           &lt;safe-area-view&gt; instead, which applies it natively.
         </text>
 
-        <text class="heading">Appearance and state</text>
+        <text class="heading" role="heading" aria-level="2">Appearance and state</text>
         <text class="body">{{ colors.current() }} theme, app is {{ app.current() }}</text>
 
-        <text class="heading">Accessibility</text>
+        <text class="heading" role="heading" aria-level="2">Accessibility</text>
         <text class="body">
           screen reader {{ on(accessibility.screenReader()) }}, reduce motion
           {{ on(accessibility.reduceMotion()) }}, bold text {{ on(accessibility.boldText()) }}
         </text>
-        <pressable class="card" (press)="announce()">
+        <pressable
+          class="card"
+          role="button"
+          [accessibilityActions]="announceActions"
+          (accessibilityAction)="announceAgain()"
+          (press)="announce()"
+        >
           <text class="button-label">Announce to a screen reader</text>
         </pressable>
 
-        <text class="heading">Keyboard</text>
+        <text class="heading" role="heading" aria-level="2">Keyboard</text>
         <text class="body">
           {{ keyboard.visible() ? keyboard.height() + 'pt tall' : 'hidden' }}
         </text>
@@ -83,12 +90,12 @@ import { page } from '../screen-styles.ts';
           placeholder="Tap here to raise the keyboard"
           placeholderTextColor="#6c6c78"
         />
-        <pressable class="card" (press)="keyboard.dismiss()">
+        <pressable class="card" role="button" (press)="keyboard.dismiss()">
           <text class="button-label">Dismiss it</text>
         </pressable>
 
-        <text class="heading">Links</text>
-        <pressable class="card" (press)="openSite()">
+        <text class="heading" role="heading" aria-level="2">Links</text>
+        <pressable class="card" role="button" (press)="openSite()">
           <text class="button-label">Open angular.dev</text>
         </pressable>
         <text class="hint">
@@ -109,12 +116,25 @@ export class DevicePage {
 
   protected readonly page = page;
 
+  /** PixelRatio, read again on each `Dimensions` change, which a new scale is. */
+  protected readonly scale = computed(() => {
+    this.screen.display();
+    return Math.round(PixelRatio.get() * 1000) / 1000;
+  });
+
   protected on(value: boolean): string {
     return value ? 'on' : 'off';
   }
 
   protected announce(): void {
     this.accessibility.announce('Angular Native says hello');
+  }
+
+  /** A custom action on the same button, which a screen reader lists beside its press. */
+  protected readonly announceActions = [{ name: 'repeat', label: 'Announce again' }];
+
+  protected announceAgain(): void {
+    this.accessibility.announce('Angular Native says hello again');
   }
 
   protected openSite(): void {

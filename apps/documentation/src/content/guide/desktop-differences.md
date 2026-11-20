@@ -1,9 +1,9 @@
 ---
-title: What differs on the Mac
-summary: Where a macOS app behaves differently from the same app on iOS, and what library code sees.
+title: What differs on the desktop
+summary: Where a macOS or Linux app differs from the same app on iOS, and what library code sees.
 ---
 
-# What differs on the Mac
+# What differs on the desktop
 
 ## The OS
 
@@ -16,8 +16,8 @@ Linux is an OS too: `OS` answers `'linux'` there, `DESKTOP` is true and `APPLE` 
 `linux:` and `desktop:` variants match. A Linux build takes `.linux`, then `.ios`, then `.native`
 files, React Native's iOS code, and `Platform.select` from `linux`, then `ios`, as a Mac build does
 for `macos`; a `macos` key does not answer on Linux. React Native's types have no `'linux'`, so
-check `OS` from `@ng-native/device` rather than `Platform.OS`. There is no Linux desktop host yet,
-so a Linux app does not run; the packages, the Metro preset and tests know the OS ahead of it.
+check `OS` from `@ng-native/device` rather than `Platform.OS`. [On Linux](#on-linux) below says
+what else differs.
 
 ## Which files a Mac build takes
 
@@ -88,3 +88,32 @@ each fires only on a desktop OS.
 
 `refresh-control`, `input-accessory-view` and `full-window-overlay` are a plain view. `controlSize`
 sizes the native controls on macOS and `<native-button>` on iOS, and Android ignores it.
+
+## On Linux
+
+The same app on Linux differs from a Mac's in these ways. [Build for Linux](/guide/desktop-linux)
+has the setup and the packages.
+
+- Closing the last window quits the app, and `provideAppLifecycle({ quitWhenLastWindowCloses:
+false })` keeps it running instead. There is no Dock to click: launching the app again, from the
+  launcher or with a link or a file, goes to the instance running and opens its main window.
+- A window's size is saved and comes back, maximised or full screen when it was, but never its
+  place: the desktop places each window. After a reload or a relaunch the main window, route
+  windows and `restoreKey` windows open again.
+- The menu bar is a bar under the header bar on KDE Plasma and the header bar's main menu on every
+  other desktop. `mod` in a shortcut is Ctrl. Back and forward are Alt+Left and Alt+Right, the
+  keyboard's Back and Forward keys, and mouse buttons 8 and 9.
+- The title bar is libadwaita's header bar, with the window controls in every `titleBar` mode.
+- A `<tray-icon>` is a StatusNotifierItem, shown only where a StatusNotifierWatcher runs (KDE
+  Plasma, and GNOME with the AppIndicator extension): `Tray.available()` is `false` elsewhere.
+  `Dock.available()` is always `false`, and the badge is the launcher's count, which KDE Plasma and
+  Ubuntu's dock show and stock GNOME does not.
+- Text follows the desktop's text scaling, as `fontScale`, and layout sizes do not. See
+  [Sizing for GNOME](/guide/desktop-sizing#sizing-for-gnome).
+- Files, links, notifications and printing go through the desktop's
+  [portals](/packages/desktop/portals), and SecureStore needs a Secret Service (GNOME Keyring or
+  KWallet) running.
+- Orca reads the app and its focus, and has no structural navigation by heading or landmark. See
+  [Focus and accessibility](/packages/desktop/accessibility#on-linux).
+- A new version of the app's host reaches it as a new package, from the package manager or Flatpak;
+  JavaScript updates come from the app's own Expo Updates server, as on macOS.

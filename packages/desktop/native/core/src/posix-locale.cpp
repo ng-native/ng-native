@@ -97,7 +97,14 @@ std::vector<std::string> preferredLanguageTags(const std::string &languageList, 
     size_t start = 0;
     while (start <= languageList.size()) {
       auto colon = languageList.find(':', start);
-      add(languageList.substr(start, colon == std::string::npos ? std::string::npos : colon - start));
+      auto name = languageList.substr(start, colon == std::string::npos ? std::string::npos : colon - start);
+      // gettext stops at C or POSIX: what follows is never a preference, and neither is the
+      // messages locale after it.
+      auto language = partsOf(name).language;
+      if (language == "C" || language == "POSIX") {
+        return tags;
+      }
+      add(name);
       if (colon == std::string::npos) {
         break;
       }
@@ -115,10 +122,33 @@ std::string regionOfLocale(const std::string &posixLocale) {
 
 bool rightToLeftLanguage(const std::string &tag) {
   static const std::set<std::string> languages{"ar", "arc", "ckb", "dv", "fa", "he", "iw", "ks", "ku", "ps", "sd", "syr", "ug", "ur", "yi"};
-  std::string language = lower(tag.substr(0, tag.find_first_of("-_")));
-  // Kurdish and Sindhi in a Latin or Devanagari script run left to right.
-  if (tag.find("-Latn") != std::string::npos || tag.find("-Deva") != std::string::npos) {
+  static const std::set<std::string> rightToLeftScripts{"Arab", "Hebr", "Syrc", "Thaa", "Adlm", "Nkoo", "Rohg", "Mand", "Samr"};
+  std::vector<std::string> subtags;
+  size_t start = 0;
+  while (start <= tag.size()) {
+    auto end = tag.find_first_of("-_", start);
+    subtags.push_back(tag.substr(start, end == std::string::npos ? std::string::npos : end - start));
+    if (end == std::string::npos) {
+      break;
+    }
+    start = end + 1;
+  }
+  std::string language = lower(subtags[0]);
+  // An explicit script decides: ku-Latn-TR runs left to right, pa-Arab right to left.
+  for (size_t i = 1; i < subtags.size(); ++i) {
+    const auto &subtag = subtags[i];
+    if (subtag.size() == 4 && std::all_of(subtag.begin(), subtag.end(), [](char c) { return std::isalpha(static_cast<unsigned char>(c)); })) {
+      return rightToLeftScripts.count(std::string(1, static_cast<char>(std::toupper(static_cast<unsigned char>(subtag[0])))) + lower(subtag.substr(1))) > 0;
+    }
+  }
+  // The script a region writes its language in, where it is not the language's usual one: glibc's
+  // ku_TR is Latin and pa_PK is Arabic (Shahmukhi).
+  std::string region = subtags.size() > 1 ? upper(subtags[1]) : "";
+  if (language == "ku" && region == "TR") {
     return false;
+  }
+  if (language == "pa" && region == "PK") {
+    return true;
   }
   return languages.count(language) > 0;
 }

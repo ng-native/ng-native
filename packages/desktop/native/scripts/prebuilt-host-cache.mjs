@@ -29,7 +29,7 @@ import path from 'node:path';
 /** @type {HostLayout} The universal AppKit host. */
 export const MACOS_HOST = {
   folder: 'appkit',
-  files: ['ngn-macos', 'hermesc', 'Sparkle.framework'],
+  files: ['ngn-macos', 'hermesc', 'hermesvm.framework', 'Sparkle.framework'],
 };
 
 /** @type {HostLayout} The GTK host, for one architecture. */

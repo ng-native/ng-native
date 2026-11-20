@@ -501,8 +501,9 @@ export function linuxMetadata(config, { format, appId, updatesCertificate }) {
 }
 
 /**
- * What a `.deb` depends on: the floor the host is built for, and every other library the host
- * links (the static libcurl's OpenSSL 3, nghttp2 and zlib, SQLite, libatomic and the C++ runtime),
+ * What a `.deb` depends on: the floor the host is built for, every other library the host links
+ * (the static libcurl's OpenSSL 3, nghttp2 and zlib, SQLite, libatomic and the C++ runtime), and
+ * glib-networking, the GIO module GLib's proxy resolver reads the desktop's proxy settings through,
  * under the package names Debian 13 and Ubuntu 24.04 share. dpkg does not read the binary, so a
  * library left out here is missing on a system without it: CI installs only these into a clean
  * Ubuntu 24.04 and checks that every library the built host needs is found
@@ -513,6 +514,7 @@ export const DEB_DEPENDS = [
   `libgtk-4-1 (>= ${LINUX_MINIMUMS.gtk})`,
   `libadwaita-1-0 (>= ${LINUX_MINIMUMS.libadwaita})`,
   'libsecret-1-0',
+  'glib-networking',
   'libssl3t64',
   'libnghttp2-14',
   'zlib1g',
@@ -586,6 +588,8 @@ export function rpmSpec(app, { tree }) {
     `Requires: gtk4 >= ${m.gtk}`,
     `Requires: libadwaita >= ${m.libadwaita}`,
     'Requires: libsecret',
+    // A GIO module, loaded rather than linked, so rpm's scanner does not find it.
+    'Requires: glib-networking',
     // The host is stripped when it is built; rpm's own steps would strip it or look for debug info.
     '%global debug_package %{nil}',
     '%global __os_install_post %{nil}',

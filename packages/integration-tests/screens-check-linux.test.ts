@@ -4,9 +4,11 @@
  * host is a stand-in that writes what it was given where it was asked to capture.
  */
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
 const script = new URL('../../.claude/skills/screens-check/linux.mjs', import.meta.url);
@@ -15,10 +17,19 @@ const { captureEnv, captureResult, shoot } = (await import(script.href)) as {
     env: Record<string, string | undefined>,
     state: string,
     file: string,
+    input?: string,
   ): Record<string, string | undefined>;
-  captureResult(log: string): 'captured' | 'failed' | undefined;
+  captureResult(log: string, scripted?: boolean): 'captured' | 'failed' | undefined;
   shoot(
-    target: { host: string; bundle: string; scheme: string; out: string; limitSeconds?: number },
+    target: {
+      host: string;
+      bundle: string;
+      scheme: string;
+      out: string;
+      input?: string;
+      limitSeconds?: number;
+      stopGraceMs?: number;
+    },
     route: string,
   ): Promise<string>;
 };
@@ -68,18 +79,169 @@ describe('the Linux screens mode', () => {
     }
   });
 
+  it('plays an input script before the capture, and names the capture after it', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'screens-linux-'));
+    try {
+      const host = standIn(
+        dir,
+        [
+          'echo "[ngn] input script done" >&2',
+          'echo "$NGN_INPUT_SCRIPT" > "$NGN_CAPTURE"',
+          'echo "[ngn] captured $NGN_CAPTURE" >&2',
+          'exec sleep 30',
+        ].join('\n'),
+      );
+      const out = path.join(dir, 'out');
+      const input = path.join(dir, 'open-sheet.input');
+      const file = await shoot({ host, bundle: '/b.js', scheme: 'notes', out, input }, '/overlays');
+      assert.equal(file, path.join(out, 'overlays-open-sheet.png'));
+      assert.equal(readFileSync(file, 'utf8').trim(), input);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails a route whose input script the host refuses, though it still captures', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'screens-linux-'));
+    try {
+      const host = standIn(
+        dir,
+        [
+          'echo "[ngn] input script: an input script plays under X11 only" >&2',
+          'echo x > "$NGN_CAPTURE"',
+          'echo "[ngn] captured $NGN_CAPTURE" >&2',
+          'exec sleep 30',
+        ].join('\n'),
+      );
+      await assert.rejects(
+        shoot(
+          {
+            host,
+            bundle: '/b.js',
+            scheme: 'notes',
+            out: dir,
+            input: '/s/a.input',
+            limitSeconds: 5,
+          },
+          '/settings',
+        ),
+        /No capture for \/settings\. The host's output:\n\[ngn\] input script: an input script plays under X11 only/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it(
+    'kills a host that ignores SIGTERM, rather than waiting on it',
+    { timeout: 20_000 },
+    async () => {
+      const dir = mkdtempSync(path.join(tmpdir(), 'screens-linux-'));
+      const pidFile = path.join(dir, 'pid');
+      let pid: number | undefined;
+      try {
+        const host = standIn(
+          dir,
+          [
+            "trap '' TERM",
+            `echo $$ > '${pidFile}'`,
+            'echo png > "$NGN_CAPTURE"',
+            'echo "[ngn] captured $NGN_CAPTURE" >&2',
+            'exec sleep 600',
+          ].join('\n'),
+        );
+        const out = path.join(dir, 'out');
+        await shoot({ host, bundle: '/b.js', scheme: 'notes', out, stopGraceMs: 300 }, '/settings');
+        pid = Number(readFileSync(pidFile, 'utf8'));
+        assert.throws(() => process.kill(pid!, 0), { code: 'ESRCH' });
+      } finally {
+        try {
+          if (pid) process.kill(pid, 'SIGKILL');
+        } catch {
+          // Already gone.
+        }
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('fails a route when the host cannot start', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'screens-linux-'));
+    try {
+      await assert.rejects(
+        shoot(
+          { host: path.join(dir, 'missing'), bundle: '/b.js', scheme: 'notes', out: dir },
+          '/settings',
+        ),
+        /ENOENT/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reads whether the host wrote its capture, after its input script when it has one', () => {
+    assert.equal(captureResult('[ngn] captured /o/a.png\n', true), 'failed');
+    assert.equal(
+      captureResult('[ngn] input script done\n[ngn] captured /o/a.png\n', true),
+      'captured',
+    );
+    assert.equal(captureResult('[ngn] input script x.input: cannot be read\n', true), 'failed');
+    assert.equal(captureResult('[ngn] first frame 90 ms\n', true), undefined);
+  });
+
   it('reads whether the host wrote its capture', () => {
     assert.equal(captureResult('[ngn] first frame 90 ms\n[ngn] captured /o/a.png\n'), 'captured');
     assert.equal(captureResult('[ngn] could not capture /o/a.png\n'), 'failed');
     assert.equal(captureResult('[ngn] first frame 90 ms\n'), undefined);
   });
 
+  it('does not accept a capture logged before its input script finished', () => {
+    assert.equal(
+      captureResult('[ngn] captured /o/a.png\n[ngn] input script done\n', true),
+      'failed',
+    );
+  });
+
+  it('reports usage for an option given without its operand', () => {
+    const out = mkdtempSync(path.join(tmpdir(), 'screens-linux-'));
+    try {
+      const run = spawnSync(
+        process.execPath,
+        [
+          fileURLToPath(script),
+          ...['--host', '/h', '--bundle', '/b.js', '--scheme', 'notes', '--out', out],
+          '/desktop',
+          '--input',
+        ],
+        { encoding: 'utf8' },
+      );
+      assert.equal(run.status, 2);
+      assert.match(run.stderr, /Usage: linux\.mjs/);
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
+  });
+
   it('launches as a test launch with no accessibility bus, whatever the caller set', () => {
-    const env = captureEnv({ GSK_RENDERER: 'vulkan', PATH: '/bin' }, '/s', '/o/a.png');
+    const env = captureEnv(
+      { GSK_RENDERER: 'vulkan', GDK_SCALE: '2', PATH: '/bin' },
+      '/s',
+      '/o/a.png',
+    );
+    assert.equal(env['GDK_SCALE'], '1');
     assert.equal(env['GSK_RENDERER'], 'cairo');
     assert.equal(env['GTK_A11Y'], 'none');
     assert.equal(env['NGN_CAPTURE'], '/o/a.png');
     assert.equal(env['NGN_STATE_DIR'], '/s');
     assert.equal(env['PATH'], '/bin');
+    assert.equal(env['NGN_INPUT_SCRIPT'], undefined);
+    // A script of the caller's own is not played unless asked for.
+    const scripted = captureEnv({ NGN_INPUT_SCRIPT: '/old.input' }, '/s', '/o/a.png', '/s/b.input');
+    assert.equal(scripted['NGN_INPUT_SCRIPT'], '/s/b.input');
+    assert.equal(
+      captureEnv({ NGN_INPUT_SCRIPT: '/old.input' }, '/s', '/o/a.png')['NGN_INPUT_SCRIPT'],
+      undefined,
+    );
   });
 });

@@ -258,4 +258,11 @@ What the native output cannot show is how native draws it. For a change that dra
 `screens-check` skill (`.claude/skills/screens-check`) opens each screen whose native output changed
 on a simulator, in main's bundle and the change's, and compares the two screenshots.
 
+For the GTK host the same skill has a Linux mode. It builds each side's host in the `ngn-el9` image
+(`packages/desktop/native/docker`, under Docker or Colima on a Mac), launches each screen under its
+own Xvfb at scale 1 with the image's fonts and GSK's cairo renderer, has the host capture its own
+window, and compares the pairs. A capture has no title bar, so a change to the header bar or the
+window frame, and Wayland, fractional scale and input methods, are checked by hand against
+[the Linux manual pass](./docs/linux-manual-pass.md).
+
 For maintainers cutting a release, see [RELEASING.md](./docs/RELEASING.md).

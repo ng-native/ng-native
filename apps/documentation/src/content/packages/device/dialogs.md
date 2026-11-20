@@ -50,7 +50,9 @@ have one, because neither an action sheet nor an Android alert should be a dead 
 dialog holds at most three buttons, cancel included; past that the platform silently drops the rest,
 so `choose()` logs a console error naming the fix rather than showing a list some of whose choices
 nobody could ever reach - reach for a select built on your own control or an action-sheet-shaped
-list instead for anything longer.
+list instead for anything longer. On the desktop it is an alert with a button for each choice; on
+Linux more than three stack one above another, as libadwaita stacks buttons that do not fit side by
+side.
 
 `choose(title, choices, { message })` adds the smaller line under the title that says what a
 choice does, such as the explanation under a destructive one. On iOS it is the action sheet's

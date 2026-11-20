@@ -47,7 +47,10 @@
  * The host has no app's linked code and is built from scratch in a directory of its own, so no other
  * build can replace it before it is archived. `ngn-macos` and `hermesc` have their local symbols
  * stripped and are signed with the hardened runtime, ad hoc (`codesign --sign -`) unless `NGN_SIGN_IDENTITY` names an identity: an
- * app re-signs the host when it packages, so the release needs no Developer ID. Nothing is uploaded.
+ * app re-signs the host when it packages, so the release needs no Developer ID. React Native's
+ * `hermesvm.framework`, which the binary links, is signed first with the same identity, and an ad
+ * hoc binary goes without library validation, which has no team to check it against (see
+ * AD_HOC_HOST_ENTITLEMENTS). Nothing is uploaded.
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -69,6 +72,7 @@ import { parseArgs } from 'node:util';
 
 import { HOST_LIBRARIES, packageDir } from '../../bin/host.mjs';
 import {
+  AD_HOC_HOST_ENTITLEMENTS,
   findHost,
   FLAVOURS,
   prebuiltName,
@@ -398,16 +402,18 @@ try {
         verbatimSymlinks: true,
       });
     }
-    const binaries = files.filter((file) => file !== 'Sparkle.framework');
     if (linux) {
-      for (const file of binaries)
+      for (const file of files)
         run('strip', ['--strip-debug', '--discard-all', path.join(appkit, file)]);
     } else {
-      signPrebuiltFiles(
-        run,
-        binaries.map((file) => path.join(appkit, file)),
-        process.env,
-      );
+      // The framework first, which the binary's signature then covers with the same identity.
+      const framework = path.join(appkit, 'hermesvm.framework');
+      if (existsSync(framework)) signPrebuiltFiles(run, [framework], process.env);
+      const entitlements = path.join(staging, 'ad-hoc-host.entitlements');
+      writeFileSync(entitlements, AD_HOC_HOST_ENTITLEMENTS);
+      signPrebuiltFiles(run, [path.join(appkit, 'ngn-macos')], process.env, entitlements);
+      rmSync(entitlements);
+      signPrebuiltFiles(run, [path.join(appkit, 'hermesc')], process.env);
     }
   }
   for (const file of files) {

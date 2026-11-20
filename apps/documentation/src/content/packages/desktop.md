@@ -1,19 +1,21 @@
 ---
 title: Desktop
-summary: The macOS host and the ng-native-desktop command that builds, runs and packages the app.
+summary: The macOS and Linux hosts and the command that builds, runs and packages the app.
 ---
 
 # Desktop
 
-`@ng-native/desktop` is the macOS desktop host: React Native's C++ core and Hermes, mounting an
-app's views into AppKit, and the `ng-native-desktop` command that builds the host and runs the app
-in it. You install the package and never import it.
+`@ng-native/desktop` is the desktop host, for macOS and for Linux: React Native's C++ core and
+Hermes, mounting an app's views into AppKit on a Mac and into GTK 4 and libadwaita on Linux, and the
+`ng-native-desktop` command that builds the host and runs the app in it. You install the package and
+never import it. [Build for Linux](/guide/desktop-linux) is the guide for the Linux half.
 
 How the host draws an app, and what it does with each part of it, is on the pages under this one:
 [Views and controls](/packages/desktop/views),
 [Windows, menus and the Dock](/packages/desktop/windows-and-menus),
 [Focus and accessibility](/packages/desktop/accessibility),
-[Expo modules on macOS](/packages/desktop/expo-modules),
+[Expo modules on the desktop](/packages/desktop/expo-modules),
+[Portals on Linux](/packages/desktop/portals),
 [Debugging and launch settings](/packages/desktop/development) and
 [Inside a package](/packages/desktop/packaging).
 
@@ -25,7 +27,8 @@ An app made from the desktop template has it already. To add macOS to an app:
 npx expo install @ng-native/desktop
 ```
 
-Then, in `app.json`, add `macos` to `expo.platforms`, set `expo.experiments.outOfTreePlatforms` to
+Then, in `app.json`, add `macos` (and `linux`, for Linux) to `expo.platforms`, set
+`expo.experiments.outOfTreePlatforms` to
 `true` (without it Expo drops `macos` from every bundle and export, and says nothing), add
 `@ng-native/desktop` to `expo.plugins`, and add two scripts to `package.json`:
 
@@ -33,14 +36,15 @@ Then, in `app.json`, add `macos` to `expo.platforms`, set `expo.experiments.outO
 {
   "scripts": {
     "macos": "ng-native-desktop run",
+    "linux": "ng-native-desktop run --os linux",
     "package": "ng-native-desktop package"
   }
 }
 ```
 
-In an Nx workspace, `nx g @ng-native/nx:desktop <app>` does all of this, and in an Angular CLI
-workspace `ng generate @ng-native/schematics:desktop <app>` does. See [Nx](/packages/nx#macos) and
-[Angular CLI](/packages/schematics#macos).
+In an Nx workspace, `nx g @ng-native/nx:desktop <app>` does all of this, for macOS and Linux, and in
+an Angular CLI workspace `ng generate @ng-native/schematics:desktop <app>` does. See
+[Nx](/packages/nx#macos-and-linux) and [Angular CLI](/packages/schematics#macos-and-linux).
 
 ## Run the app
 
@@ -51,13 +55,16 @@ npm run macos    # gets the host the first time, then opens the app from the dev
 
 The first `npm run macos` for a React Native version downloads the prebuilt debug host, which
 carries React Native's debugger, when `@ng-native/desktop` has one for that version and the app
-links no native desktop code of its own (see
-[Prebuilt hosts](/packages/desktop/packaging#prebuilt-hosts)). Otherwise it builds the host
-from source, React Native and Hermes included, against the app's own `react-native` (0.88), into
-`~/Library/Caches/ng-native/desktop/rn-<version>`: about 4 minutes on an Apple silicon Mac, and
-about 6 for a universal release build, which the command says before it starts. `run` builds it
-without the core tests, whose sources the published package leaves out. Later runs reuse it. The
-host runs on macOS 14 and later.
+links no native desktop code of its own (see [Prebuilt
+hosts](/packages/desktop/packaging#prebuilt-hosts)). Otherwise it builds the host from source, React
+Native included, against the app's own `react-native` (0.88), into
+`~/Library/Caches/ng-native/desktop/rn-<version>`, with the prebuilt Hermes React Native's iOS apps
+run: `hermesvm.framework` and `hermesc` for the Hermes that `react-native` names, downloaded from
+Maven Central and checked against the SHA-1 published there, with the debugger for `run` and without
+it for a Release build. That takes about 4 minutes on an Apple silicon Mac, and about 6 for a
+universal release build, which the command says before it starts. `run` builds it without the core
+tests, whose sources the published package leaves out. Later runs reuse it. The host runs on macOS
+14 and later.
 
 The Expo CLI has no `run:macos`: its `run` commands are a fixed list, so `npm run macos` is
 `ng-native-desktop run`. It takes a bundle path or URL in place of the dev server, and these
@@ -79,12 +86,11 @@ given instead. A bundle's images and other assets are read beside it as React Na
 for an embedded bundle, so make it with `npx expo export:embed --platform macos --dev false
 --bundle-output <dir>/main.jsbundle --assets-dest <dir>`; `npx expo export` puts them elsewhere.
 
-For a host built from source, adding or removing one of the
-[libraries it compiles in](/packages/desktop/views#libraries-compiled-in) builds it again: in a
-folder of its own for that set of libraries when the app links no native desktop code, reusing the
-Hermes built before, and in the app's own folder, recompiling what changed, when it links some.
-The host is built for macOS 14 and later (`native/CMakeLists.txt`, which `scripts/macos-target.sh`
-reads for Hermes too; a cached Hermes built for another macOS is built again).
+For a host built from source, adding or removing one of the [libraries it compiles
+in](/packages/desktop/views#libraries-compiled-in) builds it again: in a folder of its own for that
+set of libraries when the app links no native desktop code, reusing the Hermes downloaded before,
+and in the app's own folder, recompiling what changed, when it links some. The host is built for
+macOS 14 and later (`native/CMakeLists.txt`).
 
 Building from source needs Xcode 16 or its Command Line Tools (Swift 6.0 or later), CMake 3.25 or
 later and Ninja 1.10 or later. Before it builds, the command checks the toolchain
@@ -132,8 +138,10 @@ sudo dnf install clang lld cmake ninja-build git curl unzip xz perl perl-Digest-
   glib2-devel libX11-devel openssl-devel libnghttp2-devel zlib-devel sqlite-devel
 ```
 
-The GTK host runs on Linux only for now: on a Mac, `npm run linux` stops and says so. A Mac makes
-Linux packages with `npm run package -- --os linux`.
+The GTK host runs on Linux only: on a Mac, `npm run linux` stops, before it fetches or builds
+anything, and says to run it on a Linux machine or to make the packages with
+`npm run package -- --os linux`. A Mac runs the app's in-app tests in the GTK host inside a
+container (see [In-app tests](/packages/testing/in-app-tests#what-a-run-does-on-linux)).
 
 ## Package the app
 
@@ -186,6 +194,36 @@ identity on the team to its entitlements.
 [Inside a package](/packages/desktop/packaging) has the steps the command runs, the `Info.plist`
 keys it writes, updates, and the prebuilt hosts it can package in place of a build from source.
 
+### On Linux
+
+```sh
+npm run package -- --os linux                       # dist/linux: the app folder and its .tar.gz
+npm run package -- --os linux --format deb --maintainer "Ada Lovelace <ada@example.com>"
+npm run package -- --os linux --format rpm --license MIT
+npm run package -- --os linux --format flatpak --license MIT --arch x64
+```
+
+`--os` defaults to the machine's own, so on Linux `npm run package` makes a Linux package, and
+`--os macos` makes a Mac one. `--arch x64`, `arm64` or `all` (the default) chooses how many
+packages a Linux build makes, one for each architecture, and cuts a Mac build down to one
+architecture of its universal one. A Linux package takes these:
+
+| Option                | What it does                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| `--format <format>`   | `app` (default), `deb`, `rpm` or `flatpak`                                           |
+| `--output <dir>`      | Where the packages go. Default `dist/linux`.                                         |
+| `--maintainer <text>` | `"Name <email>"`, which a `deb` needs                                                |
+| `--license <spdx>`    | The app's SPDX license, which an `rpm` and a Flatpak need                            |
+| `--homepage <url>`    | The app's web page, in the package and its metainfo                                  |
+| `--categories <list>` | freedesktop categories with a main one, such as `Utility;Office`. Default `Utility`. |
+
+Linux has no `dmg`, `mas`, `--feed-url`, `--sparkle-key` or `--skip-notarize`, and those stop the
+command on Linux, as the Linux options above stop it on a Mac build. `NGN_GPG_KEY` names the key
+that signs an `app`'s `.tar.gz`, an `rpm` and a Flatpak's repository. An `rpm` and a Flatpak run
+`rpmbuild` and `flatpak-builder` in a container through Docker or Podman where those are not
+installed, which is how a Mac makes them. [Build for Linux](/guide/desktop-linux#package-the-app)
+has the formats, what each needs from `app.json`, signing and distribution.
+
 ## Config
 
 The macOS build reads what Expo already has a key for from that key, the one the iOS build reads:
@@ -199,6 +237,14 @@ The macOS build reads what Expo already has a key for from that key, the one the
 | Updates server     | `updates.url`                                                    |
 | Usage strings      | `ios.infoPlist`, and each `expo-*` plugin's permission option    |
 | Sign in with Apple | `ios.usesAppleSignIn`, and `expo-apple-authentication` installed |
+
+On Linux the same keys give the package its identity: `ios.bundleIdentifier` is the application id
+that names the desktop entry, the icon and the metainfo (an `app` build makes one from the slug when
+there is none), `scheme` and `ios.scheme` are the URL schemes the desktop entry handles, `name`,
+`description` and `version` are the package's, `slug` is its name and command, and `icon`, a square
+PNG, is the app's icon. `ios.icon` is the Mac's. A Flatpak asks for the sound server only when the
+app has a microphone usage string (`NSMicrophoneUsageDescription`), from `ios.infoPlist` or a
+plugin's permission option.
 
 The plugin options hold only what has no Expo key:
 

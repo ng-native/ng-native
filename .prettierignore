@@ -38,3 +38,5 @@ packages/layout/oracle
 packages/web-compat/wpt/.cache
 # Written by the Web Platform Tests runner, a line a file, and compared whole.
 packages/web-compat/wpt/expectations.json
+
+packages/metro/ngp

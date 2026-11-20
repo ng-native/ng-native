@@ -9,7 +9,8 @@
 # Cells:
 #   x11      Xvfb, the renderer GTK picks (GL over Mesa's software rasteriser)
 #   wayland  headless Weston, pixman
-#   vulkan   Xvfb with GSK_RENDERER=vulkan over lavapipe, Mesa's software Vulkan
+#   vulkan   Xvfb with GSK_RENDERER=vulkan over lavapipe, Mesa's software Vulkan; fails when GTK
+#            falls back to another renderer
 #   mutter   mutter --headless on Wayland, GNOME's compositor
 #
 # Fails on a library the host needs and the distribution's packages do not give it, and on any
@@ -43,7 +44,7 @@ mkdir -p "$out"
 case "$ID" in
   ubuntu | debian)
     export DEBIAN_FRONTEND=noninteractive
-    packages=(libc6 libgtk-4-1 libadwaita-1-0 libsecret-1-0
+    packages=(libc6 libgtk-4-1 libadwaita-1-0 libsecret-1-0 glib-networking
       libssl3t64 libnghttp2-14 zlib1g libsqlite3-0 libatomic1 libstdc++6
       xvfb weston libgl1-mesa-dri libegl-mesa0 dbus fonts-dejavu-core)
     has_cell vulkan && packages+=(mesa-vulkan-drivers)
@@ -54,7 +55,7 @@ case "$ID" in
   fedora | almalinux | rhel)
     # OpenSSL by the soname the host links, as an rpm's own requirements name it: Fedora 45 moved
     # openssl-libs to OpenSSL 4, and keeps libssl.so.3 in openssl3-libs.
-    packages=(gtk4 libadwaita libsecret
+    packages=(gtk4 libadwaita libsecret glib-networking
       'libssl.so.3()(64bit)' 'libcrypto.so.3()(64bit)' libnghttp2 sqlite-libs libatomic libstdc++ xorg-x11-server-Xvfb weston mesa-dri-drivers dbus-daemon
       dejavu-sans-fonts)
     has_cell vulkan && packages+=(mesa-vulkan-drivers)
@@ -117,7 +118,10 @@ probe() {
 
 if has_cell x11 || has_cell vulkan; then xvfb; fi
 has_cell x11 && probe x11 DISPLAY=:99 GDK_BACKEND=x11
-has_cell vulkan && probe vulkan DISPLAY=:99 GDK_BACKEND=x11 GSK_RENDERER=vulkan
+# GSK_RENDERER=vulkan is only the first renderer GTK tries, and GTK falls back to GL or Cairo when
+# it cannot realize it, so the probe also fails unless GTK logs that it uses the Vulkan one.
+has_cell vulkan && probe vulkan DISPLAY=:99 GDK_BACKEND=x11 GSK_RENDERER=vulkan GSK_DEBUG=renderer \
+  NGN_EXPECT_RENDERER=GskVulkanRenderer
 
 if has_cell wayland; then
   # Weston 10 and later name the backend and the renderer; Weston 8 takes the module.

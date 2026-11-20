@@ -29,8 +29,13 @@ KeyChord chordOf(guint keyval, GdkModifierType state);
 std::string acceleratorOf(const MenuItem &item);
 
 // `items` as a GMenu whose items are actions of `group`, each named for its place, calling
-// `chosen` with its item. Disabled items are disabled actions; checked ones are stateful.
+// `chosen` with its item. Disabled items, and every item in a disabled menu, are disabled actions;
+// checked ones are stateful.
 GMenuModel *buildMenu(const std::vector<MenuItem> &items, GSimpleActionGroup *group, std::function<void(const MenuItem &)> chosen);
+
+// A popover menu drawing `model`, its submenus nested rather than sliding: a sliding menu opens a
+// submenu by its label, so of two submenus with one label the second opened the first.
+GtkWidget *nestedPopoverMenu(GMenuModel *model);
 
 class GtkMenus final : public MenuBackend {
  public:
@@ -55,19 +60,32 @@ class GtkMenus final : public MenuBackend {
   GSimpleActionGroup *actions_{nullptr};
   // The menu bars and primary menu buttons showing the bar, each cleared as its window goes.
   std::vector<std::unique_ptr<GtkWidget *>> slots_;
+  // Expires as these menus go, for a bar update queued before then.
+  std::shared_ptr<void> alive_{std::make_shared<int>(0)};
 };
+
+// Linux's Keyboard Shortcuts (MenuHost::keyboardShortcuts's groups), over `parent` when given,
+// built through GtkBuilder: libadwaita 1.8's AdwShortcutsDialog, a section a group, where the
+// libadwaita running has it, and GTK's GtkShortcutsWindow below 1.8. Not yet shown.
+GtkWidget *keyboardShortcutsWindow(const std::vector<ShortcutGroup> &groups, GtkWindow *parent);
+// Shows what keyboardShortcutsWindow made: a dialog over its parent, a window on its own.
+void presentKeyboardShortcuts(GtkWidget *shortcuts, GtkWindow *parent);
 
 // A view's context menu at `point` in `widget`: chosen items call `chosen`. True once shown.
 bool popUpContextMenu(GtkWidget *widget, facebook::react::Point point, const std::vector<MenuItem> &items, std::function<void(const MenuItem &)> chosen);
 
 // The window's key handling, in the order AppKit's has it, for a window holding the app's
-// surfaces: the app's shortcuts (`shortcut`, true when one took the press), then the back and
+// surfaces: the app's shortcuts (`shortcut`, true when one took the press), then the focus keys
+// (`focus`: Tab, Shift-Tab and a composite widget's arrows, focus.h), then the back and
 // forward keys (`navigate`), then a menu item's key (`menuKey`, the item for the press or null).
-// A text input that has the focus keeps its own editing keys. Then, as the press bubbles back up
+// A text input that has the focus keeps its own editing keys: an editing command's item's, and any
+// item's on a key `editingKey` names (app-menus.h's editingChord). Then, as the press bubbles back up
 // unused, Return presses the window's `default` native button and Escape its `cancel` one.
 struct KeyRouting {
   std::function<bool(const KeyChord &chord, bool textInputFocused)> shortcut;
+  std::function<bool(GtkWindow *window, guint keyval, GdkModifierType state)> focus;
   std::function<std::optional<NavigationDirection>(const KeyChord &chord)> navigation;
+  std::function<bool(const KeyChord &chord)> editingKey;
   std::function<void(NavigationDirection direction, GtkWindow *window)> navigate;
   std::function<const MenuItem *(const KeyChord &chord)> menuKey;
   std::function<void(const MenuItem &item, GtkWindow *window)> choose;

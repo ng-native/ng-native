@@ -17,7 +17,7 @@
  * - `idleCpu`: percent of one CPU over 30 s once settled, from `utime` and `stime` in
  *   `/proc/<pid>/stat`.
  * - `idleWakeups`: context switches a second over the same 30 s, voluntary and not, summed over
- *   the host's threads in `/proc/<pid>/task/<tid>/status`.
+ *   the host's threads in `/proc/<pid>/task/<tid>/status`, sampled every 100 ms (`switchesOver`).
  * - `memoryMb`: proportional set size of the first window, from `/proc/<pid>/smaps_rollup`.
  * - `hostMb`: the host binary's size stripped of symbols.
  * The slowest commit the host logs is reported, not judged: its budget is relative to the same
@@ -30,12 +30,20 @@
  * reason and the pull request.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { commitMs, firstFrameMs, hostEnv, judge, summarize } from './bench-macos.mjs';
-import { runInLinuxImage, startXvfb } from './linux-image.mjs';
+import { runInLinuxImage, startXvfb, stopHost } from './linux-image.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const self = fileURLToPath(import.meta.url);
@@ -81,24 +89,50 @@ const read = (file) => {
 };
 
 /**
- * Context switches over a window, from each thread's count at its start and end: a thread that
- * started in the window counts from zero, and one that ended in it drops out, so threads coming and
- * going never make the count go down.
+ * Context switches over a window, from each thread's count in samples taken through it. /proc keeps
+ * no count for a thread that has ended, not even in the process's own `status` (that is the main
+ * thread's), and GLib's thread pool ends an idle worker 15 s after its last job, inside the window.
+ * So the window is sampled often, and a thread adds what it switched between each pair of samples
+ * it is in: one that ended loses only what it switched after its last sample. A thread that is new
+ * in a sample counts from zero, as does a reused thread id whose count went down. Null, when any
+ * sample could not list the threads, or there are fewer than two.
  *
- * @param {Map<string, number>} before
- * @param {Map<string, number>} after
+ * @param {(Map<string, number> | null)[]} samples
  */
-export function switchesBetween(before, after) {
+export function switchesOver(samples) {
+  if (samples.length < 2 || samples.includes(null)) return null;
   let total = 0;
-  for (const [tid, count] of after) total += count - (before.get(tid) ?? 0);
+  for (let at = 1; at < samples.length; at += 1) {
+    const before = /** @type {Map<string, number>} */ (samples[at - 1]);
+    for (const [tid, count] of /** @type {Map<string, number>} */ (samples[at])) {
+      const was = before.get(tid);
+      total += was === undefined || count < was ? count : count - was;
+    }
+  }
   return total;
 }
 
-/** The host's CPU seconds and each thread's context switches now, or nulls where /proc had none. */
-function sample(pid, ticksPerSecond) {
-  const stat = read(`/proc/${pid}/stat`);
-  /** @type {Map<string, number> | null} */
-  let switches = new Map();
+/**
+ * Idle CPU in percent of one CPU and wakeups a second, over the time that passed between the two
+ * samples rather than the time asked for, which a late timer stretches.
+ *
+ * @param {{ cpu: number | null, at: number }} before
+ * @param {{ cpu: number | null, at: number }} after
+ * @param {number | null} switches
+ */
+export function idleRates(before, after, switches) {
+  const seconds = (after.at - before.at) / 1000;
+  if (!(seconds > 0)) return { idleCpu: null, idleWakeups: null };
+  const cpu = before.cpu === null || after.cpu === null ? null : after.cpu - before.cpu;
+  return {
+    idleCpu: cpu === null ? null : (cpu / seconds) * 100,
+    idleWakeups: switches === null ? null : switches / seconds,
+  };
+}
+
+/** Each of the host's threads' context switches now, or null where /proc could not list them. */
+function threadSwitches(pid) {
+  const switches = new Map();
   try {
     for (const tid of readdirSync(`/proc/${pid}/task`)) {
       const count = contextSwitches(read(`/proc/${pid}/task/${tid}/status`) ?? '');
@@ -106,9 +140,15 @@ function sample(pid, ticksPerSecond) {
       if (count !== null) switches.set(tid, count);
     }
   } catch {
-    switches = null;
+    return null;
   }
-  return { cpu: stat === null ? null : cpuSeconds(stat, ticksPerSecond), switches };
+  return switches;
+}
+
+/** The host's CPU seconds now, or null where /proc had none. */
+function cpuNow(pid, ticksPerSecond) {
+  const stat = read(`/proc/${pid}/stat`);
+  return stat === null ? null : cpuSeconds(stat, ticksPerSecond);
 }
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -118,12 +158,12 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  *
  * @param {string} host
  * @param {string} bundle
- * @param {{ settleMs?: number, idleMs?: number, ticksPerSecond?: number }} [timing]
+ * @param {{ settleMs?: number, idleMs?: number, sampleMs?: number, ticksPerSecond?: number, stopGraceMs?: number }} [timing]
  */
 export async function measure(
   host,
   bundle,
-  { settleMs = 5_000, idleMs = 30_000, ticksPerSecond = 100 } = {},
+  { settleMs = 5_000, idleMs = 30_000, sampleMs = 100, ticksPerSecond = 100, stopGraceMs } = {},
 ) {
   const state = mkdtempSync(path.join(tmpdir(), 'bench-linux-'));
   const child = spawn(host, [bundle, '--title', 'bench:linux'], {
@@ -139,27 +179,30 @@ export async function measure(
   let log = '';
   child.stdout.on('data', (chunk) => (log += chunk));
   child.stderr.on('data', (chunk) => (log += chunk));
+  // A host that never starts emits `error` and no `exit`: reject the measurement, after cleanup.
+  const failed = new Promise((_, reject) => child.once('error', reject));
+  failed.catch(() => {});
+  const pause = (ms) => Promise.race([wait(ms), failed]);
   try {
     for (let waited = 0; firstFrameMs(log) === null && waited < 10_000; waited += 100)
-      await wait(100);
-    await wait(settleMs);
-    const before = sample(child.pid, ticksPerSecond);
-    await wait(idleMs);
-    const after = sample(child.pid, ticksPerSecond);
-    const seconds = idleMs / 1000;
-    const delta = (a, b) => (a === null || b === null ? null : b - a);
-    const cpu = delta(before.cpu, after.cpu);
-    const switches =
-      before.switches && after.switches ? switchesBetween(before.switches, after.switches) : null;
+      await pause(100);
+    await pause(settleMs);
+    const before = { cpu: cpuNow(child.pid, ticksPerSecond), at: performance.now() };
+    const samples = [threadSwitches(child.pid)];
+    for (let left = idleMs; left > 0; left = idleMs - (performance.now() - before.at)) {
+      await pause(Math.min(sampleMs, left));
+      samples.push(threadSwitches(child.pid));
+    }
+    const after = { cpu: cpuNow(child.pid, ticksPerSecond), at: performance.now() };
     return {
       launchMs: firstFrameMs(log),
-      idleCpu: cpu === null ? null : (cpu / seconds) * 100,
-      idleWakeups: switches === null ? null : switches / seconds,
+      ...idleRates(before, after, switchesOver(samples)),
       memoryMb: pssMb(read(`/proc/${child.pid}/smaps_rollup`) ?? ''),
       commitMs: commitMs(log),
     };
   } finally {
-    child.kill('SIGTERM');
+    // The next launch starts only once this host has gone.
+    await stopHost(child, stopGraceMs);
     rmSync(state, { recursive: true, force: true });
   }
 }
@@ -201,6 +244,9 @@ export function bytecode(host, bundle, dir) {
     stdio: 'inherit',
   });
   if (compiled.status !== 0) throw new Error(`hermesc could not compile ${bundle}.`);
+  // The host reads assets from beside the bundle it launches, as the export lays them out.
+  const assets = path.join(path.dirname(bundle), 'assets');
+  if (existsSync(assets)) symlinkSync(assets, path.join(dir, 'assets'));
   return out;
 }
 
