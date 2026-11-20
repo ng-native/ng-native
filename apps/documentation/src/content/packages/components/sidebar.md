@@ -38,7 +38,8 @@ and `SidebarItemPath` from `@ng-native/router` for items with a `path`.
   stays uncollapsed and shows again at a wider one. Drawn, a collapsed sidebar is hidden.
 - **`minWidth`** and **`maxWidth`** - the narrowest and widest a drag of the divider leaves it, in
   points. Drawn, they bound the sidebar's width, which starts at 240.
-- **`autosave`** - macOS: the name the width and collapsed state are kept under across launches.
+- **`autosave`** - the name the sidebar is kept under across launches: its width and collapsed
+  state on macOS, and its collapsed state on Linux, where the sidebar has no width to drag.
 
 Sections and items become a native source list on macOS. Anything else in the sidebar, such as a
 search field or a footer, is drawn and styled by CSS on every OS.

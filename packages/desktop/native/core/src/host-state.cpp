@@ -8,7 +8,7 @@ AccessibilitySettings linuxAccessibility(const LinuxAccessibilitySources &source
   return {
       .screenReader = sources.screenReader,
       .reduceMotion = sources.portalReducedMotion || sources.gtkReducedMotion || !sources.animations,
-      .increaseContrast = sources.highContrast,
+      .increaseContrast = sources.highContrast || sources.portalContrast,
   };
 }
 

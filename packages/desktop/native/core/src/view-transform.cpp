@@ -42,4 +42,32 @@ std::optional<Point> layerPointAt(const Transform &transform, Point point) {
   return Point{static_cast<Float>(ix / iw), static_cast<Float>(iy / iw)};
 }
 
+std::optional<PlaneSteps> planeSteps(const Transform &transform) {
+  const auto &m = transform.matrix;
+  constexpr double kNone = 1e-9;
+  if (std::abs(m[3]) > kNone || std::abs(m[7]) > kNone || std::abs(m[15]) < kNone) {
+    return std::nullopt;
+  }
+  // x' = a x + c y + tx, y' = b x + d y + ty, as layerPointAt reads the matrix.
+  double a = m[0] / m[15], b = m[1] / m[15], c = m[4] / m[15], d = m[5] / m[15];
+  // [a c; b d] = rotate(angle) * [1 shear; 0 1] * scale(sx, sy).
+  double sx = std::hypot(a, b);
+  double det = a * d - b * c;
+  if (sx < kNone || std::abs(det) < kNone) {
+    return std::nullopt;
+  }
+  double cosine = a / sx, sine = b / sx;
+  double sy = det / sx;
+  double shear = (cosine * c + sine * d) / sy;
+  constexpr double kDegrees = 180.0 / 3.14159265358979323846;
+  return PlaneSteps{
+      .scaleX = static_cast<Float>(sx),
+      .scaleY = static_cast<Float>(sy),
+      .skewX = static_cast<Float>(std::atan(shear) * kDegrees),
+      .rotate = static_cast<Float>(std::atan2(sine, cosine) * kDegrees),
+      .translateX = static_cast<Float>(m[12] / m[15]),
+      .translateY = static_cast<Float>(m[13] / m[15]),
+  };
+}
+
 } // namespace ngn

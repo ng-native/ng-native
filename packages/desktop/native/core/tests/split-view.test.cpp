@@ -380,6 +380,15 @@ TEST_CASE("a click in a custom row is the content's when it lands on something t
   CHECK_FALSE(ngn::rowContentTakesClick(tree, {4, 5, 6}));
 }
 
+TEST_CASE("a sidebar's collapsed state autosaves under its name in the app's preferences, as a boolean") {
+  CHECK_FALSE(ngn::sidebarCollapsedKey(""));
+  CHECK(ngn::sidebarCollapsedKey("mail") == "NgNativeSidebarCollapsed mail");
+  CHECK(ngn::savedSidebarCollapsed(folly::dynamic(true)) == true);
+  CHECK(ngn::savedSidebarCollapsed(folly::dynamic(false)) == false);
+  CHECK_FALSE(ngn::savedSidebarCollapsed(std::nullopt));
+  CHECK_FALSE(ngn::savedSidebarCollapsed(folly::dynamic("true")));
+}
+
 TEST_CASE("the sidebar's collapsed state follows the app and the user without echoing either") {
   ngn::SidebarCollapse collapse;
   // The app shuts it: the toolkit is told, and its own change after that is not news.
@@ -473,4 +482,24 @@ TEST_CASE("a source list keeps the sections the user folded until they go, and f
   list.groups.insert(list.groups.begin(), ngn::SidebarGroup{.tag = 3, .title = "Mailboxes"});
   folds.setList(list);
   CHECK_FALSE(folds.folded(3));
+}
+
+TEST_CASE("a source list that changed only its selection is told apart from one that changed its rows") {
+  ngn::SourceList tabs{.groups = {{.rows = {{.tag = 3, .label = "Library", .selected = true}, {.tag = 4, .label = "Search"}}}}};
+  auto chosen = tabs;
+  chosen.groups[0].rows[0].selected = false;
+  chosen.groups[0].rows[1].selected = true;
+  CHECK(ngn::onlySelectionDiffers(tabs, chosen));
+  // The same list is no change at all.
+  CHECK_FALSE(ngn::onlySelectionDiffers(tabs, tabs));
+  // A badge, a label or a row more is a change of rows, whatever the selection did.
+  auto badged = chosen;
+  badged.groups[0].rows[1].badge = "2";
+  CHECK_FALSE(ngn::onlySelectionDiffers(tabs, badged));
+  auto renamed = tabs;
+  renamed.groups[0].rows[0].label = "Albums";
+  CHECK_FALSE(ngn::onlySelectionDiffers(tabs, renamed));
+  auto longer = chosen;
+  longer.groups[0].rows.push_back({.tag = 5, .label = "Profile"});
+  CHECK_FALSE(ngn::onlySelectionDiffers(tabs, longer));
 }

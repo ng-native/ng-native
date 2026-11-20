@@ -35,11 +35,24 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   which the core's `aria-role.h` reads from its `role` or `accessibilityRole`, and its label,
   description, level and states follow the props. GTK fixes a role when it makes the widget, so
   a view whose role changes gets a new widget in its place, with its children and the focus. A
-  text input's field is the text box with its label, and its view is generic. Announcements go
-  through `gtk_accessible_announce`, found at run time on GTK 4.14 and later, and say nothing
-  below. `AccessibilityInfo`'s settings (`accessibility-settings.h`) come from the settings
-  portal, GTK's settings and libadwaita's high contrast, through the core's `linuxAccessibility`,
-  and the screen reader from AT-SPI's `org.a11y.Status`.
+  text input's field is the text box with its label, and its view is generic. On GTK 4.14 and
+  later a Paragraph's widget also implements `GtkAccessibleText` (`accessible-text.h`, added at
+  run time), so a screen reader reads it by character, word, sentence, line and paragraph, with
+  the spans worked out in the core's `text-units.h`; a field is GTK's own GtkText or GtkTextView,
+  which implement it themselves. Announcements, a live region's and `Accessibility.announce()`'s
+  through the front window, go through `gtk_accessible_announce`, found at run time on GTK 4.14
+  and later, and say nothing below. A view's press, increment, decrement and cancel are its
+  widget's `accessibility` actions, which GTK lists on AT-SPI's Action interface, and its
+  declared actions (`accessibilityActions`) are its `custom` actions, sent to the app as
+  `onAccessibilityAction` (`sendAxAction`, which AppKit's custom actions share). GTK gives AT-SPI
+  an action's name and no label, so a screen reader reads `custom.<name>`. GTK 4 answers
+  AT-SPI's `GrabFocus` with NotSupported, so a screen reader cannot move the keyboard focus. `AccessibilityInfo`'s settings (`accessibility-settings.h`) come from the settings
+  portal (its reduced-motion and contrast), GTK's settings and libadwaita's high contrast, through
+  the core's `linuxAccessibility`, and the screen reader from AT-SPI's `org.a11y.Status`.
+  Below libadwaita 1.6, which draws its own blue, the portal's `accent-color` is applied over
+  libadwaita's stylesheet as its accent colours (`accent-colour.h`), worked out as libadwaita 1.6
+  does in the core's `accent-colors.h`; from 1.6 libadwaita follows the portal itself. Both read
+  the portal through `settings-portal.h`.
   Orca's structural navigation finds no headings or landmarks in a GTK 4 app. It
   builds on Linux against GTK 4.10 or later and libadwaita 1.4 or later, and on a Mac against
   Homebrew's (`brew install gtk4 libadwaita openssl@3 libnghttp2`) as a dev loop. Its HTTP and
@@ -47,8 +60,16 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   core's libcurl one (`curl-network.h`), which the GTK build turns on (`NGN_CURL`): one thread
   drives every request through `curl_multi`, behaving as NSURLSession does on macOS for redirects,
   timeouts (the longest silence), decoded bodies and `file:` and `data:` urls, and opening a
-  WebSocket's `http` or `https` url as `ws` or `wss`, as React Native's HMR client asks. Unlike
-  macOS, its cookies last only as long as the process, and it takes a proxy only from libcurl's environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY`, `NO_PROXY` and the rest), not the desktop's settings. It runs a `linux`
+  WebSocket's `http` or `https` url as `ws` or `wss`, as React Native's HMR client asks. Its
+  lasting cookies are kept between launches in `cookies.txt` in the app's data folder, as macOS
+  keeps them, and session cookies are not. A proxy comes from libcurl's environment variables (`http_proxy`, `https_proxy`, `ALL_PROXY` and
+  the rest) when any is set, else from the desktop's settings, asked for each origin at most every 30 seconds: the
+  proxy portal (`org.freedesktop.portal.ProxyResolver`) when one answers, else GLib's
+  `GProxyResolver` (`proxy-resolver.h`), which reads GNOME's and KDE's settings only where glib-networking is
+  installed. `NO_PROXY` applies to either.
+  A request names the app in its User-Agent unless it sets its own, as CFNetwork does on macOS:
+  `<name>/<version> ng-native libcurl/<version>`, from `metadata.json`'s `CFBundleName` and
+  `CFBundleShortVersionString` in a package, or `--title` and `NGN_APP_VERSION` in a dev run. It runs a `linux`
   bundle, which `expo export` makes once the app's `app.config.js` registers the platform
   (`@ng-native/metro/linux.cjs`). A window is an
   `AdwApplicationWindow` of the app's `AdwApplication`, holding an `AdwToolbarView` with an
@@ -83,7 +104,10 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   sheet, and a screen presented with `present()`, is an `AdwDialog` in a resizable window on
   libadwaita 1.5 and later, found at run time, and a drawn sheet on a dimmed overlay on 1.4 or over
   a window that is not resizable, where libadwaita would open a window of its own; a cover fills
-  the overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. A
+  the overlay below the header bar; one with an `anchor` is a `GtkPopover` pointing at it. While a
+  cover or a drawn sheet is shown, the rest of the window takes no pointer or focus: the header
+  bars' items, the menu bar or the main menu (and its F10), the content and any layer behind it.
+  The window controls still work. A
   `<split-view>` is an `AdwNavigationSplitView` in an `AdwBreakpointBin` (`split-view.h`), each
   pane in a page of its own as a container for input, its size going back to layout as state. The
   window's split view runs the window's full height, as libadwaita lays a window out: each pane is
@@ -93,7 +117,11 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   core owns collapse (`FoldingSplit`): the bin's breakpoint, at the core's `sidebarCompactWidth`,
   only reports the width, and the split view's `collapsed` and `show-content` show the result. The
   sections are a `GtkListBox` over their frames, drawn from the core's `sourceLists`, and Show
-  Sidebar (F9) and the header bar's sidebar button go to the window's split view. A
+  Sidebar (F9) and the sidebar button go to the window's split view. The button sits at the end of
+  the sidebar's own header bar while the sidebar shows beside the content, and in the window's
+  header bar once it folds away. A sidebar with an `autosave` name keeps whether it is collapsed in
+  the app's preferences, and that state wins over the app's prop on the next launch. A cover starts
+  below both header bars of a full-height split view. A
   presented screen's header is the sheet's own header bar, with Cancel at the start and bound to
   Escape and the last right item the default on Return. An alert (`alerts.h`) is an
   `AdwAlertDialog` in the active window on libadwaita 1.5 and later, and an `AdwMessageDialog` on

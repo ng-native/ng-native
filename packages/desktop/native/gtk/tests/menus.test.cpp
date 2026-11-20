@@ -12,6 +12,8 @@
 #include <adwaita.h>
 #include <doctest/doctest.h>
 
+#include <algorithm>
+
 #include <memory>
 #include <new>
 #include <string>
@@ -388,6 +390,87 @@ TEST_CASE("the app's undo history runs its actions on the UI thread, whichever t
   undo->redo();
   settle();
   CHECK(ran.size() == 1);
+}
+
+namespace {
+
+void collectShortcuts(GtkWidget *widget, std::vector<std::pair<std::string, std::string>> &out) {
+  for (GtkWidget *c = gtk_widget_get_first_child(widget); c; c = gtk_widget_get_next_sibling(c)) {
+    if (std::string(G_OBJECT_TYPE_NAME(c)) == "GtkShortcutsShortcut") {
+      gchar *title = nullptr;
+      gchar *accelerator = nullptr;
+      g_object_get(c, "title", &title, "accelerator", &accelerator, nullptr);
+      out.emplace_back(title ? title : "", accelerator ? accelerator : "");
+      g_free(title);
+      g_free(accelerator);
+    }
+    collectShortcuts(c, out);
+  }
+}
+
+// The text an AdwShortcutsDialog shows, in order: each label's and each shortcut label's accelerator.
+void collectDialogText(GtkWidget *widget, std::vector<std::string> &out) {
+  for (GtkWidget *c = gtk_widget_get_first_child(widget); c; c = gtk_widget_get_next_sibling(c)) {
+    std::string type = G_OBJECT_TYPE_NAME(c);
+    if (type == "AdwShortcutLabel") {
+      gchar *accelerator = nullptr;
+      g_object_get(c, "accelerator", &accelerator, nullptr);
+      out.emplace_back(accelerator ? accelerator : "");
+      g_free(accelerator);
+      continue;
+    }
+    if (GTK_IS_LABEL(c)) {
+      out.emplace_back(gtk_label_get_text(GTK_LABEL(c)));
+    }
+    collectDialogText(c, out);
+  }
+}
+
+} // namespace
+
+TEST_CASE("Keyboard Shortcuts is a window over the app's, listing each group's keys as GTK writes them") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkWidget *parent = gtk_window_new();
+  std::vector<ngn::ShortcutGroup> groups{
+      {.title = "File & Edit", .entries = {{.title = "Save <now>", .chord = {.key = "s", .modifiers = ngn::Control}},
+                                           {.title = "Redo", .chord = {.key = "z", .modifiers = ngn::Control | ngn::Shift}}}},
+      {.title = "Notes", .entries = {{.title = "Keyboard Shortcuts", .chord = {.key = "?", .modifiers = ngn::Control | ngn::Shift}}}},
+  };
+  GtkWidget *window = ngn::gtk::keyboardShortcutsWindow(groups, GTK_WINDOW(parent));
+  REQUIRE(window);
+  // libadwaita 1.8's dialog where the libadwaita running has it, a section a group.
+  if (adw_get_major_version() == 1 && adw_get_minor_version() >= 8) {
+    CHECK(std::string(G_OBJECT_TYPE_NAME(window)) == "AdwShortcutsDialog");
+    // Shown over the parent, which builds its rows.
+    gtk_window_present(GTK_WINDOW(parent));
+    g_object_ref(window);
+    ngn::gtk::presentKeyboardShortcuts(window, GTK_WINDOW(parent));
+    for (int i = 0; i < 50; ++i) {
+      g_main_context_iteration(nullptr, FALSE);
+    }
+    std::vector<std::string> text;
+    collectDialogText(window, text);
+    auto at = [&text](const std::string &s) { return std::find(text.begin(), text.end(), s) - text.begin(); };
+    for (const char *said : {"File & Edit", "Save <now>", "<Control>s", "Redo", "<Shift><Control>z", "Notes", "Keyboard Shortcuts", "<Shift><Control>question"}) {
+      CHECK_MESSAGE(at(said) < static_cast<long>(text.size()), said);
+    }
+    CHECK(at("Save <now>") < at("<Control>s"));
+    CHECK(at("File & Edit") < at("Notes"));
+    g_object_unref(window);
+    gtk_window_destroy(GTK_WINDOW(parent));
+    return;
+  }
+  CHECK(std::string(G_OBJECT_TYPE_NAME(window)) == "GtkShortcutsWindow");
+  CHECK(gtk_window_get_transient_for(GTK_WINDOW(window)) == GTK_WINDOW(parent));
+  std::vector<std::pair<std::string, std::string>> shown;
+  collectShortcuts(window, shown);
+  // The section first; the window's search page lists them again after it.
+  REQUIRE(shown.size() >= 3);
+  shown.resize(3);
+  CHECK(shown == std::vector<std::pair<std::string, std::string>>{
+                     {"Save <now>", "<Control>s"}, {"Redo", "<Shift><Control>z"}, {"Keyboard Shortcuts", "<Shift><Control>question"}});
+  gtk_window_destroy(GTK_WINDOW(window));
+  gtk_window_destroy(GTK_WINDOW(parent));
 }
 
 TEST_CASE("the keypad's navigation keys reach the focus callback as the plain ones do, and no binding of the plain key hears them") {

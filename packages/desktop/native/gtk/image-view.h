@@ -42,10 +42,11 @@ void useImageLoading(std::shared_ptr<Http> http, std::shared_ptr<ImageCache> cac
 void readImage(const facebook::react::ImageSource &source, std::function<void(GdkTexture *texture, const std::string &error)> done);
 
 // Loads the source the view's props pick, and picks again as the widget's scale changes: in a
-// window on another monitor, or moved to one.
+// window on another monitor, or moved to one, a whole step at a time; GtkBackend::windowRescaled
+// picks again at a fractional one.
 void makeImageView(GtkWidget *widget, ViewData &view);
 // Loads the source the view's props pick when it is a new request.
-void applyImageProps(ViewData &view, int screenScale);
+void applyImageProps(ViewData &view, double screenScale);
 // Draws the loaded image inside `box`'s shape.
 void snapshotImage(const ViewData &view, GtkSnapshot *snapshot, const BoxDescription &box);
 void destroyImage(ViewData &view);

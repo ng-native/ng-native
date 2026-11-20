@@ -34,7 +34,7 @@ describe('the default menu bar', () => {
       File: ['Close Window', '-', 'Print...'],
       Edit: ['Undo', 'Redo', '-', 'Cut', 'Copy', 'Paste', 'Select All', '-', 'Find'],
       View: ['Back', 'Forward', '-', 'Show Sidebar', 'Full Screen'],
-      Notes: ['Preferences', '-', 'About Notes', '-', 'Quit'],
+      Notes: ['Preferences', 'Keyboard Shortcuts', 'Help', '-', 'About Notes', '-', 'Quit'],
     });
     // An app's group goes after View, before the app's menu, and Preferences shows with a handler.
     const merged = mergeMenuBar(defaultMenuBar('Notes', 'linux'), [
@@ -49,7 +49,50 @@ describe('the default menu bar', () => {
       merged.map((group) => group.label),
       ['File', 'Edit', 'View', 'Note', 'Notes'],
     );
-    assert.deepEqual(outline(merged)['Notes'], ['Settings', '-', 'About Notes', '-', 'Quit']);
+    assert.deepEqual(outline(merged)['Notes'], [
+      'Settings',
+      'Keyboard Shortcuts',
+      '-',
+      'About Notes',
+      '-',
+      'Quit',
+    ]);
+  });
+
+  it("keeps Linux's Help on F1 only with the app's handler, and Keyboard Shortcuts always", () => {
+    const linux = defaultMenuBar('Notes', 'linux');
+    const app = linux.find((group) => group.menuRole === 'app')!;
+    const byLabel = (label: string) =>
+      app.items.find((entry) => !isSeparator(entry) && entry.label === label);
+    assert.deepEqual(byLabel('Help'), { label: 'Help', menuRole: 'help', shortcut: 'F1' });
+    assert.deepEqual(byLabel('Keyboard Shortcuts'), {
+      label: 'Keyboard Shortcuts',
+      menuRole: 'keyboardShortcuts',
+      shortcut: 'mod+shift+?',
+    });
+    assert.deepEqual(outline(mergeMenuBar(linux, []))['Notes'], [
+      'Keyboard Shortcuts',
+      '-',
+      'About Notes',
+      '-',
+      'Quit',
+    ]);
+    const help = () => {};
+    const merged = mergeMenuBar(linux, [
+      {
+        label: 'Notes',
+        menuRole: 'app',
+        items: [{ label: 'Notes Help', menuRole: 'help', select: help }],
+      },
+    ]);
+    assert.deepEqual(outline(merged)['Notes'], [
+      'Keyboard Shortcuts',
+      'Notes Help',
+      '-',
+      'About Notes',
+      '-',
+      'Quit',
+    ]);
   });
 
   it('has App, File, Edit, View, Window and Help, with their standard items and shortcuts', () => {

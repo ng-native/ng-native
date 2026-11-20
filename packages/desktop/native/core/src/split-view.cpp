@@ -325,6 +325,20 @@ bool SidebarCollapse::toolkitChanged(bool collapsed) {
   return collapsed != prop_;
 }
 
+std::optional<std::string> sidebarCollapsedKey(const std::string &autosaveName) {
+  if (autosaveName.empty()) {
+    return std::nullopt;
+  }
+  return "NgNativeSidebarCollapsed " + autosaveName;
+}
+
+std::optional<bool> savedSidebarCollapsed(const std::optional<folly::dynamic> &value) {
+  if (!value || !value->isBool()) {
+    return std::nullopt;
+  }
+  return value->asBool();
+}
+
 Float sidebarCompactWidth(const SidebarWidths &widths) {
   return widths.minimum + kSplitContentMinWidth;
 }
@@ -390,6 +404,18 @@ std::optional<Tag> selectedRow(const SourceList &list) {
     }
   }
   return selected;
+}
+
+bool onlySelectionDiffers(const SourceList &a, const SourceList &b) {
+  auto unselected = [](SourceList list) {
+    for (auto &group : list.groups) {
+      for (auto &row : group.rows) {
+        row.selected = false;
+      }
+    }
+    return list;
+  };
+  return a != b && unselected(a) == unselected(b);
 }
 
 bool FrameSizes::report(Tag tag, Size size) {

@@ -190,10 +190,13 @@ jobs:
             bash -euo pipefail -c '
               ccache --zero-stats > /dev/null
               start=$(date +%s)
-              # With worklets and Reanimated, whose shared C++ needs the Linux shims
-              # (native/shim/worklets), so a change that breaks them on glibc fails here.
+              # With the libraries the canary uses: worklets and Reanimated, whose shared C++ needs
+              # the Linux shims (native/shim/worklets), so a change that breaks them on glibc fails
+              # here, and svg, screens and safe area, for the AT-SPI run on the canary below.
               lib=../../examples/canary/node_modules
               build=$(native/scripts/build.sh --backend gtk --no-debug-info \
+                --library $lib/react-native-svg --library $lib/react-native-screens \
+                --library $lib/react-native-safe-area-context \
                 --library $lib/react-native-worklets --library $lib/react-native-reanimated | tail -n 1)
               echo "Built in $(( $(date +%s) - start ))s"
               ccache --show-stats
@@ -257,15 +260,38 @@ jobs:
             '
           # The same app read over AT-SPI as a screen reader reads it: its buttons and its text, each
           # named, a row described by its preview (aria-describedby), then a Tab that must focus a node
-          # AT-SPI reports. As root: dbus-daemon will not start
-          # for a user the image has no passwd entry for.
+          # AT-SPI reports. As root: dbus-daemon will not start for a user the image has no passwd
+          # entry for.
           docker run --rm -e GITHUB_WORKSPACE \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
             bash -euo pipefail -c '
               probe="$GITHUB_WORKSPACE/.linux-probe"
+              python3 native/scripts/atspi-check.test.py
               Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
               DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
                 "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/notes/main.js" --role "push button" --role label --relation described-by --tab
+            '
+          # The canary's Device screen on Debian 13, whose GTK 4.18 announces and says a heading's
+          # level over AT-SPI, as el9's 4.12 does neither: a level-2 heading, its Announce button heard
+          # as an announcement (Accessibility.announce), pressed through AT-SPI as Orca presses it, and
+          # its declared action (accessibilityActions) invoked the same way, answered by another.
+          # The host is el9's, which a .deb installs on Debian 13 with DEB_DEPENDS.
+          (cd examples/canary && pnpm exec expo export:embed --platform linux --dev false \
+            --bundle-output "$probe/canary/main.js" --assets-dest "$probe/canary/assets")
+          packages=$(cd packages/desktop && node -e "import('./bin/package-linux.mjs').then((m) => console.log(m.DEB_DEPENDS.map((d) => d.split(' ')[0]).join(' ')))")
+          test -n "$packages"
+          docker run --rm -e GITHUB_WORKSPACE -e PACKAGES="$packages" \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" debian:13 \
+            bash -euo pipefail -c '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends $PACKAGES xvfb dbus at-spi2-core python3-pyatspi \
+                gir1.2-atspi-2.0 fonts-dejavu-core > /dev/null
+              probe="$GITHUB_WORKSPACE/.linux-probe"
+              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
+              DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
+                "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/canary/main.js" --url canary://device \
+                --heading 2 --announce "Announce to a screen reader" --action "Announce to a screen reader=repeat"
             '
 
       # The notes example's in-app tests on the GTK host, as `vitest --project linux` runs them

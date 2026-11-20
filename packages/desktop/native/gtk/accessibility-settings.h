@@ -1,7 +1,7 @@
 // The desktop's accessibility settings on GTK, as AccessibilityInfo reads them (host-state.h's
 // linuxAccessibility): reduce motion from the settings portal's reduced-motion, GTK 4.22's
-// gtk-interface-reduced-motion and gtk-enable-animations; increase contrast from libadwaita's
-// high-contrast (the portal's contrast) and GTK 4.20's gtk-interface-contrast; a screen reader from
+// gtk-interface-reduced-motion and gtk-enable-animations; increase contrast from the portal's
+// contrast, libadwaita's high-contrast and GTK 4.20's gtk-interface-contrast; a screen reader from
 // AT-SPI's org.a11y.Status. Each is read at start and followed as it changes; a source that is not
 // there (an older GTK, no portal, no AT-SPI bus) counts as off.
 #pragma once
@@ -15,6 +15,8 @@
 #include <optional>
 
 namespace ngn::gtk {
+
+class SettingsPortal;
 
 // Whether a gtk-interface-contrast value asks for more contrast. GtkInterfaceContrast is 0
 // unsupported, 1 no preference, 2 more, 3 less: only 2 does.
@@ -35,11 +37,7 @@ class AccessibilitySettingsWatcher {
 
  private:
   void readGtk();
-  // Asks the portal for reduced-motion: with ReadOne, or with the older Read when `legacy`.
-  void readPortalSetting(bool legacy);
-  // The portal's owner appeared, changed or went.
-  void portalOwnerChanged();
-  void readPortal(GVariant *value);
+  void readPortal(const std::string &key, GVariant *value);
   void readStatus();
   void report();
 
@@ -47,9 +45,7 @@ class AccessibilitySettingsWatcher {
   LinuxAccessibilitySources sources_;
   std::optional<AccessibilitySettings> reported_;
   GCancellable *cancellable_{nullptr};
-  GDBusProxy *portal_{nullptr};
-  // Counts the owners the portal has had: a reply for an earlier one is dropped.
-  unsigned portalRead_{0};
+  std::unique_ptr<SettingsPortal> portal_;
   GDBusProxy *status_{nullptr};
 };
 

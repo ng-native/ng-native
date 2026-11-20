@@ -18,6 +18,11 @@
 // in. A titled section starts with its title row, which folds a collapsible section away. An item
 // with children is a custom row holding the item's view in a slot. Choosing a row sends
 // `sidebarSelect` to its item, and the row the app selects is selected again on each change.
+//
+// A tabs host (the core's tabs-host.h) is placed as a split view too, as macOS draws one: its tabs
+// are a source list filling the sidebar's page, and its screens share the content page, each at the
+// page's size, the core covering all but the selected one. Choosing a tab goes to the core
+// (GtkBackend::Hooks::chooseTab), which answers with the list's new selection.
 #pragma once
 
 #include "ngn/split-view.h"
@@ -26,9 +31,11 @@
 
 #include <gtk/gtk.h>
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace ngn::gtk {
@@ -57,11 +64,22 @@ class SplitViews {
   // Called as a screen is covered or uncovered, and after a transaction.
   void placeHeaders();
 
+  // The app's preferences, where a sidebar with an autosaveName keeps whether it is collapsed
+  // (sidebarCollapsedKey): set once by the host. Without them nothing is kept.
+  std::function<std::optional<folly::dynamic>(const std::string &key)> readPreference;
+  std::function<void(const std::string &key, const folly::dynamic &value)> writePreference;
+
   // The window split view of `surfaceId`'s window, if it has one.
   std::optional<Tag> windowSplit(SurfaceId surfaceId) const;
+  // The full-height sidebar's own header bar while the sidebar shows beside the content, where the
+  // sidebar button goes, as macOS puts it over the sidebar; null otherwise, when the button stays
+  // in the window's header bar.
+  GtkWidget *sidebarHeaderShown(SurfaceId surfaceId) const;
   // Show Sidebar (F9, the header bar's sidebar button) for the window's split view. Whether there
   // was one.
   bool toggle(SurfaceId surfaceId);
+  // The same for one split view: a nested tabs host's sidebar button.
+  bool toggleHost(Tag split);
 
   // For tests: the AdwNavigationSplitView and its breakpoint, the window crossing the compact
   // width as the breakpoint says, and a source list's GtkListBox.
@@ -99,8 +117,19 @@ class SplitViews {
     Tag sidebar{-1};
     Tag content{-1};
     SidebarCollapse collapse;
+    // The collapsed input as last applied, so an update that leaves it alone does not reapply it.
+    std::optional<bool> collapsedProp;
+    // Where the sidebar button was last laid out: over the sidebar, or in the window's header bar.
+    bool buttonOverSidebar{false};
     FoldingSplit folding;
     SidebarWidths widths;
+    // A tabs host: its screens, hosted in the content slot, and the scrolled window in the sidebar
+    // slot its tab list fills.
+    bool tabs{false};
+    std::vector<Tag> screens;
+    GtkWidget *tabList{nullptr};
+    // A nested tabs host's button over its content that shows the tab list while compact.
+    GtkWidget *sidebarButton{nullptr};
   };
   struct Lists {
     std::vector<SourceList> lists;
@@ -114,6 +143,14 @@ class SplitViews {
     bool syncing{false};
   };
   void host(Split &s, Tag pane);
+  // A tabs host's screen into its content slot, at the slot's size.
+  void hostScreen(Split &s, Tag screen);
+  // The tab list of the tabs host `split` into its sidebar, once both are there, and the chosen
+  // tab's title on its content page.
+  void showTabList(Tag split);
+  // A sidebar first hosted, by placing the split or inserting the sidebar: its widths, the app's
+  // collapsed prop, then the saved preference over it.
+  void applySidebar(Split &s);
   // Moves the window's header bar over the content pane, or back over the whole window.
   void moveHeaderBar(Split &s, bool overContent);
   void placeHeader(SurfaceId surfaceId);
@@ -121,7 +158,13 @@ class SplitViews {
   void refill(Tag parent);
   void applyWidths(Split &s);
   void show(Split &s);
+  // Saves the collapsed state under the sidebar's autosaveName.
+  void autosave(const Split &s);
   void fill(Tag parent, Lists &l, size_t index);
+  // Builds `parent`'s lists afresh, rows and all.
+  void rebuild(Tag parent, const std::vector<SourceList> &lists);
+  // Selects the row list `index` has selected, without building it again.
+  void select(Lists &l, size_t index);
   void flushSizes();
   std::optional<Tag> splitOf(Tag pane) const;
 
@@ -131,6 +174,14 @@ class SplitViews {
   FrameSizes sizes_;
   std::map<Tag, facebook::react::Size> reported_;
   guint flush_{0};
+  // A tab chosen, sent to the core on the next idle: the core answers with the list's new rows,
+  // which must not replace them while the list box is still selecting the row.
+  guint choose_{0};
+  struct {
+    SurfaceId surfaceId{-1};
+    Tag host{-1};
+    Tag screen{-1};
+  } chosenTab_;
 };
 
 } // namespace ngn::gtk

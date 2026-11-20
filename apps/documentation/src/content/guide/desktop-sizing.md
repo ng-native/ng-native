@@ -48,6 +48,9 @@ On Linux, `rem` is 16 points and text with no size is 14 points too, but text fo
 text scaling: GNOME's Large Text and its text scaling factor set `fontScale`, which text sizes are
 multiplied by, as Dynamic Type's are on iOS. Layout sizes in points do not scale with it.
 
+The least a target can be on Linux is 24 by 24 points, WCAG 2.2's minimum target size. WCAG allows
+exceptions, such as a smaller target with enough space around it.
+
 The `linux:` Tailwind variant and the `platform-linux` class match on Linux only, and `desktop:`
 matches on macOS and Linux:
 

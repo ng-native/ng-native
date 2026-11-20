@@ -21,6 +21,8 @@
 #include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/core/ConcreteComponentDescriptor.h>
 
+#include <folly/dynamic.h>
+
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -264,11 +266,22 @@ class SidebarCollapse {
   // The toolkit's state changed: whether to tell the app, which it does when the app's prop
   // says otherwise.
   bool toolkitChanged(bool collapsed);
+  // What the toolkit shows now.
+  bool collapsed() const {
+    return toolkit_;
+  }
 
  private:
   bool prop_{false};
   bool toolkit_{false};
 };
+
+// Where a toolkit with no autosave of its own (GTK's) keeps a sidebar's collapsed state between
+// launches: in the app's preferences under its `autosaveName`, as window frames are (app-windows.h).
+// Its width is not kept, since libadwaita's sidebar has no divider to drag. None for no name.
+std::optional<std::string> sidebarCollapsedKey(const std::string &autosaveName);
+// The state saved there, or none for nothing saved or a value that is not a boolean.
+std::optional<bool> savedSidebarCollapsed(const std::optional<folly::dynamic> &value);
 
 // A split view that folds into a stack whose root is the sidebar (libadwaita's
 // AdwNavigationSplitView), and what it shows. The core decides, the toolkit only shows the result:
@@ -323,6 +336,10 @@ class SourceListFolds {
 
 // The row the app has selected in `list`, if any: the last one that says so.
 std::optional<Tag> selectedRow(const SourceList &list);
+// Whether `a` and `b` differ in which row is selected and nothing else: a toolkit then moves the
+// selection rather than building the list again, which would take the rows away from under the
+// pointer that just chose one.
+bool onlySelectionDiffers(const SourceList &a, const SourceList &b);
 
 // Sizes reported as the toolkit lays out (every step of a divider drag), coalesced so layout hears
 // each view's latest at most once per display frame.
