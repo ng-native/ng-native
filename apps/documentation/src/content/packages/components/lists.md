@@ -19,8 +19,22 @@ While the JS thread is idle, the window grows a viewport at a time, ahead of the
 first, so a fling lands on rows that are already drawn. `windowSize` caps it, as `FlatList`'s
 does: the viewport on screen and at most `windowSize - 1` more, five in all by default, with about
 two-thirds of the extra viewports ahead of the scroll and the rest behind. A list with expensive
-rows can lower it, and a `windowSize` of 1 renders the visible rows and the overscan only.
+rows can lower it, and a `windowSize` of 1 fills no extra viewports.
 `<section-list>` takes the same input.
+
+While the list scrolls, the window also reaches past the viewport in the direction of the scroll,
+by about the distance the list covers in `velocityLead` milliseconds (500 by default) at its recent
+speed, in steps of a quarter viewport and up to three viewports. A fast fling then lands on rows
+that were rendered while the window change that needed them was still on its way through
+JavaScript. The reach drops back as the scroll slows, and 200ms after the last scroll event. The
+first scroll event after a `scrollToIndex`, `scrollToOffset` or `scrollToEnd` call does not count
+toward the speed. Later events do, including those of an animated scroll. A `velocityLead` of 0
+turns it off. `<section-list>` takes the same input.
+
+The list reads scroll events outside Angular's listeners, so its own listener marks no view for
+checking. A scroll event that moves no row in or out of the window checks only what reads the
+signals it changes, such as a pinned sticky row, and the views of any `(scroll)` handler the app
+binds on the list.
 
 The rendering loop is deliberately not something this component owns. `<virtual-list>` computes
 _which_ rows should exist, as `window()`, and the caller's own `@for` renders them - so tracking,
@@ -276,6 +290,46 @@ failed to load is retried. `viewableItemsChanged` reports which rows are current
 `itemVisiblePercentThreshold`, and reports again when the items change under them.
 
 <!-- api: VirtualList -->
+
+### Columns
+
+`[virtualListNumColumns]` on the list lays items side by side, as `FlatList`'s `numColumns` does: a
+photo library or a shop's products, windowed a line at a time. `[virtualListColumnGap]` spaces the
+columns, and `rowGap` the lines:
+
+```html
+<virtual-list
+  #list
+  [items]="photos()"
+  [itemHeight]="120"
+  [rowGap]="2"
+  [virtualListNumColumns]="3"
+  [virtualListColumnGap]="2"
+>
+  @for (row of list.window(); track row.slot) {
+  <image [virtualListRow]="row" [source]="{ uri: row.item.uri }" resizeMode="cover" />
+  }
+</virtual-list>
+```
+
+Each item is still its own row of the window, with its own slot and key, so the `@for` is the
+same as a plain list's and recycling, `scrollToIndex`, viewability and `endReached` work by item.
+Items fill a line from the leading edge, so the first column is on the right in a right-to-left
+layout, and every column is the same width. A line is as tall as its tallest item, and the others
+on it stretch to that height. A sticky row takes a line to itself, so a month's header can pin
+across a whole grid while its photos scroll under it, which `SectionList` cannot do with columns.
+`contentPadding` insets the grid as it does rows. A separator template is drawn under each item but
+those on the last line, as wide as its column, with the first item of the next line as its
+`trailingItem`; `FlatList` draws one a line, given the line's items.
+
+Columns are for a vertical list with `itemHeight`, as `numColumns` is vertical only in React
+Native. On a horizontal list, or rows that size themselves, the list keeps one item a line and says
+so in development. Changing the count with the same `items` lays them out again and scrolls to
+where the item at the top of the viewport moved, as far into its new line as the viewport was into
+its old one; on a shorter line than that, the viewport shows the rows after it. New `items` at the
+same time are placed at the same offset, unless `maintainVisibleContentPosition` holds them.
+
+<!-- api: VirtualListNumColumns -->
 
 ## Section list
 

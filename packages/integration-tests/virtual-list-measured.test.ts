@@ -125,14 +125,15 @@ describe('virtual list with measured rows', () => {
   });
 
   it('keeps the rows it scrolled past as a spacer of their measured height', async () => {
-    const { measureAll, scroll, canvas, rendered, unmount } = await boot('Measured');
+    const { measureAll, scroll, canvas, rendered, row, unmount } = await boot('Measured');
     // Scroll down a row at a time, measuring each window, as a finger would reveal them.
     for (let y = 0; y <= 20 * 60; y += 60) {
       await measureAll(() => 60);
       await scroll(y);
     }
     await measureAll(() => 60);
-    const first = Math.min(...rendered());
+    // Not counting the slots kept hidden for reuse, which are out of the flow.
+    const first = Math.min(...rendered().filter((id) => row(id)!.props['opacity'] !== 0));
     const spacer = canvas().children[0]!;
     assert.equal(spacer.props['height'], first * 60, 'the spacer is what is above the window');
     assert.ok(rendered().includes(20), 'the row at the offset is rendered');
@@ -268,6 +269,20 @@ describe('virtual list with measured rows', () => {
     const last = scrolls().at(-1)!;
     assert.ok(scrolls().length > before, 'the offset is corrected');
     assert.deepEqual(last.args, [0, 100 * ESTIMATE + above.length * 50, false]);
+    unmount();
+  });
+
+  it('holds a row scrolled to with a viewOffset while the rows above it are measured', async () => {
+    const { instance, scrolls, measure, unmount } = await boot('Measured');
+    (
+      instance.list() as unknown as {
+        scrollToIndex(options: { index: number; viewOffset: number; animated: boolean }): void;
+      }
+    ).scrollToIndex({ index: 50, viewOffset: 150, animated: false });
+    await settle();
+    await measure(48, ESTIMATE + 30);
+    await measure(49, ESTIMATE + 30);
+    assert.deepEqual(scrolls().at(-1)!.args, [0, 50 * ESTIMATE + 60 - 150, false]);
     unmount();
   });
 
@@ -462,12 +477,12 @@ describe('virtual list sticky rows moved on the native side', () => {
     instance.sticky!.set([0, 20]);
     await settle();
     await measureAll(() => ESTIMATE);
-    const tag = row(0)!.reactTag;
     await scroll(25 * ESTIMATE);
     await measureAll(() => ESTIMATE);
     assert.equal(row(0), undefined);
-    assert.equal(drives().has(tag), false);
-    assert.ok(drives().has(row(20)!.reactTag));
+    // The only drive is row 20's, which may be in row 0's old view: a sticky row hands its slot
+    // on only to another.
+    assert.deepEqual([...drives().keys()], [row(20)!.reactTag]);
     unmount();
   });
 });
@@ -498,6 +513,39 @@ describe('virtual list with fixed heights, keyed', () => {
     await settle();
     for (const row of instance.list().window()) {
       if (before.has(row.key)) assert.equal(row.slot, before.get(row.key), `post ${row.key}`);
+    }
+    unmount();
+  });
+
+  it('recycles a sticky row only into a sticky row of the same type', async () => {
+    const { instance, scroll, unmount } = await boot('KeyedFixed');
+    const fixture = instance as unknown as {
+      typed: { set(value: boolean): void };
+      sticky: { set(value: readonly number[]): void };
+    };
+    fixture.typed.set(true);
+    // Every fifth row sticky: photos (0, 15, 30) and text (5, 10, 20) among them.
+    const sticky = new Set(Array.from({ length: 200 }, (_, i) => i * 5));
+    fixture.sticky.set([...sticky]);
+    await settle();
+    const typeOfSlot = new Map<number, string>();
+    const check = () => {
+      for (const row of instance.list().window()) {
+        if (row.parked) continue;
+        const kind = row.item.id % 3 === 0 ? 'photo' : 'text';
+        const type = sticky.has(row.index) ? `sticky ${kind}` : kind;
+        const seen = typeOfSlot.get(row.slot);
+        assert.ok(
+          seen === undefined || seen === type,
+          `slot ${row.slot} held a ${seen}, now a ${type}`,
+        );
+        typeOfSlot.set(row.slot, type);
+      }
+    };
+    check();
+    for (let y = 0; y < 300 * 40; y += 97) {
+      await scroll(y);
+      check();
     }
     unmount();
   });

@@ -28,6 +28,12 @@ const PRIMITIVES = {
  */
 const DRAWN_ON_IOS = new Set(['brightness', 'opacity']);
 
+/**
+ * The filters the macOS host leaves out: every function but `drop-shadow()`, which a layer's Core
+ * Image filters cannot draw (a filter cannot add a second copy of the view under itself).
+ */
+const UNDRAWN_ON_MACOS = new Set(['dropShadow']);
+
 /** The CSS name of each native key, for a message that names what was written. */
 const CSS_NAMES = Object.fromEntries(Object.entries(PRIMITIVES).map(([css, key]) => [key, css]));
 
@@ -43,6 +49,16 @@ function undrawnOnIos(list) {
     // A slot filled from a token on device, whose token was checked where it was set.
     if (key === '__filters') continue;
     if (key && !DRAWN_ON_IOS.has(key)) return CSS_NAMES[key] ?? key;
+  }
+  return null;
+}
+
+/** The first function in a compiled filter list that macOS does not draw: see `undrawnOnIos`. */
+function undrawnOnMacos(list) {
+  if (!Array.isArray(list)) return null;
+  for (const primitive of list) {
+    const key = Object.keys(primitive ?? {})[0];
+    if (key && UNDRAWN_ON_MACOS.has(key)) return CSS_NAMES[key] ?? key;
   }
   return null;
 }
@@ -141,4 +157,11 @@ function edge(value, start, end, context) {
   return { [start]: '50%' };
 }
 
-module.exports = { filter, undrawnOnIos, backgroundSize, backgroundRepeat, backgroundPosition };
+module.exports = {
+  filter,
+  undrawnOnIos,
+  undrawnOnMacos,
+  backgroundSize,
+  backgroundRepeat,
+  backgroundPosition,
+};

@@ -53,7 +53,7 @@ const {
 } = require('./properties.cjs');
 const { deferGradient, GRADIENTS } = require('./gradients.cjs');
 const { calcWithTokens, motionWithTokens } = require('./token-arithmetic.cjs');
-const { filter, undrawnOnIos } = require('./filters.cjs');
+const { filter, undrawnOnIos, undrawnOnMacos } = require('./filters.cjs');
 const { expandShorthand } = require('./shorthands.cjs');
 
 /** Angular's emulated encapsulation marker, which we strip: scoping is per rule set already. */
@@ -3178,12 +3178,22 @@ const NATIVE = ['ios', 'android'];
 const BUILDS = [...NATIVE, 'macos', 'linux'];
 
 /**
- * The platforms refused a filter iOS does not draw: iOS, and macOS, whose host draws no more of
- * them than iOS does. The GTK host on Linux draws every function. The desktop host hands the
- * toolkit the whole transform matrix, skews included, so a skew is refused on Android alone.
+ * What a platform leaves out of a filter list: iOS draws brightness() and opacity() alone, and the
+ * macOS host every function but drop-shadow(). The GTK host on Linux draws every function. The
+ * desktop host hands the toolkit the whole transform matrix, skews included, so a skew is refused
+ * on Android alone.
  */
-const IOS_FILTERS = new Set(['ios', 'macos']);
-const drawsIosFilters = (platforms) => platforms.some((platform) => IOS_FILTERS.has(platform));
+function undrawnIn(list, platforms) {
+  if (platforms.includes('ios')) {
+    const name = undrawnOnIos(list);
+    if (name) return { name, os: 'iOS' };
+  }
+  if (platforms.includes('macos')) {
+    const name = undrawnOnMacos(list);
+    if (name) return { name, os: 'macOS' };
+  }
+  return null;
+}
 
 /** The class `mount` puts on the root for each platform, which is how a rule is scoped to one. */
 const PLATFORM_CLASS = {
@@ -3228,17 +3238,16 @@ function rulePlatforms(selectors, targets) {
  * dropped with a warning keeps the rest of the rule.
  */
 function assertDrawn(out, deferred, from, platforms, context) {
-  if (!drawsIosFilters(platforms)) return;
-  const settled = undrawnOnIos(out.filter);
+  const settled = undrawnIn(out.filter, platforms);
   const pending = deferred
     .slice(from)
-    .filter((one) => one.props?.includes('filter') && undrawnOnIos(one.within));
-  const name = settled ?? (pending.length ? undrawnOnIos(pending[0].within) : null);
-  if (!name) return;
+    .filter((one) => one.props?.includes('filter') && undrawnIn(one.within, platforms));
+  const found = settled ?? (pending.length ? undrawnIn(pending[0].within, platforms) : null);
+  if (!found) return;
 
   if (settled) delete out.filter;
   for (const one of pending) deferred.splice(deferred.indexOf(one), 1);
-  throw undrawn(name, context);
+  throw undrawn(found, context);
 }
 
 /**
@@ -3246,11 +3255,11 @@ function assertDrawn(out, deferred, from, platforms, context) {
  * filter slot read on device, so this is the last place that knows which platforms it is for.
  */
 function assertTokenDrawn(tokens, name, platforms, context) {
-  if (!drawsIosFilters(platforms) || typeof name !== 'string') return;
-  const fn = undrawnOnIos(tokens[name]?.filter);
-  if (!fn) return;
+  if (typeof name !== 'string') return;
+  const found = undrawnIn(tokens[name]?.filter, platforms);
+  if (!found) return;
   delete tokens[name];
-  throw undrawn(fn, context);
+  throw undrawn(found, context);
 }
 
 /**
@@ -3352,7 +3361,16 @@ function assertSkewDrawn(out, tokens, deferred, from, name, platforms, context) 
   );
 }
 
-function undrawn(name, context) {
+function undrawn({ name, os }, context) {
+  if (os === 'macOS') {
+    return new CssUnsupported(
+      `${context}: filter: ${name}() is not drawn on macOS. The desktop host draws every other ` +
+        `filter function through its layer's Core Image filters, and has no filter that adds a ` +
+        `copy of the view under itself, so this would leave the view without its shadow on a Mac. ` +
+        `Use box-shadow, or scope the rule to Android with a .platform-android ancestor ` +
+        `(Tailwind's android: variant).`,
+    );
+  }
   return new CssUnsupported(
     `${context}: filter: ${name}() is not drawn on iOS. React Native draws brightness() and ` +
       `opacity() on both platforms and every other filter function on Android only, so this ` +

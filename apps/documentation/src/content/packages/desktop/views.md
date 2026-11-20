@@ -30,15 +30,27 @@ gradients (`background-image`) are drawn with their size, position and repeat, a
 outer or inset, is a blurred layer under the children. A view that clips its overflow also clips
 its outer shadows.
 
+`filter` is drawn as Core Image filters on the view's layer, which apply to the view and its
+children, in the order written in the `filter` value. It draws `blur()`, `brightness()`,
+`contrast()`, `grayscale()`, `hue-rotate()`, `invert()`, `opacity()`, `saturate()` and `sepia()`,
+with the colour functions working on sRGB values as Chrome's do. `drop-shadow()` is not drawn (use
+`box-shadow`): a stylesheet's `filter` that holds one is dropped whole with a warning, its other
+functions too, while one set from a script at runtime keeps its other functions. A
+`mix-blend-mode` blends the view with what is drawn under it, as React Native iOS does, in every
+mode but `plus-darker`.
+
+An `<image>` fits its picture to its box by `resizeMode`: `cover`, `contain`, `center` or `stretch`,
+and `repeat`, which tiles the picture from the box's top left corner at its pixel size divided by
+its source's `scale`, as React Native iOS does. With a `tintColor` it shows the colour in the shape
+of its picture, keeping the picture's alpha, as React Native iOS does.
+
 On Linux the GTK host paints the same box with GTK's render nodes: gradients and their tiles, each
-side's width and colour, and a dashed or dotted border stroked as on macOS. It also draws what the
-macOS host does not yet: `filter` (every function, `drop-shadow` and `blur` included, applied in
-order over the view and its children), `mix-blend-mode` (every mode but `plus-lighter`, which draws
-normally), an `<image>`'s `tintColor`, which fills the image's shape with the tint, and its
-`resizeMode: 'repeat'`, which tiles the image from the top left at its size in points as React
-Native iOS does, where the macOS host stretches it. A child's
-blend mode blends it with its parent's own painting and the siblings drawn before it, as if every
-view set `isolation: isolate`: over a parent with no background it shows as it is.
+side's width and colour, and a dashed or dotted border stroked as on macOS. It draws every `filter`
+function, `drop-shadow()` included, in order over the view and its children; every
+`mix-blend-mode` but `plus-lighter`, which draws normally; and an `<image>`'s `tintColor` and
+`resizeMode: 'repeat'` as the macOS host does. A child's blend mode blends it with its parent's own
+painting and the siblings drawn before it, as if every view set `isolation: isolate`: over a parent
+with no background it shows as it is.
 
 ## Modals
 
@@ -172,8 +184,10 @@ When the app has them installed, the host compiles in the Fabric components of
   the tabs not selected stay mounted, neither drawn nor hit.
 - An svg (`RNSVGSvgView`, which `@ng-native/icons` commits) draws its elements with Core Graphics:
   groups, paths, rects, circles, ellipses and lines, linear and radial gradients, clip paths,
-  luminance masks, `use` and `symbol`, images, and text in spans, with presentation inherited
-  through `propList` and `currentColor` from the svg's `color`. Markers sit at a path's or line's
+  luminance masks, `use` and `symbol`, images (an `<image>` whose request fails, or whose data is
+  not an image, is not requested again while the app runs, like a broken image in a browser), and
+  text in spans, with presentation inherited through `propList` and `currentColor` from the svg's
+  `color`. Markers sit at a path's or line's
   vertices with `orient` (`auto`, `auto-start-reverse` or an angle), `markerUnits`, `refX` and
   `refY`, their viewBox and their box clipping them. A pattern fills or strokes with its tile,
   drawn once and repeated, in either units, with its viewBox, content units and

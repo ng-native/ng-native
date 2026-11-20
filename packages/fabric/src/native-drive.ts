@@ -71,7 +71,8 @@ export type StaticTransform = Readonly<Record<string, number>>;
  * range puts it, for a drive made with one; `stop` lets it go.
  */
 export interface ScrollDrive {
-  update(range: ScrollRange): void;
+  /** Move through `range` now, from `from` when the caller knows where the source is. */
+  update(range: ScrollRange, from?: number): void;
   shift(amount: number): void;
   stop(): void;
 }
@@ -118,6 +119,8 @@ interface Drive {
   after: readonly FollowingTransform[];
   nodes: Nodes | null;
   stopped: boolean;
+  /** Where the caller last said the source is, for native to start a new graph from. */
+  from?: number;
 }
 
 /**
@@ -299,11 +302,12 @@ export class NativeScrollDriver {
     statics: readonly StaticTransform[],
     tagOf: (node: object) => number | null,
     shift: number | null = null,
+    from?: number,
   ): ComposedDrive {
     const after = statics.flatMap((entry) =>
       Object.entries(entry).map(([property, value]) => ({ property, value })),
     );
-    const drive: Drive = { viewTag: null, range, shift, after, nodes: null, stopped: false };
+    const drive: Drive = { viewTag: null, range, shift, after, nodes: null, stopped: false, from };
     const key = feedKey(feed);
     const connect = (): boolean => {
       if (drive.stopped) return true;
@@ -314,6 +318,7 @@ export class NativeScrollDriver {
       const offset = this.offset(source, sourceTag, feed, key);
       drive.nodes = this.build(offset.value, viewTag, property, drive);
       this.hold(view, viewTag, drive.nodes.props, ['transform']);
+      this.place(offset.value, drive);
       this.flush();
       return true;
     };
@@ -325,13 +330,21 @@ export class NativeScrollDriver {
       const offset = this.offsets.get(source)!.get(key)!;
       drive.nodes = this.build(offset.value, drive.viewTag, property, drive);
       this.hold(view, drive.viewTag, drive.nodes.props, ['transform']);
+      this.place(offset.value, drive);
       this.flush();
     };
     return {
-      update: (next) => {
-        if (drive.stopped || sameRange(drive.range, next)) return;
-        drive.range = next;
-        rebuild();
+      update: (next, from) => {
+        if (drive.stopped) return;
+        if (from !== undefined) drive.from = from;
+        if (!sameRange(drive.range, next)) {
+          drive.range = next;
+          return rebuild();
+        }
+        // The graph stays, but native is still to be told where the source is.
+        if (!drive.nodes || drive.from === undefined) return;
+        this.place(this.offsets.get(source)!.get(key)!.value, drive);
+        this.flush();
       },
       follow: (entries) => {
         if (drive.stopped || sameFollowing(drive.after, entries)) return;
@@ -687,6 +700,18 @@ export class NativeScrollDriver {
     if (nodes.sum !== null) API.dropAnimatedNode(nodes.sum);
     if (nodes.shift !== null) API.dropAnimatedNode(nodes.shift);
     API.dropAnimatedNode(nodes.interpolation);
+  }
+
+  /**
+   * Tell native where the source is, so a graph just connected over its value is drawn now: native
+   * works a graph out when a value changes, and the source's next event may be a while coming,
+   * after a jump not at all. React Native's components draw that first frame from JavaScript.
+   */
+  private place(value: number, drive: Drive): void {
+    if (drive.from === undefined) return;
+    this.native.API.setAnimatedNodeValue(value, drive.from);
+    // Once: native's own events take it from here, and a later rebuild must not set it back.
+    drive.from = undefined;
   }
 
   private flush(): void {

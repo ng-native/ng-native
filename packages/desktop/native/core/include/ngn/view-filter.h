@@ -1,6 +1,7 @@
 // A view's CSS `filter` as the steps a toolkit applies to what the view draws, its children
 // included: colour matrices from the Filter Effects spec's equivalents, a Gaussian blur, and a drop
-// shadow. The GTK host maps each step to a GSK node; the macOS host does not apply `filter` yet.
+// shadow. The GTK host maps each step to a GSK node, and the macOS host to a Core Image filter on
+// the view's layer, which draws every step but the drop shadow.
 #pragma once
 
 #include <react/renderer/graphics/Filter.h>

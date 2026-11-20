@@ -399,7 +399,7 @@ describe('skew, per platform', () => {
   });
 
   // The macOS host hands AppKit the whole matrix React Native resolves, skews included, so a
-  // macOS build keeps a skew written either way, and refuses an iOS filter either way.
+  // macOS build keeps a skew written either way.
   it('keeps a skew in a macOS build, unscoped and scoped to macOS alike', () => {
     for (const css of [
       '.a { transform: skewX(12deg) }',
@@ -411,9 +411,16 @@ describe('skew, per platform', () => {
     }
   });
 
-  it('refuses a filter iOS does not draw in a macOS build, unscoped and scoped to macOS alike', () => {
-    for (const css of ['.a { filter: blur(4px) }', '.platform-macos .a { filter: blur(4px) }']) {
-      assert.throws(() => compileCss(css, 'test', { platform: 'macos' }), /not drawn on iOS/);
+  // The macOS host draws every filter function through its layer's Core Image filters but
+  // drop-shadow(), which a layer filter cannot add a copy under itself for.
+  it('keeps every filter function but drop-shadow in a macOS build, unscoped and scoped alike', () => {
+    for (const css of [
+      '.a { filter: grayscale(1) blur(4px) hue-rotate(90deg) }',
+      '.platform-macos .a { filter: grayscale(1) blur(4px) hue-rotate(90deg) }',
+    ]) {
+      assert.deepEqual(compileCss(css, 'test', { platform: 'macos' }).rules[0].declarations, {
+        filter: [{ grayscale: 1 }, { blur: 4 }, { hueRotate: 90 }],
+      });
     }
   });
 
@@ -438,6 +445,43 @@ describe('skew, per platform', () => {
     const css = '.platform-ios .a { filter: blur(4px) }';
     assert.throws(() => compileCss(css, 'test', { platform: 'ios' }), /not drawn on iOS/);
     assert.doesNotThrow(() => compileCss(css, 'test', { platform: 'linux' }));
+  });
+
+  it('refuses drop-shadow in a macOS build, unscoped and scoped to macOS alike', () => {
+    for (const css of [
+      '.a { filter: blur(2px) drop-shadow(2px 2px 3px red) }',
+      '.platform-macos .a { filter: drop-shadow(2px 2px 3px red) }',
+    ]) {
+      assert.throws(
+        () => compileCss(css, 'test', { platform: 'macos' }),
+        /drop-shadow\(\) is not drawn on macOS/,
+      );
+    }
+  });
+
+  it('points a refused macOS drop-shadow at Android alone, where iOS refuses it too', () => {
+    assert.throws(
+      () =>
+        compileCss('.a { filter: drop-shadow(2px 2px 3px red) }', 'test', { platform: 'macos' }),
+      (error: Error) =>
+        error.message.includes('.platform-android') && !error.message.includes('.platform-ios'),
+    );
+  });
+
+  it('keeps a drop-shadow in a rule scoped to Android, even in a macOS build', () => {
+    const scoped = compileCss(
+      '.platform-android .a { filter: drop-shadow(1px 1px 2px red) }',
+      'test',
+      { platform: 'macos' },
+    );
+    assert.deepEqual(Object.keys(scoped.rules[0].declarations), ['filter']);
+  });
+
+  it('still refuses what iOS does not draw in an iOS build, with the iOS message', () => {
+    assert.throws(
+      () => compileCss('.a { filter: blur(4px) }', 'test', { platform: 'ios' }),
+      /blur\(\) is not drawn on iOS/,
+    );
   });
 });
 

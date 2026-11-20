@@ -14,6 +14,7 @@ import { NgIcon } from '../../icons/src/ng-icon.ts';
       [itemHeight]="40"
       [overscan]="2"
       [windowSize]="windowSize()"
+      [velocityLead]="velocityLead()"
       [style]="fill"
     >
       @for (row of list.window(); track row.index) {
@@ -27,6 +28,8 @@ import { NgIcon } from '../../icons/src/ng-icon.ts';
 export class Virtual {
   // Fill nothing while idle unless a test asks: the window tests pin what a scroll renders.
   windowSize = signal(1);
+  // Nor reach ahead by the scroll speed, which depends on how far apart in time the events land.
+  velocityLead = signal(0);
   list = viewChild.required<VirtualList<unknown>>('list');
   rows = signal(Array.from({ length: 1000 }, (_, i) => ({ id: i, label: `row ${i}` })));
   fill = { flex: 1 };
@@ -39,6 +42,7 @@ export class Virtual {
   template: `
     <virtual-list
       [windowSize]="1"
+      [velocityLead]="0"
       #list
       [items]="rows()"
       [itemHeight]="40"
@@ -93,6 +97,7 @@ export class VirtualOptions {
   template: `
     <virtual-list
       [windowSize]="1"
+      [velocityLead]="0"
       #list
       [items]="rows()"
       [itemHeight]="heightOf"
@@ -127,6 +132,7 @@ export class VirtualMixed {
   template: `
     <virtual-list
       [windowSize]="1"
+      [velocityLead]="0"
       #list
       [items]="rows()"
       [itemHeight]="40"
@@ -154,6 +160,7 @@ export class VirtualRecycled {
   template: `
     <virtual-list
       [windowSize]="1"
+      [velocityLead]="0"
       #list
       [items]="rows()"
       [itemHeight]="40"
@@ -185,6 +192,7 @@ export class VirtualKeyed {
   template: `
     <virtual-list
       [windowSize]="1"
+      [velocityLead]="0"
       #list
       [items]="rows()"
       [itemHeight]="300"
@@ -220,6 +228,7 @@ export class VirtualCarousel {
   template: `
     <virtual-list
       [windowSize]="1"
+      [velocityLead]="0"
       #list
       [items]="rows()"
       [itemHeight]="40"
@@ -250,6 +259,7 @@ export class VirtualFeed {
   template: `
     <virtual-list
       [windowSize]="1"
+      [velocityLead]="0"
       #list
       [items]="rows"
       [itemHeight]="40"
@@ -296,6 +306,7 @@ export class BoundTouchIcon {
     @if (measured()) {
       <virtual-list
         [windowSize]="1"
+        [velocityLead]="0"
         #list
         [items]="rows()"
         [estimatedItemHeight]="heightOf"
@@ -312,6 +323,7 @@ export class BoundTouchIcon {
     } @else {
       <virtual-list
         [windowSize]="1"
+        [velocityLead]="0"
         #list
         [items]="rows()"
         [itemHeight]="heightOf"

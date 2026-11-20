@@ -154,10 +154,13 @@ import { page } from '../screen-styles.ts';
         </x-example>
       </x-section>
 
-      <x-section title="Effects" note="Drawn over the whole view, its children included.">
+      <x-section
+        title="Effects"
+        note="Drawn over the whole view, its children included. Not on iOS here."
+      >
         <x-example
           title="filter"
-          note="Each function in the order listed."
+          note="Each function in the order listed. drop-shadow() on Linux and Android."
           code="grayscale(1) | sepia(1) | hue-rotate(90deg) | blur(4px) | drop-shadow(...)"
         >
           <view [style]="row">
@@ -168,7 +171,7 @@ import { page } from '../screen-styles.ts';
         </x-example>
         <x-example
           title="mix-blend-mode"
-          note="A child blended with its parent's background and the children under it."
+          note="A child blended with what is drawn under it."
           code="mix-blend-mode: multiply | screen"
         >
           <view class="blend-host">
@@ -207,25 +210,29 @@ import { page } from '../screen-styles.ts';
       border-bottom-color: var(--line);
     }
 
-    /* The filter rules are scoped: iOS and macOS draw only brightness() and opacity(), and refuse the rest. */
+    /* The filter rules are scoped: iOS draws only brightness() and opacity(), and macOS no drop-shadow(). */
     .fx {
       width: 56px;
       height: 56px;
       border-radius: 8px;
       background-color: rgb(59, 110, 245);
     }
+    .platform-macos .fx-gray,
     .platform-linux .fx-gray,
     .platform-android .fx-gray {
       filter: grayscale(1);
     }
+    .platform-macos .fx-sepia,
     .platform-linux .fx-sepia,
     .platform-android .fx-sepia {
       filter: sepia(1);
     }
+    .platform-macos .fx-hue,
     .platform-linux .fx-hue,
     .platform-android .fx-hue {
       filter: hue-rotate(90deg);
     }
+    .platform-macos .fx-blur,
     .platform-linux .fx-blur,
     .platform-android .fx-blur {
       filter: blur(4px);
@@ -257,11 +264,13 @@ import { page } from '../screen-styles.ts';
       border-radius: 24px;
       background-color: rgb(200, 60, 160);
     }
-    .blend-multiply {
+    .platform-macos .blend-multiply,
+    .platform-linux .blend-multiply {
       left: 25%;
       mix-blend-mode: multiply;
     }
-    .blend-screen {
+    .platform-macos .blend-screen,
+    .platform-linux .blend-screen {
       left: 62%;
       mix-blend-mode: screen;
     }

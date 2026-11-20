@@ -265,6 +265,7 @@ if(NGN_TESTS)
         appkit/menu-bar.mm appkit/tests/menu-bar.test.mm
         appkit/system.mm appkit/tests/system.test.mm
         appkit/image-request.mm appkit/tests/image-request.test.mm
+        appkit/view-effects.mm appkit/tests/view-effects.test.mm
         appkit/tests/pointer-buttons.test.mm
         appkit/test-launch.mm appkit/desktop-expo.mm appkit/tests/test-launch.test.mm appkit/tests/locales.test.mm
         appkit/tests/desktop-expo.test.mm)
