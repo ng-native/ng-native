@@ -29,8 +29,9 @@ EAS Update does not update desktop apps. A packaged Mac or Linux app takes Expo 
 from a server you host, at the `updates.url` in `app.json`: the desktop host downloads the launch
 asset and the update's other assets, checks each against the manifest's hash, and, with
 `updates.codeSigningCertificate` set, checks the manifest's signature. An update whose launch
-crashes before it has shown its first frame for 10 seconds (or been quit cleanly) is not run again;
-once it has, a later crash does not roll it back, and an update downloaded before the app itself was
+crashes before it has shown its first frame for 10 seconds (or been quit cleanly once its bundle has
+loaded) is not run again, so a quit while the bundle is still loading counts as a failed launch; once
+it has, a later crash does not roll it back, and an update downloaded before the app itself was
 updated (by Sparkle, a package manager or Flatpak) does not run over the new version's bundle. The
 [Updates](/packages/expo/updates) service is the same on the desktop: `check()` and `apply()`, with
 `enabled` false in development and without an `updates.url`. The host asks the server with
