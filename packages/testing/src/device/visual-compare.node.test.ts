@@ -61,6 +61,23 @@ describe("a node's committed style", () => {
     );
   });
 
+  it('compares numbers exactly, and objects whatever order their keys are in', () => {
+    assert.equal(styleMismatches(node({ flexGrow: 0.005 }), { flexGrow: 0 }).length, 1);
+    assert.deepEqual(
+      styleMismatches(node({ shadowOffset: { width: 2, height: 4 } }), {
+        shadowOffset: { height: 4, width: 2 },
+      }),
+      [],
+    );
+    assert.equal(
+      styleMismatches(node({ transform: [{ scale: 2 }, { rotate: '45deg' }] }), {
+        transform: [{ rotate: '45deg' }, { scale: 2 }],
+      }).length,
+      1,
+      'a transform in another order is another transform',
+    );
+  });
+
   it('names each property that differs, with what it has', () => {
     const card = node({ backgroundColor: 0xff3366cc, borderRadius: 16 });
     const misses = styleMismatches(card, {

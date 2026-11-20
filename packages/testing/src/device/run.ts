@@ -143,9 +143,12 @@ export async function runFiles(
     override async onAfterRunTask(test: unknown): Promise<void> {
       await super.onAfterRunTask?.(test);
       current = undefined;
-      cleanup();
-      resetScreenshotNames();
-      await resetAnimations();
+      try {
+        cleanup();
+        resetScreenshotNames();
+      } finally {
+        await resetAnimations();
+      }
     }
 
     override async onAfterRunSuite(suite: unknown): Promise<void> {

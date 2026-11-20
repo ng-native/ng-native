@@ -26,6 +26,7 @@ const css = `
   view.held { animation: rise 1s linear 200ms 1 forwards; }
   view.played { animation: rise 1s linear; }
   view.spinning { animation: rise 1s linear infinite; }
+  view.played.paused { animation-play-state: paused; }
 `;
 
 function scene(motion?: 'on' | 'off') {
@@ -73,6 +74,13 @@ describe('motion off', () => {
     s.classes('played');
     // Played, if for no time: it starts and ends, so what waits for animationend (Angular's
     // animate.leave) still goes on.
+    s.tick(0);
+    assert.equal(s.painted('width'), 100);
+  });
+
+  it('ends a paused finite animation too, rather than holding it', () => {
+    const s = scene('off');
+    s.classes('played paused');
     s.tick(0);
     assert.equal(s.painted('width'), 100);
   });

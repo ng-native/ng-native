@@ -14342,8 +14342,9 @@ export class Engine implements HostEngine {
   }
 
   /**
-   * Turn motion off or back on: see `EngineOptions.motion`. It holds from the next change a node's
-   * style makes; what is already moving goes on to its end.
+   * Turn motion off or back on: see `EngineOptions.motion`. It holds for each node from its next
+   * style change: a transition or animation already running goes on until the node restyles,
+   * when a finite animation lands on its end and one that repeats forever is cancelled.
    */
   setMotion(motion: 'on' | 'off' = 'on'): void {
     this.motion = motion;
@@ -14354,7 +14355,8 @@ export class Engine implements HostEngine {
     if (!spec || this.motion === 'on') return spec;
     // One that repeats forever has no end to show: not played, so the resting style shows.
     if (spec.iterations === null || spec.iterations === Infinity) return undefined;
-    return { ...spec, duration: 0, delay: 0 };
+    // Not held paused either: one that takes no time ends, and its animationend fires.
+    return { ...spec, duration: 0, delay: 0, paused: false };
   }
 
   /** A node's transitions as motion has them: as written, or taking no time. */

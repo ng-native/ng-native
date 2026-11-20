@@ -51,10 +51,7 @@ function mismatch(key: string, want: unknown, got: unknown): string | null {
     return a && b && sameColour(a, b, 0) ? null : `${key}: ${show(a, want)}, got ${show(b, got)}`;
   }
   const [a, b] = [points(want), points(got)];
-  const equal =
-    typeof a === 'number' && typeof b === 'number'
-      ? Math.abs(a - b) < 0.01
-      : JSON.stringify(a) === JSON.stringify(b);
+  const equal = sameValue(a, b);
   return equal ? null : `${key}: ${JSON.stringify(want)}, got ${JSON.stringify(got)}`;
 }
 
@@ -68,4 +65,29 @@ export function styleMismatches(node: FakeFabricNode, expected: Record<string, u
     }
   }
   return misses;
+}
+
+/**
+ * Equal as a style value: numbers exactly (`flexGrow: 0.005` is not 0), arrays in order (a
+ * transform's), and objects whatever order their keys were written in (`shadowOffset`).
+ */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((each, i) => sameValue(each, b[i]))
+    );
+  }
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    const keys = Object.keys(a);
+    return (
+      keys.length === Object.keys(b).length &&
+      keys.every((key) =>
+        sameValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+      )
+    );
+  }
+  return Object.is(a, b);
 }
