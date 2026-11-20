@@ -304,7 +304,9 @@ Items fill a line from the leading edge, so the first column is on the right in 
 layout, and every column is the same width. A line is as tall as its tallest item, and the others
 on it stretch to that height. A sticky row takes a line to itself, so a month's header can pin
 across a whole grid while its photos scroll under it, which `SectionList` cannot do with columns.
-`contentPadding` insets the grid as it does rows.
+`contentPadding` insets the grid as it does rows. A separator template is drawn under each item but
+those on the last line, as wide as its column, with the first item of the next line as its
+`trailingItem`; `FlatList` draws one a line, given the line's items.
 
 Columns are for a vertical list with `itemHeight`, as `numColumns` is vertical only in React
 Native. On a horizontal list, or rows that size themselves, the list keeps one item a line and says

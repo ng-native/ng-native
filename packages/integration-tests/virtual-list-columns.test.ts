@@ -242,16 +242,16 @@ describe('a windowed list in columns', () => {
     assert.equal(await reach(1501), await reach(1500));
   });
 
-  it('draws separators between lines, not under the items of the last', async () => {
+  it('draws separators between lines, not under the items of the last, before the next line', async () => {
     const rendered = await render(mod['VirtualColumnsSeparated'] as Type<unknown>);
     const host = flatten(rendered.fabric.committed).find((n) => n.viewName === 'ScrollView')!;
     await fireEvent(host, 'layout', { layout: { width: WIDTH, height: VIEWPORT } });
     const separators = flatten(rendered.fabric.committed)
-      .map((n) => /^sep(\d+)$/.exec(String(n.props['nativeID'] ?? ''))?.[1])
-      .filter((index) => index !== undefined)
-      .map(Number)
-      .sort((a, b) => a - b);
-    assert.deepEqual(separators, [0, 1, 2]);
+      .map((n) => /^sep(\d+-\d+)$/.exec(String(n.props['nativeID'] ?? ''))?.[1])
+      .filter((pair) => pair !== undefined)
+      .sort();
+    // Each comes before the first item of the next line, not the item beside its own.
+    assert.deepEqual(separators, ['0-3', '1-3', '2-3']);
   });
 
   it('keeps the real sticky row pinned beside a sticky index past the end', async () => {

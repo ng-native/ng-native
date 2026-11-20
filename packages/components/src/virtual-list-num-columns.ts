@@ -26,7 +26,9 @@ import { VIRTUAL_LIST_LAYOUT, type VirtualListLayout } from './virtual-list-layo
  *
  * ponytail: rows that size themselves stay one to a line, with a warning in development, since a
  * line's height would wait on every item in it measuring. FlatList's `columnWrapperStyle` has no
- * equivalent: there is no view per line to style. A separator is drawn under each item.
+ * equivalent: there is no view per line to style. A separator is drawn under each item but the
+ * last line's, with the next line's first item as its `trailingItem`, where FlatList draws one a
+ * line.
  */
 @Directive({
   selector: 'virtual-list[virtualListNumColumns]',

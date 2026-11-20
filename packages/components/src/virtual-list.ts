@@ -759,9 +759,10 @@ export class VirtualList<T> extends ScrollViewProps {
     const index = this.heldIndex(anchor, items);
     if (index === 'start') return this.showStart();
     if (index < 0) return this.atOffset();
-    // No further than native can scroll, past the footer and the inset after the content: native
-    // stops there, and the window must be built for where it is. Not cut at the start, where an
-    // inset before the rows, or a bounce, puts native above zero.
+    // No further than the content lets native scroll, past the footer and the inset after it:
+    // Android stops a scroll there and iOS would show blank space past it, and the window must be
+    // built for where it is. Not cut at the start, where an inset before the rows, or a bounce,
+    // puts native above zero.
     const header = this.headerHeight();
     const want = this.topOf(index) + anchor.within;
     const held = Math.min(want, this.reachable(header + want) - header);
@@ -1310,7 +1311,8 @@ export class VirtualList<T> extends ScrollViewProps {
       if (row.parked || this.onLastLine(row.index)) continue;
       const style = this.measuring() ? this.measuredGapStyle(row) : this.gapStyle(row);
       if (!style) continue;
-      const trailingItem = items[row.index + 1]!;
+      // What follows it along the list: the next line's first item, not the one beside it.
+      const trailingItem = items[this.lineStart(this.lineOf(row.index) + 1)]!;
       gaps.push({
         index: row.index,
         style,

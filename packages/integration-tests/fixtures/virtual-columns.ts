@@ -105,8 +105,8 @@ function tiles(count: number): Tile[] {
       [virtualListNumColumns]="3"
       [style]="fill"
     >
-      <ng-template virtualListSeparator let-index="leadingIndex"
-        ><view [nativeID]="'sep' + index"></view
+      <ng-template virtualListSeparator let-index="leadingIndex" let-trailing="trailingItem"
+        ><view [nativeID]="'sep' + index + '-' + trailing.id"></view
       ></ng-template>
       @for (row of list.window(); track row.slot) {
         <view [style]="row.style"
