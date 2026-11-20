@@ -200,11 +200,11 @@ for a view; a second `record()` rejects until the first stops.
 On Linux the camera comes through the Camera portal, which asks for access once and keeps the
 answer, and its frames through PipeWire, with GStreamer's PipeWire plugin installed. `facing` and
 `mirror` do nothing, since the portal offers the cameras as one. A picture is a JPEG or PNG of the
-newest frame. The movie is a QuickTime file, H.264 where an x264 or OpenH264 encoder is installed
-and Motion JPEG otherwise. It has sound where an AAC encoder is installed and a microphone is
-present: PipeWire records silence with no error when there is none, so with no microphone it
-records without sound. Linux has no microphone permission, so `microphonePermission()` reads as
-granted.
+newest frame. The movie is a QuickTime file, H.264 where an x264 or OpenH264 encoder and `h264parse`
+are installed and Motion JPEG otherwise. It has sound where an AAC encoder is installed and a
+microphone is present: PipeWire records silence with no error when there is none, so with no
+microphone it records without sound. Linux has no microphone permission, so `microphonePermission()`
+reads as granted.
 
 ## Reference
 

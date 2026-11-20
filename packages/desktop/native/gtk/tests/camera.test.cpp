@@ -14,6 +14,7 @@
 #include <gst/pbutils/pbutils.h>
 #include <react/renderer/core/PropsParserContext.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -38,14 +39,15 @@ struct Folder {
 };
 
 // The test camera, and the views the host would share, used for the test and dropped after it.
-// `present`: whether there is a microphone, which PipeWire records silence without.
+// `present`: whether there is a microphone, which PipeWire records silence without. `source`: the
+// camera's stream.
 struct Camera {
   std::shared_ptr<ngn::AudioInput> microphone;
   std::shared_ptr<ngn::CameraHardware> hardware;
   std::shared_ptr<ngn::CameraViews> views = std::make_shared<ngn::CameraViews>();
-  explicit Camera(bool present = true)
+  explicit Camera(bool present = true, const char *source = kRed)
       : microphone(ngn::gtk::makeAudioInput({.source = "audiotestsrc is-live=true", .microphone = [present] { return present; }})),
-        hardware(ngn::gtk::makeCameraHardware({.source = kRed, .microphone = microphone, .microphoneSource = "audiotestsrc is-live=true"})) {
+        hardware(ngn::gtk::makeCameraHardware({.source = source, .microphone = microphone, .microphoneSource = "audiotestsrc is-live=true"})) {
     REQUIRE(ngn::testing::gtkReady());
     REQUIRE(hardware);
     ngn::gtk::useCameraHardware(hardware, views, false);
@@ -79,6 +81,31 @@ std::string pathOf(const std::string &uri) {
   g_free(path);
   return out;
 }
+
+// A module's promise, answered into storage its callbacks share, so a wait that gives up leaves
+// them nothing gone to write to.
+using Answer = std::shared_ptr<std::optional<dynamic>>;
+Answer start(ngn::NativeModule &module, const std::string &method, dynamic args) {
+  auto answer = std::make_shared<std::optional<dynamic>>();
+  module.callWithPromise(method, args,
+                         {.resolve = [answer](dynamic v) { *answer = v; },
+                          .reject = [answer](const std::string &m) { *answer = dynamic::object("rejected", m); }});
+  return answer;
+}
+
+// A sheet's answer, kept the same way, and the sheet cancelled if a test leaves it open.
+struct Shot {
+  std::shared_ptr<std::optional<std::pair<ngn::CameraTake, std::string>>> answer =
+      std::make_shared<std::optional<std::pair<ngn::CameraTake, std::string>>>();
+  std::function<void(ngn::CameraTake, const std::string &)> done() {
+    return [answer = answer](ngn::CameraTake take, const std::string &error) { answer->emplace(std::move(take), error); };
+  }
+  ~Shot() {
+    if (GtkWidget *cancel = ngn::gtk::cameraSheetCancel()) {
+      g_signal_emit_by_name(cancel, "clicked");
+    }
+  }
+};
 
 struct Clip {
   int width{0}, height{0};
@@ -146,27 +173,32 @@ TEST_CASE("Camera on Linux shows a mounted view's camera, takes its pictures and
   CHECK(std::string(gdk_pixbuf_format_get_name(format)) == "png");
 
   // A recording, with sound, until it is stopped.
-  std::optional<dynamic> recorded;
-  module->callWithPromise("record", dynamic::array(kCamera, dynamic::object()),
-                          {.resolve = [&](dynamic v) { recorded = v; }, .reject = [&](const std::string &m) { recorded = dynamic::object("rejected", m); }});
+  auto recorded = start(*module, "record", dynamic::array(kCamera, dynamic::object()));
   gint64 until = g_get_monotonic_time() + 700 * 1000;
   ngn::testing::runUntil([&] { return g_get_monotonic_time() > until; });
   ask(*module, "stopRecording", dynamic::array(kCamera));
-  ngn::testing::runUntil([&] { return recorded.has_value(); });
-  REQUIRE_FALSE(recorded->count("rejected"));
-  auto clip = discover(pathOf(recorded->at("uri").asString()));
+  ngn::testing::runUntil([&] { return recorded->has_value(); });
+  REQUIRE_FALSE((*recorded)->count("rejected"));
+  auto clip = discover(pathOf((*recorded)->at("uri").asString()));
   REQUIRE(clip);
   CHECK(clip->width == 64);
   CHECK(clip->height == 48);
   CHECK(clip->sound);
   CHECK(clip->seconds > 0.3);
 
-  // A recording up to its maxDuration ends by itself.
-  recorded.reset();
-  module->callWithPromise("record", dynamic::array(kCamera, dynamic::object("maxDuration", 0.5)),
-                          {.resolve = [&](dynamic v) { recorded = v; }, .reject = [&](const std::string &m) { recorded = dynamic::object("rejected", m); }});
-  ngn::testing::runUntil([&] { return recorded.has_value(); });
-  REQUIRE_FALSE(recorded->count("rejected"));
+  // A recording up to its maxDuration ends by itself, and its timer, gone once it fired, is not
+  // removed again (GLib says so as a critical).
+  int criticals = 0;
+  struct Handler {
+    guint id;
+    ~Handler() { g_log_remove_handler("GLib", id); }
+  } handler{g_log_set_handler("GLib", G_LOG_LEVEL_CRITICAL, [](const gchar *, GLogLevelFlags, const gchar *, gpointer count) {
+    ++*static_cast<int *>(count);
+  }, &criticals)};
+  recorded = start(*module, "record", dynamic::array(kCamera, dynamic::object("maxDuration", 0.5)));
+  ngn::testing::runUntil([&] { return recorded->has_value(); });
+  REQUIRE_FALSE((*recorded)->count("rejected"));
+  CHECK(criticals == 0);
 
   // Inactive, the camera stops: the module finds none.
   views.update(views.mounting->tree().find(kCamera)->view, cameraShadow(dynamic::object("active", false)).props);
@@ -180,12 +212,15 @@ TEST_CASE("ImagePicker's camera on Linux takes a photo in its own dialog, and an
   auto sheet = ngn::gtk::makeCameraSheet();
   ngn::CameraSheetRequest request;
   request.photo.path = (folder.path / "shot.jpg").string();
-  std::optional<std::pair<ngn::CameraTake, std::string>> answer;
-  sheet->shoot(request, [&](ngn::CameraTake take, const std::string &error) { answer.emplace(take, error); });
+  Shot shot;
+  auto &answer = *shot.answer;
+  sheet->shoot(request, shot.done());
   ngn::testing::runUntil([] { return ngn::gtk::cameraSheetWindow() != nullptr; });
   CHECK(std::string(gtk_button_get_label(GTK_BUTTON(ngn::gtk::cameraSheetShutter()))) == "Take Photo");
-  // Once the camera shows a frame, the shutter takes it.
+  // The camera starts off the main loop: until it shows a frame there is nothing to take.
+  CHECK_FALSE(gtk_widget_get_sensitive(ngn::gtk::cameraSheetShutter()));
   ngn::testing::runUntil([] { return gtk_picture_get_paintable(ngn::gtk::cameraSheetPreview()) != nullptr; });
+  CHECK(gtk_widget_get_sensitive(ngn::gtk::cameraSheetShutter()));
   g_signal_emit_by_name(ngn::gtk::cameraSheetShutter(), "clicked");
   ngn::testing::runUntil([&] { return answer.has_value(); });
   CHECK(answer->second.empty());
@@ -195,7 +230,7 @@ TEST_CASE("ImagePicker's camera on Linux takes a photo in its own dialog, and an
   CHECK(ngn::gtk::cameraSheetWindow() == nullptr);
 
   answer.reset();
-  sheet->shoot(request, [&](ngn::CameraTake take, const std::string &error) { answer.emplace(take, error); });
+  sheet->shoot(request, shot.done());
   ngn::testing::runUntil([] { return ngn::gtk::cameraSheetWindow() != nullptr; });
   g_signal_emit_by_name(ngn::gtk::cameraSheetCancel(), "clicked");
   REQUIRE(answer);
@@ -212,9 +247,11 @@ TEST_CASE("ImagePicker's camera on Linux records a video in its own dialog") {
   request.photos = false;
   request.videos = true;
   request.video.path = (folder.path / "clip.mov").string();
-  std::optional<std::pair<ngn::CameraTake, std::string>> answer;
-  sheet->shoot(request, [&](ngn::CameraTake take, const std::string &error) { answer.emplace(take, error); });
+  Shot shot;
+  auto &answer = *shot.answer;
+  sheet->shoot(request, shot.done());
   ngn::testing::runUntil([] { return ngn::gtk::cameraSheetWindow() != nullptr; });
+  ngn::testing::runUntil([] { return gtk_picture_get_paintable(ngn::gtk::cameraSheetPreview()) != nullptr; });
   GtkWidget *shutter = ngn::gtk::cameraSheetShutter();
   CHECK(std::string(gtk_button_get_label(GTK_BUTTON(shutter))) == "Record");
   g_signal_emit_by_name(shutter, "clicked");
@@ -227,6 +264,18 @@ TEST_CASE("ImagePicker's camera on Linux records a video in its own dialog") {
   REQUIRE(answer->first.video);
   CHECK(answer->first.video->width == 64);
   CHECK(answer->first.video->duration > 300);
+
+  // Cancelled while it records: no asset, and no movie left behind.
+  answer.reset();
+  request.video.path = (folder.path / "cancelled.mov").string();
+  sheet->shoot(request, shot.done());
+  ngn::testing::runUntil([] { return gtk_picture_get_paintable(ngn::gtk::cameraSheetPreview()) != nullptr; });
+  g_signal_emit_by_name(ngn::gtk::cameraSheetShutter(), "clicked");
+  ngn::testing::runUntil([&] { return std::filesystem::exists(request.video.path); });
+  g_signal_emit_by_name(ngn::gtk::cameraSheetCancel(), "clicked");
+  REQUIRE(answer);
+  CHECK_FALSE(answer->first.video);
+  ngn::testing::runUntil([&] { return !std::filesystem::exists(request.video.path); });
 }
 TEST_CASE("Camera on Linux records without sound where there is no microphone") {
   Camera camera(false);
@@ -247,5 +296,43 @@ TEST_CASE("Camera on Linux records without sound where there is no microphone") 
   REQUIRE(clip);
   CHECK(clip->width == 64);
   CHECK_FALSE(clip->sound);
+}
+TEST_CASE("Camera on Linux sends mountError and stops when the camera's stream fails after it started") {
+  // The stream fails after its fifth frame.
+  Camera camera(true, "videotestsrc is-live=true pattern=4 ! video/x-raw,width=64,height=48,framerate=30/1 ! identity error-after=5");
+  MountedViews views;
+  ngn::testing::SentEvents<facebook::react::ViewEventEmitter> sent;
+  auto shadow = cameraShadow(dynamic::object("active", true));
+  shadow.eventEmitter = sent.emitter;
+  views.add(shadow);
+  ngn::testing::runUntil([&] { return sent.count("topMountError") == 1; });
+  CHECK(sent.count("topCameraReady") == 1);
+  CHECK_FALSE(camera.views->find(kCamera));
+}
+
+TEST_CASE("Camera on Linux sends cameraReady once a start, however many frames come") {
+  Camera camera;
+  MountedViews views;
+  ngn::testing::SentEvents<facebook::react::ViewEventEmitter> sent;
+  auto shadow = cameraShadow(dynamic::object("active", true));
+  shadow.eventEmitter = sent.emitter;
+  views.add(shadow);
+  auto *d = ngn::gtk::viewData(views.view(kCamera));
+  ngn::testing::runUntil([&] { return gtk_picture_get_paintable(ngn::gtk::cameraPicture(*d->camera)) != nullptr; });
+  gint64 until = g_get_monotonic_time() + 300 * 1000;
+  ngn::testing::runUntil([&] { return g_get_monotonic_time() > until; });
+  CHECK(sent.count("topCameraReady") == 1);
+}
+
+TEST_CASE("Camera on Linux records H.264 through h264parse, and Motion JPEG without either") {
+  auto with = [](std::initializer_list<const char *> names) {
+    std::vector<std::string> have(names.begin(), names.end());
+    return [have](const char *name) { return std::find(have.begin(), have.end(), name) != have.end(); };
+  };
+  CHECK(ngn::gtk::cameraVideoEncoder("avc1", with({"x264enc", "openh264enc", "h264parse"})) == "x264enc ! h264parse");
+  CHECK(ngn::gtk::cameraVideoEncoder("avc1", with({"openh264enc", "h264parse"})) == "openh264enc ! h264parse");
+  CHECK(ngn::gtk::cameraVideoEncoder("avc1", with({"openh264enc"})) == "jpegenc");
+  CHECK(ngn::gtk::cameraVideoEncoder("avc1", with({})) == "jpegenc");
+  CHECK(ngn::gtk::cameraVideoEncoder("jpeg", with({"x264enc", "h264parse"})) == "jpegenc");
 }
 #endif

@@ -7,9 +7,9 @@
 // A running camera is `pipewiresrc` on the PipeWire connection the portal opens for the app, its
 // frames shown as textures (gst-frames.h). A picture is the newest frame, written as a JPEG by
 // gdk-pixbuf or a PNG by GDK. A recording is a second stream from the camera into a QuickTime
-// movie, H.264 where an encoder is installed (x264 or OpenH264) and Motion JPEG otherwise, with
-// AAC sound from the default microphone when it is allowed, an AAC encoder is installed and the
-// view is not muted.
+// movie, H.264 where an encoder (x264 or OpenH264) and h264parse are installed and Motion JPEG
+// otherwise, with AAC sound from the default microphone when it is allowed and present, an AAC
+// encoder is installed and the view is not muted. A camera starts off the main loop.
 //
 // `facing` and `mirror` do nothing: the portal offers the cameras as one.
 #pragma once
@@ -51,6 +51,11 @@ std::shared_ptr<CameraSurface> makeCameraSurface(GtkWidget *view, int tag, std::
 void applyCameraSurface(CameraSurface &surface, const CameraProps &props);
 GtkWidget *cameraWidget(CameraSurface &surface);
 GtkPicture *cameraPicture(CameraSurface &surface);
+
+// The video encoder a recording uses for `codec`, as a gst-launch description, by what `installed`
+// says GStreamer has: H.264 (x264, then OpenH264) behind h264parse, which qtmux needs, and Motion
+// JPEG for "jpeg" or where either is missing.
+std::string cameraVideoEncoder(const std::string &codec, const std::function<bool(const char *)> &installed);
 
 // The host's camera screen for ImagePicker: a dialog over the front window with the preview,
 // Cancel (Escape) and the shutter, and a Photo and Video switch for a request that takes either.

@@ -98,10 +98,10 @@ own.
 `capture()` shows the desktop host's own camera window over the window in front, with the camera's
 preview from the Camera portal, Cancel (Escape) and Take Photo, as on macOS, and a Photo and Video
 switch for `mediaTypes: ['images', 'videos']`. `cameraPermission` is the portal's camera access,
-asked for once. The video is a QuickTime movie, H.264 where an x264 or OpenH264 encoder is
-installed and Motion JPEG otherwise, with sound only where a microphone is present and an AAC
-encoder is installed. With no Camera portal the permission is denied, and on a computer with no
-camera `capture()` rejects. Without GStreamer's PipeWire plugin there is no camera at all:
+asked for once. The video is a QuickTime movie, H.264 where an x264 or OpenH264 encoder and
+`h264parse` are installed and Motion JPEG otherwise, with sound only where a microphone is present
+and an AAC encoder is installed. With no Camera portal the permission is denied, and on a computer
+with no camera `capture()` rejects. Without GStreamer's PipeWire plugin there is no camera at all:
 `capture()` resolves to an empty list and `cameraPermission` reads as denied.
 
 ## Permissions

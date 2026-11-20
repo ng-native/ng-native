@@ -6,12 +6,14 @@
 #include "portal.h"
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
+#include <glib/gstdio.h>
 #include <gst/pbutils/pbutils.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include <algorithm>
 #include <atomic>
+#include <thread>
 #include <mutex>
 #include <optional>
 
@@ -33,6 +35,14 @@ std::string firstInstalled(std::initializer_list<const char *> names) {
 }
 
 class GstCameraCapture;
+
+// Runs `fn` on the main loop.
+void onMainLoop(std::function<void()> fn) {
+  g_idle_add_full(G_PRIORITY_DEFAULT, [](gpointer data) -> gboolean {
+    (*static_cast<std::function<void()> *>(data))();
+    return G_SOURCE_REMOVE;
+  }, new std::function<void()>(std::move(fn)), [](gpointer data) { delete static_cast<std::function<void()> *>(data); });
+}
 
 class PortalCamera final : public CameraHardware {
  public:
@@ -136,6 +146,9 @@ class GstCameraCapture final : public CameraCapture, public std::enable_shared_f
       : camera_(std::move(camera)), pipeline_(pipeline), sink_(sink), fd_(fd), frames_(std::move(frames)) {}
 
   ~GstCameraCapture() override {
+    if (busWatch_) {
+      g_source_remove(busWatch_);
+    }
     endRecording(true, "");
     gst_element_set_state(pipeline_, GST_STATE_NULL);
     gst_object_unref(sink_);
@@ -198,10 +211,7 @@ class GstCameraCapture final : public CameraCapture, public std::enable_shared_f
       done(error);
       return;
     }
-    std::string video = request.codec == "jpeg" ? std::string("jpegenc") : firstInstalled({"x264enc", "openh264enc"});
-    if (video.empty()) {
-      video = "jpegenc";
-    }
+    std::string video = cameraVideoEncoder(request.codec, [](const char *name) { return gstreamerHas({name}); });
     std::string aac = request.sound ? firstInstalled({"fdkaacenc", "avenc_aac", "voaacenc"}) : "";
     const auto &setup = camera_->setup();
     std::string line = "videoconvert name=convert ! video/x-raw,format=I420 ! " + video + " ! queue ! qtmux name=mux ! filesink name=file";
@@ -268,6 +278,12 @@ class GstCameraCapture final : public CameraCapture, public std::enable_shared_f
       auto *limitWeak = new std::weak_ptr<GstCameraCapture>(weak_from_this());
       r->limit = g_timeout_add_full(G_PRIORITY_DEFAULT, static_cast<guint>(request.maxDuration * 1000), [](gpointer data) -> gboolean {
         if (auto self = static_cast<std::weak_ptr<GstCameraCapture> *>(data)->lock()) {
+          {
+            std::lock_guard lock(self->mutex_);
+            if (self->recording_) {
+              self->recording_->limit = 0;
+            }
+          }
           self->stopRecording();
         }
         return G_SOURCE_REMOVE;
@@ -335,13 +351,23 @@ class GstCameraCapture final : public CameraCapture, public std::enable_shared_f
     if (!r) {
       return;
     }
+    std::string failed = error;
     if (wait) {
       gst_element_send_event(r->pipeline, gst_event_new_eos());
       GstBus *bus = gst_element_get_bus(r->pipeline);
-      if (GstMessage *end = gst_bus_timed_pop_filtered(bus, 3 * GST_SECOND, static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR))) {
+      GstMessage *end = gst_bus_timed_pop_filtered(bus, 3 * GST_SECOND, static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
+      gst_object_unref(bus);
+      if (!end) {
+        failed = "the recording did not finish writing its file";
+      } else if (GST_MESSAGE_TYPE(end) == GST_MESSAGE_ERROR && failed.empty()) {
+        GError *why = nullptr;
+        gst_message_parse_error(end, &why, nullptr);
+        failed = why && why->message ? why->message : "the recording failed";
+        g_clear_error(&why);
+      }
+      if (end) {
         gst_message_unref(end);
       }
-      gst_object_unref(bus);
     }
     if (r->poll) {
       g_source_remove(r->poll);
@@ -355,10 +381,36 @@ class GstCameraCapture final : public CameraCapture, public std::enable_shared_f
       close(r->fd);
     }
     if (r->done) {
-      r->done(error);
+      r->done(failed);
     }
   }
 
+ public:
+  // Called on the main loop with the stream's error, once, if it fails after it started.
+  void watchErrors(std::function<void(const std::string &)> failed) {
+    GstBus *bus = gst_element_get_bus(pipeline_);
+    auto *watch = new std::pair<std::weak_ptr<GstCameraCapture>, std::function<void(const std::string &)>>(weak_from_this(), std::move(failed));
+    busWatch_ = gst_bus_add_watch_full(bus, G_PRIORITY_DEFAULT, [](GstBus *, GstMessage *message, gpointer data) -> gboolean {
+      if (GST_MESSAGE_TYPE(message) != GST_MESSAGE_ERROR) {
+        return G_SOURCE_CONTINUE;
+      }
+      auto &[weak, failed] = *static_cast<std::pair<std::weak_ptr<GstCameraCapture>, std::function<void(const std::string &)>> *>(data);
+      if (auto self = weak.lock()) {
+        self->busWatch_ = 0;
+        GError *why = nullptr;
+        gst_message_parse_error(message, &why, nullptr);
+        std::string text = why && why->message ? why->message : "the camera's stream failed";
+        g_clear_error(&why);
+        auto call = failed;
+        call("Camera stopped - " + text);
+      }
+      return G_SOURCE_REMOVE;
+    }, watch, [](gpointer data) { delete static_cast<std::pair<std::weak_ptr<GstCameraCapture>, std::function<void(const std::string &)>> *>(data); });
+    gst_object_unref(bus);
+  }
+
+ private:
+  guint busWatch_{0};
   std::shared_ptr<PortalCamera> camera_;
   GstElement *pipeline_;
   GstElement *sink_;
@@ -383,7 +435,20 @@ std::shared_ptr<GstCameraCapture> startCapture(const std::shared_ptr<CameraHardw
   auto frames = std::make_shared<Frames>();
   GstElement *pipeline = GST_ELEMENT(gst_object_ref_sink(gst_pipeline_new(nullptr)));
   GstElement *convert = gst_element_factory_make("videoconvert", nullptr);
-  GstElement *sink = GST_ELEMENT(gst_object_ref_sink(makeFrameSink(frames, false)));
+  GstElement *made = makeFrameSink(frames, false);
+  if (!convert || !made) {
+    gst_object_unref(gst_object_ref_sink(source));
+    if (convert) {
+      gst_object_unref(gst_object_ref_sink(convert));
+    }
+    gst_object_unref(pipeline);
+    if (fd >= 0) {
+      close(fd);
+    }
+    error = "Camera could not be started - GStreamer's videoconvert or appsink is not installed.";
+    return nullptr;
+  }
+  GstElement *sink = GST_ELEMENT(gst_object_ref_sink(made));
   gst_bin_add_many(GST_BIN(pipeline), source, convert, sink, nullptr);
   auto capture = std::make_shared<GstCameraCapture>(camera, pipeline, sink, fd, frames);
   if (!gst_element_link_many(source, convert, sink, nullptr) ||
@@ -394,11 +459,34 @@ std::shared_ptr<GstCameraCapture> startCapture(const std::shared_ptr<CameraHardw
   return capture;
 }
 
+// Starts a camera off the main loop, where the portal's call and the stream's start would block
+// it, and answers there. A capture `done` does not keep is stopped on the main loop.
+void startCaptureAsync(std::shared_ptr<CameraHardware> hardware,
+                       std::function<void(std::shared_ptr<GstCameraCapture>, const std::string &)> done) {
+  std::thread([hardware = std::move(hardware), done = std::move(done)]() mutable {
+    std::string error;
+    auto capture = startCapture(hardware, error);
+    onMainLoop([capture = std::move(capture), error, done = std::move(done)]() mutable { done(std::move(capture), error); });
+  }).detach();
+}
+
 std::shared_ptr<CameraHardware> gHardware;
 std::shared_ptr<CameraViews> gViews;
 bool gNoPrompts = false;
 
 } // namespace
+
+std::string cameraVideoEncoder(const std::string &codec, const std::function<bool(const char *)> &installed) {
+  if (codec != "jpeg" && installed("h264parse")) {
+    // qtmux takes H.264 in its avc form, which h264parse makes of an encoder's byte stream.
+    for (const char *encoder : {"x264enc", "openh264enc"}) {
+      if (installed(encoder)) {
+        return std::string(encoder) + " ! h264parse";
+      }
+    }
+  }
+  return "jpegenc";
+}
 
 std::shared_ptr<CameraHardware> makeCameraHardware(CameraSetup setup) {
   if (!gstreamerHas({"videoconvert", "appsink"}) || (setup.source.empty() && !gstreamerHas({"pipewiresrc"}))) {
@@ -425,6 +513,10 @@ struct CameraSurface : std::enable_shared_from_this<CameraSurface> {
   bool asking{false};
   bool asked{false};
   bool reported{false};
+  // A start in flight, off the main loop.
+  bool starting{false};
+  // Whether this start has sent cameraReady.
+  bool ready{false};
   // Which start a frame belongs to: a stop moves it on.
   uint64_t start{0};
 
@@ -465,7 +557,7 @@ struct CameraSurface : std::enable_shared_from_this<CameraSurface> {
       stop();
       return;
     }
-    if (!gHardware || capture || asking) {
+    if (!gHardware || capture || asking || starting) {
       return;
     }
     auto mount = cameraMount(gHardware->access(), gHardware->hasCamera(), gNoPrompts, asked);
@@ -489,19 +581,44 @@ struct CameraSurface : std::enable_shared_from_this<CameraSurface> {
       report(cameraMountError(mount));
       return;
     }
-    std::string error;
-    capture = startCapture(gHardware, error);
-    if (!capture) {
-      report(error);
-      return;
-    }
+    starting = true;
     uint64_t at = ++start;
+    std::weak_ptr<CameraSurface> weak = weak_from_this();
+    startCaptureAsync(gHardware, [weak, at](std::shared_ptr<GstCameraCapture> started, const std::string &error) {
+      auto self = weak.lock();
+      if (!self) {
+        return;
+      }
+      self->starting = false;
+      if (self->start != at) {
+        // Stopped while it started: what it started goes, and the view starts again if it should.
+        self->follow();
+        return;
+      }
+      if (!started) {
+        self->report(error);
+        return;
+      }
+      self->attach(std::move(started), at);
+    });
+  }
+
+  void attach(std::shared_ptr<GstCameraCapture> started, uint64_t at) {
+    capture = std::move(started);
+    ready = false;
     auto *self = this;
-    watcher = capture->frames()->watch([self, at, first = true](GdkTexture *texture) mutable {
+    watcher = capture->frames()->watch([self, at](GdkTexture *texture) {
       gtk_picture_set_paintable(GTK_PICTURE(self->picture), texture ? GDK_PAINTABLE(texture) : nullptr);
-      if (texture && first && self->start == at) {
-        first = false;
+      if (texture && !self->ready && self->start == at) {
+        self->ready = true;
         self->send("cameraReady", folly::dynamic::object());
+      }
+    });
+    std::weak_ptr<CameraSurface> weak = weak_from_this();
+    capture->watchErrors([weak, at](const std::string &error) {
+      if (auto self = weak.lock(); self && self->start == at) {
+        self->stop();
+        self->report(error);
       }
     });
     if (gViews) {
@@ -644,6 +761,8 @@ void pressShutter(Sheet &s) {
   auto path = s.request.video.path;
   s.capture->startRecording(s.request.video, [&s, alive = s.alive, path](const std::string &error) {
     if (!*alive) {
+      // Cancelled while it recorded: the movie is no one's.
+      g_unlink(path.c_str());
       return;
     }
     if (!error.empty()) {
@@ -660,13 +779,7 @@ void showSheet(CameraSheetRequest request, std::function<void(CameraTake, const 
     done({}, "");
     return;
   }
-  std::string error;
-  auto capture = startCapture(gHardware, error);
-  if (!capture) {
-    done({}, error);
-    return;
-  }
-  auto *s = new Sheet{.request = std::move(request), .done = std::move(done), .capture = capture};
+  auto *s = new Sheet{.request = std::move(request), .done = std::move(done)};
   s->videoMode = !s->request.photos && s->request.videos;
   gSheet = s;
   GtkWidget *window = gtk_window_new();
@@ -683,9 +796,6 @@ void showSheet(CameraSheetRequest request, std::function<void(CameraTake, const 
   gtk_widget_set_vexpand(picture, TRUE);
   gtk_box_append(GTK_BOX(box), picture);
   s->preview = GTK_PICTURE(picture);
-  s->watcher = capture->frames()->watch([picture](GdkTexture *texture) {
-    gtk_picture_set_paintable(GTK_PICTURE(picture), texture ? GDK_PAINTABLE(texture) : nullptr);
-  });
   GtkWidget *bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
   gtk_widget_set_margin_start(bar, 12);
   gtk_widget_set_margin_end(bar, 12);
@@ -713,6 +823,8 @@ void showSheet(CameraSheetRequest request, std::function<void(CameraTake, const 
   }
   gtk_box_append(GTK_BOX(bar), middle);
   s->shutter = gtk_button_new_with_label("Take Photo");
+  // Until the camera shows a frame there is nothing to take.
+  gtk_widget_set_sensitive(s->shutter, FALSE);
   gtk_widget_add_css_class(s->shutter, "suggested-action");
   g_signal_connect(s->shutter, "clicked", G_CALLBACK(+[](GtkButton *, gpointer data) { pressShutter(*static_cast<Sheet *>(data)); }), s);
   gtk_box_append(GTK_BOX(bar), s->shutter);
@@ -734,6 +846,27 @@ void showSheet(CameraSheetRequest request, std::function<void(CameraTake, const 
   }), s);
   updateShutter(*s);
   gtk_window_present(s->window);
+  startCaptureAsync(gHardware, [s, alive = s->alive](std::shared_ptr<GstCameraCapture> capture, const std::string &error) {
+    if (!*alive) {
+      return;
+    }
+    if (!capture) {
+      s->finish({}, error);
+      return;
+    }
+    s->capture = capture;
+    s->watcher = capture->frames()->watch([s](GdkTexture *texture) {
+      gtk_picture_set_paintable(s->preview, texture ? GDK_PAINTABLE(texture) : nullptr);
+      if (texture) {
+        gtk_widget_set_sensitive(s->shutter, TRUE);
+      }
+    });
+    capture->watchErrors([s, alive = s->alive](const std::string &failed) {
+      if (*alive) {
+        s->finish({}, failed);
+      }
+    });
+  });
 }
 
 class GtkCameraSheet final : public CameraSheet {

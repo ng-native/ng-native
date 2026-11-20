@@ -150,7 +150,7 @@ DesktopModules addDesktopModules(ModuleRegistry &registry, const DesktopModuleSo
   // Made again for each runtime, as every module is: over the photo library only with its camera,
   // and over a picker with no library with or without one.
   if (s.photos) {
-    addSourced(s.cameraHardware && s.audioInput && s.cameraSheet, "NgNativeImagePicker", [s] { return makeDesktopImagePicker(s); });
+    addSourced(s.cameraHardware && s.cameraSheet, "NgNativeImagePicker", [s] { return makeDesktopImagePicker(s); });
   } else {
     addSourced(s.photoPicker, "NgNativeImagePicker", [s] { return makeDesktopImagePicker(s); });
   }
