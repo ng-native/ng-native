@@ -17113,6 +17113,9 @@ export class Engine implements HostEngine {
     for (const node of [...this.playedNatively]) this.stopNative(node, node.playing!);
     for (const node of [...this.easedNatively]) this.stopEased(node);
     for (const node of [...this.paintedNodes]) this.stopPainting(node);
+    for (const nodes of [...this.scrollTimelines.values()]) {
+      for (const node of [...nodes]) this.stopScrolled(node);
+    }
   }
 
   /**

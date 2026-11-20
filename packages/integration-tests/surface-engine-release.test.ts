@@ -263,6 +263,46 @@ describe('a disposed engine', () => {
     );
   });
 
+  it('disconnects on native the animations its scroll views drive, and a commit after starts none', () => {
+    const rec = recorder();
+    const engine = new Engine(createFakeFabric(), 1, {
+      globalStyles: compileCss(
+        '@keyframes fade { from { opacity: 1 } to { opacity: 0 } } ' +
+          '.a { animation: fade linear both; animation-timeline: scroll(); animation-range: 0px 100px }',
+      ) as StyleSheet,
+      nativeAnimated: rec.native,
+    });
+    const scroll = engine.createElement('scroll-view');
+    const view = engine.createElement('view');
+    engine.appendChild(engine.root, scroll);
+    engine.appendChild(scroll, view);
+    engine.commit();
+    engine.setClasses(view, 'a');
+    engine.commit();
+    /** The views a native animated props node drives now, and those a scroll event feeds. */
+    const live = () => {
+      const driven = new Map<unknown, unknown>();
+      const fed = new Set<unknown>();
+      for (const [name, a, b] of rec.calls) {
+        if (name === 'toView') driven.set(b, a);
+        if (name === 'fromView' && driven.get(b) === a) driven.delete(b);
+        if (name === 'event') fed.add(a);
+        if (name === 'removeEvent') fed.delete(a);
+      }
+      return { driven: [...driven.keys()], fed: [...fed] };
+    };
+    assert.deepEqual(live(), { driven: [engine.tagOf(view)], fed: [engine.tagOf(scroll)] });
+    engine.dispose();
+    assert.deepEqual(live(), { driven: [], fed: [] });
+    // A commit on the disposed engine, as an app's last change detection makes, starts it again
+    // with the class put back, and takes it back at once.
+    engine.setClasses(view, '');
+    engine.commit();
+    engine.setClasses(view, 'a');
+    engine.commit();
+    assert.deepEqual(live(), { driven: [], fed: [] });
+  });
+
   it('says nothing, and commits nothing, when a move native was laying out is up', async () => {
     const fabric = createFakeFabric();
     Object.assign(fabric, { configureNextLayoutAnimation: () => {} });
