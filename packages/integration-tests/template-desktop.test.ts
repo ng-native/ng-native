@@ -76,7 +76,9 @@ describe('the desktop template', () => {
     const readme = read(desktop, 'README.md').toString('utf8');
     assert.match(readme, /vitest --project macos/);
     assert.match(readme, /`node-macos`/);
-    assert.match(readme, /EXPO_PUBLIC_DEVICE_TESTS=1/);
+    // The project starts Metro for the tests itself: nothing to start in another terminal.
+    assert.match(readme, /starts\s+Metro and opens the app itself/);
+    assert.doesNotMatch(readme, /EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start/);
   });
 
   it("wraps Metro's config for the in-app tests, and starts the test host for them in main.ts", () => {

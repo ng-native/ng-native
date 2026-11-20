@@ -15,11 +15,10 @@ npm run package    # dist/macos/my-app.app
 npm run package -- --format dmg   # a signed, notarised .dmg; --format mas for the Mac App Store
 ```
 
-To run tests inside the app, on real AppKit views, start Metro for them and run the `macos` Vitest
-project, which opens the app itself (`src/app/app.device.ts` is the example):
+To run tests inside the app, on real AppKit views, run the `macos` Vitest project, which starts
+Metro and opens the app itself (`src/app/app.device.ts` is the example):
 
 ```sh
-EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start
 npx vitest --project macos
 ```
 

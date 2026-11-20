@@ -63,9 +63,9 @@ fakes of the windows, menus, Dock and tray. See
 An app from the desktop template, or from the generators' desktop-only option, has two Vitest
 projects. `node-macos` runs in Node, and is what `npm test` (`vitest run --project node-macos`)
 and the app's `test` target run. `macos` runs `src/**/*.device.ts`, such as
-`src/app/app.device.ts`, inside the app on real AppKit views, and opens the app itself:
+`src/app/app.device.ts`, inside the app on real AppKit views, and starts Metro and opens the app
+itself:
 
 ```sh
-EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start   # in one terminal
 npx vitest --project macos
 ```

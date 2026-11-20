@@ -368,11 +368,10 @@ EAS targets, which build for iOS and Android, are left out too, until
 
 Its `vitest.config.mts` has two projects: `node-macos`, in Node, which its `test` target runs alone
 (`vitest run --project node-macos`), and `macos`, which runs `src/**/*.device.ts` inside the app
-and opens it. `src/app/app.device.ts` is the example, and its
-`metro.config.js` adds the in-app tests only when Metro starts with `EXPO_PUBLIC_DEVICE_TESTS=1`:
-run `EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start` in the app's folder, then
-`npx vitest --project macos` there. `nx g @ng-native/nx:init --desktopOnly`, the generator
-`nx add` runs, makes it the default of every app generated in the workspace, in `nx.json`.
+and starts Metro and opens it. `src/app/app.device.ts` is the example: run
+`npx vitest --project macos` in the app's folder. `nx g @ng-native/nx:init --desktopOnly`, the
+generator `nx add` runs, makes it the default of every app generated in the workspace, in
+`nx.json`.
 
 `--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`; it defaults to
 `com.<scope>.<name>`, from the workspace's npm scope and the app's name with anything but letters

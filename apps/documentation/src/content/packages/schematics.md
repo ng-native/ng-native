@@ -167,10 +167,8 @@ and `@ng-native/expo` in place of the phone's status bar and system UI packages,
 `ng generate @ng-native/schematics:application` both take it. Its `vitest.config.mts` has two
 projects: `node-macos`, in Node, which its `test` target runs alone through the Vitest builder's
 `project` option (`"options": { "project": "node-macos" }`), and `macos`, which runs
-`src/**/*.device.ts` inside the app and opens it. `src/app/app.device.ts` is the example, and its
-`metro.config.js` adds the in-app tests only when Metro starts with `EXPO_PUBLIC_DEVICE_TESTS=1`:
-run `EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start` in the project's folder, then
-`npx vitest --project macos` there.
+`src/**/*.device.ts` inside the app and starts Metro and opens it. `src/app/app.device.ts` is the
+example: run `npx vitest --project macos` in the project's folder.
 
 `--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`. It defaults to
 `com.<scope>.<name>`, from the npm scope of the root `package.json`'s name and the app's name with
