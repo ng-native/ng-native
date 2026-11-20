@@ -134,6 +134,12 @@ void MountingManager::synchronouslyUpdateViewOnUIThread(Tag tag, const folly::dy
   view.props = descriptor->cloneProps(context, view.props, RawProps(changed));
   tree_.update(view);
   backend_->updateProps(view);
+  // A nativeID or a relation changed this way is as real as one a commit brought: tell the backend
+  // now, not whenever a later commit touches the surface.
+  relations_.update(view);
+  for (const auto &[related, relations] : relations_.didMount(view.surfaceId)) {
+    backend_->setAccessibilityRelations(view.surfaceId, related, relations);
+  }
 }
 
 void MountingManager::ensureRoot(SurfaceId surfaceId, Tag tag) {
@@ -159,6 +165,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         const auto &view = m.newChildShadowView;
         tree_.create(view);
         liveRegions_.update(view);
+        relations_.update(view);
         safeAreas_->created(view);
         backend_->createView(view);
         svgs_.changed(tree_, view.tag);
@@ -178,6 +185,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
         svgs_.deleted(m.oldChildShadowView.tag);
         expoUI_.deleted(m.oldChildShadowView.tag);
         liveRegions_.remove(m.oldChildShadowView.tag);
+        relations_.remove(m.oldChildShadowView.tag);
         tree_.destroy(m.oldChildShadowView.tag);
         backend_->deleteView(surfaceId, m.oldChildShadowView.tag);
         break;
@@ -214,6 +222,7 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
           backend_->updateProps(view);
           reportDesktopProps(view, &old);
           liveRegions_.update(view);
+          relations_.update(view);
           sidebars_.propsChanged(tree_, view.tag);
           tabs_->propsChanged(tree_, view.tag);
           screens_->propsChanged(tree_, view.tag);
@@ -263,6 +272,9 @@ void MountingManager::apply(SurfaceId surfaceId, const ShadowViewMutationList &m
   if (known == frontHeaders_.end() ? header.has_value() : known->second != header) {
     frontHeaders_[surfaceId] = header;
     backend_->setFrontHeader(surfaceId, header);
+  }
+  for (const auto &[tag, relations] : relations_.didMount(surfaceId)) {
+    backend_->setAccessibilityRelations(surfaceId, tag, relations);
   }
   for (const auto &announcement : liveRegions_.didMount(surfaceId)) {
     backend_->announce(surfaceId, announcement);

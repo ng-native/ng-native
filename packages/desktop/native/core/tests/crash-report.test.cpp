@@ -3,6 +3,7 @@
 #include <doctest/doctest.h>
 
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <signal.h>
 #include <unistd.h>
@@ -11,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <sstream>
 
 namespace {
@@ -44,6 +46,26 @@ TEST_CASE("a crash report goes in a test launch's state folder, else under XDG_S
   // An empty XDG_STATE_HOME is unset, as the XDG spec has it.
   vars["XDG_STATE_HOME"] = "";
   CHECK(ngn::crashReportPath("dev.notes", std::nullopt, env) == "/home/ada/.local/state/dev.notes/crash.txt");
+}
+
+TEST_CASE("a crash report goes under the account's home folder for a process started without HOME") {
+  std::map<std::string, std::string> vars;
+  auto env = [&vars](const std::string &name) -> std::optional<std::string> {
+    auto it = vars.find(name);
+    return it == vars.end() ? std::nullopt : std::optional<std::string>(it->second);
+  };
+  auto account = []() -> std::optional<std::string> { return "/home/ada"; };
+  CHECK(ngn::crashReportPath("dev.notes", std::nullopt, env, account) == "/home/ada/.local/state/dev.notes/crash.txt");
+  // An empty HOME is unset too.
+  vars["HOME"] = "";
+  CHECK(ngn::crashReportPath("dev.notes", std::nullopt, env, account) == "/home/ada/.local/state/dev.notes/crash.txt");
+  // With no account either, the temporary folder, never the root's.
+  std::string temporary = std::filesystem::temp_directory_path().string();
+  auto none = []() -> std::optional<std::string> { return std::nullopt; };
+  CHECK(ngn::crashReportPath("dev.notes", std::nullopt, env, none) == temporary + "/.local/state/dev.notes/crash.txt");
+  // By default, the password database's (a container's user can have no entry).
+  auto home = ngn::accountHomeDirectory();
+  CHECK(ngn::crashReportPath("dev.notes", std::nullopt, env) == home.value_or(temporary) + "/.local/state/dev.notes/crash.txt");
 }
 
 // Linux only, the one host that installs it: on macOS each crash would go to the system's crash
@@ -116,5 +138,51 @@ TEST_CASE("a fatal signal still kills the process when a handler installed later
   std::error_code ignored;
   std::filesystem::remove_all(std::filesystem::temp_directory_path() / ("ngn-crash-chain-" + std::to_string(child)), ignored);
   CHECK(WIFSIGNALED(status));
+}
+
+namespace {
+
+// The child's wait status, or nothing when it is still running after `seconds` (then it is killed).
+std::optional<int> waitFor(pid_t child, int seconds) {
+  for (int i = 0; i < seconds * 20; ++i) {
+    int status = 0;
+    if (waitpid(child, &status, WNOHANG) == child) {
+      return status;
+    }
+    usleep(50 * 1000);
+  }
+  kill(child, SIGKILL);
+  waitpid(child, nullptr, 0);
+  return std::nullopt;
+}
+
+} // namespace
+
+TEST_CASE("a fatal signal kills the process in bounded time when the handler would block") {
+  auto dir = std::filesystem::temp_directory_path() / ("ngn-crash-stuck-" + std::to_string(getpid()));
+  struct Remove {
+    std::filesystem::path dir;
+    ~Remove() {
+      std::error_code ignored;
+      std::filesystem::remove_all(dir, ignored);
+    }
+  } remove{dir};
+  std::filesystem::create_directories(dir);
+  // A pipe no one reads: opening it to write blocks for good, as a lock the stack's unwinder waits
+  // on would.
+  auto path = dir / "fifo";
+  REQUIRE(mkfifo(path.c_str(), 0600) == 0);
+  pid_t child = fork();
+  REQUIRE(child >= 0);
+  if (child == 0) {
+    noCoreFile();
+    ngn::installCrashReport(path.string(), "ngn-test-host");
+    raise(SIGSEGV);
+    _exit(0);
+  }
+  auto status = waitFor(child, 10);
+  REQUIRE(status);
+  REQUIRE(WIFSIGNALED(*status));
+  CHECK(WTERMSIG(*status) == SIGSEGV);
 }
 #endif

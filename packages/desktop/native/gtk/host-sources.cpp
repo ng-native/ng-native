@@ -1,9 +1,12 @@
 #include "host-sources.h"
 
+#include "accessible.h"
+#include "alerts.h"
 #include "app-info.h"
 #include "app-windows.h"
 #include "locales.h"
 #include "native-controls.h"
+#include "portal.h"
 #include "system-access.h"
 
 #include "ngn/posix-locale.h"
@@ -174,8 +177,7 @@ class GtkSystem final : public System {
     });
   }
   void showAlert(const AlertRequest &request, std::function<void(int, std::string, std::string)> done) override {
-    fprintf(stderr, "[ngn] alert (no dialogs yet): %s: %s\n", request.title.c_str(), request.message.c_str());
-    done(request.cancelIndex, "", "");
+    onMainContext([request, done = std::move(done)]() mutable { ngn::gtk::showAlert(request, std::move(done), activeWindow()); });
   }
   // What the clipboard held as it last changed: GDK reads it asynchronously, which System's
   // callers do not, so another app's change counts once its text has been read.
@@ -213,7 +215,11 @@ class GtkSystem final : public System {
     g_object_unref(loader);
     return size;
   }
-  void announce(const Announcement &) override {}
+  void announce(const Announcement &announcement) override {
+    // Through the window in front, as macOS posts it on the application: GTK announces through a
+    // widget, and reads it out from its window.
+    onMainContext([announcement] { announceOn(GTK_WIDGET(portal::frontWindow()), announcement); });
+  }
   std::string appDataDirectory() override {
     g_mkdir_with_parents(appData_.c_str(), 0700);
     return appData_;
@@ -273,16 +279,33 @@ class NoMenus final : public MenuBackend {
   void setMenuBar(std::vector<MenuItem>) override {}
 };
 
-class NoTray final : public TrayBackend {
+class GtkUndo final : public UndoManager {
  public:
-  void setIcons(std::vector<TrayIcon>) override {}
-};
+  void registerAction(const std::string &label, std::function<void()> action) override {
+    auto record = [stacks = stacks_, label, action = std::move(action)]() mutable { stacks->registerAction(label, std::move(action)); };
+    // Inline on the UI thread (the loop's dispatch owns the main context there): an undo registers
+    // its redo while it runs, and a queued registration would find undoing() false by then.
+    if (g_main_context_is_owner(g_main_context_default())) {
+      record();
+      return;
+    }
+    onMainContext(std::move(record));
+  }
+  bool undoing() const override {
+    return stacks_->undoing();
+  }
+  void undo() override {
+    onMainContext([stacks = stacks_] { stacks->undo(); });
+  }
+  void redo() override {
+    onMainContext([stacks = stacks_] { stacks->redo(); });
+  }
+  void clear() override {
+    onMainContext([stacks = stacks_] { stacks->clear(); });
+  }
 
-class NoDock final : public DockBackend {
- public:
-  void setMenu(std::optional<std::vector<MenuItem>>) override {}
-  void bounce(int, bool) override {}
-  void cancelBounce(int) override {}
+ private:
+  std::shared_ptr<UndoStacks> stacks_ = std::make_shared<UndoStacks>();
 };
 
 } // namespace
@@ -309,12 +332,8 @@ std::shared_ptr<MenuBackend> makeNoMenus() {
   return std::make_shared<NoMenus>();
 }
 
-std::shared_ptr<TrayBackend> makeNoTray() {
-  return std::make_shared<NoTray>();
-}
-
-std::shared_ptr<DockBackend> makeNoDock() {
-  return std::make_shared<NoDock>();
+std::shared_ptr<UndoManager> makeUndoManager() {
+  return std::make_shared<GtkUndo>();
 }
 
 std::shared_ptr<ControlMeasurer> makeControlMeasurer() {

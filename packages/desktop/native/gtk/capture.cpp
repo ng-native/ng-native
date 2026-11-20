@@ -1,5 +1,7 @@
 #include "capture.h"
 
+#include "window-scale.h"
+
 namespace ngn::gtk {
 
 GdkTexture *renderWidget(GtkWidget *widget) {
@@ -14,7 +16,7 @@ GdkTexture *renderWidget(GtkWidget *widget) {
   if (width <= 0 || height <= 0 || !renderer) {
     return nullptr;
   }
-  float scale = static_cast<float>(gtk_widget_get_scale_factor(widget));
+  float scale = static_cast<float>(windowScale(widget));
   GdkPaintable *paintable = gtk_widget_paintable_new(widget);
   GtkSnapshot *snapshot = gtk_snapshot_new();
   gtk_snapshot_scale(snapshot, scale, scale);

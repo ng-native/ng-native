@@ -46,10 +46,9 @@ void configureButton(NSButton *button, const NativeControlProps &p) {
   button.bezelStyle = NSBezelStylePush;
   button.image = p.sfSymbol.empty() ? nil : [NSImage imageWithSystemSymbolName:nsString(p.sfSymbol) accessibilityDescription:nil];
   button.imagePosition = button.image == nil ? NSNoImage : (p.title.empty() ? NSImageOnly : NSImageLeading);
-  // Return presses the default button of its window, and Escape the cancel one. A button with no
-  // kind takes Return as a default one does.
-  bool takesReturn = p.kind == "default" || p.kind.empty();
-  button.keyEquivalent = takesReturn ? @"\r" : p.kind == "cancel" ? @"\x1b" : @"";
+  // Return presses the default button of its window, and Escape the cancel one. Only a `default`
+  // button takes Return, on every desktop OS; one with no kind takes neither key.
+  button.keyEquivalent = p.kind == "default" ? @"\r" : p.kind == "cancel" ? @"\x1b" : @"";
   button.hasDestructiveAction = p.kind == "destructive";
   button.contentTintColor = p.kind == "destructive" ? NSColor.systemRedColor : nil;
   button.enabled = p.enabled;
@@ -188,6 +187,12 @@ RNSize AppKitControlMeasurer::measure(ControlKind kind, const NativeControlProps
   if (const auto *p = self.controlProps) {
     [self apply:*p];
   }
+  // The control's own title goes over what the views it is labelled by said: they say it again.
+  [self refreshControlRelations];
+}
+
+- (NSView *)accessibilityControl {
+  return self.control;
 }
 
 - (void)apply:(const NativeControlProps &)p {
@@ -386,6 +391,11 @@ RNSize AppKitControlMeasurer::measure(ControlKind kind, const NativeControlProps
   if (const auto *p = dynamic_cast<const NativeControlProps *>(props.get())) {
     [_search apply:*p];
   }
+  [self refreshControlRelations];
+}
+
+- (NSView *)accessibilityControl {
+  return _search.field;
 }
 
 - (void)handleCommand:(const std::string &)name args:(const folly::dynamic &)args {

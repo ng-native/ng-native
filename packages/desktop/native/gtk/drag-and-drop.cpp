@@ -142,8 +142,11 @@ GdkDragAction over(DropState *s, GdkDrop *drop, double x, double y) {
     s->items.reset();
     readDrop(s, drop);
   }
-  // Empty until the drag's data has come, as the view under it then hears.
-  return s->input->dragOver(dropInput(*s), s->items.value_or(DragItems{})) ? GDK_ACTION_COPY : GdkDragAction(0);
+  // Pending until the drag's data has come: the view under it is hit tested, and hears the enter
+  // with what is dragged once itemsCame hands it on.
+  DragItems items = s->items.value_or(DragItems{});
+  items.pending = !s->items;
+  return s->input->dragOver(dropInput(*s), items) ? GDK_ACTION_COPY : GdkDragAction(0);
 }
 
 GdkDragAction dragEntered(GtkDropTargetAsync *, GdkDrop *drop, double x, double y, gpointer user) {

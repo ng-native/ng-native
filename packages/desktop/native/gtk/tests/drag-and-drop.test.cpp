@@ -152,6 +152,9 @@ TEST_CASE("a drag carrying a link and text hands the view under it both, and the
   CHECK(items.text == "Read the guide");
   // The view under the drag heard what it carries before the drop.
   REQUIRE_FALSE(sink.over.empty());
+  // The first enter came before the data was read: hit tested, and told to wait.
+  CHECK(sink.over.front().second.pending);
+  CHECK_FALSE(sink.over.back().second.pending);
   CHECK(sink.over.back().second.text == "Read the guide");
   CHECK(sink.over.back().second.urls == std::vector<std::string>{"https://ng-native.dev/"});
   gtk_window_destroy(GTK_WINDOW(window));

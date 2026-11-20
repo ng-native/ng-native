@@ -302,16 +302,21 @@ TEST_CASE("an svg <image> whose load failed, or whose picture cairo cannot hold,
   g_object_unref(texture);
   // Copied into no pixels: GDK's check on the pointer is all that stops a write through null.
   int criticals = 0;
-  guint handler = g_log_set_handler("Gdk", G_LOG_LEVEL_CRITICAL, [](const gchar *, GLogLevelFlags, const gchar *, gpointer count) {
+  // Removed on every exit path: runUntil throws on a timeout, and the handler holds &criticals.
+  struct Handler {
+    guint id;
+    ~Handler() {
+      g_log_remove_handler("Gdk", id);
+    }
+  } handler{g_log_set_handler("Gdk", G_LOG_LEVEL_CRITICAL, [](const gchar *, GLogLevelFlags, const gchar *, gpointer count) {
     ++*static_cast<int *>(count);
-  }, &criticals);
+  }, &criticals)};
   drawImage("https://example.com/huge.png", ended);
   answer(*http, std::string(static_cast<const char *>(g_bytes_get_data(png, nullptr)), g_bytes_get_size(png)));
   g_bytes_unref(png);
   // Decoded off the main thread: only the load's end says cairo has been given it.
   ngn::testing::runUntil([ended] { return *ended == 2; });
   drawImage("https://example.com/huge.png");
-  g_log_remove_handler("Gdk", handler);
   CHECK(criticals == 0);
   CHECK(http->sent.size() == 2);
 }
@@ -506,5 +511,39 @@ TEST_CASE("the cairo canvas draws a filter's source unfiltered when its bitmap c
   cairo_surface_flush(surface);
   // Premultiplied ARGB: the corner pixel is red.
   CHECK(*reinterpret_cast<const uint32_t *>(cairo_image_surface_get_data(surface)) == 0xffff0000);
+  cairo_surface_destroy(surface);
+}
+
+TEST_CASE("the cairo canvas draws what follows a mask whose bitmap cannot be made") {
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 10, 10);
+  cairo_t *cr = cairo_create(surface);
+  // A view wider than cairo's bitmaps, so even the view's pixels do not fit.
+  auto canvas = ngn::gtk::makeCairoCanvas(cr, 40000, 10, 1);
+  ngn::SvgPath square;
+  square.moveTo(0, 0);
+  square.lineTo(10, 0);
+  square.lineTo(10, 10);
+  square.lineTo(0, 10);
+  square.close();
+  ngn::SvgPath corner;
+  corner.moveTo(5, 5);
+  corner.lineTo(10, 5);
+  corner.lineTo(10, 10);
+  corner.lineTo(5, 10);
+  corner.close();
+  canvas->beginMask(false);
+  // The mask's own drawing must reach no pixel.
+  canvas->fill(square, false, {.argb = 0xffffffff});
+  canvas->endMask();
+  canvas->endMasked();
+  // Drawn after the mask: lost when the mask's error surface reaches the parent context.
+  canvas->fill(corner, false, {.argb = 0xff00ff00});
+  canvas.reset();
+  cairo_destroy(cr);
+  cairo_surface_flush(surface);
+  const auto *pixels = reinterpret_cast<const uint32_t *>(cairo_image_surface_get_data(surface));
+  CHECK(pixels[7 * 10 + 7] == 0xff00ff00);
+  // Only the mask's own shape covers this one: it stays transparent.
+  CHECK(pixels[1 * 10 + 1] == 0);
   cairo_surface_destroy(surface);
 }

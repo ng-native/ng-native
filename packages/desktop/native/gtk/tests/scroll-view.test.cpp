@@ -153,6 +153,30 @@ TEST_CASE("a ScrollView's content mounts into its scrolled window, and scrollTo 
   CHECK(offsets.told.back().second == Point{0, 200});
 }
 
+TEST_CASE("a scroll command wins over a contentOffset still waiting to be applied") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool toEnd : {false, true}) {
+    CAPTURE(toEnd);
+    Offsets offsets;
+    MountedViews views;
+    mountScrollView(views);
+    views.settle();
+    // Straight to the backend, so no turn of the main loop runs the idle that applies it.
+    auto scroll = views.mounting->tree().find(2)->view;
+    scroll.props = scrollProps(dynamic::object("contentOffset", dynamic::object("x", 0)("y", 100)));
+    views.backend->updateProps(scroll);
+    REQUIRE(ngn::gtk::viewData(views.view(2))->scroll->pendingOffset);
+    // Before the idle applies the prop.
+    if (toEnd) {
+      views.backend->dispatchCommand(2, "scrollToEnd", dynamic::array(false));
+    } else {
+      views.backend->dispatchCommand(2, "scrollTo", dynamic::array(0, 200, false));
+    }
+    views.settle();
+    CHECK(offsets.told.back().second == Point{0, 200});
+  }
+}
+
 TEST_CASE("a ScrollView starts at its contentOffset, and moves when the prop changes") {
   REQUIRE(ngn::testing::gtkReady());
   Offsets offsets;
@@ -392,6 +416,58 @@ TEST_CASE("a scroll view's gutter follows the desktop switching scroll bars, and
   CHECK(ngn::ScrollerGutters::shared().get(2).right == 0);
 }
 
+TEST_CASE("a scroll view still measuring its gutter measures on the new frame clock when it moves to another window") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkSettings *settings = gtk_settings_get_default();
+  gboolean overlay = TRUE;
+  g_object_get(settings, "gtk-overlay-scrolling", &overlay, nullptr);
+  struct Restore {
+    GtkSettings *settings;
+    gboolean overlay;
+    ~Restore() {
+      g_object_set(settings, "gtk-overlay-scrolling", overlay, nullptr);
+    }
+  } restore{settings, overlay};
+  g_object_set(settings, "gtk-overlay-scrolling", TRUE, nullptr);
+
+  MountedViews views;
+  mountScrollView(views);
+  auto *box = ngn::gtk::viewData(views.view(2))->scroll;
+  ngn::testing::runUntil([&] {
+    views.settle();
+    return gtk_widget_get_mapped(box->scrolled);
+  });
+
+  // Classic scroll bars start a measurement, which has not settled yet.
+  g_object_set(settings, "gtk-overlay-scrolling", FALSE, nullptr);
+  REQUIRE(box->remeasure != 0);
+  GdkFrameClock *first = box->remeasureClock;
+  REQUIRE(first != nullptr);
+  g_object_ref(first);
+
+  // The scroll view moves under another window, which has a frame clock of its own.
+  GtkWidget *parent = gtk_widget_get_parent(box->scrolled);
+  GtkWidget *other = gtk_window_new();
+  g_object_ref(box->scrolled);
+  gtk_widget_unparent(box->scrolled);
+  gtk_window_set_child(GTK_WINDOW(other), box->scrolled);
+  gtk_window_present(GTK_WINDOW(other));
+  ngn::testing::runUntil([&] {
+    g_main_context_iteration(nullptr, FALSE);
+    return gtk_widget_get_mapped(box->scrolled);
+  });
+  GdkFrameClock *second = gtk_widget_get_frame_clock(box->scrolled);
+  CHECK(second != first);
+  CHECK((box->remeasure == 0 || box->remeasureClock == second));
+
+  // Put it back for the views to tear down.
+  gtk_window_set_child(GTK_WINDOW(other), nullptr);
+  gtk_window_destroy(GTK_WINDOW(other));
+  gtk_widget_set_parent(box->scrolled, parent);
+  g_object_unref(box->scrolled);
+  g_object_unref(first);
+}
+
 TEST_CASE("a thin scroll view mounted under classic scroll bars takes the narrow gutter from the start") {
   REQUIRE(ngn::testing::gtkReady());
   GtkSettings *settings = gtk_settings_get_default();
@@ -419,4 +495,46 @@ TEST_CASE("a thin scroll view mounted under classic scroll bars takes the narrow
   float narrow = ngn::gtk::classicScrollerWidth(box->scrolled);
   CHECK(narrow > 0);
   CHECK(ngn::ScrollerGutters::shared().get(2).right == doctest::Approx(narrow));
+}
+
+TEST_CASE("thin scroll bars narrow the thickness and keep the theme's minimum thumb length") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkSettings *settings = gtk_settings_get_default();
+  gboolean overlay = TRUE;
+  g_object_get(settings, "gtk-overlay-scrolling", &overlay, nullptr);
+  struct Restore {
+    GtkSettings *settings;
+    gboolean overlay;
+    ~Restore() {
+      g_object_set(settings, "gtk-overlay-scrolling", overlay, nullptr);
+    }
+  } restore{settings, overlay};
+  g_object_set(settings, "gtk-overlay-scrolling", FALSE, nullptr);
+
+  MountedViews views;
+  mountScrollView(views);
+  auto *box = ngn::gtk::viewData(views.view(2))->scroll;
+  settleScrollers(views, box);
+  GtkWidget *vbar = gtk_scrolled_window_get_vscrollbar(GTK_SCROLLED_WINDOW(box->scrolled));
+  GtkWidget *hbar = gtk_scrolled_window_get_hscrollbar(GTK_SCROLLED_WINDOW(box->scrolled));
+  int vLength = 0, hLength = 0;
+  gtk_widget_measure(vbar, GTK_ORIENTATION_VERTICAL, -1, &vLength, nullptr, nullptr, nullptr);
+  gtk_widget_measure(hbar, GTK_ORIENTATION_HORIZONTAL, -1, &hLength, nullptr, nullptr, nullptr);
+  float regular = ngn::gtk::classicScrollerWidth(box->scrolled);
+  // The slider's own minimum length is what keeps these well past a few pixels.
+  CHECK(vLength > 20);
+  CHECK(hLength > 20);
+
+  ngn::DesktopProps thin;
+  thin.scrollbarWidth = ngn::ScrollbarWidth::Thin;
+  views.backend->updateDesktopProps(MountedViews::kSurface, 2, thin);
+  settleScrollers(views, box);
+  int thinV = 0, thinH = 0;
+  gtk_widget_measure(vbar, GTK_ORIENTATION_VERTICAL, -1, &thinV, nullptr, nullptr, nullptr);
+  gtk_widget_measure(hbar, GTK_ORIENTATION_HORIZONTAL, -1, &thinH, nullptr, nullptr, nullptr);
+  CHECK(ngn::gtk::classicScrollerWidth(box->scrolled) < regular);
+  // The bar loses its padding and margin, but the theme's 40px slider minimum stays: without the
+  // fix this measures about 5px.
+  CHECK(thinV > 30);
+  CHECK(thinH > 30);
 }

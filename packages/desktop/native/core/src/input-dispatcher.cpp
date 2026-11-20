@@ -469,6 +469,9 @@ bool InputDispatcher::dragOver(const PointerInput &input, const DragItems &items
   if (!target) {
     return false;
   }
+  if (items.pending) {
+    return true;
+  }
   dropTarget_ = DropTarget{input.container, *target};
   if (const auto *node = tree_.find(*target)) {
     emitElementEvent(*node, "dropEnter", dropPayload(items));

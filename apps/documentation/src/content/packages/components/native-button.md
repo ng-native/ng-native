@@ -24,9 +24,11 @@ greys it out.
 
 ## Inputs
 
-- **`kind`** - `default`, `cancel`, `destructive` or `plain`. On macOS a `default` button takes
-  Return and a `cancel` one takes Escape in its window. Unset, the button is a plain push button
-  that takes neither key.
+- **`kind`** - `default`, `cancel`, `destructive` or `plain`. On macOS and Linux a `default` button
+  takes Return and a `cancel` one takes Escape in its window. Unset, the button is a plain push
+  button that takes neither key. While a one-line `<text-input>` has the focus, each OS keeps its
+  own convention: on macOS Return still presses the `default` button, and on Linux the field keeps
+  Return, as GTK's fields do, so it goes to `(submitEditing)` instead.
 - **`controlSize`** - `mini`, `small`, `regular` or `large`: AppKit's control sizes on macOS, and
   UIKit's button sizes on iOS. Android and the web ignore it. `regular` when unset.
 - **`sfSymbol`** - an SF Symbol beside the label, on iOS and macOS.

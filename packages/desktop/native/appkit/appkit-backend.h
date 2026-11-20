@@ -53,6 +53,7 @@ class AppKitBackend final : public MountingBackend, public DesktopPropsSink {
   void setSvgDrawing(SurfaceId surfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) override;
   void setExpoUITree(SurfaceId surfaceId, Tag host, std::shared_ptr<const ExpoUINode> root) override;
   void announce(SurfaceId surfaceId, const Announcement &announcement) override;
+  void setAccessibilityRelations(SurfaceId surfaceId, Tag tag, const AxRelations &relations) override;
   void didMount(SurfaceId surfaceId) override;
   void updateDesktopProps(SurfaceId surfaceId, Tag tag, const DesktopProps &props) override;
   std::vector<facebook::react::ComponentDescriptorProvider> componentProviders() const override;

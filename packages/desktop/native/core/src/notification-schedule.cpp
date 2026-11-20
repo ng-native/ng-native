@@ -16,6 +16,9 @@ namespace {
 // The units a calendar trigger names, largest first. A weekday is a day's.
 enum Level { kYear, kMonth, kDay, kHour, kMinute, kSecond };
 
+// The days in 400 Gregorian years: after it every date falls on the weekday it did.
+constexpr int kDaysInCycle = 146097;
+
 int levelOf(const std::string &name) {
   if (name == "year") return kYear;
   if (name == "month") return kMonth;
@@ -98,8 +101,8 @@ std::optional<double> nextCalendarMatch(const std::map<std::string, int> &compon
   if (components.empty()) {
     smallest = kSecond;
   }
-  // The day `after` is in, then each one after it, in local time. Eight years reaches a 29th of
-  // February from any day.
+  // The day `after` is in, then each one after it, in local time. The Gregorian calendar repeats,
+  // weekdays included, every 400 years, so a rule that has not matched in that many days never will.
   time_t start = static_cast<time_t>(std::floor(after / 1000));
   struct tm day{};
   localtime_r(&start, &day);
@@ -111,7 +114,15 @@ std::optional<double> nextCalendarMatch(const std::map<std::string, int> &compon
   // first of January.
   bool firstMonth = !components.count("month") && kMonth > smallest;
   bool firstDay = !components.count("day") && !components.count("weekday") && kDay > smallest;
-  for (int offset = 0; offset <= 366 * 8 + 1; ++offset) {
+  // A named year not yet come starts on its first day, and only that year is searched.
+  int last = kDaysInCycle;
+  if (auto it = components.find("year"); it != components.end() && it->second - 1900 > year) {
+    year = it->second - 1900;
+    month = 0;
+    date = 1;
+    last = 366;
+  }
+  for (int offset = 0; offset <= last; ++offset) {
     // Noon, so a daylight saving change on the way never moves the date.
     struct tm noon{};
     noon.tm_year = year;
@@ -208,8 +219,8 @@ struct NotificationSchedule::State : std::enable_shared_from_this<NotificationSc
     }
   }
 
-  // Under the lock.
-  void save() const {
+  // Under the lock. False when the file was not committed; the one before it is then as it was.
+  bool save() const {
     folly::dynamic out = folly::dynamic::object("pending", folly::dynamic::array())("delivered", folly::dynamic::array());
     for (const auto &entry : pending) {
       out["pending"].push_back(folly::dynamic::object("request", requestRecord(entry.request))("next", entry.next));
@@ -221,11 +232,17 @@ struct NotificationSchedule::State : std::enable_shared_from_this<NotificationSc
     {
       std::ofstream file(temp, std::ios::binary | std::ios::trunc);
       file << folly::toJson(out);
+      file.close();
       if (!file) {
-        return;
+        std::remove(temp.c_str());
+        return false;
       }
     }
-    std::rename(temp.c_str(), path.c_str());
+    if (std::rename(temp.c_str(), path.c_str()) != 0) {
+      std::remove(temp.c_str());
+      return false;
+    }
+    return true;
   }
 
   // Under the lock: the timer set for the soonest request, at most kLongestWait away.
@@ -326,15 +343,20 @@ void NotificationSchedule::start() {
   state_->fire();
 }
 
-void NotificationSchedule::add(const NotificationRequest &request) {
+bool NotificationSchedule::add(const NotificationRequest &request) {
   std::lock_guard lock(state_->mutex);
   auto &pending = state_->pending;
+  auto before = pending;
   std::erase_if(pending, [&](const auto &entry) { return entry.request.identifier == request.identifier; });
   if (auto next = firstFireDate(request.trigger, state_->clock.now())) {
     pending.push_back({request, *next});
   }
-  state_->save();
+  if (!state_->save()) {
+    pending = std::move(before);
+    return false;
+  }
   state_->arm();
+  return true;
 }
 
 std::vector<NotificationRequest> NotificationSchedule::pending() const {

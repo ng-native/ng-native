@@ -134,6 +134,8 @@ struct StandInPortal {
   std::vector<std::string> closedSessions;
   // The LocationUpdated a session gets as it starts, none when empty.
   std::vector<std::pair<std::string, double>> fix;
+  // Takes each request and never answers it, as a portal does while the user has not chosen.
+  bool silent{false};
 
   StandInPortal() {
     std::tie(server, client) = peerToPeer();
@@ -156,6 +158,11 @@ struct StandInPortal {
     g_dbus_connection_close_sync(client, nullptr, nullptr);
     g_object_unref(client);
     g_object_unref(server);
+  }
+
+  // The portal goes away: its connection closes, with whatever it had not answered.
+  void exit() {
+    g_dbus_connection_close_sync(server, nullptr, nullptr);
   }
 
   void add(const char *interface, const std::string &path) {
@@ -264,7 +271,7 @@ struct StandInPortal {
     g_variant_unref(second);
     calls.push_back(call);
     g_dbus_method_invocation_return_value(invocation, g_variant_new("(o)", handle.c_str()));
-    if (method == "Inhibit") {
+    if (method == "Inhibit" || silent) {
       // Held until closed: no Response, and a Request object to close.
       add("org.freedesktop.portal.Request", handle);
       return;
