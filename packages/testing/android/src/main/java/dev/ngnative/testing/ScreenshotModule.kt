@@ -1,7 +1,9 @@
 package dev.ngnative.testing
 
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.graphics.Rect
+import android.graphics.RectF
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
@@ -47,16 +49,32 @@ class ScreenshotModule : Module() {
         ?: return@AsyncFunction promise.reject(ScreenshotException("The app has no activity"))
       val view = appContext.findView<View>(tag)
         ?: return@AsyncFunction promise.reject(ScreenshotException("No view with tag $tag"))
-      // Where the view shows in the window, through its own and its ancestors' transforms (a
-      // scale, a rotation), which its width and height do not count, and cut to what is visible.
-      val rect = Rect()
-      if (!view.getGlobalVisibleRect(rect)) {
-        return@AsyncFunction promise.reject(ScreenshotException("The view with tag $tag is not visible"))
-      }
-      copy(activity.window, rect, activity.window.decorView, promise)
+      copy(activity.window, windowRect(view), activity.window.decorView, promise)
     }.runOnQueue(Queues.MAIN)
 
     OnDestroy { encoder.quitSafely() }
+  }
+
+  /**
+   * Where the view shows in the window, through its own and its ancestors' transforms composed (a
+   * scale, a rotation, one undone by another), which its width and height do not count. Before
+   * Android 10 the ancestors' are applied one at a time, an axis-aligned box at each.
+   */
+  private fun windowRect(view: View): Rect {
+    val rect = Rect()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      val matrix = Matrix()
+      view.transformMatrixToGlobal(matrix)
+      val box = RectF(0f, 0f, view.width.toFloat(), view.height.toFloat())
+      matrix.mapRect(box)
+      // The matrix maps to the screen, and the window can start elsewhere on it (split screen).
+      val window = IntArray(2).also { view.rootView.getLocationOnScreen(it) }
+      box.offset(-window[0].toFloat(), -window[1].toFloat())
+      box.roundOut(rect)
+    } else {
+      view.getGlobalVisibleRect(rect)
+    }
+    return rect
   }
 
   private fun copy(window: android.view.Window, region: Rect, decor: View, promise: Promise) {
