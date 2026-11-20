@@ -15,6 +15,7 @@ import { VirtualList } from '../../components/src/virtual-list.ts';
       [items]="rows"
       [itemHeight]="40"
       [windowSize]="1"
+      [velocityLead]="0"
       [style]="fill"
       (endReached)="ended = ended + 1"
     >
@@ -47,6 +48,7 @@ export class VirtualScrollChecks {
       [items]="rows"
       [itemHeight]="40"
       [windowSize]="1"
+      [velocityLead]="0"
       [style]="fill"
       (scroll)="scrolls = scrolls + 1"
     >
