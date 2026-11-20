@@ -69,6 +69,7 @@ struct FakeOutput final : ngn::AudioOutput {
 struct FakeRecording final : ngn::AudioRecording {
   bool on{false};
   double seconds{0};
+  std::string failed;
   bool record() override {
     on = true;
     return true;
@@ -87,6 +88,9 @@ struct FakeRecording final : ngn::AudioRecording {
   }
   std::optional<double> metering() override {
     return -20.0;
+  }
+  std::string error() override {
+    return failed;
   }
 };
 
@@ -422,12 +426,30 @@ TEST_CASE("NgNativeAudio records with the permission, into a file under its fold
   CHECK(s.events.back()["id"] == id);
   CHECK(s.events.back()["status"]["isFinished"] == dynamic(true));
   CHECK(s.events.back()["status"]["url"] == dynamic("file://" + s.input->path));
+  CHECK(s.events.back()["status"]["hasError"] == dynamic(false));
   CHECK(s.call("recorderStatus", dynamic::array(id))["isRecording"] == dynamic(false));
 
   // A prepare's own options win over the recorder's.
   s.ask("prepareToRecordAsync", dynamic::array(id, dynamic::object("extension", ".wav")));
   CHECK(s.input->settings.format == "pcm");
   CHECK(s.input->path.substr(s.input->path.size() - 4) == ".wav");
+}
+
+TEST_CASE("NgNativeAudio reports a recording that did not finish its file as an error, with no url") {
+  Setup s;
+  s.input->now = ngn::AudioInput::Access::Granted;
+  auto id = s.call("createRecorder", dynamic::array(dynamic::object("extension", ".m4a")));
+  s.ask("prepareToRecordAsync", dynamic::array(id, nullptr));
+  REQUIRE(s.input->last != nullptr);
+  s.call("record", dynamic::array(id));
+  s.input->last->failed = "the muxer did not finish the file";
+  s.ask("stopRecording", dynamic::array(id));
+  REQUIRE_FALSE(s.events.empty());
+  auto status = s.events.back()["status"];
+  CHECK(status["isFinished"] == dynamic(true));
+  CHECK(status["hasError"] == dynamic(true));
+  CHECK(status["error"] == dynamic("the muxer did not finish the file"));
+  CHECK(status["url"] == dynamic(nullptr));
 }
 
 TEST_CASE("NgNativeAudio's audio mode and session calls resolve with nothing to set") {

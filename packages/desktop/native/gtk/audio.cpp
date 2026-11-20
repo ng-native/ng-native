@@ -137,12 +137,30 @@ class GstRecording final : public AudioRecording {
       gst_element_send_event(pipeline_, gst_event_new_eos());
       GstBus *bus = gst_element_get_bus(pipeline_);
       GstMessage *done = gst_bus_timed_pop_filtered(bus, 5 * GST_SECOND, static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
+      gst_object_unref(bus);
+      // Only the end of the stream says the muxer wrote the file whole.
+      if (!done) {
+        failed_ = "the recording did not finish writing its file";
+      } else if (GST_MESSAGE_TYPE(done) == GST_MESSAGE_ERROR) {
+        GError *error = nullptr;
+        gst_message_parse_error(done, &error, nullptr);
+        failed_ = error && error->message ? error->message : "the recording failed";
+        g_clear_error(&error);
+      }
       if (done) {
         gst_message_unref(done);
       }
-      gst_object_unref(bus);
     }
     gst_element_set_state(pipeline_, GST_STATE_NULL);
+    if (failed_.empty()) {
+      // An error posted while it recorded, which the sync handler kept.
+      std::lock_guard lock(bus_.mutex);
+      failed_ = bus_.error;
+    }
+  }
+
+  std::string error() override {
+    return failed_;
   }
 
   bool recording() override {
@@ -177,6 +195,7 @@ class GstRecording final : public AudioRecording {
   bool started_{false};
   bool stopped_{false};
   double time_{0};
+  std::string failed_;
 };
 
 } // namespace
@@ -232,9 +251,10 @@ class GstInput final : public AudioInput {
     gchar *folder = g_path_get_dirname(path.c_str());
     g_mkdir_with_parents(folder, 0700);
     g_free(folder);
-    std::string format = settings.format == "pcm" ? std::string(",format=") + pcmFormatOf(settings.bitDepth) : "";
+    bool aiff = elements.muxer == "aiffmux";
+    std::string format = settings.format == "pcm" ? std::string(",format=") + pcmFormatOf(settings.bitDepth, aiff) : "";
     std::string line = setup_.source + " ! audioconvert ! audioresample ! audio/x-raw,rate=" +
-                       std::to_string(static_cast<int>(settings.sampleRate)) + ",channels=" + std::to_string(settings.channels) +
+                       std::to_string(recordingRateOf(settings, elements)) + ",channels=" + std::to_string(settings.channels) +
                        format + (settings.metering ? " ! level interval=100000000" : "") +
                        (elements.encoder.empty() ? "" : " ! " + elements.encoder) + " ! " + elements.muxer +
                        " ! filesink name=file";
@@ -263,12 +283,13 @@ class GstInput final : public AudioInput {
   }
 
  private:
-  static const char *pcmFormatOf(int bits) {
+  // WAV's samples are little-endian, and unsigned at 8 bits; AIFF's big-endian and signed.
+  static const char *pcmFormatOf(int bits, bool aiff) {
     switch (bits) {
-      case 8: return "U8";
-      case 24: return "S24LE";
-      case 32: return "S32LE";
-      default: return "S16LE";
+      case 8: return aiff ? "S8" : "U8";
+      case 24: return aiff ? "S24BE" : "S24LE";
+      case 32: return aiff ? "S32BE" : "S32LE";
+      default: return aiff ? "S16BE" : "S16LE";
     }
   }
 
@@ -276,6 +297,20 @@ class GstInput final : public AudioInput {
 };
 
 } // namespace
+
+int recordingRateOf(const RecordingSettings &settings, const RecordingElements &elements) {
+  int rate = static_cast<int>(settings.sampleRate);
+  if (elements.encoder.rfind("opusenc", 0) != 0) {
+    return rate;
+  }
+  // Opus takes 8, 12, 16, 24 or 48 kHz: the lowest of them that keeps the rate asked for.
+  for (int each : {8000, 12000, 16000, 24000}) {
+    if (rate <= each) {
+      return each;
+    }
+  }
+  return 48000;
+}
 
 RecordingElements recordingElementsOf(const RecordingSettings &settings) {
   const std::string &ext = settings.extension;

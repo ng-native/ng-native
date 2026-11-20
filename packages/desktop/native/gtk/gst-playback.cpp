@@ -38,6 +38,10 @@ double secondsOf(gint64 time) {
 
 struct Playback::Shared {
   std::mutex mutex;
+  // Held over each state change, from deciding it to making it, so two threads' changes land in
+  // the order they were decided, and the destructor's release waits for one in progress. Taken
+  // before `mutex`, never under it.
+  std::mutex changing;
   GstElement *pipeline{nullptr};
   std::function<void(Change)> changed;
   bool alive{true};
@@ -87,6 +91,7 @@ void startTimer(const std::shared_ptr<Shared> &shared);
 // Sets the pipeline to the state `wanted` gives, and runs the interval while it plays. Not under
 // `mutex`.
 void apply(const std::shared_ptr<Shared> &shared) {
+  std::lock_guard changing(shared->changing);
   GstState next;
   bool timer = false;
   {
@@ -117,7 +122,9 @@ void startTimer(const std::shared_ptr<Shared> &shared) {
     return;
   }
   auto *weak = new std::weak_ptr<Shared>(shared);
-  shared->timer = g_timeout_add_full(G_PRIORITY_DEFAULT, static_cast<guint>(shared->interval * 1000), [](gpointer data) -> gboolean {
+  // At least a millisecond: a timeout of 0 would run on every turn of the loop.
+  guint every = static_cast<guint>(std::max(1.0, shared->interval * 1000));
+  shared->timer = g_timeout_add_full(G_PRIORITY_DEFAULT, every, [](gpointer data) -> gboolean {
     auto shared = static_cast<std::weak_ptr<Shared> *>(data)->lock();
     if (shared) {
       send(shared, Change::Time);
@@ -132,16 +139,19 @@ bool seekTo(const std::shared_ptr<Shared> &shared, double seconds) {
   {
     std::lock_guard lock(shared->mutex);
     rate = shared->rate;
-    shared->appliedRate = rate;
     shared->seeking = true;
-    shared->ended = false;
   }
   gint64 at = static_cast<gint64>(std::max(0.0, seconds) * GST_SECOND);
   bool ok = gst_element_seek(shared->pipeline, rate, GST_FORMAT_TIME, static_cast<GstSeekFlags>(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE),
                              GST_SEEK_TYPE_SET, at, GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE);
+  std::lock_guard lock(shared->mutex);
   if (!ok) {
-    std::lock_guard lock(shared->mutex);
+    // Set before the seek, since its ASYNC_DONE can come before this line runs.
     shared->seeking = false;
+  } else {
+    // The rate is the pipeline's only once a seek carried it, and the end is behind it.
+    shared->appliedRate = rate;
+    shared->ended = false;
   }
   return ok;
 }
@@ -335,8 +345,10 @@ Playback::~Playback() {
     g_source_remove(timer);
   }
   if (shared_->pipeline) {
+    // After any state change in progress on another thread, which `alive` stops the next of.
+    std::lock_guard changing(shared_->changing);
     gst_element_set_state(shared_->pipeline, GST_STATE_NULL);
-    gst_object_unref(shared_->pipeline);
+    gst_object_unref(std::exchange(shared_->pipeline, nullptr));
   }
   finishSeeks(shared_);
 }
@@ -438,7 +450,8 @@ void Playback::setRate(double rate) {
     shared_->rate = rate;
     playing = shared_->wantPlaying;
   }
-  if (playing && rate > 0) {
+  if (playing) {
+    // A rate of 0 or less pauses, as play's does.
     play(rate);
   }
 }
