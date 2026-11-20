@@ -20,16 +20,13 @@ import {
 import {
   type HostNode,
   type NativeSyntheticEvent,
-  type ScrollDrive,
-  type ScrollRange,
   type StaticTransform,
   nativePlatform,
-  pinnedRange,
 } from '@ng-native/fabric';
 import { HeightIndex } from './height-index.ts';
 import { type KeyboardShouldPersistTaps, dismissKeyboardOnTap } from './keyboard-taps.ts';
 import { RefreshControl } from './refresh-control.ts';
-import { STICKY_SETTLE_MS } from './sticky-headers.ts';
+import { StickyRows } from './sticky-rows.ts';
 import { TemplateSlot } from './template-slot.ts';
 import { ZeroSizeWarning, checksZeroSize, written } from './zero-size-warning.ts';
 import { View } from './view.ts';
@@ -382,8 +379,6 @@ export class VirtualList<T> extends ScrollViewProps {
   }>();
 
   private readonly viewport = signal(0);
-  /** The leading edge of the viewport in content space, which sticky rows and viewability need. */
-  private readonly offset = signal(0);
   private readonly headerHeight = signal(0);
   /** What native reported the content measures along the axis, once it has. */
   private contentSize = 0;
@@ -407,16 +402,6 @@ export class VirtualList<T> extends ScrollViewProps {
     nativePlatform() === 'android' && this.refreshControl() ? true : undefined,
   );
 
-  /**
-   * Whether native moves sticky rows. Each then stays at its own place in the list and native
-   * translates it on every frame the list scrolls, as RN's `ScrollViewStickyHeader` does; a
-   * translate committed from each scroll event lands a frame or more late, and on a fast fling
-   * the row shudders and comes away from the edge.
-   */
-  private readonly nativeSticky = this.engine.drivesScroll;
-  /** The offset once scrolling pauses, which the settled translate of a native-moved row is from. */
-  private readonly settled = signal(0);
-  private settleTimer: ReturnType<typeof setTimeout> | undefined;
   /** Viewports filled past the overscan, before and after the visible rows in index order. */
   private readonly fill = signal({ before: 0, after: 0 });
   /** The way the visible row last moved: 1 toward the end of the list, -1 toward the start. */
@@ -432,12 +417,22 @@ export class VirtualList<T> extends ScrollViewProps {
     };
   });
   private fillTimer: ReturnType<typeof setTimeout> | undefined;
-  /** What native is moving, by row view, with the transform kept beside the translate. */
-  private readonly drives = new Map<HostNode, { drive: ScrollDrive; statics: string }>();
   private readonly canvasView = viewChild.required('rows', { read: ElementRef });
 
-  /** Whether the scroll offset is needed as a signal, which only pinning needs. */
-  private readonly pinning = computed(() => this.stickyHeader() || this.stickyIndices().length > 0);
+  /** The sticky rows and header: see `StickyRows`. */
+  private readonly sticky = new StickyRows(this.engine, this.node, {
+    indices: this.stickyIndices,
+    header: this.stickyHeader,
+    headerHeight: this.headerHeight,
+    horizontal: () => this.horizontal(),
+    measuring: () => this.measuring(),
+    topOf: (index) => this.topOf(index),
+    heightOf: (index) => this.heightOf(index),
+    slotStyle: (index) => this.slotStyle(index),
+    flowSpacing: () => this.flowSpacing(),
+    flip: () => this.flip(),
+    flipText: () => this.flipText(),
+  });
 
   /** Rows size themselves and are laid out in flow, rather than placed at a known offset. */
   readonly measuring = computed(() => this.itemHeight() === undefined);
@@ -481,7 +476,7 @@ export class VirtualList<T> extends ScrollViewProps {
     const columns = this.columns();
     if (columns === 1) return null;
     const count = this.items().length;
-    const sticky = this.nextSticky();
+    const sticky = this.sticky.next();
     const of = new Int32Array(count);
     const starts: number[] = [];
     let column = columns;
@@ -510,7 +505,7 @@ export class VirtualList<T> extends ScrollViewProps {
   /** An item's insets across the axis: its column's, or the whole width's. */
   private acrossOf(index: number): Record<string, unknown> {
     const lines = this.lines();
-    if (!lines || this.nextSticky().has(index)) return this.across();
+    if (!lines || this.sticky.next().has(index)) return this.across();
     return this.columnAcross()[index - lines.starts[lines.of[index]!]!]!;
   }
 
@@ -863,7 +858,7 @@ export class VirtualList<T> extends ScrollViewProps {
     super();
     afterEveryRender(() => {
       this.flushScroll();
-      if (this.nativeSticky) this.driveStickyRows();
+      if (this.sticky.native) this.driveStickyRows();
       this.recheckItems();
     });
     const stop = dismissKeyboardOnTap(this.engine, this.node, () =>
@@ -871,10 +866,9 @@ export class VirtualList<T> extends ScrollViewProps {
     );
     inject(DestroyRef).onDestroy(() => {
       stop();
-      clearTimeout(this.settleTimer);
+      this.sticky.destroy();
       clearTimeout(this.fillTimer);
       this.zeroSize?.stop();
-      for (const held of this.drives.values()) held.drive.stop();
     });
     if (this.zeroSize) this.checkZeroSize(this.zeroSize);
     effect(() => this.scheduleFill());
@@ -980,9 +974,9 @@ export class VirtualList<T> extends ScrollViewProps {
   protected readonly spacer = computed(() => {
     const span = this.span();
     let lead = span ? this.topOf(span.first) : 0;
-    const pinned = this.pinnedIndex();
+    const pinned = this.sticky.pinned();
     if (span && pinned !== null && pinned < span.first) {
-      lead = this.nativeSticky ? this.topOf(pinned) : lead - this.heightOf(pinned) - this.rowGap();
+      lead = this.sticky.native ? this.topOf(pinned) : lead - this.heightOf(pinned) - this.rowGap();
     }
     return this.horizontal() ? { width: Math.max(0, lead) } : { height: Math.max(0, lead) };
   });
@@ -990,7 +984,7 @@ export class VirtualList<T> extends ScrollViewProps {
   /** The rows from `first` up to `last`, and the pinned row above them if there is one. */
   private rowsFor(items: readonly T[], first: number, last: number): VirtualRow<T>[] {
     const rows: VirtualRow<T>[] = [];
-    const pinned = this.pinnedIndex();
+    const pinned = this.sticky.pinned();
     const pinnedAbove = pinned !== null && pinned < first;
     this.releaseRecycled(first, last, pinnedAbove ? pinned : null);
     // The pinned row is on screen even when its own place in the list is not, which is the whole
@@ -1003,11 +997,11 @@ export class VirtualList<T> extends ScrollViewProps {
           slot: this.recycledSlot(key, items[pinned]!, pinned),
           key,
           item: items[pinned]!,
-          style: this.nativeSticky
-            ? this.stickyStyle(pinned)
+          style: this.sticky.native
+            ? this.sticky.style(pinned)
             : this.measuring()
-              ? this.pinnedFlowStyle(this.topOf(first) - this.heightOf(pinned) - this.rowGap())
-              : this.slotStyle(pinned, this.offset()),
+              ? this.sticky.flowStyle(this.topOf(first) - this.heightOf(pinned) - this.rowGap())
+              : this.slotStyle(pinned, this.sticky.offset()),
         }),
       );
     }
@@ -1023,7 +1017,7 @@ export class VirtualList<T> extends ScrollViewProps {
         }),
       );
     }
-    if (pinnedAbove && this.nativeSticky && this.measuring()) this.leadWindow(rows, pinned, first);
+    if (pinnedAbove && this.sticky.native && this.measuring()) this.leadWindow(rows, pinned, first);
     return rows;
   }
 
@@ -1042,137 +1036,25 @@ export class VirtualList<T> extends ScrollViewProps {
   }
 
   private styleFor(index: number, pinned: boolean): Record<string, unknown> {
-    if (this.nativeSticky && this.nextSticky().has(index)) return this.stickyStyle(index);
+    if (this.sticky.native && this.sticky.next().has(index)) return this.sticky.style(index);
     if (this.measuring()) {
-      return pinned ? this.pinnedFlowStyle(this.topOf(index)) : this.flowStyle();
+      return pinned ? this.sticky.flowStyle(this.topOf(index)) : this.flowStyle();
     }
-    return pinned ? this.slotStyle(index, this.offset()) : this.slotStyle(index);
-  }
-
-  /** A pinned row in flow, moved from where flow put it to the leading edge by a transform. */
-  private pinnedFlowStyle(at: number): Record<string, unknown> {
-    const shift = Math.max(0, this.offset() - at);
-    const move = `${this.horizontal() ? 'translateX' : 'translateY'}(${shift}px)`;
-    const flip = this.flipText();
-    return { ...this.flowSpacing(), zIndex: 1, transform: flip ? `${move} ${flip}` : move };
+    return pinned ? this.slotStyle(index, this.sticky.offset()) : this.slotStyle(index);
   }
 
   /**
-   * A sticky row native moves: at its own place, with the translate native had reached when
-   * scrolling paused, so the props agree with what is on screen.
-   */
-  private stickyStyle(index: number): Record<string, unknown> {
-    const horizontal = this.horizontal();
-    const style: Record<string, unknown> = this.measuring()
-      ? { ...this.flowSpacing() }
-      : { ...this.slotStyle(index) };
-    style['zIndex'] = 1;
-    const top = this.topOf(index);
-    const shift = Math.min(Math.max(0, this.settled() - top), this.stopOf(index) - top);
-    const move = shift > 0 ? `${horizontal ? 'translateX' : 'translateY'}(${shift}px)` : '';
-    const transform = [move, this.flipText() ?? ''].filter(Boolean).join(' ');
-    if (transform) style['transform'] = transform;
-    return style;
-  }
-
-  /** Each sticky row, and the one after it, which pushes it off. */
-  private readonly nextSticky = computed(() => {
-    const sticky = this.stickyIndices();
-    return new Map(sticky.map((index, at) => [index, sticky[at + 1]]));
-  });
-
-  /** Where a sticky row stops, pushed off by the next: that row's top, less this row's size. */
-  private stopOf(index: number): number {
-    const next = this.nextSticky().get(index);
-    return next === undefined ? Infinity : this.topOf(next) - this.heightOf(index);
-  }
-
-  /**
-   * How native moves a rendered row, or null when it does not: along the scroll view's own
-   * offset, which counts the header, from the row's top until the next sticky row pushes it off.
-   */
-  private stickyDrive(
-    row: VirtualRow<T>,
-  ): { range: ScrollRange; statics: readonly StaticTransform[] } | null {
-    if (!this.nativeSticky || row.parked || !this.nextSticky().has(row.index)) return null;
-    const header = this.headerHeight();
-    const start = header + this.topOf(row.index);
-    return {
-      range: pinnedRange(start, header + this.stopOf(row.index)),
-      statics: this.flip() ?? [],
-    };
-  }
-
-  /**
-   * Hand each rendered sticky row's view to native to move, and let go of the rest. The rows'
-   * views are the canvas's element children in window order, after the spacer, which is how
-   * `@for` over `window()` leaves them.
+   * Hand each rendered sticky row's view to native to move. The rows' views are the canvas's
+   * element children in window order, after the spacer, which is how `@for` over `window()`
+   * leaves them.
    */
   private driveStickyRows(): void {
-    if (!this.pinning() && this.drives.size === 0) return;
-    const canvas = this.canvasView().nativeElement as HostNode;
-    const views = canvas.childList
-      .filter((child) => child.nodeKind === 'element')
-      .slice(this.measuring() ? 1 : 0);
-    const axis = this.horizontal() ? 'x' : 'y';
-    const live = new Set<HostNode>();
-    // After the list scrolled itself, where native is: it draws a graph when its offset changes,
-    // and after a jump the offset of a drive just made may not. What native last reported, or
-    // before it has, the target of a jump that is not animated. An animated one only once it has
-    // landed: on the way native's offset changes every frame, so it draws a new graph anyway, and
-    // the offset here trails native's and would set every pinned row back a frame. The same holds
-    // mid-fling, which is why nothing is told outside a jump.
-    const from = !this.jumped
-      ? undefined
-      : this.jumpAnimated
-        ? this.landed
-          ? this.reported
-          : undefined
-        : (this.reported ?? this.jumpedTo);
-    this.window().forEach((row, at) => {
-      const view = views[at];
-      const next = this.stickyDrive(row);
-      if (!view || !next) return;
-      live.add(view);
-      const statics = JSON.stringify(next.statics);
-      const held = this.drives.get(view);
-      if (held?.statics === statics) return held.drive.update(next.range, from);
-      held?.drive.stop();
-      const drive = this.engine.driveByScroll(
-        view,
-        this.node,
-        axis,
-        next.range,
-        next.statics,
-        from,
-      );
-      if (drive) this.drives.set(view, { drive, statics });
-    });
-    for (const [view, held] of this.drives) {
-      if (live.has(view)) continue;
-      held.drive.stop();
-      this.drives.delete(view);
-    }
-    if (this.landed) this.jumped = this.landed = false;
+    const views = () =>
+      (this.canvasView().nativeElement as HostNode).childList
+        .filter((child) => child.nodeKind === 'element')
+        .slice(this.measuring() ? 1 : 0);
+    this.sticky.drive(() => this.window(), views);
   }
-
-  /** The list scrolled itself, and native has not drawn its sticky rows there yet. */
-  private jumped = false;
-  /** Native has reported reaching the target, so this pass's drives are the last to need telling. */
-  private landed = false;
-  /** Where the list scrolled itself to, in the scroll view, which native reports with its event. */
-  private jumpedTo = 0;
-  /** Whether that scroll is animated, so native is still at its start until it reports. */
-  private jumpAnimated = false;
-  /** Where native's latest event since the jump said the scroll view was, header and all. */
-  private reported: number | undefined;
-  /** Where native's latest event of all said it was, header and all. */
-  private nativeAt = 0;
-  /**
-   * Scroll end events still to come, one for each jump that moved native, as iOS sends one. Kept
-   * across jumps: one that landed has its end still to come, and must not be taken for the next's.
-   */
-  private ends = 0;
 
   /** Which recycling slot each rendered item holds, by key: its type, and the row it last drew. */
   private readonly recycled = new Map<
@@ -1226,29 +1108,14 @@ export class VirtualList<T> extends ScrollViewProps {
     return { index: -1, slot, key, item: this.items()[0]!, style: PARKED };
   }
 
-  /** The recycling type of a sticky row of each `itemType`: apart from plain rows of it. */
-  private readonly stickyTypeOf = new Map<unknown, symbol>();
-  private readonly stickyTypes = new Set<unknown>();
-
-  private stickyType(kind: unknown): symbol {
-    let type = this.stickyTypeOf.get(kind);
-    if (!type) {
-      type = Symbol('sticky');
-      this.stickyTypeOf.set(kind, type);
-      this.stickyTypes.add(type);
-    }
-    return type;
-  }
-
   private recycledSlot(key: unknown, item: T, index: number): number {
     // A sticky row is a type of its own: native keeps the translate it moved one by, and a plain
     // row taking its slot commits no transform to put it back. A row that stops or starts being
     // sticky takes a new slot for the same reason.
-    const sticky = this.nextSticky().has(index);
+    const sticky = this.sticky.next().has(index);
     const held = this.recycled.get(key);
-    if (held && this.stickyTypes.has(held.type) === sticky) return held.slot;
-    const kind = this.itemType()?.(item, index);
-    const type = sticky ? this.stickyType(kind) : kind;
+    if (held && this.sticky.isType(held.type) === sticky) return held.slot;
+    const type = this.sticky.recyclingType(index, this.itemType()?.(item, index));
     const slot = this.unpark(key, type) ?? this.parked.get(type)?.pop()?.slot ?? this.nextSlot++;
     this.recycled.set(key, { slot, type, row: null });
     return slot;
@@ -1369,21 +1236,8 @@ export class VirtualList<T> extends ScrollViewProps {
     return style;
   }
 
-  /**
-   * The header's translation while it is pinned: the scroll position, held back at zero by an
-   * overscroll and at the first sticky row, which pushes it off.
-   */
-  protected readonly headerStyle = computed(() => {
-    const flip = this.flipText();
-    if (!this.stickyHeader()) return flip ? { transform: flip } : undefined;
-    const along = this.offset() + this.headerHeight();
-    const first = this.stickyIndices()[0];
-    const limit = first === undefined ? Infinity : this.topOf(first);
-    const shift = Math.min(Math.max(0, along), limit);
-    const move = shift > 0 ? `${this.horizontal() ? 'translateX' : 'translateY'}(${shift}px)` : '';
-    const transform = [move, flip ?? ''].filter(Boolean).join(' ');
-    return transform ? { zIndex: 1, transform } : { zIndex: 1 };
-  });
+  /** The header, pinned with the rows when `stickyHeader` says so: see `StickyRows`. */
+  protected readonly headerStyle = this.sticky.headerStyle;
 
   /**
    * The footer, flipped back like every row when the list is inverted, as FlatList inverts its
@@ -1392,23 +1246,6 @@ export class VirtualList<T> extends ScrollViewProps {
   protected readonly footerStyle = computed(() => {
     const flip = this.flipText();
     return flip ? { transform: flip } : undefined;
-  });
-
-  /**
-   * The sticky row currently holding the leading edge: the last one at or before the offset.
-   * Null when the list has scrolled back above the first of them.
-   */
-  private readonly pinnedIndex = computed<number | null>(() => {
-    const sticky = this.stickyIndices();
-    if (sticky.length === 0) return null;
-    const offset = this.offset();
-
-    let pinned: number | null = null;
-    for (const index of sticky) {
-      if (this.topOf(index) <= offset) pinned = index;
-      else break;
-    }
-    return pinned;
   });
 
   /** Which rows are on screen far enough to count, by the caller's threshold. */
@@ -1491,12 +1328,12 @@ export class VirtualList<T> extends ScrollViewProps {
     const { offset, animated = true } = options;
     this.jumpTo(this.indexAt(offset - this.headerHeight()));
     const [x, y] = this.horizontal() ? [offset, 0] : [0, offset];
-    this.jumping(this.reachable(offset), animated);
+    this.sticky.jumping(this.reachable(offset), animated);
     this.engine.dispatchCommand(this.node, 'scrollTo', [x, y, animated]);
   }
 
   scrollToEnd(options: { animated?: boolean } = {}): void {
-    this.jumping(this.reachable(Infinity), options.animated ?? true);
+    this.sticky.jumping(this.reachable(Infinity), options.animated ?? true);
     this.jumpTo(this.items().length - 1);
     this.engine.dispatchCommand(this.node, 'scrollToEnd', [options.animated ?? true]);
   }
@@ -1545,18 +1382,8 @@ export class VirtualList<T> extends ScrollViewProps {
     const visible = this.indexAt(content);
     if (visible !== this.visible()) this.moveTo(visible);
     this.lastOffset = content;
-    this.nativeAt = along;
-    if (this.jumped) {
-      this.reported = along;
-      // An event from before the jump, or on the way, is not where it lands.
-      if (Math.abs(along - this.jumpedTo) <= 1) this.landed = true;
-    }
     this.anchorAt(visible, content);
-    // A pinned row follows the scroll continuously, so with sticky rows the offset has to be a
-    // signal - and only then. Without them this stays a field, and a fling that moves no row in
-    // or out of the window costs no change detection at all.
-    if (this.pinning()) this.offset.set(content);
-    if (this.nativeSticky && this.pinning()) this.settleAfterPause(content);
+    this.sticky.scrolled(content, along);
     this.checkEnd(along);
     this.announceViewable(content);
   }
@@ -1622,12 +1449,6 @@ export class VirtualList<T> extends ScrollViewProps {
     );
   }
 
-  /** A pinned row's translate, settled once scrolling pauses: see `STICKY_SETTLE_MS`. */
-  private settleAfterPause(content: number): void {
-    clearTimeout(this.settleTimer);
-    this.settleTimer = setTimeout(() => this.settled.set(content), STICKY_SETTLE_MS);
-  }
-
   protected onLayout(
     event: NativeSyntheticEvent<{ layout?: { width?: number; height?: number } }>,
   ): void {
@@ -1677,34 +1498,14 @@ export class VirtualList<T> extends ScrollViewProps {
     return this.contentSizeFor === own ? this.contentSize : own;
   }
 
-  /** The list is scrolling itself, to `to` in the scroll view, where native has not drawn yet. */
-  private jumping(to: number, animated: boolean): void {
-    // To where native last said it was, with no earlier jump on its way: it moves nothing and
-    // reports nothing. With one, native moves and comes back, and reports that.
-    const pending = this.jumped && !this.landed;
-    if (Math.abs(to - (pending ? this.jumpedTo : this.nativeAt)) > 1) this.ends++;
-    this.jumped = pending || Math.abs(to - this.nativeAt) > 1;
-    this.landed = false;
-    this.jumpedTo = to;
-    this.jumpAnimated = animated;
-    this.reported = undefined;
-  }
-
   /** The user took the scroll over: native's own events move the rows from here. */
   protected onDragBegin(): void {
-    this.jumped = this.landed = false;
-    // Android sends no end for a jump that is not animated, so none is waited for past a drag.
-    this.ends = 0;
+    this.sticky.dragged();
   }
 
-  /**
-   * A scroll came to rest. The last of the jumps on their way has landed, wherever it did: iOS
-   * does not stop a scroll at the end of the content, so it can rest past where `reachable` said,
-   * and what moves it next (a tap on the status bar) is not a drag.
-   */
+  /** A scroll came to rest: see `StickyRows.rested`. */
   protected onScrollEnd(): void {
-    if (this.ends > 0) this.ends--;
-    if (this.jumped && this.ends === 0) this.landed = true;
+    this.sticky.rested();
   }
 
   /**
