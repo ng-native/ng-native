@@ -1199,6 +1199,29 @@ describe('ng-native-desktop package --os linux', () => {
     }
   });
 
+  it('gives a Flatpak the sound server when the app plays media, with no microphone usage string', async () => {
+    for (const installed of [[], ['expo-audio'], ['expo-video']]) {
+      const { root, app, sys } = linuxApp();
+      sys.resolvePackage = (_from, name) =>
+        installed.includes(name) ? path.join(app, 'node_modules', name) : null;
+      try {
+        await quiet(() =>
+          main(['package', '--format', 'flatpak', '--arch', 'arm64', ...LICENSED], sys),
+        );
+        const manifest = JSON.parse(
+          readFileSync(path.join(app, 'dist', 'linux', 'com.example.notes.json'), 'utf8'),
+        );
+        assert.equal(
+          manifest['finish-args'].includes('--socket=pulseaudio'),
+          installed.length > 0,
+          installed.join() || 'no media package',
+        );
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+  });
+
   it('builds a Flatpak in the container when Linux has no flatpak-builder, into a repo and bundles', async () => {
     const { root, app, sys, calls } = linuxApp({
       answers: { 'flatpak-builder --version': 1, 'docker image': 1 },

@@ -131,7 +131,8 @@ hands them to one already running.
   `flatpak-repo`, the app's own remote, and a `.flatpak` bundle of each architecture. The manifest,
   `<app-id>.json`, and the source archives it builds from are written beside them. Its permissions
   are the display (Wayland, with X11 as the fallback), shared IPC, GPU access and the network; the
-  sound server when the app has a microphone usage string; and a `--filesystem` for each path in
+  sound server when the app has `expo-audio` or `expo-video` installed, or a microphone usage
+  string; and a `--filesystem` for each path in
   the plugin options' `capabilities.paths`, read only unless it says `readwrite`. Files, links,
   notifications and secrets go through [portals](/packages/desktop/portals), which need none.
   Before it builds, `package` warns about what the sandbox takes away: `capabilities.spawn`, since
