@@ -97,11 +97,12 @@ TEST_CASE("addDesktopModules leaves out each module the backend gives no source 
   // What the core makes over the host's own objects, the two whose null source is an answer, and the
   // tray and Dock, which sources() gives.
   std::vector<std::string> registered{
-      "NgNativeApplication", "NgNativeAsset", "NgNativeClipboard", "NgNativeDevice", "NgNativeDock", "NgNativeHost", "NgNativeMaps",
+      "NgNativeApplication", "NgNativeAsset", "NgNativeClipboard", "NgNativeDevice", "NgNativeDock", "NgNativeHost",
       "NgNativeProcesses", "NgNativeTray", "NgNativeSqlite", "NgNativeStoreReview", "NgNativeWebBrowser", "RNCWebViewModule",
   };
   std::sort(registered.begin(), registered.end());
   CHECK(registry.names() == registered);
+  CHECK(std::find(made.absent.begin(), made.absent.end(), "NgNativeMaps") != made.absent.end());
   // The modules Linux crashed in, among the rest.
   for (const char *name : {"NgNativeBattery", "NgNativeAppleAuthentication", "NgNativeHaptics", "NgNativeSplashScreen",
                            "NgNativeCalendar", "NgNativeCamera", "NgNativeImagePicker", "NgNativeMediaLibrary",
@@ -180,4 +181,14 @@ TEST_CASE("addDesktopModules makes the notification centre and push tokens over 
   CHECK(made.fonts);
   CHECK(made.cameraViews);
   CHECK(made.mapViews);
+}
+
+TEST_CASE("addDesktopModules registers NgNativeMaps where the backend draws map views") {
+  ngn::ModuleRegistry registry;
+  auto given = sources();
+  given.mapViews = true;
+  auto made = ngn::addDesktopModules(registry, given);
+  auto names = registry.names();
+  CHECK(std::find(names.begin(), names.end(), "NgNativeMaps") != names.end());
+  CHECK(std::find(made.absent.begin(), made.absent.end(), "NgNativeMaps") == made.absent.end());
 }

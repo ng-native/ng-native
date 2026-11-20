@@ -1206,6 +1206,7 @@ int main(int argc, const char *argv[]) {
            return surface == kAppSurface ? gHost.appWindow : gHost.windows->window(surface);
          }),
          .reviewPrompt = ngn::appkit::makeReviewPrompt(packaged && packaged->distribution == "mas"),
+         .mapViews = true,
          .crypto = ngn::appkit::makeCryptoSource(),
          .locales = ngn::appkit::makeLocaleSource(),
          .regionCode = ngn::appkit::systemRegionCode,
