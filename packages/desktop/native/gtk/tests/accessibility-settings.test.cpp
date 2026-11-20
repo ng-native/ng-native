@@ -9,6 +9,8 @@
 
 #include <cstring>
 #include <memory>
+#include <optional>
+#include <string>
 #include <vector>
 
 TEST_CASE("the settings portal's contrast is increase contrast, read at start and followed as it changes") {
@@ -109,7 +111,9 @@ TEST_CASE("only GTK's more-contrast value asks for more contrast") {
 namespace {
 
 // A settings portal on a private bus: it answers ReadOne and Read as `oneWorks` and `readWorks` say,
-// with `value`, and counts the calls.
+// with `value`, and counts the calls of the connection named in `counted`: libadwaita asks the portal
+// too, on whatever session bus address the process has as it connects, and its calls are not the
+// watcher's.
 struct FakePortal {
   GDBusConnection *connection{nullptr};
   guint registration{0};
@@ -119,6 +123,7 @@ struct FakePortal {
   bool oneWorks{true};
   bool readWorks{true};
   guint32 value{0};
+  std::string counted;
 
   explicit FakePortal(const char *address) {
     GError *error = nullptr;
@@ -133,11 +138,13 @@ struct FakePortal {
         "</interface></node>";
     GDBusNodeInfo *info = g_dbus_node_info_new_for_xml(xml, nullptr);
     static const GDBusInterfaceVTable vtable = {
-        +[](GDBusConnection *, const char *, const char *, const char *, const char *method, GVariant *, GDBusMethodInvocation *invocation,
+        +[](GDBusConnection *, const char *sender, const char *, const char *, const char *method, GVariant *, GDBusMethodInvocation *invocation,
             gpointer data) {
           auto *self = static_cast<FakePortal *>(data);
           bool one = std::strcmp(method, "ReadOne") == 0;
-          (one ? self->readOne : self->read)++;
+          if (self->counted.empty() || self->counted == sender) {
+            (one ? self->readOne : self->read)++;
+          }
           if (!(one ? self->oneWorks : self->readWorks)) {
             g_dbus_method_invocation_return_dbus_error(invocation, "org.freedesktop.DBus.Error.UnknownMethod", "no such method");
             return;
@@ -178,9 +185,15 @@ struct PrivateBus {
   GTestDBus *bus{nullptr};
   GDBusConnection *client{nullptr};
   std::string address;
+  // g_test_dbus_up points DBUS_SESSION_BUS_ADDRESS at the private bus and g_test_dbus_down unsets it,
+  // so the session bus the run was started under (dbus-run-session) is put back for the tests after.
+  std::optional<std::string> sessionAddress;
   PrivateBus() {
     if (!g_find_program_in_path("dbus-daemon")) {
       return;
+    }
+    if (const char *was = g_getenv("DBUS_SESSION_BUS_ADDRESS")) {
+      sessionAddress = was;
     }
     bus = g_test_dbus_new(G_TEST_DBUS_NONE);
     g_test_dbus_up(bus);
@@ -206,11 +219,37 @@ struct PrivateBus {
     if (bus) {
       g_test_dbus_down(bus);
       g_object_unref(bus);
+      if (sessionAddress) {
+        g_setenv("DBUS_SESSION_BUS_ADDRESS", sessionAddress->c_str(), TRUE);
+      } else {
+        g_unsetenv("DBUS_SESSION_BUS_ADDRESS");
+      }
     }
   }
 };
 
 } // namespace
+
+TEST_CASE("a private bus puts the run's session bus address back when it goes") {
+  const char *was = g_getenv("DBUS_SESSION_BUS_ADDRESS");
+  std::optional<std::string> before;
+  if (was) {
+    before = was;
+  }
+  {
+    PrivateBus bus;
+    if (!bus) {
+      MESSAGE("no private bus to run");
+      return;
+    }
+    CHECK(g_getenv("DBUS_SESSION_BUS_ADDRESS") != nullptr);
+  }
+  const char *after = g_getenv("DBUS_SESSION_BUS_ADDRESS");
+  CHECK((after != nullptr) == before.has_value());
+  if (after && before) {
+    CHECK(std::string(after) == *before);
+  }
+}
 
 TEST_CASE("the portal's reduced motion is read again when its owner changes, and let go of when it goes") {
   REQUIRE(ngn::testing::gtkReady());
@@ -250,24 +289,27 @@ TEST_CASE("the portal is asked with Read only where it has no ReadOne, and no mo
     return;
   }
   const char *address = bus.address.c_str();
+  // The watcher reads two settings, reduced motion and contrast, each with ReadOne and then Read.
+  constexpr int kKeys = 2;
   FakePortal portal(address);
   portal.oneWorks = false;
   portal.value = 1;
+  portal.counted = g_dbus_connection_get_unique_name(bus.client);
   portal.own();
   {
     // The older portal: Read answers.
     ngn::gtk::AccessibilitySettingsWatcher watcher([](const ngn::AccessibilitySettings &) {}, bus.client);
     ngn::testing::runUntil([&] { return watcher.sources().portalReducedMotion; });
-    CHECK(portal.readOne == 1);
-    CHECK(portal.read == 1);
+    CHECK(portal.readOne == kKeys);
+    CHECK(portal.read == kKeys);
   }
-  // A portal that has neither: one of each, and then nothing.
+  // A portal that has neither: one of each per setting, and then nothing.
   portal.readWorks = false;
   portal.readOne = portal.read = 0;
   ngn::gtk::AccessibilitySettingsWatcher watcher([](const ngn::AccessibilitySettings &) {}, bus.client);
   ngn::testing::runUntil([&] { return portal.read > 0; });
   idleFor(300);
-  CHECK(portal.readOne == 1);
-  CHECK(portal.read == 1);
+  CHECK(portal.readOne == kKeys);
+  CHECK(portal.read == kKeys);
   CHECK_FALSE(watcher.sources().portalReducedMotion);
 }
