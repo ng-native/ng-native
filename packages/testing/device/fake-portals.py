@@ -30,7 +30,8 @@ a time where it is a log:
   would, and a link or a folder opens (response 0). `response` is the portal's own: 0 done, 1 the
   person cancelled, 2 it ended some other way. `results` is the Response's a{sv}: a string, a
   boolean, a whole number (as an int32) or a list of strings keeps its type, and `uris` and `writable` are
-  always a list of strings and a boolean.
+  always a list of strings and a boolean. A file chooser's results always have `uris`, an empty
+  list where the answer gives none.
 - `signals.jsonl`: a line a test appends is sent when it is read (every 100 ms), as {signal, args}:
   {"signal": "ActionInvoked", "args": ["<notification id>", "<action>", []]} is a click on a
   notification, with its parameters a list of strings.
@@ -161,9 +162,14 @@ class Fake:
                 self.write_answers(answers)
                 found = first
         answer = found if isinstance(found, dict) else {}
+        results = dict(answer.get("results") or {})
+        # A file chooser's Response always has uris, empty when nothing was chosen, as
+        # xdg-desktop-portal sends it: GTK reads it before it looks at the response.
+        if interface == "FileChooser":
+            results.setdefault("uris", [])
         return {
             "response": int(answer.get("response", DEFAULT_RESPONSE.get(interface, 0))),
-            "results": answer.get("results", {}),
+            "results": results,
         }
 
     def write_answers(self, answers):

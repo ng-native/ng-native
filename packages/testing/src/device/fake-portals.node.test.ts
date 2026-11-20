@@ -228,7 +228,10 @@ describe('the fake desktop portal', { skip }, () => {
     );
     assert.deepEqual(out.calls[0]?.['args'], ['', 'Open', { handle_token: 'token1' }]);
     assert.deepEqual(out.calls[1]?.['args'], ['', 'https://example.com', {}]);
-    assert.deepEqual(out.calls[0]?.['answer'], { response: 1, results: {} });
+    // A file chooser's Response has uris even when nothing was chosen, as GTK reads them.
+    assert.deepEqual(out.results[0]?.['results'], { uris: [] });
+    assert.deepEqual(out.results[1]?.['results'], {});
+    assert.deepEqual(out.calls[0]?.['answer'], { response: 1, results: { uris: [] } });
     // The Request path is the one the caller's token names, under its own bus name.
     assert.match(String(out.results[0]?.['handle']), /\/request\/[\d_]+\/token1$/);
   });
@@ -246,7 +249,7 @@ describe('the fake desktop portal', { skip }, () => {
         'FileChooser.SaveFile',
       ],
       {
-        'FileChooser.OpenFile': [chosen, { response: 2 }],
+        'FileChooser.OpenFile': [chosen, { response: 2, results: { writable: false } }],
         'FileChooser.SaveFile': { response: 0, results: { uris: ['file:///tmp/out.txt'] } },
       },
     );
@@ -259,6 +262,9 @@ describe('the fake desktop portal', { skip }, () => {
       uris: ['file:///tmp/a.txt', 'file:///tmp/b.txt'],
       writable: true,
     });
+    // An answer, or the default, that gives no uris still sends them, empty.
+    assert.deepEqual(out.results[1]?.['results'], { writable: false, uris: [] });
+    assert.deepEqual(out.results[2]?.['results'], { uris: [] });
     assert.deepEqual(out.results[3]?.['results'], { uris: ['file:///tmp/out.txt'] });
   });
 
