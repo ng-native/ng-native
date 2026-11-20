@@ -23,8 +23,13 @@ interface Page {
 }
 
 const PAGES: readonly Page[] = [
-  { id: 'home', label: 'Home', sfSymbol: 'house', hint: 'A native macOS app, written in Angular.' },
-  { id: 'notes', label: 'Notes', sfSymbol: 'note.text', hint: 'Real AppKit views, no web view.' },
+  {
+    id: 'home',
+    label: 'Home',
+    sfSymbol: 'house',
+    hint: 'A native desktop app, written in Angular.',
+  },
+  { id: 'notes', label: 'Notes', sfSymbol: 'note.text', hint: 'Real native views, no web view.' },
   { id: 'settings', label: 'Settings', sfSymbol: 'gearshape', hint: 'One runtime: no IPC.' },
 ];
 
@@ -32,8 +37,9 @@ const PAGES: readonly Page[] = [
  * Element names are lowercase, and that is load-bearing rather than style: an uppercase name such
  * as <View> matches no component's selector, and the Metro transform fails the build on it.
  *
- * Sizes are a phone's by default and a Mac's under :host-context(.platform-macos), so the app is
- * Mac-sized now and still fits a phone if iOS or Android is added later.
+ * Sizes are a phone's by default and a desktop's under :host-context(.platform-macos) and
+ * :host-context(.platform-linux), so the app is desktop-sized now and still fits a phone if iOS or
+ * Android is added later.
  */
 @Component({
   imports: [
@@ -108,14 +114,17 @@ const PAGES: readonly Page[] = [
       color: #5f5f6b;
       font-size: 15px;
     }
-    :host-context(.platform-macos) .content {
+    :host-context(.platform-macos) .content,
+    :host-context(.platform-linux) .content {
       gap: 8px;
       padding: 20px;
     }
-    :host-context(.platform-macos) .title {
+    :host-context(.platform-macos) .title,
+    :host-context(.platform-linux) .title {
       font-size: 22px;
     }
-    :host-context(.platform-macos) .hint {
+    :host-context(.platform-macos) .hint,
+    :host-context(.platform-linux) .hint {
       font-size: 13px;
     }
     @media (prefers-color-scheme: dark) {

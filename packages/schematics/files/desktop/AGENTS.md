@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This is an Angular app rendering real native macOS views (AppKit) with
+This is an Angular app rendering real native macOS (AppKit) and Linux (GTK) views with
 [Angular Native](https://ng-native.com): Angular components on React Native's Fabric renderer, in
 the `@ng-native/desktop` host. Expo is the build tool (CLI, config, autolinking, Metro), not the
 runtime. It is not a web app, not Electron and not React: there is no DOM, no web view and no JSX.
@@ -16,13 +16,16 @@ browser-only parts do not: there is no `NgOptimizedImage` (use `<image>`), and n
 
 ```sh
 npm start           # Metro, the dev server the app loads from
-npm run macos       # builds the desktop host (the first time) and opens the app from Metro
+npm run macos       # on a Mac: builds the desktop host (the first time) and opens the app from Metro
+npm run linux       # on Linux: the same, in GTK
 npm test            # Vitest, in Node against a fake native layer: no app window needed
 npx vitest --project macos   # tests in src/**/*.device.ts, inside the running app; needs
                              # EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start in another terminal
+npx vitest --project linux   # the same in GTK: on Linux, or on a Mac in the ngn-el9 container
 npm run typecheck
-npm run package     # the .app
+npm run package     # the .app on a Mac, an app folder and .tar.gz on Linux
 npm run package -- --format dmg   # a signed, notarised download; --format mas for the Mac App Store
+npm run package -- --os linux --format deb   # --format rpm or flatpak too
 ```
 
 `src/main.ts` mounts the root component, `src/app/app.ts`. Run `npm test` and `npm run typecheck` after a
@@ -67,8 +70,8 @@ change; both are fast.
   `::before`/`::after` are dropped with a build warning naming the file, line and reason - lay out
   with flexbox, grid or a block. Everything is `display: flex` with `flex-direction: column` by
   default, as in React Native.
-- Tailwind v4 works through `@ng-native/tailwind`, with `ios:`, `android:`, `macos:`, `desktop:`
-  and `dark:` variants.
+- Tailwind v4 works through `@ng-native/tailwind`, with `ios:`, `android:`, `macos:`, `linux:`,
+  `desktop:` and `dark:` variants.
 
 ## Lists, navigation, forms
 

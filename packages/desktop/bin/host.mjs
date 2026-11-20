@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { desktopAppConfig } from './app-config.mjs';
 import { desktopLinks, linkWarnings } from './autolink.mjs';
 import { choosePrebuilt, fetchPrebuilt, readManifest } from './prebuilt.mjs';
-import { checkToolchain, FIRST_BUILD_NOTE } from './toolchain.mjs';
+import { checkToolchain, FIRST_BUILD_NOTE, LINUX_FIRST_BUILD_NOTE } from './toolchain.mjs';
 
 export const packageDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -414,7 +414,7 @@ function hostBuildDir(sys, reactNative, build) {
   if (os === 'linux' && !buildsLinuxHere(sys, arch)) {
     throw new UsageError(
       `The Linux desktop host builds on Linux only for now, on the architecture it is for, and no ` +
-        `prebuilt Linux ${arch} host fits this app (${prebuilt.reason}). Package on Linux on ${arch}.`,
+        `prebuilt Linux ${arch} host fits this app (${prebuilt.reason}). Run this on Linux on ${arch}.`,
     );
   }
   return {
@@ -591,13 +591,13 @@ function prebuiltHost(sys, reactNative, { flavour, deny, linked, hostLibraries, 
  * @param {string} link the file `linkFile` names
  */
 function buildHost(sys, reactNative, libraries, { universal, release, os }, link) {
-  if (os === 'macos') checkToolchain(sys);
+  checkToolchain(sys, os);
   const version = versionIn(sys, reactNative);
   if (
     version &&
     !sys.exists(path.join(cacheDir(version, { env: sys.env, platform: sys.platform }), 'host'))
   ) {
-    sys.warn(FIRST_BUILD_NOTE);
+    sys.warn(os === 'linux' ? LINUX_FIRST_BUILD_NOTE : FIRST_BUILD_NOTE);
   }
   const buildArgs = [reactNative, ...libraries.flatMap((dir) => ['--library', dir])];
   if (os === 'linux') buildArgs.push('--backend', 'gtk');

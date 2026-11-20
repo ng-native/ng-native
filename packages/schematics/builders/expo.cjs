@@ -5,16 +5,17 @@
  * `ng run native:run-ios` is `expo run:ios`. Nothing is translated: Metro builds an Angular Native
  * app, Expo drives Metro, and this is how `ng` reaches it.
  *
- * Two commands are not the Expo CLI's, because its `run` commands are a fixed list with no
- * `run:macos`: `macos` is `ng-native-desktop run`, which builds the desktop host and opens the app
- * from the dev server `ng serve` runs, and `package` is `ng-native-desktop package`, which makes the
- * `.app`, `.dmg` or Mac App Store package. Both come from `@ng-native/desktop`.
+ * Three commands are not the Expo CLI's, because its `run` commands are a fixed list with no
+ * `run:macos` or `run:linux`: `macos` and `linux` are `ng-native-desktop run`, which builds the
+ * desktop host and opens the app from the dev server `ng serve` runs, and `package` is
+ * `ng-native-desktop package`, which makes the `.app`, `.dmg` or Mac App Store package, or on Linux
+ * the app folder, `.deb`, `.rpm` or Flatpak. All come from `@ng-native/desktop`.
  */
 const { createBuilder } = require('@angular-devkit/architect');
 const { spawnBin } = require('./spawn-bin.cjs');
 
-/** The commands `ng-native-desktop` runs in place of the Expo CLI, by its subcommand. */
-const DESKTOP_COMMANDS = { macos: 'run', package: 'package' };
+/** What `ng-native-desktop` runs in place of the Expo CLI: its subcommand, and the OS for `linux`. */
+const DESKTOP_COMMANDS = { macos: ['run'], linux: ['run', '--os', 'linux'], package: ['package'] };
 
 /**
  * The Expo CLI's arguments for a target's options.
@@ -30,15 +31,15 @@ function expoArgs(options) {
 }
 
 /**
- * `ng-native-desktop`'s arguments for a `macos` or `package` target. The port is the dev server's
- * the host loads the app from, which only `macos` has: `package` bundles the app itself, and
- * refuses `--port`.
+ * `ng-native-desktop`'s arguments for a `macos`, `linux` or `package` target. The port is the dev
+ * server's the host loads the app from, which only `macos` and `linux` have: `package` bundles the
+ * app itself, and refuses `--port`.
  *
- * @param {{ command: 'macos' | 'package', args?: string[], port?: number }} options
+ * @param {{ command: 'macos' | 'linux' | 'package', args?: string[], port?: number }} options
  */
 function desktopArgs(options) {
-  const args = [DESKTOP_COMMANDS[options.command], ...(options.args ?? [])];
-  if (options.port && options.command === 'macos') args.push('--port', String(options.port));
+  const args = [...DESKTOP_COMMANDS[options.command], ...(options.args ?? [])];
+  if (options.port && options.command !== 'package') args.push('--port', String(options.port));
   return args;
 }
 

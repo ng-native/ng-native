@@ -65,8 +65,11 @@ If the host crashes, the file that was running fails with the path of the crash 
 
 ## What a run does on Linux
 
-`platform: 'linux'` starts the GTK host (`ngn-linux`) on the dev server's Linux bundle. Give it the
-host binary, the `gtk/ngn-linux` in its build folder, as `NGN_DESKTOP_HOST` or through
+`platform: 'linux'` starts the GTK host (`ngn-linux`) on the dev server's Linux bundle. By default
+it runs the debug host `npm run linux` uses, which it gets once from the project's
+`ng-native-desktop host --os linux`: on Linux the prebuilt one for the machine's architecture or
+one built from source, and on a Mac the prebuilt one for the Mac's architecture. To run another,
+give the host binary, the `gtk/ngn-linux` in its build folder, as `NGN_DESKTOP_HOST` or through
 `linuxLauncher({ host })`:
 
 ```ts

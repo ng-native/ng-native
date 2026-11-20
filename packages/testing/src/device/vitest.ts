@@ -38,11 +38,16 @@ export function deviceTests(options: DeviceTestsOptions = {}): Plugin {
   const { include = ['src/**/*.device.ts'], sources = ['src'], name, ...pool } = options;
   // A desktop app is a process the pool can open; a simulator is one a person has open.
   if (pool.platform === 'macos' && pool.launch === undefined) pool.launch = macosLauncher();
-  if (pool.platform === 'linux' && pool.launch === undefined) pool.launch = linuxLauncher();
   return {
     name: 'ng-native:device-tests',
     config(config) {
       const root = path.resolve(config.root ?? process.cwd());
+      // The Linux host is found by the desktop CLI, which reads the app's configuration from its
+      // working directory: the project's root, not the folder Vitest was started in.
+      const launching =
+        pool.platform === 'linux' && pool.launch === undefined
+          ? { ...pool, launch: linuxLauncher({ cwd: root }) }
+          : pool;
       return {
         test: {
           name: name ?? pool.platform ?? 'device',
@@ -57,7 +62,7 @@ export function deviceTests(options: DeviceTestsOptions = {}): Plugin {
               ),
           }),
           include,
-          pool: devicePool(pool),
+          pool: devicePool(launching),
           maxWorkers: 1,
           isolate: false,
           // Absolute: `**` does not match a directory whose name starts with a dot.

@@ -49,9 +49,18 @@ describe('expo', () => {
 });
 
 describe('the desktop commands', () => {
-  it('runs ng-native-desktop for macos and package, which the Expo CLI has no command for', () => {
+  it('runs ng-native-desktop for macos, linux and package, which the Expo CLI has no command for', () => {
     assert.deepEqual(desktopArgs({ command: 'macos' }), ['run']);
     assert.deepEqual(desktopArgs({ command: 'macos', port: 8082 }), ['run', '--port', '8082']);
+    assert.deepEqual(desktopArgs({ command: 'linux' }), ['run', '--os', 'linux']);
+    assert.deepEqual(desktopArgs({ command: 'linux', port: 8082 }), [
+      'run',
+      '--os',
+      'linux',
+      '--port',
+      '8082',
+    ]);
+    assert.deepEqual(desktopArgs({ command: 'package', port: 8082 }), ['package']);
     assert.deepEqual(desktopArgs({ command: 'package', args: ['--format', 'dmg'] }), [
       'package',
       '--format',
@@ -103,6 +112,13 @@ describe('vitest', () => {
 
   it('runs one Vitest project when the target names it', () => {
     assert.deepEqual(vitestArgs({ project: 'node-macos' }), ['run', '--project', 'node-macos']);
+    assert.deepEqual(vitestArgs({ project: ['node-macos', 'node-linux'] }), [
+      'run',
+      '--project',
+      'node-macos',
+      '--project',
+      'node-linux',
+    ]);
   });
 });
 

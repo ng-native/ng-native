@@ -63,8 +63,8 @@ change; both are fast.
   `::before`/`::after` are dropped with a build warning naming the file, line and reason - lay out
   with flexbox, grid or a block. Everything is `display: flex` with `flex-direction: column` by
   default, as in React Native.
-- Tailwind v4 works through `@ng-native/tailwind`, with `ios:`, `android:`, `macos:`, `desktop:`
-  and `dark:` variants.
+- Tailwind v4 works through `@ng-native/tailwind`, with `ios:`, `android:`, `macos:`, `linux:`,
+  `desktop:` and `dark:` variants.
 
 ## Lists, navigation, forms
 

@@ -1,14 +1,16 @@
 /**
- * `nx g @ng-native/nx:desktop mobile`: an Angular Native app that runs on macOS too.
+ * `nx g @ng-native/nx:desktop mobile`: an Angular Native app that runs on macOS and Linux too.
  *
- * The app's `app.json` lists `macos` with Expo's `experiments.outOfTreePlatforms` (without it Expo
- * drops `macos` from every bundle and export, and says nothing) and the `@ng-native/desktop` config
- * plugin. The app depends on `@ng-native/desktop`, whose `ng-native-desktop` command the two new
- * targets run: `macos` builds the desktop host and opens the app from the dev server `nx start`
- * runs, and `package` makes the `.app`, `.dmg` or Mac App Store package. The Expo CLI has no
- * `run:macos` to infer one from.
+ * The app's `app.json` lists `macos` and `linux` with Expo's `experiments.outOfTreePlatforms`
+ * (without it Expo drops them from every bundle and export, and says nothing) and the
+ * `@ng-native/desktop` config plugin. The app depends on `@ng-native/desktop`, whose
+ * `ng-native-desktop` command the new targets run: `macos` and `linux` build the desktop host and
+ * open the app from the dev server `nx start` runs, and `package` makes the `.app`, `.dmg` or Mac
+ * App Store package, or on Linux the app folder, `.deb`, `.rpm` or Flatpak. The Expo CLI has no
+ * `run:macos` or `run:linux` to infer one from.
  *
- * It only adds, so running it again changes nothing.
+ * It only adds, so running it again changes nothing, and an app that has `macos` alone gains
+ * `linux`.
  */
 const {
   addDependenciesToPackageJson,
@@ -42,14 +44,19 @@ function metroPort(project) {
 }
 
 /**
- * The two targets. `macos` is continuous, as `start` is: the host stays open on the app until it
- * quits.
+ * The targets. `macos` and `linux` are continuous, as `start` is: the host stays open on the app
+ * until it quits.
  */
 function desktopTargets(root, port) {
   const run = (command) => ({ executor: 'nx:run-commands', options: { cwd: root, command } });
   const own = port === DEFAULT_PORT ? '' : ` --port ${port}`;
   return {
-    macos: { ...run(`${native.DESKTOP_SCRIPTS.macos}${own}`), continuous: true },
+    ...Object.fromEntries(
+      native.DESKTOP_OSES.map((os) => [
+        os,
+        { ...run(`${native.DESKTOP_SCRIPTS[os]}${own}`), continuous: true },
+      ]),
+    ),
     package: run(native.DESKTOP_SCRIPTS.package),
   };
 }
@@ -107,8 +114,9 @@ async function desktop(tree, options) {
   const install = addDependenciesToPackageJson(tree, native.desktopDependencies, {}, manifest);
   if (!options.skipFormat) await formatFiles(tree);
   logger.info(
-    `${options.project} runs on macOS: nx start ${options.project}, then ` +
-      `nx run ${options.project}:macos. nx run ${options.project}:package makes the app.`,
+    `${options.project} runs on macOS and Linux: nx start ${options.project}, then ` +
+      `nx run ${options.project}:macos or nx run ${options.project}:linux. ` +
+      `nx run ${options.project}:package makes the app.`,
   );
   return options.skipInstall ? () => {} : () => (install(), installPackagesTask(tree));
 }

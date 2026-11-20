@@ -56,6 +56,18 @@ describe('the generated app', () => {
     assert.match(config, /plugins: \[tsconfigPaths\(\), ngNative\(\)\],/);
   });
 
+  it("resolves the aliases in each of the desktop template's Node projects, macos and linux", () => {
+    const config = native.vitestConfig(true, true);
+    for (const os of ['macos', 'linux']) {
+      assert.match(
+        config,
+        new RegExp(`plugins: \\[tsconfigPaths\\(\\), ngNative\\(\\{ os: '${os}' \\}\\)\\]`),
+        os,
+      );
+    }
+    assert.doesNotMatch(config, /plugins: \[ngNative\(/);
+  });
+
   it("applies the template's Metro preset around withNxMetro, so it can wrap Nx's resolver", () => {
     assert.match(
       native.METRO_CONFIG,
@@ -181,9 +193,16 @@ describe('the generated app', () => {
     assert.deepEqual(JSON.parse(native.appJson('mobile')).expo.plugins, ['@ng-native/metro']);
   });
 
+  it('turns on the same flag and plugin for linux alone, which is a desktop OS as macos is', () => {
+    const { expo } = JSON.parse(native.appJson('mobile', undefined, ['ios', 'android', 'linux']));
+    assert.deepEqual(expo.platforms, ['ios', 'android', 'linux']);
+    assert.deepEqual(expo.experiments, { outOfTreePlatforms: true });
+    assert.deepEqual(expo.plugins, ['@ng-native/metro', '@ng-native/desktop']);
+  });
+
   it('writes a desktop-only app.json with no phone settings, keeping the bundle identifier', () => {
-    const { expo } = JSON.parse(native.appJson('@org/notes', 'com.org.notes', ['macos']));
-    assert.deepEqual(expo.platforms, ['macos']);
+    const { expo } = JSON.parse(native.appJson('@org/notes', 'com.org.notes', ['macos', 'linux']));
+    assert.deepEqual(expo.platforms, ['macos', 'linux']);
     assert.deepEqual(expo.experiments, { outOfTreePlatforms: true });
     assert.deepEqual(expo.ios, { bundleIdentifier: 'com.org.notes' });
     for (const key of ['android', 'orientation']) assert.equal(expo[key], undefined, key);
@@ -231,7 +250,7 @@ describe('the generated desktop-only app', () => {
   });
 
   it("writes the desktop template's app.json, with the app's name and bundle identifier", () => {
-    const { expo } = JSON.parse(native.appJson('notes', 'com.acme.notes', ['macos']));
+    const { expo } = JSON.parse(native.appJson('notes', 'com.acme.notes', ['macos', 'linux']));
     const theirs = JSON.parse(desktopFile('app.json')).expo;
     for (const key of ['version', 'platforms', 'experiments', 'userInterfaceStyle', 'extra']) {
       assert.deepEqual(expo[key], theirs[key], key);
@@ -247,18 +266,24 @@ describe('withDesktop', () => {
       experiments: { typedRoutes: true },
       plugins: ['@ng-native/metro', ['expo-camera', {}]],
     });
-    assert.deepEqual(expo.platforms, ['ios', 'android', 'macos']);
+    assert.deepEqual(expo.platforms, ['ios', 'android', 'macos', 'linux']);
     assert.deepEqual(expo.experiments, { typedRoutes: true, outOfTreePlatforms: true });
     assert.deepEqual(expo.plugins, ['@ng-native/metro', ['expo-camera', {}], '@ng-native/desktop']);
   });
 
   it("keeps Expo's default iOS and Android where the config names no platforms", () => {
-    assert.deepEqual(native.withDesktop({}).platforms, ['ios', 'android', 'macos']);
+    assert.deepEqual(native.withDesktop({}).platforms, ['ios', 'android', 'macos', 'linux']);
+  });
+
+  it('adds linux to a config that has macos alone, and only the OSes asked for', () => {
+    const mac = native.withDesktop({ platforms: ['macos'] }, ['macos']);
+    assert.deepEqual(mac.platforms, ['macos']);
+    assert.deepEqual(native.withDesktop(mac).platforms, ['macos', 'linux']);
   });
 
   it('changes nothing the second time, and keeps the options of a plugin entry', () => {
     const entry = ['@ng-native/desktop', { deny: ['x'] }];
-    const once = native.withDesktop({ platforms: ['macos'], plugins: [entry] });
+    const once = native.withDesktop({ platforms: ['macos', 'linux'], plugins: [entry] });
     assert.deepEqual(native.withDesktop(once), once);
     assert.deepEqual(once.plugins, [entry]);
   });
@@ -268,8 +293,10 @@ describe('withDesktop', () => {
     assert.deepEqual(native.desktopDependencies, { '@ng-native/desktop': version });
     assert.deepEqual(native.DESKTOP_SCRIPTS, {
       macos: 'ng-native-desktop run',
+      linux: 'ng-native-desktop run --os linux',
       package: 'ng-native-desktop package',
     });
+    assert.match(native.DESKTOP_GITIGNORE, /^\/dist\/macos$\n^\/dist\/linux$/m);
   });
 });
 
