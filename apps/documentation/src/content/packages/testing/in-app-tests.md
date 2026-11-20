@@ -289,7 +289,7 @@ it('lands on the warm colour', async () => {
 What it turns off:
 
 - the engine's CSS transitions and `@keyframes` animations: a transition lands on its new value,
-  a finite animation ends by the next frame (on its last frame where its fill mode keeps it),
+  a finite animation ends within two frames (on its last frame where its fill mode keeps it),
   and one that repeats forever is not played;
 - UIKit's view animations on iOS;
 - every Android `Animator`, through the app's own animator duration scale. Android can refuse

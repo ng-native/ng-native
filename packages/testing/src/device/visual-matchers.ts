@@ -52,9 +52,8 @@ export function installVisualMatchers(): void {
     toHaveStyle(received: FakeFabricNode, expected: Record<string, unknown>) {
       // What the view has now, not what the record a test kept had when it was queried.
       const now = harness().recorder.current(received.reactTag);
-      if (!now) {
-        return { pass: false, message: () => 'The node is no longer committed: it has gone.' };
-      }
+      // An error rather than a failed match, so `.not.toHaveStyle` reports it too.
+      if (!now) throw new Error('The node is no longer committed: it has gone.');
       const misses = styleMismatches(now as unknown as FakeFabricNode, expected);
       return {
         pass: misses.length === 0,

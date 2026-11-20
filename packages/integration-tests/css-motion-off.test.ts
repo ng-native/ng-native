@@ -1,7 +1,7 @@
 /**
  * Motion off: what a test asks for so what it reads, or captures, is where each change ends. Every
  * transition and `@keyframes` animation takes no time, as CSS defines one of no duration: a
- * transition lands on its new value, an animation ends by the next frame, keeping its last frame
+ * transition lands on its new value, an animation ends within two frames, keeping its last frame
  * only where its fill mode says so, and one that repeats forever shows the resting style.
  */
 import assert from 'node:assert/strict';
@@ -42,6 +42,7 @@ function scene(motion?: 'on' | 'off') {
   engine.commit();
   return {
     engine,
+    view,
     painted: (prop: string) => flatten(fabric.committed)[0]?.props[prop],
     classes(value: string) {
       engine.setClasses(view, value);
@@ -69,7 +70,7 @@ describe('motion off', () => {
     assert.equal(s.painted('opacity'), 0.5);
   });
 
-  it('ends a finite animation by the next frame, on the resting style where it does not fill', () => {
+  it('ends a finite animation within two frames, on the resting style where it does not fill', () => {
     const s = scene('off');
     s.classes('played');
     // Played, if for no time: it starts and ends, so what waits for animationend (Angular's
@@ -80,9 +81,16 @@ describe('motion off', () => {
 
   it('ends a paused finite animation too, rather than holding it', () => {
     const s = scene('off');
+    const ended: string[] = [];
+    s.engine.setEventListener(s.view, 'topAnimationend', (event) =>
+      ended.push((event as { animationName: string }).animationName),
+    );
     s.classes('played paused');
-    s.tick(0);
+    // Its animationend on one frame, its resting style on the next.
+    s.tick(16);
+    s.tick(16);
     assert.equal(s.painted('width'), 100);
+    assert.deepEqual(ended, ['rise'], 'its animationend fires');
   });
 
   it('shows the resting style for an animation that repeats forever', () => {

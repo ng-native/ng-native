@@ -70,6 +70,13 @@ describe("a node's committed style", () => {
       [],
     );
     assert.equal(
+      styleMismatches(node({ shadowOffset: { width: undefined } }), {
+        shadowOffset: { height: undefined },
+      }).length,
+      1,
+      'keys of their own, not just as many of them',
+    );
+    assert.equal(
       styleMismatches(node({ transform: [{ scale: 2 }, { rotate: '45deg' }] }), {
         transform: [{ rotate: '45deg' }, { scale: 2 }],
       }).length,

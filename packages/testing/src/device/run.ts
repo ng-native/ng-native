@@ -141,14 +141,23 @@ export async function runFiles(
     }
 
     override async onAfterRunTask(test: unknown): Promise<void> {
-      await super.onAfterRunTask?.(test);
-      current = undefined;
+      // Animations go back to the project's setting however the rest of teardown goes, and the
+      // first error, the teardown's own, is the one reported.
+      let failure: { error: unknown } | undefined;
       try {
+        await super.onAfterRunTask?.(test);
+        current = undefined;
         cleanup();
         resetScreenshotNames();
-      } finally {
-        await resetAnimations();
+      } catch (error) {
+        failure = { error };
       }
+      try {
+        await resetAnimations();
+      } catch (error) {
+        failure ??= { error };
+      }
+      if (failure) throw failure.error;
     }
 
     override async onAfterRunSuite(suite: unknown): Promise<void> {

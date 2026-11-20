@@ -6881,7 +6881,7 @@ export interface EngineOptions {
   now?: () => number;
   /**
    * `off`: every transition and `@keyframes` animation takes no time, as one of no duration does
-   * in CSS. A transition lands on its new value, a finite animation ends by the next frame (on its
+   * in CSS. A transition lands on its new value, a finite animation ends within two frames (on its
    * last frame where its fill mode keeps it), and one that repeats forever is not played. For a
    * test that reads or captures where a change ends. Default `on`; see `setMotion`.
    */
