@@ -54,6 +54,8 @@ struct Replay {
   GdkDisplay *display{nullptr};
   InputScript script;
   size_t at{0};
+  // Called once the last step has played.
+  std::function<void()> done;
   // Whether the script's press of the primary button is not yet released. The X server holds a
   // posted press for every client until its release, so a script that stops before its `up`, its
   // window closed, releases it.
@@ -204,6 +206,9 @@ void playNext(std::shared_ptr<Replay> replay) {
   }
   if (replay->at >= replay->script.steps.size()) {
     fprintf(stderr, "[ngn] input script done\n");
+    if (replay->done) {
+      replay->done();
+    }
     return;
   }
   const auto &step = replay->script.steps[replay->at++];
@@ -258,7 +263,7 @@ std::optional<std::string> xtestProblem(Display *display) {
 }
 #endif
 
-bool replayInputScript(GtkWidget *window, InputScript script) {
+bool replayInputScript(GtkWidget *window, InputScript script, std::function<void()> done) {
   if (auto problem = inputReplayProblem(window, script)) {
     fprintf(stderr, "[ngn] input script: %s\n", problem->c_str());
     return false;
@@ -268,10 +273,12 @@ bool replayInputScript(GtkWidget *window, InputScript script) {
   replay->window = window;
   replay->display = GDK_DISPLAY(g_object_ref(gtk_widget_get_display(window)));
   replay->script = std::move(script);
+  replay->done = std::move(done);
   g_object_add_weak_pointer(G_OBJECT(window), reinterpret_cast<gpointer *>(&replay->window));
   playNext(std::move(replay));
   return true;
 #else
+  (void)done;
   return false;
 #endif
 }

@@ -128,6 +128,31 @@ TEST_CASE("an input script whose window closes stops there") {
   ngn::testing::runUntil([until] { return g_get_monotonic_time() > until; });
 }
 
+TEST_CASE("an input script calls back once its last step has played, and not when its window closes first") {
+  REQUIRE(ngn::testing::gtkReady());
+  if (!onX11()) {
+    return;
+  }
+  GtkWidget *window = gtk_window_new();
+  gtk_window_set_default_size(GTK_WINDOW(window), 200, 100);
+  gtk_window_present(GTK_WINDOW(window));
+  ngn::testing::runUntil([window] { return gtk_widget_get_mapped(window); });
+  gint64 started = g_get_monotonic_time();
+  gint64 doneAt = 0;
+  REQUIRE(ngn::gtk::replayInputScript(window, ngn::parseInputScript("move 10 10\nwait 300\nkey tab\n"),
+                                      [&doneAt] { doneAt = g_get_monotonic_time(); }));
+  ngn::testing::runUntil([&doneAt] { return doneAt != 0; });
+  CHECK(doneAt - started >= 300 * 1000);
+
+  bool closedDone = false;
+  REQUIRE(ngn::gtk::replayInputScript(window, ngn::parseInputScript("wait 100\nmove 10 10\n"),
+                                      [&closedDone] { closedDone = true; }));
+  gtk_window_destroy(GTK_WINDOW(window));
+  gint64 until = g_get_monotonic_time() + 400 * 1000;
+  ngn::testing::runUntil([until] { return g_get_monotonic_time() > until; });
+  CHECK_FALSE(closedDone);
+}
+
 TEST_CASE("an input script stops when its window is destroyed while another reference keeps it") {
   REQUIRE(ngn::testing::gtkReady());
   if (!onX11()) {

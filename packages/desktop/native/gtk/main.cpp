@@ -7,8 +7,8 @@
 //   ngn-linux             (a packaged app: what the metadata.json beside it names; argv and env
 //                          are ignored)
 //
-// NGN_CAPTURE=<file.png> saves the first window's content a second after its first frame, drawn
-// in-process (capture.h).
+// NGN_CAPTURE=<file.png> saves the first window's content a second after its first frame, or with
+// NGN_INPUT_SCRIPT a second after the script has played, drawn in-process (capture.h).
 #include "app-windows.h"
 #include "capture.h"
 #include "gtk-backend.h"
@@ -42,9 +42,11 @@
 
 #include <atomic>
 #include <cstdio>
+#include <functional>
 #include <map>
 #include <memory>
 #include <set>
+#include <string>
 
 using facebook::react::Float;
 using facebook::react::SurfaceId;
@@ -140,19 +142,34 @@ ngn::WindowMetrics windowMetrics(int width, int height) {
 // A dev or test run's input script (NGN_INPUT_SCRIPT), played into the first window once it shows.
 std::string gInputScript;
 
-void playInputScript(GtkWidget *window) {
+// False, having logged why, when the script cannot be read or played; `done` runs once it has played.
+bool playInputScript(GtkWidget *window, std::function<void()> done) {
   gchar *text = nullptr;
   if (!g_file_get_contents(gInputScript.c_str(), &text, nullptr, nullptr)) {
     fprintf(stderr, "[ngn] input script %s: cannot be read\n", gInputScript.c_str());
-    return;
+    return false;
   }
   auto script = ngn::parseInputScript(text);
   g_free(text);
-  ngn::gtk::replayInputScript(window, std::move(script));
+  return ngn::gtk::replayInputScript(window, std::move(script), std::move(done));
 }
 
-// The first window's first frame, once drawn: logged, captured when asked, and given the run's
-// input script.
+// With NGN_CAPTURE, saves `surface` a second from now.
+void captureSoon(GtkWidget *surface) {
+  const char *path = getenv("NGN_CAPTURE");
+  if (!path || !*path) {
+    return;
+  }
+  std::string file = path;
+  ngn::gtk::runAfter(1, [file, surface] {
+    bool saved = ngn::gtk::captureWidget(surface, file);
+    fprintf(stderr, saved ? "[ngn] captured %s\n" : "[ngn] could not capture %s\n", file.c_str());
+  });
+}
+
+// The first window's first frame, once drawn: logged, given the run's input script, and captured
+// when asked, a second after the script has played, or after the frame when there is no script or
+// it cannot play.
 void watchFirstFrame(GtkWidget *window, GtkWidget *surface) {
   GdkFrameClock *clock = gtk_widget_get_frame_clock(window);
   if (!clock || gHost.firstFrame) {
@@ -166,15 +183,9 @@ void watchFirstFrame(GtkWidget *window, GtkWidget *surface) {
     }
     logged = true;
     fprintf(stderr, "[ngn] first frame %.0f ms after launch\n", (g_get_monotonic_time() - gHost.launched) / 1000.0);
-    if (!gInputScript.empty()) {
-      playInputScript(GTK_WIDGET(gtk_widget_get_root(static_cast<GtkWidget *>(surface))));
-    }
-    if (const char *path = getenv("NGN_CAPTURE"); path && *path) {
-      std::string file = path;
-      ngn::gtk::runAfter(1, [file, surface] {
-        bool saved = ngn::gtk::captureWidget(static_cast<GtkWidget *>(surface), file);
-        fprintf(stderr, saved ? "[ngn] captured %s\n" : "[ngn] could not capture %s\n", file.c_str());
-      });
+    auto *widget = static_cast<GtkWidget *>(surface);
+    if (gInputScript.empty() || !playInputScript(GTK_WIDGET(gtk_widget_get_root(widget)), [widget] { captureSoon(widget); })) {
+      captureSoon(widget);
     }
   }), surface);
 }
