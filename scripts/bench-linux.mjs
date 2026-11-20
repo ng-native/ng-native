@@ -20,8 +20,18 @@
  *   the host's threads in `/proc/<pid>/task/<tid>/status`, sampled every 100 ms (`switchesOver`).
  * - `memoryMb`: proportional set size of the first window, from `/proc/<pid>/smaps_rollup`.
  * - `hostMb`: the host binary's size stripped of symbols.
- * The slowest commit the host logs is reported, not judged: its budget is relative to the same
- * commit on the fake backend, which this does not measure yet.
+ * And, from a second launch on a bundle of its own (`examples/notes/bench/linux-bench.ts`, exported
+ * with the notes example's Metro config), which tells a local server when each of its steps begins
+ * and ends while the host logs every commit and frame (`NGN_LOG_COMMITS`):
+ * - `mountMs`: the slowest commit of mounting a list of 2,000 views, on the JavaScript thread.
+ * - `scrollFrameMs`: the median frame, from the frame clock's update to the end of its paint, while
+ *   the list scrolls and one of its views changes each frame.
+ * - `resizeCommitMs` and `resizeCommitsPerFrame`: the slowest commit, and commits over frames,
+ *   while a divider's width changes each frame, as a drag changes it.
+ * - `extraWindowMb`: the growth of the host's proportional set size from opening four more
+ *   windows, over four.
+ * The slowest commit the host logs on the notes bundle is reported, not judged: its budget is
+ * relative to the same commit on the fake backend, which this does not measure yet.
  *
  * As `bench:macos`, the first launch is a warm-up that is reported and not judged, each metric is
  * the median of `--runs` launches (default 3). A JavaScript bundle is compiled to bytecode first,
@@ -30,8 +40,10 @@
  * reason and the pull request.
  */
 import { spawn, spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -42,7 +54,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { commitMs, firstFrameMs, hostEnv, judge, summarize } from './bench-macos.mjs';
+import { commitMs, firstFrameMs, hostEnv, judge, median, summarize } from './bench-macos.mjs';
 import { runInLinuxImage, startXvfb, stopHost } from './linux-image.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -154,6 +166,36 @@ function cpuNow(pid, ticksPerSecond) {
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * The host launched on `bundle` as a test launch under a state folder of its own, its standard
+ * output and error given to `onOutput`. `failed` rejects when it could not start, which emits
+ * `error` and no `exit`.
+ *
+ * @param {string} host
+ * @param {string} bundle
+ * @param {(chunk: Buffer) => void} onOutput
+ * @param {NodeJS.ProcessEnv} [extra]
+ */
+function launchHost(host, bundle, onOutput, extra = {}) {
+  const state = mkdtempSync(path.join(tmpdir(), 'bench-linux-'));
+  const child = spawn(host, [bundle, '--title', 'bench:linux'], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...benchEnv(process.env),
+      NGN_TESTS: '1',
+      NGN_STATE_DIR: state,
+      NGN_RUN_ID: `bench-${process.pid}`,
+      NGN_TESTS_FAKE_SYSTEM_UI: '1',
+      ...extra,
+    },
+  });
+  child.stdout.on('data', onOutput);
+  child.stderr.on('data', onOutput);
+  const failed = new Promise((_, reject) => child.once('error', reject));
+  failed.catch(() => {});
+  return { child, state, failed };
+}
+
+/**
  * Launch the host on `bundle`, measure it, and stop it.
  *
  * @param {string} host
@@ -165,23 +207,9 @@ export async function measure(
   bundle,
   { settleMs = 5_000, idleMs = 30_000, sampleMs = 100, ticksPerSecond = 100, stopGraceMs } = {},
 ) {
-  const state = mkdtempSync(path.join(tmpdir(), 'bench-linux-'));
-  const child = spawn(host, [bundle, '--title', 'bench:linux'], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...benchEnv(process.env),
-      NGN_TESTS: '1',
-      NGN_STATE_DIR: state,
-      NGN_RUN_ID: `bench-${process.pid}`,
-      NGN_TESTS_FAKE_SYSTEM_UI: '1',
-    },
-  });
   let log = '';
-  child.stdout.on('data', (chunk) => (log += chunk));
-  child.stderr.on('data', (chunk) => (log += chunk));
-  // A host that never starts emits `error` and no `exit`: reject the measurement, after cleanup.
-  const failed = new Promise((_, reject) => child.once('error', reject));
-  failed.catch(() => {});
+  const { child, state, failed } = launchHost(host, bundle, (chunk) => (log += chunk));
+  // A host that never starts rejects the measurement, after cleanup.
   const pause = (ms) => Promise.race([wait(ms), failed]);
   try {
     for (let waited = 0; firstFrameMs(log) === null && waited < 10_000; waited += 100)
@@ -204,6 +232,180 @@ export async function measure(
     // The next launch starts only once this host has gone.
     await stopHost(child, stopGraceMs);
     rmSync(state, { recursive: true, force: true });
+  }
+}
+
+/**
+ * What the host logged, line by line, with when each line arrived: a commit (`[ngn] commit N ms`)
+ * or a frame (`[ngn] frame N ms`). A chunk need not end on a line break, so the unfinished line
+ * waits for the rest.
+ */
+export class HostEvents {
+  /** @type {{ kind: 'commit' | 'frame', ms: number, at: number }[]} */
+  events = [];
+  #pending = '';
+
+  /** @param {string} chunk @param {number} at */
+  push(chunk, at) {
+    const lines = (this.#pending + chunk).split('\n');
+    this.#pending = lines.pop() ?? '';
+    for (const line of lines) {
+      const match = /\[ngn\] (commit|frame) ([\d.]+) ms/.exec(line);
+      if (match) {
+        this.events.push({
+          kind: /** @type {'commit' | 'frame'} */ (match[1]),
+          ms: Number(match[2]),
+          at,
+        });
+      }
+    }
+  }
+}
+
+/**
+ * The workload's metrics from its steps' bounds (when each began and ended, as the server saw them),
+ * what the host logged and the memory sampled around the window step. A metric whose events are not
+ * there is null, which fails the run: a step that logged no commit measured nothing.
+ *
+ * @param {{ events: { kind: string, ms: number, at: number }[], steps: Record<string, { from?: number, to?: number, failed?: boolean }>, pss: { before: number | null, after: number | null }, windows?: number }} measured
+ */
+export function workloadMetrics({ events, steps, pss, windows }) {
+  const within = (name, kind) => {
+    const step = steps[name];
+    if (step?.from === undefined || step.to === undefined || step.failed) return [];
+    return events
+      .filter((event) => event.kind === kind && event.at > step.from && event.at <= step.to)
+      .map((event) => event.ms);
+  };
+  const slowest = (times) => (times.length ? Math.max(...times) : null);
+  const scrollFrames = within('scroll', 'frame');
+  const resizeCommits = within('resize', 'commit');
+  const resizeFrames = within('resize', 'frame');
+  return {
+    mountMs: slowest(within('mount', 'commit')),
+    scrollFrameMs: scrollFrames.length ? median(scrollFrames) : null,
+    resizeCommitMs: slowest(resizeCommits),
+    resizeCommitsPerFrame: resizeFrames.length ? resizeCommits.length / resizeFrames.length : null,
+    extraWindowMb:
+      steps['window']?.failed || pss.before === null || pss.after === null || !(windows > 0)
+        ? null
+        : (pss.after - pss.before) / windows,
+  };
+}
+
+/** How long the server lets the host's output catch up with a step's boundary, in milliseconds. */
+const DRAIN_MS = 300;
+
+/**
+ * Launch the host on the workload bundle and measure it: the bundle asks this process's server, on
+ * `port`, to start, and to bracket each step (`begin/<name>`, then `end/<name>`, or `failed/<name>`
+ * for a step that did not do what it measures), and says when it is done. The host's commits and frames are read from its output against those brackets, and its
+ * memory is sampled at the window step's, divided by the windows it opened (`count/<n>`). Stops the host. Rejects when the host does not start or
+ * the workload does not finish in `timeoutMs`.
+ *
+ * @param {string} host
+ * @param {string} bundle
+ * @param {{ port?: number, timeoutMs?: number, stopGraceMs?: number, firstFrameMs?: number }} [options]
+ */
+export async function measureWorkload(
+  host,
+  bundle,
+  { port = 51741, timeoutMs = 120_000, stopGraceMs, firstFrameMs: firstFrameWaitMs = 10_000 } = {},
+) {
+  const output = new HostEvents();
+  let log = '';
+  /** The host, once the server is listening: a port that is taken starts nothing. */
+  let launched;
+  /** @type {Record<string, { from?: number, to?: number, failed?: boolean }>} */
+  const steps = {};
+  const pss = {
+    before: /** @type {number | null} */ (null),
+    after: /** @type {number | null} */ (null),
+  };
+  const sample = () => pssMb(read(`/proc/${launched.child.pid}/smaps_rollup`) ?? '');
+  let windows;
+  let finished;
+  const done = new Promise((resolve) => (finished = resolve));
+  const server = createServer(async (request, response) => {
+    const [, action, name] = /^\/(\w+)(?:\/(\w+))?$/.exec(request.url ?? '') ?? [];
+    try {
+      if (action === 'start') {
+        for (
+          let waited = 0;
+          firstFrameMs(log) === null && waited < firstFrameWaitMs;
+          waited += 50
+        ) {
+          await wait(50);
+        }
+        await wait(1000);
+      } else if (action === 'begin' && name) {
+        // What the host logged before this belongs to the step before it.
+        await wait(DRAIN_MS);
+        steps[name] = { from: performance.now() };
+        if (name === 'window') pss.before = sample();
+      } else if ((action === 'end' || action === 'failed') && name && steps[name]) {
+        // A step that did not do what it measures is a measurement of nothing.
+        steps[name].to = performance.now();
+        steps[name].failed = action === 'failed';
+        if (name === 'window') pss.after = sample();
+      } else if (action === 'count' && name) {
+        // How many windows the window step opens, which its memory is divided by.
+        windows = Number(name);
+      } else if (action === 'done') {
+        finished();
+      }
+      response.end('ok');
+    } catch {
+      response.statusCode = 500;
+      response.end();
+    }
+  });
+  let timer;
+  try {
+    await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(port, '127.0.0.1', () => resolve(undefined));
+    });
+    launched = launchHost(
+      host,
+      bundle,
+      (chunk) => {
+        log += chunk;
+        output.push(String(chunk), performance.now());
+      },
+      { NGN_BENCH_PORT: String(port) },
+    );
+    const { child, failed } = launched;
+    const timedOut = new Promise((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(new Error(`The workload did not finish in ${timeoutMs} ms.\n${log.slice(-2000)}`)),
+        timeoutMs,
+      );
+    });
+    const exited = new Promise((_, reject) =>
+      child.once('exit', (code, signal) =>
+        reject(
+          new Error(
+            `The host ended (${signal ?? code}) before the workload finished.\n${log.slice(-2000)}`,
+          ),
+        ),
+      ),
+    );
+    exited.catch(() => {});
+    await Promise.race([done, failed, exited, timedOut]);
+    return { ...workloadMetrics({ events: output.events, steps, pss, windows }) };
+  } finally {
+    clearTimeout(timer);
+    // The next launch listens on the same port, so it is closed before this returns.
+    await new Promise((resolve) => {
+      server.close(resolve);
+      server.closeAllConnections();
+    });
+    if (launched) {
+      await stopHost(launched.child, stopGraceMs);
+      rmSync(launched.state, { recursive: true, force: true });
+    }
   }
 }
 
@@ -250,11 +452,18 @@ export function bytecode(host, bundle, dir) {
   return out;
 }
 
-/** A release bundle of the notes example for Linux: `--bundle`, or one exported now. */
-function findBundle(given) {
+/**
+ * A release bundle for Linux made with the notes example's Metro config: the given file, or `entry`
+ * (relative to the example) exported now into `dist/<name>`.
+ *
+ * @param {string | undefined} given
+ * @param {string} name
+ * @param {string[]} entry
+ */
+function findBundle(given, name, entry) {
   if (given) return existsSync(given) ? path.resolve(given) : null;
   const notes = path.join(root, 'examples', 'notes');
-  const out = path.join(notes, 'dist', 'linux');
+  const out = path.join(notes, 'dist', name);
   const bundle = path.join(out, 'main.js');
   const exported = spawnSync(
     'npx',
@@ -265,6 +474,7 @@ function findBundle(given) {
       'linux',
       '--dev',
       'false',
+      ...entry,
       '--bundle-output',
       bundle,
       '--assets-dest',
@@ -280,7 +490,10 @@ const option = (argv, name) => {
   return at >= 0 ? argv[at + 1] : undefined;
 };
 
-/** The host, the bundle and the number of runs, from the arguments, or why they are unusable. */
+/**
+ * The host, the notes bundle, the workload bundle and the number of runs, from the arguments, or
+ * why they are unusable.
+ */
 function inputs(argv) {
   const given = option(argv, '--host') ?? process.env.NGN_DESKTOP_HOST;
   if (!given || !existsSync(given)) {
@@ -293,22 +506,36 @@ function inputs(argv) {
   if (!Number.isInteger(runs) || runs < 1) {
     throw new Error('--runs takes a whole number, 1 or more.');
   }
-  const bundle = findBundle(option(argv, '--bundle'));
+  const bundle = findBundle(option(argv, '--bundle'), 'linux', []);
   if (!bundle) {
     throw new Error('No Linux bundle: the notes example did not export, or --bundle is missing.');
   }
-  return { host: path.resolve(given), bundle, runs };
+  const workload = findBundle(option(argv, '--workload-bundle'), 'linux-bench', [
+    '--entry-file',
+    'bench/linux-bench.ts',
+  ]);
+  if (!workload) {
+    throw new Error(
+      'No workload bundle: examples/notes/bench/linux-bench.ts did not export, or ' +
+        '--workload-bundle is missing.',
+    );
+  }
+  return { host: path.resolve(given), bundle, workload, runs };
 }
 
-/** Each launch's numbers, the first a warm-up, under a display of the bench's own. */
-async function launches(host, bundle, runs) {
+/**
+ * Each run's numbers, the first a warm-up, under a display of the bench's own: a launch of the
+ * notes bundle, then one of the workload's.
+ */
+async function launches(host, bundle, workload, runs) {
   const ticks =
     Number(spawnSync('getconf', ['CLK_TCK'], { encoding: 'utf8' }).stdout.trim()) || 100;
   const stop = await startXvfb();
   const all = [];
   try {
     for (let launch = 0; launch <= runs; launch += 1) {
-      all.push(await measure(host, bundle, { ticksPerSecond: ticks }));
+      const measured = await measure(host, bundle, { ticksPerSecond: ticks });
+      all.push({ ...measured, ...(await measureWorkload(host, workload)) });
     }
   } finally {
     stop();
@@ -317,12 +544,14 @@ async function launches(host, bundle, runs) {
 }
 
 async function main(argv) {
-  const { host, bundle, runs } = inputs(argv);
+  const { host, bundle, workload, runs } = inputs(argv);
   if (process.platform !== 'linux') {
     process.exitCode = runInLinuxImage(
       self,
-      ['--host', host, '--bundle', bundle, '--runs', String(runs)],
-      { mounts: [path.dirname(path.dirname(host)), path.dirname(bundle)] },
+      ['--host', host, '--bundle', bundle, '--workload-bundle', workload, '--runs', String(runs)],
+      {
+        mounts: [path.dirname(path.dirname(host)), path.dirname(bundle), path.dirname(workload)],
+      },
     );
     return;
   }
@@ -332,7 +561,13 @@ async function main(argv) {
   const dir = mkdtempSync(path.join(tmpdir(), 'bench-linux-hbc-'));
   let all;
   try {
-    all = await launches(host, bytecode(host, bundle, dir), runs);
+    // Each in a folder of its own: both are `main`, and keep their assets beside them.
+    const compiled = (file, name) => {
+      const folder = path.join(dir, name);
+      mkdirSync(folder);
+      return bytecode(host, file, folder);
+    };
+    all = await launches(host, compiled(bundle, 'notes'), compiled(workload, 'workload'), runs);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

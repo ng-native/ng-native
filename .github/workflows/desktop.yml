@@ -70,6 +70,9 @@ jobs:
           filters: |
             desktop:
               - 'packages/desktop/**'
+              - 'packages/testing/device/fake-portals.py'
+              - 'packages/testing/src/device/fake-portals.node.test.ts'
+              - 'packages/testing/src/device/linux-launcher.ts'
               - '.github/workflows/desktop.yml'
               - 'scripts/desktop-host-pins.mjs'
               - '.github/actions/desktop-prebuilt/**'
@@ -204,8 +207,7 @@ jobs:
               echo "$build" > "$GITHUB_WORKSPACE/.linux-probe/build-dir"
               "$build/ngn_core_tests"
               "$build/ngn_runtime_tests"
-              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
-              xvfb=$!
+              xvfb=$(native/scripts/start-xvfb.sh "$GITHUB_WORKSPACE/.linux-probe/xvfb-gtk-tests.log")
               trap "kill $xvfb" EXIT
               mkdir -p "$GITHUB_WORKSPACE/.linux-probe/gtk-tests"
               # A session bus of their own, for the tray and the launcher badge (status-notifier.test.cpp).
@@ -214,6 +216,15 @@ jobs:
               native/docker/glibc-floor.sh 2.34 "$build/ngn_core_tests" "$build/ngn_runtime_tests" "$build/gtk/ngn-linux" \
                 "$NGN_DESKTOP_CACHE"/*/hermes-$(uname -m)/bin/hermesc
             '
+
+      # The Linux test launcher's fake system UI (packages/testing/device/fake-portals.py) on a
+      # session bus of its own, in the image that has dbus-daemon and PyGObject. As root: dbus-daemon
+      # takes no client whose user the image has no passwd entry for.
+      - name: Test the fake system UI of the Linux test launcher
+        run: |
+          docker run --rm --init -e NGN_REQUIRE_FAKE_SYSTEM_UI=1 \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ngn-el9 \
+            node --test packages/testing/src/device/fake-portals.node.test.ts
 
       # A .deb depends on DEB_DEPENDS and nothing else: with only those installed in a clean Ubuntu
       # 24.04, every library the built host loads must be found. (An rpm's requirements are
@@ -245,8 +256,7 @@ jobs:
               probe="$GITHUB_WORKSPACE/.linux-probe"
               host="$(cat "$probe/build-dir")/gtk/ngn-linux"
               export GTK_A11Y=none
-              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
-              xvfb=$!
+              xvfb=$(native/scripts/start-xvfb.sh "$probe/xvfb-launch.log")
               DISPLAY=:99 GDK_BACKEND=x11 NGN_CAPTURE="$probe/x11.png" \
                 native/scripts/launch-probe.sh "$host" "$probe/notes/main.js"
               kill $xvfb
@@ -268,7 +278,7 @@ jobs:
             bash -euo pipefail -c '
               probe="$GITHUB_WORKSPACE/.linux-probe"
               python3 native/scripts/atspi-check.test.py
-              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
+              native/scripts/start-xvfb.sh "$probe/xvfb-atspi.log" > /dev/null
               DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
                 "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/notes/main.js" --role "push button" --role label --relation described-by --tab
             '
@@ -289,7 +299,7 @@ jobs:
               apt-get install -y -qq --no-install-recommends $PACKAGES xvfb dbus at-spi2-core python3-pyatspi \
                 gir1.2-atspi-2.0 fonts-dejavu-core > /dev/null
               probe="$GITHUB_WORKSPACE/.linux-probe"
-              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
+              native/scripts/start-xvfb.sh "$probe/xvfb-debian.log" > /dev/null
               DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
                 "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/canary/main.js" --url canary://device \
                 --heading 2 --announce "Announce to a screen reader" --action "Announce to a screen reader=repeat"
@@ -312,7 +322,10 @@ jobs:
           for _ in $(seq 120); do curl -fs -o /dev/null http://127.0.0.1:8081/status && break; sleep 1; done
           curl -fs -o /dev/null --max-time 600 \
             'http://127.0.0.1:8081/.expo/.virtual-metro-entry.bundle?platform=linux&dev=true'
+          # The runner's passwd and group, so the user has an entry in the image: the launcher's fake
+          # system UI runs a session bus, which takes no client the system does not know.
           docker run --rm --init --network host --user "$(id -u):$(id -g)" -e HOME=/tmp -e GTK_A11Y=none \
+            -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro \
             -e NGN_DESKTOP_HOST="$(cat "$probe/build-dir")/gtk/ngn-linux" \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/examples/notes" ngn-el9 \
             node_modules/.bin/vitest run --project linux

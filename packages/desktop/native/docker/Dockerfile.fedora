@@ -1,0 +1,35 @@
+# The same build and test image on Fedora, for the newer GTK, libadwaita, Mesa and compositors the
+# Linux host also runs on, beside the AlmaLinux 9 one in Dockerfile, which stays the image whose
+# output ships (it keeps the glibc floor, and the GTK 4.12 and libadwaita 1.4 the host builds
+# against). Where el9 runs the fallbacks libadwaita 1.4 needs, this runs the code a newer libadwaita
+# takes instead. The nightly workflow builds the host and runs the core and GTK tests in it, and a
+# Mac builds it the same way, from the repository's root:
+#
+#   docker build -f packages/desktop/native/docker/Dockerfile.fedora -t ngn-fedora packages/desktop/native/docker
+#   docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e NGN_DESKTOP_CACHE=/tmp/cache \
+#     -v "$PWD:$PWD" -w "$PWD/packages/desktop" ngn-fedora \
+#     native/scripts/build.sh --backend gtk --test
+#
+# The tools that start a container take its name from NGN_LINUX_IMAGE, so `NGN_LINUX_IMAGE=ngn-fedora
+# pnpm bench:linux` and a `linuxLauncher()` run in this image instead of `ngn-el9`. Run it as a user
+# other than root, as the el9 image: root reads a file whatever its mode, so the core tests that
+# make one unreadable fail.
+ARG FEDORA=44
+FROM fedora:${FEDORA}
+
+# What Dockerfile installs, under Fedora's names: its llvm packages, GTK, libadwaita and libsecret
+# headers, the libraries the static libcurl links dynamically, Xvfb, Weston, Mesa's software
+# drivers, D-Bus, the fonts, the English and German locales the GTK tests set, and pyatspi for the
+# AT-SPI check. Fedora's repositories carry ninja, ccache and Weston, so it needs no CRB and no EPEL.
+RUN dnf -y install \
+      clang lld llvm cmake ninja-build ccache \
+      git python3 perl perl-Digest-SHA nodejs \
+      binutils diffutils file findutils procps-ng which \
+      bzip2 tar unzip xz \
+      libatomic sqlite-devel openssl-devel libnghttp2-devel zlib-devel \
+      gtk4-devel libadwaita-devel pango-devel cairo-devel libsecret-devel \
+      xorg-x11-server-Xvfb weston mesa-dri-drivers dbus-daemon dbus-tools at-spi2-core python3-pyatspi \
+      dejavu-sans-fonts google-noto-sans-fonts glibc-langpack-en glibc-langpack-de \
+ && dnf clean all
+
+ENV CC=clang CXX=clang++

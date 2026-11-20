@@ -5,6 +5,15 @@
  * the AlmaLinux 9 image the host is built in (`packages/desktop/native/docker`), which reaches the
  * pool and Metro on the Mac through ports it forwards.
  *
+ * The launch has a fake system UI (`fake-portals.py`, in the package's `device` folder): a private
+ * session bus where the fake owns `org.freedesktop.portal.Desktop`, so a file chooser, a link or a
+ * notification asks nobody and a test can see the call and answer it, as the macOS host's fake
+ * system UI answers as a person cancelling would. Its control folder is `portals` in the launch's
+ * state folder, described in the script's header. The host calls the portals itself whenever one
+ * answers (portal.h), and GTK's own dialogs only where none does, so nothing selects GTK's portal
+ * path (`GDK_DEBUG=portals`) here. `fakeSystemUi: false` leaves the session's own bus and portals
+ * in use.
+ *
  * Linux has no crash report location of its own, so the host writes `crash.txt` in its state
  * folder as it dies of a fatal signal. The session script prints it after the host, where the
  * launch's output carries it out of a container too, and the pool names it for a lost host, with
@@ -14,6 +23,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import { constants } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { AppLauncher, LaunchRequest, LaunchedApp } from './launcher.ts';
 import { testEnvironment } from './macos-launcher.ts';
 
@@ -45,8 +55,8 @@ export interface LinuxLauncherOptions {
    */
   display?: LinuxDisplay;
   /**
-   * The image to run the host in, or `false` to run it directly. Default: `ngn-el9` on any OS but
-   * Linux, and none on Linux.
+   * The image to run the host in, or `false` to run it directly. Default: `NGN_LINUX_IMAGE`, or
+   * `ngn-el9`, on any OS but Linux, and none on Linux.
    */
   container?: string | false;
   /** The container command. Default `docker`. */
@@ -56,6 +66,14 @@ export interface LinuxLauncherOptions {
    * container too. Default: the current directory.
    */
   cwd?: string;
+  /**
+   * Whether the host runs against a fake system UI: its own session bus with a fake desktop portal
+   * on it (`fake-portals.py`), which answers a file chooser as cancelled and a link as opened,
+   * records every call and takes a test's answers, instead of the session's portals, which would
+   * open a real dialog. It needs `dbus-daemon` and `python3` with PyGObject where the host runs,
+   * and the launch fails without them. Default true.
+   */
+  fakeSystemUi?: boolean;
   /** How long `stop` waits after SIGTERM before it kills what is left, in milliseconds. Default 3000. */
   stopGraceMs?: number;
   /** Environment added to the process's own. */
@@ -94,7 +112,11 @@ export function linuxStateEnvironment(stateDir: string): Record<string, string> 
  * (`"$@"`) run until it exits or is sent SIGTERM, which it is passed. It exits with the host's
  * status, or 128 plus the signal that ended it, and stops the display it started.
  */
-export function sessionScript(display: LinuxDisplay, forward: readonly number[] = []): string {
+export function sessionScript(
+  display: LinuxDisplay,
+  forward: readonly number[] = [],
+  fakeSystemUi = false,
+): string {
   const lines = [
     'set -u',
     'mkdir -p "$NGN_STATE_DIR" "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" "$TMPDIR"',
@@ -113,6 +135,7 @@ export function sessionScript(display: LinuxDisplay, forward: readonly number[] 
       '[ -f /tmp/ngn-forwarding ] || { echo "ngn-test: the port forwarder did not start" >&2; exit 70; }',
     );
   }
+  if (fakeSystemUi) lines.push(...FAKE_SYSTEM_UI);
   if (display === 'xvfb') {
     lines.push(
       'Xvfb -displayfd 3 -screen 0 1280x800x24 -nolisten tcp 3>"$work/display" >/dev/null 2>&1 &',
@@ -151,6 +174,49 @@ export function sessionScript(display: LinuxDisplay, forward: readonly number[] 
   return lines.join('\n');
 }
 
+/**
+ * The fake system UI's lines of the session script: a session bus of the launch's own, with no
+ * service files, so nothing is started on demand, and the fake desktop portal on it
+ * (`$NGN_FAKE_PORTALS`), answering before the host starts. The bus has its own configuration, which
+ * lets any client own a name.
+ */
+const FAKE_SYSTEM_UI = [
+  'command -v dbus-daemon >/dev/null && command -v python3 >/dev/null && python3 -c "import gi" 2>/dev/null || { echo "ngn-test: the fake system UI needs dbus-daemon and python3 with PyGObject (launcher option fakeSystemUi: false runs without it)" >&2; exit 70; }',
+  `cat >"$work/bus.conf" <<EOF
+<busconfig><type>session</type><listen>unix:path=$work/bus</listen><auth>EXTERNAL</auth>
+<policy context="default"><allow send_destination="*" eavesdrop="true"/><allow eavesdrop="true"/><allow own="*"/></policy></busconfig>
+EOF`,
+  'dbus-daemon --config-file="$work/bus.conf" --nofork >"$work/bus.log" 2>&1 &',
+  'pids="$pids $!"',
+  'for _ in $(seq 100); do [ -S "$work/bus" ] && break; sleep 0.1; done',
+  '[ -S "$work/bus" ] || { echo "ngn-test: the session bus did not start:" >&2; cat "$work/bus.log" >&2; exit 70; }',
+  'export DBUS_SESSION_BUS_ADDRESS="unix:path=$work/bus"',
+  'python3 "$NGN_FAKE_PORTALS" "$NGN_STATE_DIR/portals" >"$work/portals.log" 2>&1 &',
+  'pids="$pids $!"',
+  'for _ in $(seq 100); do [ -e "$NGN_STATE_DIR/portals/ready" ] && break; sleep 0.1; done',
+  '[ -e "$NGN_STATE_DIR/portals/ready" ] || { echo "ngn-test: the fake portals did not start:" >&2; cat "$work/portals.log" >&2; exit 70; }',
+];
+
+/**
+ * What a container with a fake system UI runs first, as root: the session bus will not take a
+ * client whose user the image has no passwd entry for, and the container's user is the caller's
+ * (so what it writes to a mount is theirs), so the entry is made, and the session script
+ * (`$1`) runs as that user from here.
+ */
+export const ROOT_PRELUDE = [
+  'set -eu',
+  'if [ -n "${NGN_AS_USER:-}" ]; then',
+  '  uid=${NGN_AS_USER%:*}; gid=${NGN_AS_USER#*:}',
+  '  getent group "$gid" >/dev/null || echo "ngn:x:$gid:" >>/etc/group',
+  '  getent passwd "$uid" >/dev/null || echo "ngn:x:$uid:$gid::/tmp:/bin/bash" >>/etc/passwd',
+  '  exec setpriv --reuid="$uid" --regid="$gid" --clear-groups bash -c "$@"',
+  'fi',
+  'exec bash -c "$@"',
+].join('\n');
+
+/** Where the fake desktop portal's script is, in this package's `device` folder. */
+export const FAKE_PORTALS = fileURLToPath(new URL('../../device/fake-portals.py', import.meta.url));
+
 /** Forwards 127.0.0.1:<port> to host.docker.internal:<port> for each port in argv. */
 const FORWARDER = `
 const net = require('node:net');
@@ -182,6 +248,19 @@ export interface LinuxLaunch {
   args: string[];
   env: Record<string, string>;
   container?: string;
+}
+
+/**
+ * The image a launch runs in off Linux: `NGN_LINUX_IMAGE`, such as `ngn-fedora` (the newer-GTK
+ * variant beside the AlmaLinux 9 one), or `ngn-el9`. An empty value is a mistake, not the default.
+ */
+export function imageNamed(env: Environment): string {
+  const named = env['NGN_LINUX_IMAGE'];
+  if (named === undefined) return 'ngn-el9';
+  if (!/^[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?$/.test(named)) {
+    throw new Error(`NGN_LINUX_IMAGE is not an image name: ${JSON.stringify(named)}.`);
+  }
+  return named;
 }
 
 /**
@@ -224,7 +303,7 @@ function resolveLaunch(options: LinuxLauncherOptions, env: Environment) {
   }
   const metroPort = options.metroPort ?? Number(env['RCT_METRO_PORT'] ?? 8081);
   const bundle = options.bundle ?? linuxBundleUrl(metroPort);
-  const image = options.container ?? (process.platform === 'linux' ? false : 'ngn-el9');
+  const image = options.container ?? (process.platform === 'linux' ? false : imageNamed(env));
   return {
     host: path.resolve(given),
     metroPort,
@@ -248,16 +327,17 @@ function displayOf(
   return display;
 }
 
-/** The command a launch runs, with its arguments and environment. */
-export function linuxLaunchCommand(
+/**
+ * The bundle and the host's command line. A bundle file is resolved against the directory the
+ * launch runs in, so the container's mount and the path the host is given name the same file. A
+ * URL is left as it is.
+ */
+function hostCommand(
   options: LinuxLauncherOptions,
   request: LaunchRequest,
-  env: Environment = process.env,
-): LinuxLaunch {
-  const resolved = resolveLaunch(options, env);
-  const { host, metroPort, image, display } = resolved;
-  // A bundle file is resolved against the directory the launch runs in, so the container's mount
-  // and the path the host is given name the same file. A URL is left as it is.
+  resolved: ReturnType<typeof resolveLaunch>,
+): { bundle: string; hostArgs: string[] } {
+  const { host, image } = resolved;
   const bundle =
     image && !/^https?:/.test(resolved.bundle)
       ? path.resolve(options.cwd ?? process.cwd(), resolved.bundle)
@@ -269,30 +349,55 @@ export function linuxLaunchCommand(
     '--app-id',
     testApplicationId(request.runId),
   ];
+  return { bundle, hostArgs };
+}
+
+/** The command a launch runs, with its arguments and environment. */
+export function linuxLaunchCommand(
+  options: LinuxLauncherOptions,
+  request: LaunchRequest,
+  env: Environment = process.env,
+): LinuxLaunch {
+  const resolved = resolveLaunch(options, env);
+  const { host, metroPort, image, display } = resolved;
+  const { bundle, hostArgs } = hostCommand(options, request, resolved);
+  const fakeSystemUi = options.fakeSystemUi ?? true;
+  const fake: Record<string, string> = fakeSystemUi ? { NGN_FAKE_PORTALS: FAKE_PORTALS } : {};
   if (!image) {
     return {
       command: 'bash',
-      args: ['-c', sessionScript(display), 'ngn-test', ...hostArgs],
+      args: ['-c', sessionScript(display, [], fakeSystemUi), 'ngn-test', ...hostArgs],
       env: {
         ...stringEnv(env),
         ...options.env,
         ...testEnvironment(request),
         ...linuxStateEnvironment(request.stateDir),
+        ...fake,
       },
     };
   }
+  const session = sessionScript(
+    display,
+    forwardedPorts(request.port, metroPort, bundle),
+    fakeSystemUi,
+  );
+  // The host's build folder, a bundle file's folder, and the fake portals' script's, at the same
+  // paths.
+  const mounts = [path.dirname(path.dirname(host))];
+  if (!/^https?:/.test(bundle)) mounts.push(path.dirname(bundle));
+  if (fakeSystemUi) mounts.push(path.dirname(FAKE_PORTALS));
+  const user = containerUser(fakeSystemUi);
   // In the container the state lives in the container, which is removed with the host: the pool's
   // own directory is on the Mac, where the container cannot write.
   const stateDir = '/tmp/ngn-state';
-  const containerEnv = {
+  const containerEnv: Record<string, string> = {
     ...options.env,
     ...testEnvironment({ ...request, stateDir }),
     ...linuxStateEnvironment(stateDir),
+    ...fake,
+    ...user.env,
     HOME: '/tmp',
   };
-  // The host's build folder, and a bundle file's folder, at the same paths.
-  const mounts = [path.dirname(path.dirname(host))];
-  if (!/^https?:/.test(bundle)) mounts.push(path.dirname(bundle));
   const name = `ngn-test-${request.runId}`;
   return {
     command: options.docker ?? 'docker',
@@ -303,7 +408,7 @@ export function linuxLaunchCommand(
       '--init',
       '--name',
       name,
-      ...userArgs(),
+      ...user.flags,
       // Docker Desktop resolves host.docker.internal itself; Docker Engine on Linux needs the mapping.
       '--add-host',
       'host.docker.internal:host-gateway',
@@ -312,12 +417,23 @@ export function linuxLaunchCommand(
       image,
       'bash',
       '-c',
-      sessionScript(display, forwardedPorts(request.port, metroPort, bundle)),
+      ...(fakeSystemUi ? [ROOT_PRELUDE, 'ngn-prelude', session] : [session]),
       'ngn-test',
       ...hostArgs,
     ],
     env: stringEnv(env),
   };
+}
+
+/**
+ * Who the container runs as. With a fake system UI it starts as root, whatever user the image
+ * names, makes the caller's user known to the image and drops to it (`ROOT_PRELUDE`, told the user
+ * as `NGN_AS_USER`); without one it starts as that user, so what it writes to a mount is theirs.
+ */
+function containerUser(fakeSystemUi: boolean): { flags: string[]; env: Record<string, string> } {
+  const user = process.getuid && process.getgid ? `${process.getuid()}:${process.getgid()}` : '';
+  if (fakeSystemUi) return { flags: ['--user', '0:0'], env: { NGN_AS_USER: user } };
+  return { flags: user ? ['--user', user] : [], env: {} };
 }
 
 /**
@@ -333,13 +449,6 @@ function forwardedPorts(poolPort: number, metroPort: number, bundle: string): nu
     }
   }
   return [...new Set(ports)];
-}
-
-/** The container runs as this user, so what it writes to a mount is the user's. */
-function userArgs(): string[] {
-  return process.getuid && process.getgid
-    ? ['--user', `${process.getuid()}:${process.getgid()}`]
-    : [];
 }
 
 function stringEnv(env: Environment): Record<string, string> {

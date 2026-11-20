@@ -28,13 +28,16 @@ import {
 } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
   desktopCliHost,
+  FAKE_PORTALS,
+  imageNamed,
   linuxBundleUrl,
   linuxLaunchCommand,
   linuxLauncher,
+  ROOT_PRELUDE,
   sessionScript,
   testApplicationId,
 } from '@ng-native/testing/device/linux-launcher';
@@ -105,6 +108,7 @@ async function setup(options: { crash?: boolean } = {}) {
     metroPort: 8099,
     display: 'inherit',
     container: false,
+    fakeSystemUi: false,
     env: {
       LOG: log,
       POOL_PORT: String(port),
@@ -249,6 +253,7 @@ setInterval(() => {}, 1000);`,
         args: [script],
         display: 'inherit',
         container: false,
+        fakeSystemUi: false,
         env: { PIDS: pids },
       }).start({ port: 1, runId: 'stubborn', stateDir: join(dir, 'state') });
       for (let i = 0; i < 100 && !existsSync(pids); i++) await wait(50);
@@ -278,6 +283,7 @@ setInterval(() => {}, 1000);`,
           args: ['-e', 'process.exit(3)', '--'],
           display: 'inherit',
           container: false,
+          fakeSystemUi: false,
         }),
       });
       const worker = pool.createPoolWorker({ project: { config: { root: dir } } } as never);
@@ -352,7 +358,12 @@ describe('the Linux launch from another OS', () => {
 
   it('runs the host in the AlmaLinux 9 image, on a display of its own, forwarding the pool and Metro', () => {
     const launch = linuxLaunchCommand(
-      { host: '/Users/me/cache/build/gtk/ngn-linux', container: 'ngn-el9', metroPort: 8082 },
+      {
+        host: '/Users/me/cache/build/gtk/ngn-linux',
+        container: 'ngn-el9',
+        metroPort: 8082,
+        fakeSystemUi: false,
+      },
       runRequest,
       {},
     );
@@ -379,6 +390,67 @@ describe('the Linux launch from another OS', () => {
     ]);
   });
 
+  it('starts a container with a fake system UI as root, and runs the session as the caller', () => {
+    const { args } = linuxLaunchCommand(
+      { host: '/Users/me/cache/build/gtk/ngn-linux', container: 'ngn-el9', metroPort: 8082 },
+      runRequest,
+      {},
+    );
+    // As root even where the image names another user: root makes the passwd entry.
+    assert.equal(args[args.indexOf('--user') + 1], '0:0');
+    assert.ok(args.indexOf('--user') < args.indexOf('ngn-el9'));
+    const user = `${process.getuid?.()}:${process.getgid?.()}`;
+    assert.ok(args.includes(`NGN_AS_USER=${user}`), 'and drops to the caller (ROOT_PRELUDE)');
+    assert.ok(args.includes(`NGN_FAKE_PORTALS=${FAKE_PORTALS}`));
+    assert.ok(args.includes(`${dirname(FAKE_PORTALS)}:${dirname(FAKE_PORTALS)}:ro`));
+    const image = args.indexOf('ngn-el9');
+    assert.deepEqual(args.slice(image + 1, image + 5), ['bash', '-c', ROOT_PRELUDE, 'ngn-prelude']);
+    assert.equal(args[image + 5], sessionScript('weston', [51730, 8082], true));
+    assert.match(args[image + 5] ?? '', /dbus-daemon --config-file/);
+    // Without one, the caller is the container's user and nothing is faked.
+    const plain = linuxLaunchCommand(
+      { host: '/h/b/gtk/ngn-linux', container: 'ngn-el9', fakeSystemUi: false },
+      runRequest,
+      {},
+    );
+    assert.equal(plain.args[plain.args.indexOf('--user') + 1], user);
+    assert.ok(!plain.args.some((arg) => arg.startsWith('NGN_FAKE_PORTALS')));
+    assert.doesNotMatch(plain.args.join('\n'), /dbus-daemon/);
+  });
+
+  it('runs in the image NGN_LINUX_IMAGE names, and in ngn-el9 without it', () => {
+    assert.equal(imageNamed({}), 'ngn-el9');
+    assert.equal(imageNamed({ NGN_LINUX_IMAGE: 'ngn-fedora' }), 'ngn-fedora');
+    assert.equal(
+      imageNamed({ NGN_LINUX_IMAGE: 'registry.example/ngn/fedora:44' }),
+      'registry.example/ngn/fedora:44',
+    );
+    // An empty value, or one docker would take for an option, is a mistake and not the default.
+    for (const bad of ['', '-v /:/host', 'ngn fedora']) {
+      assert.throws(() => imageNamed({ NGN_LINUX_IMAGE: bad }), /not an image name/);
+    }
+    // The default container, off Linux: the platform is the launcher's, so it is set for the call.
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    try {
+      const request = { host: '/Users/me/b/gtk/ngn-linux' };
+      for (const [env, expected] of [
+        [{}, 'ngn-el9'],
+        [{ NGN_LINUX_IMAGE: 'ngn-fedora' }, 'ngn-fedora'],
+      ] as const) {
+        const { args } = linuxLaunchCommand(request, runRequest, env);
+        assert.equal(args[args.indexOf('bash') - 1], expected);
+      }
+      // A launcher given a container ignores the variable.
+      const given = linuxLaunchCommand({ ...request, container: 'ngn-el9' }, runRequest, {
+        NGN_LINUX_IMAGE: 'ngn-fedora',
+      });
+      assert.equal(given.args[given.args.indexOf('bash') - 1], 'ngn-el9');
+    } finally {
+      Object.defineProperty(process, 'platform', platform);
+    }
+  });
+
   it('maps host.docker.internal for Docker Engine on Linux, which does not define it', () => {
     const { args } = linuxLaunchCommand(
       { host: '/cache/build/gtk/ngn-linux', container: 'ngn-el9', metroPort: 8082 },
@@ -392,7 +464,12 @@ describe('the Linux launch from another OS', () => {
 
   it("mounts a bundle file's folder, which the container could not see otherwise", () => {
     const { args } = linuxLaunchCommand(
-      { host: '/h/b/gtk/ngn-linux', container: 'ngn-el9', bundle: '/Users/me/out/main.js' },
+      {
+        host: '/h/b/gtk/ngn-linux',
+        container: 'ngn-el9',
+        bundle: '/Users/me/out/main.js',
+        fakeSystemUi: false,
+      },
       runRequest,
       {},
     );
@@ -415,14 +492,14 @@ describe('the Linux launch from another OS', () => {
 
   it('starts the display it is asked for, and forwards only in a container', () => {
     const direct = linuxLaunchCommand(
-      { host: '/h/b/gtk/ngn-linux', container: false },
+      { host: '/h/b/gtk/ngn-linux', container: false, fakeSystemUi: false },
       runRequest,
       { DISPLAY: ':0' },
     );
     assert.equal(direct.command, 'bash');
     assert.equal(direct.args[1], sessionScript('inherit'), 'a display already there is used');
     const headless = linuxLaunchCommand(
-      { host: '/h/b/gtk/ngn-linux', container: false },
+      { host: '/h/b/gtk/ngn-linux', container: false, fakeSystemUi: false },
       runRequest,
       {},
     );

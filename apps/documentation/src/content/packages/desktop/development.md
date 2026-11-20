@@ -68,8 +68,10 @@ signal with what it has written.
 ## Logging
 
 `NGN_LOG_COMMITS=1` in the host's environment logs each commit's time to stderr as `[ngn] commit N
-ms`, which `pnpm bench:macos` and `pnpm bench:linux` read. It is off by default, since an
-animation commits every frame.
+ms`, which `pnpm bench:macos` and `pnpm bench:linux` read. On Linux it also logs each frame of each
+window as `[ngn] frame N ms`, the time from the start of GTK's frame clock update to the end of the
+frame's paint, which `pnpm bench:linux` reads. It is off by default, since an animation commits
+every frame.
 `NGN_LOG_ROTORS=1` logs each VoiceOver rotor's items in the first window a second after its first
 frame, for checking them without a screen reader. Both, and `NGN_INPUT_SCRIPT`, work only in a dev
 run: a packaged app ignores them, as it ignores the rest of its environment but `NGN_NO_PROMPTS=1`,

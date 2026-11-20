@@ -80,8 +80,21 @@ deviceTests({ platform: 'linux', launch: linuxLauncher({ host: 'build/gtk/ngn-li
 
 Each run gets fresh state: `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME`
 and `TMPDIR` in a new folder that is removed when the run ends, and an application id of its own,
-so a run never joins another one. Calls that show system UI answer as if you had cancelled them,
-as on a Mac.
+so a run never joins another one.
+
+The host runs on a session bus of its own, where a fake desktop portal stands in for the system's
+(`org.freedesktop.portal.Desktop`), so a request to a portal shows nothing and waits for no one.
+The fake implements the FileChooser, OpenURI and Notification portals, and no others. The host
+calls these portals itself whenever one answers, outside a Flatpak too, so its file pickers, links
+and notifications reach the fake with no `GDK_DEBUG=portals`. It cancels a
+file chooser, as you cancelling it would, and opens a link; a test changes that by writing
+`portals/answers.json` in the run's state folder before the call, and reads what the host asked
+from `portals/calls.jsonl` beside it. Appending a line to `portals/signals.jsonl` sends a
+notification's click to the host. The folder's files are described at the top of
+`device/fake-portals.py` in the package. The fake needs `dbus-daemon` and `python3` with PyGObject where the host runs, which the image
+has. Its session bus takes only a user the system has a passwd entry for, so a container you start
+with `--user` needs one (the launcher's own container makes it). A launch without these fails;
+`fakeSystemUi: false` runs the host against the session's own portals instead.
 
 The windows go to the display you are using when `DISPLAY` or `WAYLAND_DISPLAY` is set. Without
 one, each launch starts a headless Weston of its own. `display: 'xvfb'` starts an X server instead.
@@ -89,7 +102,9 @@ one, each launch starts a headless Weston of its own. `display: 'xvfb'` starts a
 On a Mac, the host runs in the AlmaLinux 9 image it is built in, `ngn-el9` from
 `packages/desktop/native/docker`, under Docker or Colima. The host binary must be in a folder the
 container can see, such as one under your home folder. The image reaches Vitest and Metro on the
-Mac through ports it forwards, so start Metro as usual. `container: false` runs the host directly.
+Mac through ports it forwards, so start Metro as usual. `container: false` runs the host directly,
+and `NGN_LINUX_IMAGE=ngn-fedora` runs it in the Fedora variant of the image
+(`Dockerfile.fedora`, built as `ngn-fedora`) instead, which has a newer GTK and libadwaita.
 
 Linux has no crash report folder, so the host writes its own as it crashes, naming the signal and
 the native stack. The failure quotes that report, then the end of the host's output, from a
