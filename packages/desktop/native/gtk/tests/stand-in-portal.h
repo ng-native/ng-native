@@ -106,6 +106,7 @@ struct StandInPortal {
     bool directory{false};
     std::string name;
     std::vector<std::string> types;
+    std::string filterName;
     std::string printed;
     unsigned printToken{0};
   };
@@ -225,7 +226,9 @@ struct StandInPortal {
     }
     if (GVariant *filter = g_variant_lookup_value(options, "current_filter", G_VARIANT_TYPE("(sa(us))"))) {
       GVariantIter *patterns = nullptr;
-      g_variant_get(filter, "(&sa(us))", nullptr, &patterns);
+      const gchar *filterName = nullptr;
+      g_variant_get(filter, "(&sa(us))", &filterName, &patterns);
+      call.filterName = filterName;
       guint32 kind = 0;
       const gchar *pattern = nullptr;
       while (g_variant_iter_next(patterns, "(u&s)", &kind, &pattern)) {

@@ -203,6 +203,15 @@ struct PickerCamera {
 folly::dynamic cameraPermissionOf(CameraHardware::Access access);
 void requestCameraPermission(CameraHardware &hardware, bool noPrompts, JsPromise promise);
 
+// What expo-image-picker's mediaTypes (a MediaType, a list of them, or the deprecated
+// MediaTypeOptions) ask for. As on iOS, live photos are photos, and a request that names neither
+// photos nor videos (left out, or an empty list) takes photos.
+struct MediaKinds {
+  bool photos{false};
+  bool videos{false};
+};
+MediaKinds mediaKindsOf(const folly::dynamic &options);
+
 // expo-image-picker's launchCameraAsync(options) over `camera`, shaped as iOS shapes a camera
 // shot (no assetId and no fileName):
 // - a photo, a JPEG at `quality` (1 by default), with base64 and exif only when asked;

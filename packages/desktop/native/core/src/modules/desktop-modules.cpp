@@ -112,9 +112,16 @@ DesktopModules addDesktopModules(ModuleRegistry &registry, const DesktopModuleSo
   addSourced(s.photos, "NgNativeMediaLibrary", [photos = s.photos, noPrompts = s.noPrompts, files = s.files] {
     return makeMediaLibraryModule(photos, noPrompts, files);
   });
-  addSourced(s.photos && s.cameraHardware && s.audioInput && s.cameraSheet, "NgNativeImagePicker", [photos = s.photos, noPrompts = s.noPrompts, camera = PickerCamera{.hardware = s.cameraHardware, .microphone = s.audioInput, .sheet = s.cameraSheet, .folder = s.caches + "/ImagePicker"}] {
-    return makeImagePickerModule(photos, noPrompts, camera);
-  });
+  if (s.photos) {
+    addSourced(s.cameraHardware && s.audioInput && s.cameraSheet, "NgNativeImagePicker", [photos = s.photos, noPrompts = s.noPrompts, camera = PickerCamera{.hardware = s.cameraHardware, .microphone = s.audioInput, .sheet = s.cameraSheet, .folder = s.caches + "/ImagePicker"}] {
+      return makeImagePickerModule(photos, photos, noPrompts, camera);
+    });
+  } else {
+    // A picker with no library and no camera: the library half alone.
+    addSourced(s.photoPicker, "NgNativeImagePicker", [picker = s.photoPicker, noPrompts = s.noPrompts] {
+      return makeImagePickerModule(picker, nullptr, noPrompts);
+    });
+  }
   addSourced(s.tracking, "NgNativeTrackingTransparency", [tracking = s.tracking, noPrompts = s.noPrompts] {
     return makeTrackingModule(tracking, noPrompts);
   });

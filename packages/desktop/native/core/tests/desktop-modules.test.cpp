@@ -126,6 +126,23 @@ TEST_CASE("addDesktopModules registers a module once its source is given, and no
   CHECK(std::find(made.absent.begin(), made.absent.end(), "NgNativeHaptics") != made.absent.end());
 }
 
+TEST_CASE("addDesktopModules registers ImagePicker over a picker with no photo library, and leaves MediaLibrary out") {
+  struct Picker final : ngn::PhotoPicker {
+    void pick(const folly::dynamic &, std::function<void(std::optional<std::vector<Picked>>)> done) override {
+      done(std::nullopt);
+    }
+  };
+  auto given = sources();
+  given.photoPicker = std::make_shared<Picker>();
+  ngn::ModuleRegistry registry;
+  auto made = ngn::addDesktopModules(registry, given);
+  auto has = [&](const char *name) { return std::find(made.absent.begin(), made.absent.end(), name) == made.absent.end(); };
+  CHECK(has("NgNativeImagePicker"));
+  CHECK(registry.module("NgNativeImagePicker", nullptr));
+  CHECK_FALSE(has("NgNativeMediaLibrary"));
+  CHECK_FALSE(has("NgNativeCamera"));
+}
+
 TEST_CASE("addDesktopModules leaves out the tray and the Dock without a source for them") {
   auto given = sources();
   given.tray = nullptr;

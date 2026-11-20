@@ -220,4 +220,12 @@ std::shared_ptr<ImageCodec> makeImageCodec() {
   return std::make_shared<PixbufCodec>();
 }
 
+std::optional<std::pair<double, double>> imagePixelSize(const std::string &path) {
+  int width = 0, height = 0;
+  if (!gdk_pixbuf_get_file_info(path.c_str(), &width, &height) || width <= 0 || height <= 0) {
+    return std::nullopt;
+  }
+  return std::pair<double, double>(width, height);
+}
+
 } // namespace ngn::gtk

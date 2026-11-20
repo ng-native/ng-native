@@ -7,9 +7,16 @@
 #include "ngn/image-manipulator.h"
 
 #include <memory>
+#include <optional>
+#include <string>
+#include <utility>
 
 namespace ngn::gtk {
 
 std::shared_ptr<ImageCodec> makeImageCodec();
+
+// An image file's size in pixels as stored (before its Exif orientation), from its header; nothing
+// for a file no gdk-pixbuf loader reads. ImagePicker describes a pick with it.
+std::optional<std::pair<double, double>> imagePixelSize(const std::string &path);
 
 } // namespace ngn::gtk
