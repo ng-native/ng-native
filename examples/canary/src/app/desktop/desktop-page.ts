@@ -11,17 +11,45 @@ import {
   ScrollView,
   Shortcut,
   Text,
+  TrayIcon,
   View,
   type FileDropEvent,
 } from '@ng-native/components';
-import { AppWindows, OS, UndoStack } from '@ng-native/device';
+import { AppWindows, Dialogs, OS, Tray, UndoStack, type OsName } from '@ng-native/device';
+import { DateTimePicker } from '@ng-native/expo';
+import { Notifications } from '@ng-native/expo/notifications';
 import { NativeHeader } from '@ng-native/router';
 import { page } from '../screen-styles.ts';
 import { LibraryWindow } from './library-window.ts';
 import { TitleBarWindow } from './title-bar-window.ts';
 
+/** What each OS is called in the screen's text: `OS` answers `'macos'` and `'linux'`. */
+const OS_LABELS: Record<OsName, string> = {
+  ios: 'iOS',
+  android: 'Android',
+  macos: 'macOS',
+  linux: 'Linux',
+  web: 'the web host',
+};
+
 /**
- * What a Mac app has that a phone app does not: a menu bar of the app's own, keyboard shortcuts,
+ * Where the Canary menu is on each OS and where its shortcuts work, from the support matrix
+ * (`OS_SUPPORT`): a menu bar on macOS and iPadOS, GTK's on Linux, nothing drawn on iPhone and
+ * Android, and `mod` is Ctrl on Linux and Android.
+ */
+const MENU_NOTES: Record<OsName, string> = {
+  macos:
+    'The menu bar has a Canary menu while this screen is open, and its shortcuts work from the keyboard.',
+  linux:
+    "The Canary menu is a menu bar under the header bar on KDE Plasma and in the header bar's main menu elsewhere while this screen is open, and its shortcuts work with Ctrl.",
+  ios: 'On an iPad the menu bar has a Canary menu while this screen is open, and its shortcuts work from a hardware keyboard on an iPad or an iPhone.',
+  android:
+    "No menu bar is drawn, and the Canary menu's shortcuts work from a hardware keyboard with Ctrl, Alt, Shift or Meta held.",
+  web: "The web host draws no menu bar, and the Canary menu's shortcuts work from the keyboard.",
+};
+
+/**
+ * What a desktop app has that a phone app does not: a menu bar of the app's own, keyboard shortcuts,
  * context menus, windows, drag and drop, and undo. Each section says what it does on the OS the
  * app is on, so the screen is worth opening on iOS and Android too.
  */
@@ -29,6 +57,7 @@ import { TitleBarWindow } from './title-bar-window.ts';
   selector: 'x-desktop',
   imports: [
     ContextMenu,
+    DateTimePicker,
     DragItem,
     FileDrop,
     MenuBar,
@@ -40,6 +69,7 @@ import { TitleBarWindow } from './title-bar-window.ts';
     ScrollView,
     Shortcut,
     Text,
+    TrayIcon,
     View,
   ],
   template: `
@@ -51,10 +81,7 @@ import { TitleBarWindow } from './title-bar-window.ts';
       </menu-group>
     </menu-bar>
     <scroll-view class="screen" [contentContainerStyle]="page.content">
-      <text class="hint">
-        On {{ os }}. The menu bar has a Canary menu while this screen is open, and its shortcuts
-        work from a hardware keyboard on iPad, iPhone and Android.
-      </text>
+      <text class="hint"> On {{ osLabel }}. {{ menuNote }} </text>
 
       <text class="heading">Stars and undo</text>
       <text class="body">{{ stars() }} stars</text>
@@ -68,6 +95,50 @@ import { TitleBarWindow } from './title-bar-window.ts';
         Edit > Undo takes a star back while no text field has focus.
         {{ undo.available() ? '' : 'This OS has no undo manager, so undo does nothing here.' }}
       </text>
+
+      <text class="heading">Time</text>
+      <view class="desktop-row">
+        <date-time-picker
+          testID="time"
+          mode="time"
+          [date]="time()"
+          [minimumDate]="opens"
+          [maximumDate]="closes"
+          [minuteInterval]="15"
+          (change)="time.set($event.nativeEvent.timestamp)"
+        />
+        <date-time-picker
+          testID="countdown"
+          mode="countdown"
+          [date]="countdown()"
+          (change)="countdown.set($event.nativeEvent.timestamp)"
+        />
+      </view>
+      <text class="hint">
+        A time between 9:00 and 17:30 in quarter hours, which the picker keeps it within, and a
+        countdown in hours and minutes.
+      </text>
+
+      <text class="heading">A choice of five</text>
+      <view class="desktop-row">
+        <native-button testID="choose" (press)="chooseColour()">Choose a Colour</native-button>
+      </view>
+      <text class="hint">{{ colour() }}</text>
+
+      <text class="heading">Tray and badge</text>
+      <view class="desktop-row">
+        <native-button testID="tray" [disabled]="!tray.available()" (press)="toggleTray()">
+          {{ trayShown() ? 'Hide the Tray Icon' : 'Show a Tray Icon' }}
+        </native-button>
+        <native-button testID="badge" (press)="badgeStars()">Badge the Stars</native-button>
+      </view>
+      @if (trayShown()) {
+        <tray-icon sfSymbol="star" [title]="stars() + ' stars'" tooltip="Canary stars">
+          <menu-item label="Add a Star" (select)="addStar()" />
+          <menu-item label="Clear Stars" (select)="clearStars()" />
+        </tray-icon>
+      }
+      <text class="hint">{{ trayNote() }}</text>
 
       <text class="heading">Context menu</text>
       <view class="card" testID="menu-card" [nativeID]="cardName()" [contextMenu]="cardMenu">
@@ -124,27 +195,52 @@ import { TitleBarWindow } from './title-bar-window.ts';
         <text class="body">Drag this card into another app.</text>
       </view>
       <text class="hint"
-        >On macOS and iPadOS. Nothing fires on iPhone, Android or the web host.</text
+        >On macOS, Linux and iPadOS. Nothing fires on iPhone, Android or the web host.</text
       >
     </scroll-view>
   `,
 })
 export class DesktopPage {
   protected readonly undo = inject(UndoStack);
+  protected readonly tray = inject(Tray);
+  private readonly notifications = inject(Notifications);
   private readonly windows = inject(AppWindows);
-  protected readonly os = inject(OS);
+  private readonly os = inject(OS);
+  protected readonly osLabel = OS_LABELS[this.os];
+  protected readonly menuNote = MENU_NOTES[this.os];
   protected readonly page = page;
 
+  private readonly dialogs = inject(Dialogs);
   protected readonly stars = signal(0);
+  protected readonly colour = signal('More than three choices stack one above another.');
+  protected readonly opens = new Date(2026, 2, 14, 9, 0).getTime();
+  protected readonly closes = new Date(2026, 2, 14, 17, 30).getTime();
+  protected readonly time = signal(new Date(2026, 2, 14, 14, 45).getTime());
+  protected readonly countdown = signal(new Date(2026, 2, 14, 1, 30).getTime());
   protected readonly chosen = signal('Nothing chosen yet.');
   /** The card's own nativeID, renamed and taken away in turn: its menu follows each. */
   protected readonly cardName = signal<string | undefined>(undefined);
   protected readonly over = signal(false);
   protected readonly drops = signal<readonly string[]>([]);
   protected readonly windowNote = signal('');
+  protected readonly trayShown = signal(false);
+  protected readonly trayNote = computed(() =>
+    this.tray.available()
+      ? 'The tray icon menu adds and clears stars. The badge is the star count on the app icon, where the OS draws one.'
+      : 'This OS has no tray here. The badge is the star count on the app icon, where the OS draws one.',
+  );
   protected readonly undoTitle = computed(() =>
     this.undo.undoLabel() ? 'Undo ' + this.undo.undoLabel() : 'Undo',
   );
+
+  protected async chooseColour(): Promise<void> {
+    const colours = ['Red', 'Orange', 'Green', 'Blue', 'Cancel'];
+    const at = await this.dialogs.choose('Pick a colour', [
+      ...colours.slice(0, 4).map((label) => ({ label })),
+      { label: 'Cancel', style: 'cancel' as const },
+    ]);
+    this.colour.set(at === null ? 'Dismissed.' : `Chose ${colours[at]}.`);
+  }
 
   protected addStar(): void {
     this.stars.update((count) => count + 1);
@@ -154,6 +250,14 @@ export class DesktopPage {
       undo: () => this.stars.update((count) => count - 1),
       redo: () => this.stars.update((count) => count + 1),
     });
+  }
+
+  protected toggleTray(): void {
+    this.trayShown.update((shown) => !shown);
+  }
+
+  protected badgeStars(): void {
+    if (this.notifications.available()) this.notifications.setBadge(this.stars());
   }
 
   protected renameCard(): void {

@@ -58,6 +58,17 @@ TEST_CASE("a key step names a key and its modifiers, for the key window") {
   CHECK(ngn::parseInputScript("key home").error == "line 1: unknown key home");
 }
 
+TEST_CASE("a key step takes the arrows, with modifiers, as Alt+Left goes back on Linux") {
+  auto script = ngn::parseInputScript("key left option\nkey right\nkey up shift\nkey down");
+  REQUIRE_FALSE(script.error);
+  REQUIRE(script.steps.size() == 4);
+  CHECK(script.steps[0].key == "left");
+  CHECK(script.steps[0].modifiers == ngn::InputStep::Option);
+  CHECK(script.steps[1].key == "right");
+  CHECK(script.steps[2].key == "up");
+  CHECK(script.steps[3].key == "down");
+}
+
 TEST_CASE("a key step names space, tab and delete by name") {
   auto script = ngn::parseInputScript("key space\nkey tab shift\nkey delete");
   REQUIRE_FALSE(script.error);

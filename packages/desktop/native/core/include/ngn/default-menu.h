@@ -43,6 +43,9 @@ enum class MenuCommand {
   // Back and forward through the window's history: the app hears them as `navigate`.
   Back,
   Forward,
+  // Linux's Keyboard Shortcuts window: the host lists every key the menus and the app's shortcuts
+  // take (keyboardShortcuts).
+  KeyboardShortcuts,
   // An app's own item: the app hears it as `menuSelect` with the item's id.
   AppItem,
 };
@@ -95,8 +98,9 @@ struct DefaultMenuOptions {
 std::vector<MenuItem> defaultMenuBar(const DefaultMenuOptions &options);
 // macOS's bar (HostOs's menuBar for macOS).
 std::vector<MenuItem> macOSMenuBar(const DefaultMenuOptions &options);
-// Linux's (HostOs's menuBar for Linux): the app's groups, then a menu named for the app with About
-// and Quit. None of macOS's Hide, Services, Minimize, Zoom or window list.
+// Linux's (HostOs's menuBar for Linux): the app's groups, then a menu named for the app with
+// Keyboard Shortcuts (Ctrl+Shift+?), About and Quit. Preferences and Help join it once the app gives
+// them a handler (the app's bar). None of macOS's Hide, Services, Minimize, Zoom or window list.
 std::vector<MenuItem> linuxMenuBar(const DefaultMenuOptions &options);
 
 // Where a window shows the app's menus on Linux: a menu bar under the header bar on KDE Plasma,
@@ -108,5 +112,26 @@ MenuPlacement linuxMenuPlacement(std::string_view currentDesktop);
 
 // The item with this command anywhere in `menus`, or null.
 const MenuItem *findMenuItem(const std::vector<MenuItem> &menus, MenuCommand command);
+// The enabled item a key press chooses anywhere in `menus`, or null: its key, a letter in either
+// case, with exactly its modifiers. A toolkit whose menus do not take their own keys (GTK's, drawn
+// in a popover) looks a press up here.
+const MenuItem *findMenuItem(const std::vector<MenuItem> &menus, const KeyChord &chord);
+// One group of the Keyboard Shortcuts window: a title, and each entry with its key.
+struct ShortcutEntry {
+  std::string title;
+  KeyChord chord;
+  bool operator==(const ShortcutEntry &) const = default;
+};
+struct ShortcutGroup {
+  std::string title;
+  std::vector<ShortcutEntry> entries;
+  bool operator==(const ShortcutGroup &) const = default;
+};
+// The Keyboard Shortcuts window's groups for `menus`: each menu with the enabled items in it, read
+// through its submenus, that have a key, in order. A menu with none is left out.
+std::vector<ShortcutGroup> menuShortcuts(const std::vector<MenuItem> &menus);
+
+// Undo, Redo, Cut, Copy, Paste, Delete and Select All: what a focused text input does itself.
+bool isEditingCommand(MenuCommand command);
 
 } // namespace ngn

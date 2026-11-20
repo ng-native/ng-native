@@ -1,5 +1,6 @@
 #include "ngn/input-script.h"
 
+#include <set>
 #include <sstream>
 
 namespace ngn {
@@ -75,8 +76,8 @@ InputScript parseInputScript(const std::string &text) {
       if (!(words >> step.key)) {
         return fail("key needs a key");
       }
-      if (step.key.size() != 1 && step.key != "escape" && step.key != "return" && step.key != "space" &&
-          step.key != "tab" && step.key != "delete") {
+      static const std::set<std::string> named{"escape", "return", "space", "tab", "delete", "left", "right", "up", "down"};
+      if (step.key.size() != 1 && !named.count(step.key)) {
         return fail("unknown key " + step.key);
       }
       std::string modifier;

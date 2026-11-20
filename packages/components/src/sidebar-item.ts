@@ -9,10 +9,11 @@ import {
   output,
 } from '@angular/core';
 import { SIDEBAR_SELECTION } from '@ng-native/device';
-import { nativePlatform, registerViewName } from '@ng-native/fabric';
+import { registerViewName } from '@ng-native/fabric';
 import type { ButtonIcon } from './native-button.ts';
 import { ControlBase, TouchableBase } from './pressable.ts';
 import { Sidebar, type SidebarRow } from './sidebar.ts';
+import { hostDraws } from './split-view.ts';
 import { Text } from './text.ts';
 
 /**
@@ -88,8 +89,8 @@ export type SidebarItemIcon = ButtonIcon;
 })
 export class SidebarItem extends ControlBase implements SidebarRow {
   private readonly sidebar = inject(Sidebar, { optional: true });
-  /** Whether this row is drawnHere here rather than by the desktop host. */
-  protected readonly drawnHere = nativePlatform() !== 'macos';
+  /** Whether this row is drawn here rather than by the desktop host. */
+  protected readonly drawnHere = !hostDraws('sidebar-item');
 
   /** The row's text, and what it is announced as. */
   readonly label = input<string>();

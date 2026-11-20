@@ -90,6 +90,25 @@ bool walked(const ViewTree &tree, Tag tag, Tag root, const ViewTree::Node *node)
       node->view.layoutMetrics.displayType != DisplayType::None;
 }
 
+} // namespace
+
+bool viewTakesFocus(const DesktopProps &props) {
+  return props.tabIndex.has_value() || props.focusable.value_or(false);
+}
+
+Tag focusContainer(const ViewTree &tree, Tag tag) {
+  Tag at = tag;
+  for (const auto *node = tree.find(at); node != nullptr; node = tree.find(at)) {
+    if (tree.isContainerRoot(at) || node->parent < 0) {
+      return at;
+    }
+    at = node->parent;
+  }
+  return tag;
+}
+
+namespace {
+
 // Whether the view takes the focus when the host moves it there, in Tab order or not: any
 // `tabIndex` does, as on the web.
 bool canFocus(const ViewTree::Node &node) {

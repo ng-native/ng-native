@@ -34,9 +34,11 @@ export type LinuxDisplay = 'inherit' | 'xvfb' | 'weston';
 
 export interface LinuxLauncherOptions {
   /**
-   * The host executable, `<build>/gtk/ngn-linux`. Default `NGN_DESKTOP_HOST`. In a container it is
-   * mounted at the same path, so it must be under a folder the container runtime shares (the home
-   * folder, for Colima and Docker Desktop).
+   * The host executable, `<build>/gtk/ngn-linux`. Default `NGN_DESKTOP_HOST`, else the debug host
+   * the project's `ng-native-desktop host --os linux` gets, as `npm run linux` gets it (on a Mac,
+   * the prebuilt one for its architecture). In a container it is mounted at the same path, so it
+   * must be under a folder the container runtime shares (the home folder, for Colima and Docker
+   * Desktop).
    */
   host?: string;
   /** Arguments before the bundle. Default none. */
@@ -259,6 +261,35 @@ export function imageNamed(env: Environment): string {
   return named;
 }
 
+/**
+ * The Linux debug host the project's `ng-native-desktop host --os linux` gets, as `npm run linux`
+ * gets it: prebuilt for this machine's architecture where one fits the app (on a Mac too), else
+ * built from source on Linux. Throws with the command's own message when it cannot.
+ */
+export function desktopCliHost(
+  cwd: string | undefined,
+  command = 'ng-native-desktop',
+  run: typeof spawnSync = spawnSync,
+): string {
+  const result = run(command, ['host', '--os', 'linux'], {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const lines = String(result.stdout ?? '')
+    .trim()
+    .split('\n');
+  const host = lines[lines.length - 1];
+  if (result.error || result.status !== 0 || !host) {
+    const why = result.error?.message ?? String(result.stderr ?? '').trim();
+    throw new Error(
+      `linuxLauncher() could not get the Linux desktop host from ${command} host --os linux` +
+        `${why ? `: ${why}` : ''}. Pass \`host\` or set NGN_DESKTOP_HOST to the build folder's gtk/ngn-linux.`,
+    );
+  }
+  return host;
+}
+
 /** The host, the bundle and where they run, from the options and the environment. */
 function resolveLaunch(options: LinuxLauncherOptions, env: Environment) {
   const given = options.host ?? env['NGN_DESKTOP_HOST'];
@@ -376,6 +407,9 @@ export function linuxLaunchCommand(
       '--name',
       name,
       ...user.flags,
+      // Docker Desktop resolves host.docker.internal itself; Docker Engine on Linux needs the mapping.
+      '--add-host',
+      'host.docker.internal:host-gateway',
       ...mounts.flatMap((mount) => ['-v', `${mount}:${mount}:ro`]),
       ...Object.entries(containerEnv).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
       image,
@@ -517,9 +551,13 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
     pending: [] as string[],
     closed: Promise.resolve(),
   };
+  // Asked of the desktop CLI once, at the first launch, when neither the options nor the
+  // environment name it.
+  let host = options.host || process.env['NGN_DESKTOP_HOST'] || undefined;
   return {
     start(request): LaunchedApp {
-      const launch = linuxLaunchCommand(options, request);
+      host ??= desktopCliHost(options.cwd);
+      const launch = linuxLaunchCommand({ ...options, host }, request);
       const child: ChildProcess = spawn(launch.command, launch.args, {
         cwd: options.cwd,
         env: launch.env as NodeJS.ProcessEnv,

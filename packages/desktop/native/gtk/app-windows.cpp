@@ -2,6 +2,7 @@
 
 #include "screens.h"
 #include "view-widget.h"
+#include "window-scale.h"
 
 #include <adwaita.h>
 
@@ -138,7 +139,7 @@ GtkWindows::~GtkWindows() {
 }
 
 void GtkWindows::disconnect(Window &entry) {
-  g_clear_signal_handler(&entry.scaled, entry.window);
+  stopScaleFollow(entry.scaleFollow);
   g_clear_signal_handler(&entry.closeRequested, entry.window);
   for (gulong &id : entry.notified) {
     g_clear_signal_handler(&id, entry.window);
@@ -184,7 +185,7 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   }
   GtkWidget *widget = makeSurfaceWidget(surface, [this, surface, window](int w, int h) {
     if (hooks_.resizeSurface) {
-      hooks_.resizeSurface(surface, w, h, gtk_widget_get_scale_factor(window));
+      hooks_.resizeSurface(surface, w, h, windowScale(window));
     }
     // A window that fills the screen has the size GTK allocates, which arrives after the
     // notify::maximized or notify::fullscreened that reported the old one.
@@ -195,18 +196,7 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   }
   adw_application_window_set_content(ADW_APPLICATION_WINDOW(window), wrapInChrome(widget, {.titleBar = request.titleBar, .menus = menus_}));
   windows_[surface] = {.window = window, .surface = widget};
-  // A move to a monitor of another scale changes no size, so the surface widget does not report it.
   Window &entry = windows_[surface];
-  entry.scaled = g_signal_connect_data(
-      window, "notify::scale-factor", G_CALLBACK(+[](GtkWidget *scaled, GParamSpec *, gpointer data) {
-        auto *r = static_cast<CloseRequest *>(data);
-        GtkWidget *content = r->windows->surfaceWidget(r->surface);
-        if (content && r->windows->hooks_.resizeSurface) {
-          r->windows->hooks_.resizeSurface(
-              r->surface, gtk_widget_get_width(content), gtk_widget_get_height(content), gtk_widget_get_scale_factor(scaled));
-        }
-      }),
-      new CloseRequest{this, surface}, [](gpointer data, GClosure *) { delete static_cast<CloseRequest *>(data); }, GConnectFlags(0));
   auto *request_ = new CloseRequest{this, surface};
   entry.closeRequested = g_signal_connect_data(
       window, "close-request", G_CALLBACK(+[](GtkWindow *, gpointer data) -> gboolean {
@@ -238,6 +228,18 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   }
   // Realized, so the surface knows its scale, but not shown until its first frame mounts.
   gtk_widget_realize(window);
+  // A move to a monitor of another scale, or a new fractional scale, changes no size, so the
+  // surface widget does not report it.
+  entry.scaleFollow = followWindowScale(window, [this, surface, window] {
+    GtkWidget *content = surfaceWidget(surface);
+    if (content && hooks_.resizeSurface) {
+      hooks_.resizeSurface(surface, gtk_widget_get_width(content), gtk_widget_get_height(content), windowScale(window));
+    }
+    if (hooks_.rescaled) {
+      hooks_.rescaled(window);
+    }
+    reportFrame(surface);
+  });
   entry.laidOut = afterLayout(window, [this, surface] {
     if (hooks_.laidOut) {
       hooks_.laidOut(surface);
@@ -248,7 +250,7 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
     entry.clock = GDK_FRAME_CLOCK(g_object_ref(gtk_widget_get_frame_clock(window)));
   }
   if (hooks_.startSurface) {
-    hooks_.startSurface(surface, width, height, gtk_widget_get_scale_factor(window));
+    hooks_.startSurface(surface, width, height, windowScale(window));
   }
   if (opened) {
     opened();
@@ -271,11 +273,34 @@ void presentWithoutInitialFocus(GtkWindow *window) {
 
 void GtkWindows::didMount(SurfaceId surface) {
   auto it = windows_.find(surface);
+  if (it == windows_.end() || it->second.mounted) {
+    return;
+  }
+  it->second.mounted = true;
+  if (!hooks_.whenShown) {
+    show(surface);
+    return;
+  }
+  // Held past the splash screen, which may let it go after these windows are gone. The hook
+  // answers on the main context, in one dispatch, so a window shows in the order it was ready.
+  hooks_.whenShown([this, surface, alive = std::weak_ptr<void>(alive_)] {
+    if (!alive.expired()) {
+      show(surface);
+    }
+  });
+}
+
+void GtkWindows::show(SurfaceId surface) {
+  auto it = windows_.find(surface);
+  // A window closed while the splash held it is not shown.
   if (it == windows_.end() || it->second.shown) {
     return;
   }
   it->second.shown = true;
   presentWithoutInitialFocus(GTK_WINDOW(it->second.window));
+  if (hooks_.presented) {
+    hooks_.presented(surface);
+  }
   // The app learns the size the window opened at, which a saved frame decides.
   reportFrame(surface);
 }
@@ -311,7 +336,7 @@ void GtkWindows::reportFrame(SurfaceId surface, bool onAllocation) {
   if (width > 0 && height > 0) {
     it->second.reportedWidth = now.width;
     it->second.reportedHeight = now.height;
-    host->resized(surface, now, gtk_widget_get_scale_factor(it->second.window), saved);
+    host->resized(surface, now, windowScale(it->second.window), saved);
   }
 }
 

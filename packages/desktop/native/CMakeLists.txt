@@ -80,6 +80,7 @@ endif()
 # --- core -----------------------------------------------------------------------------------------
 add_library(ngn_core STATIC
     core/src/absent-views.cpp
+    core/src/accent-colors.cpp
     core/src/accessibility.cpp
     core/src/aria-role.cpp
     core/src/animation-frames.cpp
@@ -91,6 +92,7 @@ add_library(ngn_core STATIC
     core/src/crash-report.cpp
     core/src/desktop-modal.cpp
     core/src/desktop-view-props.cpp
+    core/src/dbus-menu.cpp
     core/src/default-menu.cpp
     core/src/dev-server.cpp
     core/src/dom-web-view.cpp
@@ -99,14 +101,18 @@ add_library(ngn_core STATIC
     core/src/glass.cpp
     core/src/header-bar.cpp
     core/src/host-os.cpp
+    core/src/host-reload.cpp
     core/src/host-state.cpp
     core/src/host-views.cpp
     core/src/image-source.cpp
     core/src/input-dispatcher.cpp
     core/src/input-script.cpp
     core/src/key-value-store.cpp
+    core/src/notification-schedule.cpp
     core/src/launch-settings.cpp
     core/src/live-regions.cpp
+    core/src/text-units.cpp
+    core/src/accessibility-relations.cpp
     core/src/library-glue.cpp
     core/src/module-registry.cpp
     core/src/mounting-manager.cpp
@@ -120,6 +126,7 @@ add_library(ngn_core STATIC
     core/src/safe-areas.cpp
     core/src/scrollers.cpp
     core/src/posix-launcher.cpp
+    core/src/posix-locale.cpp
     core/src/processes.cpp
     core/src/screen-presentation.cpp
     core/src/screen-stacks.cpp
@@ -132,6 +139,7 @@ add_library(ngn_core STATIC
     core/src/download.cpp
     core/src/updates.cpp
     core/src/view-box.cpp
+    core/src/view-filter.cpp
     core/src/view-transform.cpp
     core/src/red-box.cpp
     core/src/expo-image.cpp
@@ -155,6 +163,7 @@ add_library(ngn_core STATIC
     core/src/modules/crypto.cpp
     core/src/modules/desktop-expo.cpp
     core/src/modules/desktop-modules.cpp
+    core/src/modules/file-photo-picker.cpp
     core/src/modules/file-system.cpp
     core/src/modules/fonts.cpp
     core/src/modules/image-loader.cpp
@@ -291,7 +300,16 @@ if(_ngn_curl)
   add_library(ngn_curl STATIC core/src/curl-network.cpp)
   target_link_libraries(ngn_curl PUBLIC ngn_core PRIVATE ngn_libcurl)
   target_compile_options(ngn_curl PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter -Wno-missing-field-initializers)
+  # The Expo Updates client's hash and signature check over the same system OpenSSL 3, for the
+  # backend with no OS crypto of its own.
+  add_library(ngn_openssl STATIC core/src/openssl-update-crypto.cpp)
+  target_include_directories(ngn_openssl PRIVATE ${NGN_OPENSSL_INCLUDE_DIRS})
+  target_link_libraries(ngn_openssl PUBLIC ngn_core ${NGN_OPENSSL_LINK_LIBRARIES})
+  target_compile_options(ngn_openssl PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter -Wno-missing-field-initializers)
   if(NGN_TESTS)
+    target_sources(ngn_core_tests PRIVATE core/tests/openssl/update-crypto.test.cpp)
+    target_link_libraries(ngn_core_tests PRIVATE ngn_openssl)
+    set_source_files_properties(core/tests/openssl/update-crypto.test.cpp PROPERTIES COMPILE_OPTIONS "${NGN_DOCTEST_SOURCE_OPTIONS}")
     # Against a local server, test-server.py, which needs python3.
     set(_curl_tests core/tests/curl/network.test.cpp)
     target_sources(ngn_core_tests PRIVATE ${_curl_tests})

@@ -1,6 +1,6 @@
 /**
- * `<native-button>`: a platform button. NSButton on macOS and UIButton on iOS, which the host
- * implements under the view name `NgNativeButton`, and a drawn pressable on Android.
+ * `<native-button>`: a platform button. NSButton on macOS, GtkButton on Linux and UIButton on iOS,
+ * which the host implements under the view name `NgNativeButton`, and a drawn pressable on Android.
  *
  * The contract for a host that draws it: the props are `title` (the projected text), `kind`
  * (`default`, `cancel`, `destructive` or `plain`; `default` takes Return and `cancel` takes
@@ -32,7 +32,7 @@ const touch = async (node: Parameters<typeof fireEvent>[0]) => {
   await settle();
 };
 
-for (const os of ['ios', 'macos'] as const) {
+for (const os of ['ios', 'macos', 'linux'] as const) {
   describe(`on ${os}`, () => {
     before(() => registerPlatformComponents(os));
     after(() => registerPlatformComponents('ios'));

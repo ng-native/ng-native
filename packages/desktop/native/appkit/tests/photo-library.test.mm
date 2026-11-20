@@ -51,7 +51,7 @@ TEST_CASE("The media library and the picker over PhotoKit read and write nothing
   CHECK(run("albums", folly::dynamic::array()).first == folly::dynamic::array());
   CHECK(run("createAsset", folly::dynamic::array("file:///tmp/none.jpg", nullptr)).second);
   CHECK(module->call("startObserving") == folly::dynamic(false));
-  auto picker = ngn::makeImagePickerModule(library, true);
+  auto picker = ngn::makeImagePickerModule(library, library, true);
   std::optional<folly::dynamic> picked;
   picker->callWithPromise("launchImageLibraryAsync", folly::dynamic::array(folly::dynamic::object()),
                           {.resolve = [&](folly::dynamic v) { picked = v; }, .reject = {}});

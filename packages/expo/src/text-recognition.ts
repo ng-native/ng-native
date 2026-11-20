@@ -14,7 +14,13 @@
  * so there `available` is false and `recognize` rejects with a `MissingModuleError`.
  */
 import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
-import { MissingModuleError, currentPlatform, optional } from './native.ts';
+import {
+  MissingModuleError,
+  absentByDesign,
+  currentPlatform,
+  isDesktopPlatform,
+  optional,
+} from './native.ts';
 
 export interface TextRecognitionOptions {
   /**
@@ -67,10 +73,10 @@ const NOTHING_READ: RecognizedText = Object.freeze({ text: '', lines: [], width:
 
 /**
  * The module where the build has it: an Expo module on iOS, and the desktop host's TurboModule of
- * the same name on macOS.
+ * the same name on a desktop OS.
  */
 function nativeTextRecognition(): NativeTextRecognition | null {
-  if (currentPlatform() === 'macos') {
+  if (isDesktopPlatform(currentPlatform())) {
     return optional(() => {
       const { TurboModuleRegistry } = require('react-native') as typeof import('react-native');
       return TurboModuleRegistry.get(MODULE) as NativeTextRecognition | null;
@@ -104,9 +110,12 @@ export class TextRecognition {
    */
   recognize(imageUri: string, options: TextRecognitionOptions = {}): Promise<RecognizedText> {
     if (!this.native) {
-      // Absent where Vision cannot exist: nothing is read, as from an image with no text.
+      // Absent where Vision cannot exist, or where the desktop host has no recognizer by design
+      // (Linux): nothing is read, as from an image with no text.
       const platform = currentPlatform();
-      if (platform === 'android' || platform === 'web') return Promise.resolve(NOTHING_READ);
+      if (platform === 'android' || platform === 'web' || absentByDesign(MODULE)) {
+        return Promise.resolve(NOTHING_READ);
+      }
       return Promise.reject(missing());
     }
     const languages = options.languages?.map(byScript);
@@ -142,8 +151,8 @@ function missing(): MissingModuleError {
       ? 'Node, where a test runs, has no native module: provide TextRecognition.SOURCE with a stand-in.'
       : platform === 'ios'
         ? 'This build does not have it, and Expo Go cannot load it: run a development build.'
-        : platform === 'macos'
-          ? 'This build of the desktop host does not have it: rebuild it with "npm run macos".'
+        : isDesktopPlatform(platform)
+          ? `This build of the desktop host does not have it: rebuild it with "npm run ${platform}".`
           : `It is not available on ${platform}.`;
   return new MissingModuleError(
     '@ng-native/expo',

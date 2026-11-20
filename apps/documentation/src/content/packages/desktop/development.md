@@ -32,7 +32,8 @@ features with no React tree to read here, so the menu leaves them out.
 A dev run plays an input script into its first window when `NGN_INPUT_SCRIPT` names one
 (`input-script.h`): presses, drags, moves, trackpad scrolls, magnifies, rotations and keys, as
 AppKit events sent through NSApp, which drives these screens without an accessibility grant. A key
-goes to the key window (a character, `space`, `tab`, `delete`, `escape` or `return`), and a
+goes to the key window (a character, `space`, `tab`, `delete`, `escape`, `return`, or an arrow:
+`left`, `right`, `up` or `down`), and a
 character or a space is typed into a focused text field; a `type` step types the rest of its line
 there a character at a time, so smart quotes and capitals follow it. A scroll or gesture
 goes to the view under its point, wherever the real pointer is, so a web view scrolls and a map
@@ -46,11 +47,13 @@ On Linux the GTK host plays a script in a dev run and in a test launch (`NGN_TES
 screens-check's Linux mode drives an exported bundle. It plays under X11 only, Xvfb included,
 posting each step to the X server through XTest (`libXtst.so.6`), so a step reaches GTK as a
 person's input does, native controls included. The pointer steps, `key` and `type` play, with the
-command modifier as Ctrl and option as Alt. A character is typed in the keyboard group that has it,
-the active group first, and the active group is put back after. A press the script has not
-released when it ends or its window closes is released then. A script with `scroll`, `magnify`, `rotate` or `choose`
-is refused, as is any script on an X server without the XTEST extension, with the reason in the
-host's log.
+command modifier as Ctrl and option as Alt, so `key left option` is the back key. A character is
+typed in the keyboard group that has it, the active group first, and the active group is put back
+after. A press the script has not released when it ends or its window closes is released then. A
+script with `scroll`, `magnify`, `rotate` or `choose` is refused, as is any script on an X server
+without the XTEST extension, with the reason in the host's log. With `NGN_CAPTURE` set too, the GTK
+host takes its screenshot a second after the script has played, rather than a second after the
+first frame.
 
 ## Crash reports
 

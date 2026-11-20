@@ -113,7 +113,10 @@ TEST_CASE("a bare program name is looked for on the OS's search path") {
 }
 
 TEST_CASE("Device's OS name and a push token's type are the OS's") {
-  CHECK(ngn::makeDeviceModule({}, otherOs().name)->property("osName") == dynamic("OtherOS"));
+  CHECK(ngn::makeDeviceModule({}, otherOs())->property("osName") == dynamic("OtherOS"));
+  // An OS that makes no machines leaves the brand to the machine's maker.
+  CHECK(ngn::makeDeviceModule({.manufacturer = "LENOVO"}, otherOs())->property("brand") == dynamic("LENOVO"));
+  CHECK(ngn::makeDeviceModule({}, otherOs())->property("manufacturer") == dynamic(nullptr));
 
   ngn::DesktopModuleSources sources{
       .os = otherOs(),
@@ -129,6 +132,16 @@ TEST_CASE("Device's OS name and a push token's type are the OS's") {
   made.push->registered("b");
   REQUIRE(heard.size() == 1);
   CHECK(heard[0]["token"]["type"] == "otheros");
+}
+
+TEST_CASE("Linux in a right-to-left locale goes back with Alt+Right and forward with Alt+Left, menu included") {
+  auto os = ngn::linuxOs(true);
+  CHECK(ngn::navigationFor(ngn::KeyChord{.key = "ArrowRight", .modifiers = ngn::Option}, os) == ngn::NavigationDirection::Back);
+  CHECK(ngn::navigationFor(ngn::KeyChord{.key = "ArrowLeft", .modifiers = ngn::Option}, os) == ngn::NavigationDirection::Forward);
+  auto bar = ngn::linuxMenuBar({.appName = "Notes", .os = os});
+  const auto *back = ngn::findMenuItem(bar, ngn::MenuCommand::Back);
+  REQUIRE(back != nullptr);
+  CHECK(back->key == "ArrowRight");
 }
 
 TEST_CASE("Linux's profile: Ctrl for shortcuts, Alt and the arrows for back and forward, no Homebrew") {

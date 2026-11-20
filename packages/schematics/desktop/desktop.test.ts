@@ -42,9 +42,9 @@ describe('the desktop schematic', () => {
     tree = await runner.runSchematic('desktop', { project: 'native', skipInstall: true }, tree);
   });
 
-  it('lists macos with the out-of-tree platforms flag and the config plugin', () => {
+  it('lists macos and linux with the out-of-tree platforms flag and the config plugin', () => {
     const { expo } = json(tree, 'projects/native/app.json');
-    assert.deepEqual(expo.platforms, ['ios', 'android', 'macos']);
+    assert.deepEqual(expo.platforms, ['ios', 'android', 'macos', 'linux']);
     assert.equal(expo.experiments.outOfTreePlatforms, true);
     assert.deepEqual(expo.plugins, ['@ng-native/metro', '@ng-native/desktop']);
   });
@@ -53,12 +53,14 @@ describe('the desktop schematic', () => {
     assert.equal(json(tree, 'package.json').dependencies['@ng-native/desktop'], version);
   });
 
-  it('adds macos and package targets on the expo builder', () => {
+  it('adds macos, linux and package targets on the expo builder', () => {
     const { architect } = json(tree, 'angular.json').projects.native;
-    assert.deepEqual(architect.macos, {
-      builder: '@ng-native/schematics:expo',
-      options: { command: 'macos' },
-    });
+    for (const os of ['macos', 'linux']) {
+      assert.deepEqual(architect[os], {
+        builder: '@ng-native/schematics:expo',
+        options: { command: os },
+      });
+    }
     assert.deepEqual(architect.package, {
       builder: '@ng-native/schematics:expo',
       options: { command: 'package' },
@@ -81,17 +83,47 @@ describe('the desktop schematic', () => {
         { project: 'native', skipInstall: true },
         ported,
       );
-      assert.deepEqual(json(ported, 'angular.json').projects.native.architect.macos.options, {
-        command: 'macos',
-        port: 8082,
-      });
+      const { architect } = json(ported, 'angular.json').projects.native;
+      for (const os of ['macos', 'linux']) {
+        assert.deepEqual(architect[os].options, { command: os, port: 8082 });
+      }
     }
   });
 
   it("ignores the packaged apps in the project's .gitignore, keeping what is there", () => {
     const ignore = tree.readContent('projects/native/.gitignore');
     assert.match(ignore, /^\/dist\/macos$/m);
+    assert.match(ignore, /^\/dist\/linux$/m);
     assert.match(ignore, /^\/ios$/m);
+  });
+
+  it('adds linux to a project that already runs on macOS, and keeps what it has', async () => {
+    // What an earlier release of this schematic wrote: macos alone, and its ignore rule.
+    const app = json(tree, 'projects/native/app.json');
+    app.expo.platforms = ['ios', 'android', 'macos'];
+    tree.overwrite('projects/native/app.json', JSON.stringify(app, null, 2));
+    const workspace = json(tree, 'angular.json');
+    const { architect } = workspace.projects.native;
+    delete architect.linux;
+    architect.macos.options = { command: 'macos', port: 9000 };
+    tree.overwrite('angular.json', JSON.stringify(workspace, null, 2));
+    tree.overwrite(
+      'projects/native/.gitignore',
+      '# Built by ng-native-desktop package\n/dist/macos\n',
+    );
+
+    const again = await runner.runSchematic(
+      'desktop',
+      { project: 'native', skipInstall: true },
+      tree,
+    );
+
+    const { expo } = json(again, 'projects/native/app.json');
+    assert.deepEqual(expo.platforms, ['ios', 'android', 'macos', 'linux']);
+    const after = json(again, 'angular.json').projects.native.architect;
+    assert.deepEqual(after.macos.options, { command: 'macos', port: 9000 });
+    assert.deepEqual(after.linux.options, { command: 'linux' });
+    assert.match(again.readContent('projects/native/.gitignore'), /^\/dist\/linux$/m);
   });
 
   it('changes nothing run again', async () => {

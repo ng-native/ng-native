@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -54,14 +55,19 @@ struct Replay {
   GdkDisplay *display{nullptr};
   InputScript script;
   size_t at{0};
-  // Called once the last step has played.
   std::function<void()> done;
+  // Set when the window unrealizes: a destroyed window a caller still holds is not a finished script.
+  bool closed{false};
+  gulong unrealizeHandler{0};
   // Whether the script's press of the primary button is not yet released. The X server holds a
   // posted press for every client until its release, so a script that stops before its `up`, its
   // window closed, releases it.
   bool pressed{false};
   ~Replay() {
     if (window) {
+      if (unrealizeHandler) {
+        g_signal_handler_disconnect(window, unrealizeHandler);
+      }
       g_object_remove_weak_pointer(G_OBJECT(window), reinterpret_cast<gpointer *>(&window));
     }
     if (display) {
@@ -101,8 +107,12 @@ void pointerTo(GtkWidget *window, const InputStep &step) {
   xtest().motion(displayOf(window), -1, x, y, 0);
 }
 
-// The X keysym a script's key names: a character, or escape, return, space, tab or delete.
+// The X keysym a script's key names: a character, or escape, return, space, tab, delete or an arrow.
 unsigned long keysymOf(const std::string &key) {
+  if (key == "left") return XK_Left;
+  if (key == "right") return XK_Right;
+  if (key == "up") return XK_Up;
+  if (key == "down") return XK_Down;
   if (key == "escape") return XK_Escape;
   if (key == "return") return XK_Return;
   if (key == "space") return XK_space;
@@ -199,8 +209,9 @@ void play(Replay &replay, const InputStep &step) {
 // Plays from `replay->at`: a wait waits, and every other step leaves the loop a moment to take
 // the event before the next, as a person's input arrives.
 void playNext(std::shared_ptr<Replay> replay) {
-  // A destroyed window that another reference keeps is unrealized, with no surface to post to.
-  if (!replay->window || !gtk_widget_get_realized(replay->window)) {
+  // A destroyed window that another reference keeps is unrealized, with no surface to post to; one
+  // unrealized since the script began is closed even if something realizes it again.
+  if (!replay->window || replay->closed || !gtk_widget_get_realized(replay->window)) {
     fprintf(stderr, "[ngn] input script: the window closed before the script ended\n");
     return;
   }
@@ -275,10 +286,12 @@ bool replayInputScript(GtkWidget *window, InputScript script, std::function<void
   replay->script = std::move(script);
   replay->done = std::move(done);
   g_object_add_weak_pointer(G_OBJECT(window), reinterpret_cast<gpointer *>(&replay->window));
+  replay->unrealizeHandler = g_signal_connect(window, "unrealize", G_CALLBACK(+[](GtkWidget *, gpointer data) {
+    static_cast<Replay *>(data)->closed = true;
+  }), replay.get());
   playNext(std::move(replay));
   return true;
 #else
-  (void)done;
   return false;
 #endif
 }

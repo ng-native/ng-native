@@ -125,6 +125,10 @@ class FileDialogs {
     // MIME types ("text/plain", "image/*"); empty for any file.
     std::vector<std::string> types;
     bool multiple{false};
+    // The panel's title and the types' filter's name, where the OS shows them; empty for the
+    // host's own ("Open File", the types listed).
+    std::string title;
+    std::string filterName;
   };
   struct SaveRequest {
     std::string suggestedName;

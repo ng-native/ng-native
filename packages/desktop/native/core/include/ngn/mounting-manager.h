@@ -141,6 +141,7 @@ class MountingManager final : public facebook::react::IMountingManager,
   std::unordered_map<SurfaceId, uint64_t> mountedBy_;
   ViewTree tree_;
   LiveRegions liveRegions_;
+  AccessibilityRelations relations_;
   std::unique_ptr<ScreenStacks> screens_;
   std::unique_ptr<SafeAreas> safeAreas_;
   bool safeAreasSettled_{false};

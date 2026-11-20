@@ -805,7 +805,7 @@ describe('packageApp', () => {
       calls.filter((call) => call.command === 'codesign').map((call) => call.args);
 
     const plain = withHermes({});
-    await quiet(() => packageApp(parsePackage([]), plain.sys));
+    await quiet(() => packageApp(macPackage([]), plain.sys));
     assert.ok(plain.copied.some(([from, to]) => from === built && to === embedded));
     assert.deepEqual(signed(plain.calls), [
       ['--force', '--sign', '-', embedded],
@@ -813,7 +813,7 @@ describe('packageApp', () => {
     ]);
 
     const dmg = withHermes(DMG_ENV);
-    await quiet(() => packageApp(parsePackage(['--format', 'dmg']), dmg.sys));
+    await quiet(() => packageApp(macPackage(['--format', 'dmg']), dmg.sys));
     const [framework, ofApp] = signed(dmg.calls);
     assert.deepEqual(framework, [
       '--force',
@@ -827,7 +827,7 @@ describe('packageApp', () => {
     assert.equal(ofApp!.at(-1), app);
 
     const mas = withHermes(MAS_ENV);
-    await quiet(() => packageApp(parsePackage(['--format', 'mas']), mas.sys));
+    await quiet(() => packageApp(macPackage(['--format', 'mas']), mas.sys));
     assert.deepEqual(
       signed(mas.calls)
         .slice(0, 2)
@@ -845,7 +845,7 @@ describe('packageApp', () => {
         env,
         exists: (path) => path === HERMESC || (hermes && path === built),
       });
-      await quiet(() => packageApp(parsePackage(['--format', 'dmg', '--skip-notarize']), sys));
+      await quiet(() => packageApp(macPackage(['--format', 'dmg', '--skip-notarize']), sys));
       return written[file]!;
     };
     const validation = /com\.apple\.security\.cs\.disable-library-validation/;
@@ -860,7 +860,7 @@ describe('packageApp', () => {
 
   it('embeds no Hermes framework for a host with Hermes linked in', async () => {
     const { sys, copied } = fakeMac();
-    await quiet(() => packageApp(parsePackage([]), sys));
+    await quiet(() => packageApp(macPackage([]), sys));
     assert.ok(!copied.some(([, to]) => to.includes('hermesvm.framework')));
   });
 

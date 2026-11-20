@@ -289,12 +289,12 @@ TEST_CASE("NgNativeImagePicker asks for the camera as NgNativeCamera does: only 
   auto library = std::make_shared<FakeLibrary>();
   auto camera = std::make_shared<FakeCamera>();
   ngn::PickerCamera picker{.hardware = camera, .microphone = std::make_shared<FakeMicrophone>(), .sheet = std::make_shared<FakeSheet>(), .folder = "/tmp/unused"};
-  auto quiet = ngn::makeImagePickerModule(library, true, picker);
+  auto quiet = ngn::makeImagePickerModule(library, library, true, picker);
   CHECK(ask(*quiet, "requestCameraPermissionsAsync").value ==
         dynamic(dynamic::object("status", "undetermined")("granted", false)("canAskAgain", true)("expires", "never")));
   CHECK(camera->asked == 0);
 
-  auto module = ngn::makeImagePickerModule(library, false, picker);
+  auto module = ngn::makeImagePickerModule(library, library, false, picker);
   camera->decides = FakeCamera::Access::Granted;
   CHECK(ask(*module, "requestCameraPermissionsAsync").value->at("status") == dynamic("granted"));
   CHECK(camera->asked == 1);
@@ -315,7 +315,7 @@ TEST_CASE("NgNativeImagePicker takes a photo with the host's camera sheet, answe
   auto sheet = std::make_shared<FakeSheet>();
   auto folder = std::filesystem::temp_directory_path() / ("ngn-picker-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   auto module = ngn::makeImagePickerModule(
-      library, false, ngn::PickerCamera{.hardware = camera, .microphone = std::make_shared<FakeMicrophone>(), .sheet = sheet, .folder = folder.string()});
+      library, library, false, ngn::PickerCamera{.hardware = camera, .microphone = std::make_shared<FakeMicrophone>(), .sheet = sheet, .folder = folder.string()});
 
   auto shot = ask(*module, "launchCameraAsync", dynamic::array(dynamic::object("quality", 0.4)));
   REQUIRE(shot.value);
@@ -372,7 +372,7 @@ TEST_CASE("NgNativeImagePicker shows the sheet in photo mode, video mode or both
   auto sheet = std::make_shared<FakeSheet>();
   sheet->user = FakeSheet::User::Cancels;
   auto module = ngn::makeImagePickerModule(
-      library, false, ngn::PickerCamera{.hardware = camera, .microphone = std::make_shared<FakeMicrophone>(), .sheet = sheet, .folder = "/tmp/unused"});
+      library, library, false, ngn::PickerCamera{.hardware = camera, .microphone = std::make_shared<FakeMicrophone>(), .sheet = sheet, .folder = "/tmp/unused"});
   struct Case {
     dynamic types;
     bool photos;
@@ -404,7 +404,7 @@ TEST_CASE("NgNativeImagePicker records a video with the host's camera sheet, ans
   sheet->user = FakeSheet::User::Records;
   auto folder = std::filesystem::temp_directory_path() / ("ngn-picker-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   auto module = ngn::makeImagePickerModule(
-      library, false, ngn::PickerCamera{.hardware = camera, .microphone = std::make_shared<FakeMicrophone>(), .sheet = sheet, .folder = folder.string()});
+      library, library, false, ngn::PickerCamera{.hardware = camera, .microphone = std::make_shared<FakeMicrophone>(), .sheet = sheet, .folder = folder.string()});
 
   // base64 and exif asked for, which iOS gives a photo only.
   auto clip = ask(*module, "launchCameraAsync",
@@ -469,7 +469,7 @@ TEST_CASE("NgNativeImagePicker asks for the microphone for a video as iOS does: 
   auto microphone = std::make_shared<FakeMicrophone>();
   auto folder = std::filesystem::temp_directory_path() / ("ngn-picker-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
   ngn::PickerCamera picker{.hardware = camera, .microphone = microphone, .sheet = sheet, .folder = folder.string()};
-  auto module = ngn::makeImagePickerModule(library, false, picker);
+  auto module = ngn::makeImagePickerModule(library, library, false, picker);
   const std::string missing = "ImagePicker: Missing microphone permission. Please enable it with the `expo-image-picker` config plugin";
   auto videos = dynamic::array(dynamic::object("mediaTypes", dynamic::array("images", "videos")));
   auto recorded = [&](const Answer &answer) {
@@ -526,7 +526,7 @@ TEST_CASE("NgNativeImagePicker asks for the microphone for a video as iOS does: 
   camera->state = FakeCamera::Access::Denied;
   CHECK(ask(*module, "launchCameraAsync", videos).failure == "ImagePicker: Missing camera or camera roll permission");
   camera->state = FakeCamera::Access::Granted;
-  auto quiet = ngn::makeImagePickerModule(library, true, picker);
+  auto quiet = ngn::makeImagePickerModule(library, library, true, picker);
   CHECK(ask(*quiet, "launchCameraAsync", videos).value->at("canceled") == dynamic(true));
   CHECK(microphone->asked == 3);
   CHECK(sheet->shown == 6);
@@ -538,7 +538,7 @@ TEST_CASE("NgNativeImagePicker shows no camera without the permission, with no p
   auto camera = std::make_shared<FakeCamera>();
   auto sheet = std::make_shared<FakeSheet>();
   ngn::PickerCamera picker{.hardware = camera, .microphone = std::make_shared<FakeMicrophone>(), .sheet = sheet, .folder = "/tmp/unused"};
-  auto module = ngn::makeImagePickerModule(library, false, picker);
+  auto module = ngn::makeImagePickerModule(library, library, false, picker);
   // As iOS rejects it: capture() asks first, so only a direct call gets here.
   for (auto access : {FakeCamera::Access::NotDetermined, FakeCamera::Access::Denied, FakeCamera::Access::Restricted}) {
     camera->state = access;
@@ -549,7 +549,7 @@ TEST_CASE("NgNativeImagePicker shows no camera without the permission, with no p
   camera->camera = false;
   CHECK(ask(*module, "launchCameraAsync", dynamic::array(dynamic::object())).failure == "ImagePicker: this Mac has no camera");
   camera->camera = true;
-  auto quiet = ngn::makeImagePickerModule(library, true, picker);
+  auto quiet = ngn::makeImagePickerModule(library, library, true, picker);
   CHECK(ask(*quiet, "launchCameraAsync", dynamic::array(dynamic::object())).value->at("canceled") == dynamic(true));
   CHECK_FALSE(sheet->asked);
 }
@@ -557,7 +557,7 @@ TEST_CASE("NgNativeImagePicker shows no camera without the permission, with no p
 TEST_CASE("NgNativeImagePicker picks from the library without a permission, and has no camera without the host's") {
   auto library = std::make_shared<FakeLibrary>();
   library->read = Access::Denied;
-  auto module = ngn::makeImagePickerModule(library, false);
+  auto module = ngn::makeImagePickerModule(library, library, false);
   CHECK(ask(*module, "launchImageLibraryAsync", dynamic::array(dynamic::object())).value->at("canceled") == dynamic(true));
   library->picks = std::vector<ngn::PhotoLibrary::Picked>{{.uri = "file:///c/p.jpg", .fileName = "p.jpg", .mimeType = "image/jpeg", .type = "image", .width = 10, .height = 20}};
   auto picked = *ask(*module, "launchImageLibraryAsync", dynamic::array(dynamic::object())).value;
@@ -569,7 +569,7 @@ TEST_CASE("NgNativeImagePicker picks from the library without a permission, and 
   CHECK(ask(*module, "requestCameraPermissionsAsync").value->at("granted") == dynamic(false));
   CHECK(ask(*module, "launchCameraAsync").value->at("canceled") == dynamic(true));
   // With no prompts the picker is never shown.
-  auto quiet = ngn::makeImagePickerModule(library, true);
+  auto quiet = ngn::makeImagePickerModule(library, library, true);
   CHECK(ask(*quiet, "launchImageLibraryAsync", dynamic::array(dynamic::object())).value->at("canceled") == dynamic(true));
 }
 

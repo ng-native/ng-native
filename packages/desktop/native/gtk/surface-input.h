@@ -4,6 +4,7 @@
 // pointer still takes its own click.
 #pragma once
 
+#include "ngn/input-dispatcher.h"
 #include "ngn/input.h"
 
 #include <react/renderer/components/view/primitives.h>
@@ -11,6 +12,7 @@
 #include <gtk/gtk.h>
 
 #include <cstdint>
+#include <functional>
 
 namespace ngn::gtk {
 
@@ -40,7 +42,16 @@ const char *cursorName(facebook::react::Cursor cursor);
 // that name; null for `auto`, which is the widget's own. The caller owns it.
 GdkCursor *makeCursor(facebook::react::Cursor cursor);
 
-// Feeds `widget`'s pointer events to `input` as the container `container` of `surfaceId`.
+// Shows a view's context menu for a secondary click at `input` in `widget`; true when it did, and
+// the click goes no further. Set once by the host.
+void setContextMenuShower(std::function<bool(GtkWidget *widget, const PointerInput &input)> shower);
+
+// Feeds `widget`'s pointer events to `input` as the container `container` of `surfaceId`, and
+// drags over it (drag-and-drop.h).
 void attachPointerInput(GtkWidget *widget, facebook::react::SurfaceId surfaceId, ContainerId container, InputSink *input);
+
+// Starts dragging `item` out of `view` from the pointer move the input sink is hearing, as its
+// onDragOut asks; false outside one, or when GDK would not start a drag.
+bool dragOutOfPointer(GtkWidget *view, const DragOutItem &item);
 
 } // namespace ngn::gtk

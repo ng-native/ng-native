@@ -1,5 +1,7 @@
 #include "surface-input.h"
 
+#include "drag-and-drop.h"
+
 #include <cmath>
 #include <optional>
 
@@ -95,6 +97,13 @@ struct PointerState {
   ClickCounter clicks{400, 5};
 };
 
+// The motion event the input sink is hearing, while it hears it.
+struct Moving {
+  PointerState *state{nullptr};
+  GdkEvent *event{nullptr};
+};
+Moving gMoving;
+
 // The event's point in the widget's coordinates: GDK gives it in the surface's.
 std::optional<facebook::react::Point> pointIn(GtkWidget *widget, GdkEvent *event) {
   double x = 0, y = 0;
@@ -138,6 +147,11 @@ std::optional<WheelDelta> wheelDelta(GdkEvent *event) {
   return delta;
 }
 
+std::function<bool(GtkWidget *, const PointerInput &)> &contextMenuShower() {
+  static std::function<bool(GtkWidget *, const PointerInput &)> shower;
+  return shower;
+}
+
 gboolean pointerEvent(GtkEventControllerLegacy *, GdkEvent *event, gpointer user) {
   auto *s = static_cast<PointerState *>(user);
   GdkEventType type = gdk_event_get_event_type(event);
@@ -161,7 +175,7 @@ gboolean pointerEvent(GtkEventControllerLegacy *, GdkEvent *event, gpointer user
       input.buttons = s->buttons;
       input.pressure = 0.5f;
       input.clickCount = s->clicks.press(gdk_event_get_time(event), point->x, point->y, button);
-      if (button == 3 && s->input->contextMenu(input)) {
+      if (button == 3 && ((contextMenuShower() && contextMenuShower()(s->widget, input)) || s->input->contextMenu(input))) {
         return FALSE;
       }
       s->input->pointerDown(input);
@@ -175,7 +189,11 @@ gboolean pointerEvent(GtkEventControllerLegacy *, GdkEvent *event, gpointer user
     case GDK_MOTION_NOTIFY:
       input.buttons = s->buttons;
       input.pressure = s->buttons ? 0.5f : 0;
+      // A move that crosses the drag threshold on a `[dragItem]` view starts a drag out from
+      // this event (dragOutOfPointer).
+      gMoving = {s, event};
       s->input->pointerMove(input);
+      gMoving = {};
       return FALSE;
     default: {
       auto delta = wheelDelta(event);
@@ -198,6 +216,10 @@ void pointerLeft(GtkEventControllerMotion *, gpointer user) {
 
 } // namespace
 
+void setContextMenuShower(std::function<bool(GtkWidget *widget, const PointerInput &input)> shower) {
+  contextMenuShower() = std::move(shower);
+}
+
 void attachPointerInput(GtkWidget *widget, SurfaceId surfaceId, ContainerId container, InputSink *input) {
   auto *state = new PointerState{.widget = widget, .surfaceId = surfaceId, .container = container, .input = input};
   int interval = 400, distance = 5;
@@ -213,6 +235,17 @@ void attachPointerInput(GtkWidget *widget, SurfaceId surfaceId, ContainerId cont
   GtkEventController *motion = gtk_event_controller_motion_new();
   g_signal_connect(motion, "leave", G_CALLBACK(pointerLeft), state);
   gtk_widget_add_controller(widget, motion);
+
+  attachDropTarget(widget, container, input);
+}
+
+bool dragOutOfPointer(GtkWidget *view, const DragOutItem &item) {
+  if (!gMoving.event || !beginDragOut(view, gMoving.event, item)) {
+    return false;
+  }
+  // The drag has the pointer to its release, which this widget never sees.
+  gMoving.state->buttons = 0;
+  return true;
 }
 
 } // namespace ngn::gtk

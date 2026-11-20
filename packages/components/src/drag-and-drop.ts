@@ -32,8 +32,8 @@ export interface DragItemValue {
   readonly url?: string;
 }
 
-/** Drag and drop exists on macOS and iPadOS; iPhone's host ignores both props. */
-const takesDrags = (os: string): boolean => os === 'macos' || os === 'ios';
+/** Drag and drop exists on macOS, Linux and iPadOS; iPhone's host ignores both props. */
+const takesDrags = (os: string): boolean => os === 'macos' || os === 'linux' || os === 'ios';
 
 /** iOS's host module, which takes both by the view's `nativeID`, where the app has it. */
 function moduleOnIos(os: string): DragAndDrop | null {
@@ -42,7 +42,7 @@ function moduleOnIos(os: string): DragAndDrop | null {
 }
 
 /**
- * Files, text and urls dragged onto a view, on macOS and iPadOS: `(fileDragEnter)` as a drag
+ * Files, text and urls dragged onto a view, on macOS, Linux and iPadOS: `(fileDragEnter)` as a drag
  * comes over it, `(fileDragLeave)` as it goes off without dropping, and `(fileDrop)` when it is
  * dropped. Each carries a `FileDropEvent`. On iPhone, Android and the web host nothing fires.
  *
@@ -88,9 +88,9 @@ export class FileDrop {
 }
 
 /**
- * A view that can be dragged out, on macOS and iPadOS: to Finder, another app, or a `(fileDrop)`
- * view. `[dragItem]="{ files: [path] }"`, `{ text }` or `{ url }`, or several of them; null for
- * none. A mouse drag starts it on macOS and a long press on iPadOS.
+ * A view that can be dragged out, on macOS, Linux and iPadOS: to a file manager, another app, or a
+ * `(fileDrop)` view. `[dragItem]="{ files: [path] }"`, `{ text }` or `{ url }`, or several of
+ * them; null for none. A mouse drag starts it on macOS and Linux, and a long press on iPadOS.
  *
  * The host contract: the view takes a `dragItem` prop of `{ files, text, url }`, with each file
  * as a `file://` url and the others a string or null, or null to take it away. On iOS the item

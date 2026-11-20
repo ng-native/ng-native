@@ -81,6 +81,21 @@ yet. With the microphone refused, the video is recorded with no sound, as on iOS
 makes the request reject only when the app's `Info.plist` has no `NSMicrophoneUsageDescription`,
 with iOS's message. On a Mac with no camera `capture()` rejects.
 
+On the desktop, a picked image has `base64` and `exif` when the options ask for them, as a photo
+from `capture()` does. `exif` is read from a JPEG's own EXIF, with expo's tag names and GPS
+coordinates in degrees; an image in another format has `exif: null`. A video has neither.
+
+## On Linux
+
+`pick()` opens the desktop's file chooser through the FileChooser portal, or GTK's own where no
+portal answers, with one filter for the media types asked for (images, videos or both). It needs no
+permission, so `libraryPermission` reads as granted. The files chosen are copied into the app's
+caches. An image's size comes from its header. An MP4 or QuickTime video's size and duration come
+from the file itself; a video in another container, such as WebM, has a width and height of 0 and
+no duration. `selectionLimit` keeps the first files chosen, since the portal has no limit of its
+own. There is no camera on Linux: `capture()` resolves to an empty list and `cameraPermission`
+reads as denied.
+
 ## Permissions
 
 Two separate permissions, each a `Permission` (see [Permissions](/packages/expo/permissions)):

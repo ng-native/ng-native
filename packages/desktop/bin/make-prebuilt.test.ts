@@ -91,7 +91,7 @@ describe('make-prebuilt.mjs', () => {
     );
     assert.match(build, /-DCMAKE_\$\{lang\}_FLAGS_RELWITHDEBINFO=\$flags/);
     assert.match(build, /\$\{flags_args\[@\]\+"\$\{flags_args\[@\]\}"\}/);
-    assert.match(source, /prebuiltName\(desktopVersion, reactNative, flavour\)/);
+    assert.match(source, /prebuiltName\(desktopVersion, reactNative, flavour, platform\)/);
     assert.match(source, /const host = \{\s*reactNative,\s*flavour,/);
   });
 
@@ -193,6 +193,48 @@ describe('publishPrebuilt', () => {
       ]);
     } finally {
       rmSync(out, { recursive: true, force: true });
+    }
+  });
+
+  it('publishes a Linux host beside the macOS one of the same flavour, each with its own entry', () => {
+    const { out, archive } = packed();
+    try {
+      const linux = { ...host, os: 'linux' as const, arch: 'arm64' as const, sha256: 'l' };
+      publishPrebuilt({ out, archive, name: 'h.tar.gz', host });
+      const second = path.join(out, '.linux.partial');
+      writeFileSync(second, 'linux build');
+      publishPrebuilt({ out, archive: second, name: 'l.tar.gz', host: linux });
+      assert.deepEqual(
+        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-release.json'), 'utf8')),
+        host,
+      );
+      assert.deepEqual(
+        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-linux-arm64-release.json'), 'utf8')),
+        linux,
+      );
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
+  });
+
+  it('takes macos or linux for --os, builds a Linux host only on Linux, with the cache flags too', () => {
+    const windows = makePrebuilt(['--os', 'windows']);
+    assert.equal(windows.status, 2);
+    assert.match(windows.stderr, /--os takes macos or linux/);
+    for (const flag of [
+      [],
+      ['--host-cache', '/tmp/c'],
+      ['--reuse', '/tmp/p.json'],
+      ['--print-key'],
+    ]) {
+      const linux = makePrebuilt(['--os', 'linux', ...flag]);
+      if (process.platform === 'linux') {
+        assert.match(linux.stderr, /react-native is not installed/, flag.join(' '));
+      } else {
+        assert.equal(linux.status, 2, flag.join(' '));
+        assert.match(linux.stderr, /--os linux builds on Linux only/);
+      }
+      assert.ok(!linux.wroteOut, 'nothing built or written');
     }
   });
 

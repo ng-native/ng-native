@@ -96,6 +96,14 @@ const REFUSED_PROGRAMS = new Set([
   'pwsh',
   'nice',
   'nohup',
+  // Linux's: escalation (`pkexec`), a shell of its own (`busybox`), and leaving a Flatpak sandbox,
+  // the session or the mount namespace (`flatpak-spawn --host`, `systemd-run`, `nsenter`, `chroot`).
+  'pkexec',
+  'busybox',
+  'flatpak-spawn',
+  'systemd-run',
+  'nsenter',
+  'chroot',
 ]);
 
 /** Windows batch files, which run through `cmd.exe` and so re-parse their arguments. */

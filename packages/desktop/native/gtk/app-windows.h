@@ -6,6 +6,7 @@
 
 #include "ngn/app-windows.h"
 #include "ngn/default-menu.h"
+#include "window-scale.h"
 
 #include <gtk/gtk.h>
 
@@ -46,9 +47,12 @@ class GtkWindows final : public WindowBackend {
   struct Hooks {
     // A window's surface widget was made: the backend mounts into it and input reads it.
     std::function<void(SurfaceId surface, GtkWidget *widget)> addSurface;
-    // Start, size and stop the surface's app, with its size in points and its scale.
-    std::function<void(SurfaceId surface, int width, int height, int scale)> startSurface;
-    std::function<void(SurfaceId surface, int width, int height, int scale)> resizeSurface;
+    // Start and size the surface's app, with its size in points and its scale.
+    std::function<void(SurfaceId surface, int width, int height, double scale)> startSurface;
+    std::function<void(SurfaceId surface, int width, int height, double scale)> resizeSurface;
+    // The window's scale changed, a fractional step included (window-scale.h).
+    std::function<void(GtkWidget *window)> rescaled;
+    // Stop the surface's app.
     std::function<void(SurfaceId surface)> stopSurface;
     // GTK laid out the surface's window: its chrome may have moved.
     std::function<void(SurfaceId surface)> laidOut;
@@ -57,6 +61,12 @@ class GtkWindows final : public WindowBackend {
     // The user closed the last of these windows, and no app listens to decide (the core's
     // WindowHost::lastWindowClosed). The host decides: the app's own window may still be open.
     std::function<void()> lastWindowClosed;
+    // Runs a window's first show, now or later (once the app hides its splash screen, splash-screen.h),
+    // on the main context, in the order the windows were ready, and in the same one dispatch as any
+    // other show the host holds past the splash. Without it a window shows as its first frame mounts.
+    std::function<void(std::function<void()> show)> whenShown;
+    // A window was shown for the first time: not one closed while the splash held it.
+    std::function<void(SurfaceId surface)> presented;
   };
 
   // Windows of `application`, with the app's menus where `menus` says.
@@ -92,9 +102,11 @@ class GtkWindows final : public WindowBackend {
   struct Window {
     GtkWidget *window{nullptr};
     GtkWidget *surface{nullptr};
+    // Its first frame mounted, and it is shown, or held by whenShown until it may be.
+    bool mounted{false};
     bool shown{false};
     // The handlers that call back into these windows, stopped when the window closes or these go.
-    gulong scaled{0};
+    ScaleFollow scaleFollow;
     gulong closeRequested{0};
     // The window's notify handlers (size, maximised, full screen, focus).
     std::vector<gulong> notified;
@@ -104,6 +116,7 @@ class GtkWindows final : public WindowBackend {
     double reportedWidth{0};
     double reportedHeight{0};
   };
+  void show(SurfaceId surface);
   static void disconnect(Window &entry);
   static bool fillsScreen(GtkWindow *window);
   void open(SurfaceId surface, const WindowRequest &request, const WindowPlacement &placement, std::function<void()> opened);
@@ -119,6 +132,8 @@ class GtkWindows final : public WindowBackend {
   MenuPlacement menus_;
   std::weak_ptr<WindowHost> host_;
   std::map<SurfaceId, Window> windows_;
+  // Gone with these windows: a show the splash let go after that does nothing.
+  std::shared_ptr<void> alive_ = std::make_shared<int>(0);
 };
 
 // Runs `task` on GLib's default main context, which is the UI thread.

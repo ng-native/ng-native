@@ -150,6 +150,19 @@ void FakeBackend::announce(SurfaceId surfaceId, const Announcement &announcement
       announcement.text);
 }
 
+void FakeBackend::setAccessibilityRelations(SurfaceId, Tag tag, const AxRelations &relations) {
+  auto list = [](const std::vector<Tag> &tags) {
+    std::string out;
+    for (Tag t : tags) {
+      out += (out.empty() ? "" : ",") + std::to_string(t);
+    }
+    return out;
+  };
+  calls.push_back(
+      "relations " + std::to_string(tag) + " labelledBy=" + list(relations.labelledBy) + " describedBy=" +
+      list(relations.describedBy));
+}
+
 void FakeBackend::didMount(SurfaceId surfaceId) {
   calls.push_back("mounted " + std::to_string(surfaceId));
 }

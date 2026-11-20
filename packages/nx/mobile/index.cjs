@@ -2,7 +2,7 @@
  * `nx g @ng-native/nx:mobile desktop`: a desktop-only Angular Native app that runs on iOS and
  * Android too, undoing what `--desktopOnly` left out.
  *
- * The app's `app.json` lists `ios` and `android` beside `macos`, with the phone settings a mobile
+ * The app's `app.json` lists `ios` and `android` beside `macos` and `linux`, with the phone settings a mobile
  * app's has, and the app depends on the phone's status bar and system UI packages again. `nx.json`
  * stops keeping `@nx/expo`'s plugin off the app, so the plugin infers `run-ios`, `run-android` and
  * `prebuild` for it as for a mobile app. An app whose Metro is not on Expo's default port gets its

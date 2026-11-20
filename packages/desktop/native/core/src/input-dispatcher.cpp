@@ -5,6 +5,8 @@
 #include "ngn/app-menus.h"
 #include "ngn/file-system.h"
 
+#include <unordered_set>
+
 #include <react/renderer/components/view/TouchEventEmitter.h>
 #include <react/renderer/components/view/ViewProps.h>
 
@@ -392,14 +394,31 @@ DragItems dragItems(const std::vector<std::string> &urls, std::optional<std::str
     auto last = slash == std::string_view::npos ? path : path.substr(slash + 1);
     items.files.push_back({.uri = url, .name = percentDecoded(last)});
   }
-  // The toolkit offers a dragged url as text too, and a file as its path.
+  // The toolkit offers a dragged url as text too, and a file as its path: several of them a line
+  // each (a file manager's drag of more than one file).
   if (items.text) {
+    // Each url, and each file url's decoded path, once: a drag of thousands of files stays linear.
+    std::unordered_set<std::string> offered;
     for (const auto &url : urls) {
-      bool path = url.rfind("file://", 0) == 0 && percentDecoded(std::string_view(url).substr(7)) == *items.text;
-      if (url == *items.text || path) {
-        items.text.reset();
-        break;
+      offered.insert(url);
+      if (url.rfind("file://", 0) == 0) {
+        offered.insert(percentDecoded(std::string_view(url).substr(7)));
       }
+    }
+    auto repeats = [&offered](std::string_view line) { return offered.count(std::string(line)) > 0; };
+    bool onlyUrls = !urls.empty();
+    std::string_view rest = *items.text;
+    while (onlyUrls && !rest.empty()) {
+      auto end = rest.find('\n');
+      auto line = rest.substr(0, end);
+      if (!line.empty() && line.back() == '\r') {
+        line.remove_suffix(1);
+      }
+      onlyUrls = line.empty() || repeats(line);
+      rest = end == std::string_view::npos ? std::string_view() : rest.substr(end + 1);
+    }
+    if (onlyUrls) {
+      items.text.reset();
     }
   }
   return items;
@@ -452,6 +471,9 @@ bool InputDispatcher::dragOver(const PointerInput &input, const DragItems &items
   leaveDropTarget();
   if (!target) {
     return false;
+  }
+  if (items.pending) {
+    return true;
   }
   dropTarget_ = DropTarget{input.container, *target};
   if (const auto *node = tree_.find(*target)) {

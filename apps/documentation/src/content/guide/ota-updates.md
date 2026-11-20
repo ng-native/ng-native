@@ -23,14 +23,21 @@ server you host. The [Updates](/packages/expo/updates) service wraps it: `check(
 update and `apply()` restarts the app into it. That page covers the install and the service's
 state.
 
-## On macOS
+## On macOS and Linux
 
-EAS Update does not update macOS apps. A packaged Mac app takes Expo Updates (protocol 1) from a
-server you host, at the `updates.url` in `app.json`: the desktop host downloads the launch asset
-and the update's other assets, checks each against the manifest's hash, and, with
+EAS Update does not update desktop apps. A packaged Mac or Linux app takes Expo Updates (protocol 1)
+from a server you host, at the `updates.url` in `app.json`: the desktop host downloads the launch
+asset and the update's other assets, checks each against the manifest's hash, and, with
 `updates.codeSigningCertificate` set, checks the manifest's signature. An update whose launch
-crashes is not run again. The [Updates](/packages/expo/updates) service is the same on a Mac:
-`check()` and `apply()`, with `enabled` false in development and without an `updates.url`.
+crashes before it has shown its first frame for 10 seconds (or been quit cleanly once its bundle has
+loaded) is not run again, so a quit while the bundle is still loading counts as a failed launch;
+once it has, a later crash does not roll it back, and an update downloaded before the app itself was
+updated (by Sparkle, a package manager or Flatpak) does not run over the new version's bundle. The
+[Updates](/packages/expo/updates) service is the same on the desktop: `check()` and `apply()`, with
+`enabled` false in development and without an `updates.url`. The host asks the server with
+`expo-platform` set to `macos` or `linux`. A Linux app keeps its updates in
+`$XDG_DATA_HOME/<app id>/updates`, outside the install folder, which a `deb`, `rpm` or Flatpak
+installs read-only; the package manager or Flatpak still updates the app itself.
 
 A `dmg` packaged with `--feed-url` also embeds Sparkle, which replaces the whole app, native code
 included, rather than its bundle: see

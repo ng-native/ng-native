@@ -47,11 +47,11 @@ const run = (tree: Tree, project = 'mobile') =>
   desktop(tree, { project, skipFormat: true, skipInstall: true });
 
 describe('the desktop generator', () => {
-  it('lists macos with the out-of-tree platforms flag and the config plugin', async () => {
+  it('lists macos and linux with the out-of-tree platforms flag and the config plugin', async () => {
     const tree = await app();
     await run(tree);
     const { expo } = readJson(tree, 'apps/mobile/app.json');
-    assert.deepEqual(expo.platforms, ['ios', 'android', 'macos']);
+    assert.deepEqual(expo.platforms, ['ios', 'android', 'macos', 'linux']);
     assert.equal(expo.experiments.outOfTreePlatforms, true);
     assert.deepEqual(expo.plugins, ['@ng-native/metro', '@ng-native/desktop']);
   });
@@ -64,15 +64,20 @@ describe('the desktop generator', () => {
     assert.equal(dependencies['@ng-native/desktop'], require('../package.json').version);
   });
 
-  it('adds macos and package targets that run ng-native-desktop in the app', async () => {
+  it('adds macos, linux and package targets that run ng-native-desktop in the app', async () => {
     const tree = await app();
     await run(tree);
     const { targets } = readProjectConfiguration(tree, 'mobile');
-    assert.deepEqual(targets!['macos'], {
-      executor: 'nx:run-commands',
-      options: { cwd: 'apps/mobile', command: 'ng-native-desktop run' },
-      continuous: true,
-    });
+    for (const [os, command] of [
+      ['macos', 'ng-native-desktop run'],
+      ['linux', 'ng-native-desktop run --os linux'],
+    ] as const) {
+      assert.deepEqual(targets![os], {
+        executor: 'nx:run-commands',
+        options: { cwd: 'apps/mobile', command },
+        continuous: true,
+      });
+    }
     assert.deepEqual(targets!['package'], {
       executor: 'nx:run-commands',
       options: { cwd: 'apps/mobile', command: 'ng-native-desktop package' },
@@ -85,6 +90,7 @@ describe('the desktop generator', () => {
     await run(tree, 'second');
     const { targets } = readProjectConfiguration(tree, 'second');
     assert.equal(targets!['macos'].options.command, 'ng-native-desktop run --port 8082');
+    assert.equal(targets!['linux'].options.command, 'ng-native-desktop run --os linux --port 8082');
   });
 
   it('loads from a port its start target names in commands, as a string or an object', async () => {
@@ -107,7 +113,35 @@ describe('the desktop generator', () => {
     await run(tree);
     const ignore = tree.read('apps/mobile/.gitignore', 'utf-8')!;
     assert.match(ignore, /^\/dist\/macos$/m);
+    assert.match(ignore, /^\/dist\/linux$/m);
     assert.ok(ignore.startsWith(native.GITIGNORE), 'keeps what was there');
+  });
+
+  it('adds linux to an app that already runs on macOS, and keeps what it has', async () => {
+    const tree = await app();
+    // What an earlier release of this generator wrote: macos alone, and its ignore rule.
+    updateJson(tree, 'apps/mobile/app.json', ({ expo }) => ({
+      expo: { ...expo, platforms: ['ios', 'android', 'macos'], experiments: { typedRoutes: true } },
+    }));
+    const project = readProjectConfiguration(tree, 'mobile');
+    const macos = {
+      executor: 'nx:run-commands',
+      options: { cwd: 'apps/mobile', command: 'ng-native-desktop run --port 9000' },
+      continuous: true,
+    };
+    project.targets!['macos'] = macos;
+    updateProjectConfiguration(tree, 'mobile', project);
+    tree.write('apps/mobile/.gitignore', '# Built by ng-native-desktop package\n/dist/macos\n');
+
+    await run(tree);
+
+    const { expo } = readJson(tree, 'apps/mobile/app.json');
+    assert.deepEqual(expo.platforms, ['ios', 'android', 'macos', 'linux']);
+    assert.deepEqual(expo.experiments, { typedRoutes: true, outOfTreePlatforms: true });
+    const { targets } = readProjectConfiguration(tree, 'mobile');
+    assert.deepEqual(targets!['macos'], macos, 'keeps its own macos target');
+    assert.equal(targets!['linux'].options.command, 'ng-native-desktop run --os linux');
+    assert.match(tree.read('apps/mobile/.gitignore', 'utf-8')!, /^\/dist\/linux$/m);
   });
 
   it('changes nothing run again', async () => {

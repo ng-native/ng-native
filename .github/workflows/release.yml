@@ -129,6 +129,45 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
 
+  # The prebuilt Linux hosts for the same React Native version, both flavours, for x64 and arm64,
+  # each built natively on its own runner in the AlmaLinux 9 image, so it needs glibc 2.34 at most.
+  # Not signed: the download is checked by its SHA-256, which goes into prebuilt.json beside the
+  # macOS hosts'.
+  desktop-host-linux:
+    name: desktop-host-linux (${{ matrix.arch }}, ${{ matrix.flavour }})
+    needs: validate
+    if: github.ref == 'refs/heads/main' || inputs.dry_run
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+        flavour: [debug, release]
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/desktop-prebuilt-linux
+        with:
+          flavour: ${{ matrix.flavour }}
+          version: ${{ needs.validate.outputs.version }}
+          base-url: https://github.com/${{ github.repository }}/releases/download/v${{ needs.validate.outputs.version }}
+          out: .prebuilt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-host-linux-${{ matrix.arch }}-${{ matrix.flavour }}
+          path: .prebuilt
+          include-hidden-files: true
+          if-no-files-found: error
+
   # One setup route in a fresh project: ng new with ng add, Nx's angular-monorepo preset with
   # nx add and the library generators, or the manual setup guide followed from its code blocks.
   # Too slow for every push, and exactly what a release of the schematics, the Nx plugin or the
@@ -206,7 +245,7 @@ jobs:
         run: cat verdaccio.log
 
   release:
-    needs: [validate, native, verify, generators, storybook, desktop-host]
+    needs: [validate, native, verify, generators, storybook, desktop-host, desktop-host-linux]
     if: github.ref == 'refs/heads/main' || inputs.dry_run
     runs-on: ubuntu-latest
     outputs:
@@ -250,17 +289,15 @@ jobs:
           done
           # Each prebuilt desktop host's entry, with its SHA-256, into the manifest
           # @ng-native/desktop ships, so the package names the archives the GitHub release below
-          # serves. A flavour's entry missing fails the step, so no release ships without either.
+          # serves: both flavours for macOS and for Linux on x64 and arm64 (RELEASE_HOSTS). An entry
+          # missing or for another host fails the step, so no release ships without one.
           node --input-type=module -e "
             import { readFileSync, writeFileSync } from 'node:fs';
-            import { entryName, FLAVOURS, readManifest, withHost } from './packages/desktop/bin/prebuilt.mjs';
+            import { readManifest, withReleaseHosts } from './packages/desktop/bin/prebuilt.mjs';
             const file = 'packages/desktop/prebuilt.json';
-            let manifest = readManifest(readFileSync(file, 'utf8'));
-            for (const flavour of FLAVOURS) {
-              const host = JSON.parse(readFileSync('.prebuilt/' + entryName(flavour), 'utf8'));
-              if (host.flavour !== flavour) throw new Error(entryName(flavour) + ' is not a ' + flavour + ' host.');
-              manifest = withHost(manifest, host);
-            }
+            const manifest = withReleaseHosts(readManifest(readFileSync(file, 'utf8')), (name) =>
+              readFileSync('.prebuilt/' + name, 'utf8'),
+            );
             writeFileSync(file, JSON.stringify(manifest, null, 2) + '\\n');
           "
           git add packages/desktop/prebuilt.json

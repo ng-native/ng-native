@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import {
+  OS,
   Processes,
   UndeclaredCapabilityError,
   type NativeProcesses,
@@ -186,6 +187,19 @@ describe('Processes.spawn', () => {
     await assert.rejects(processes.spawn('/usr/bin/tool', ['a', '--exec=x']));
     assert.deepEqual(spawned, []);
   });
+
+  for (const os of ['macos', 'linux'] as const) {
+    it(`says to rebuild with npm run ${os} after declaring a call on ${os}`, async () => {
+      const { host } = fakeHost();
+      const processes = injectService(Processes, {
+        providers: [
+          { provide: Processes.SOURCE, useValue: host },
+          { provide: OS, useValue: os },
+        ],
+      });
+      await assert.rejects(processes.spawn('git', ['push']), new RegExp(`npm run ${os}\\.$`));
+    });
+  }
 
   it('passes only the declared environment variables', async () => {
     const { host, spawned } = fakeHost();

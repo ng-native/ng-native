@@ -67,6 +67,7 @@
     "native/appkit",
     "!native/appkit/tests",
     "native/gtk",
+    "native/docker",
     "!native/gtk/tests"
   ],
   "publishConfig": {
