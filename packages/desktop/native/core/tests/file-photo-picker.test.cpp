@@ -289,3 +289,133 @@ TEST_CASE("NgNativeImagePicker with no photo library answers its permissions gra
   CHECK(ask(*quiet, "launchImageLibraryAsync", dynamic::array(dynamic::object())).value->at("canceled") == dynamic(true));
   CHECK(dialogs->asked.size() == before);
 }
+
+namespace {
+
+std::string writeFile(const fs::path &at, const std::string &bytes) {
+  std::ofstream(at, std::ios::binary) << bytes;
+  return at.string();
+}
+
+// A version 0 tkhd box with `payload` bytes after its header, width and height last when whole.
+std::string trackBox(int width, int height, size_t payload = 84) {
+  std::string body = std::string(4, '\0') + std::string(20, '\0') + std::string(16, '\0');
+  int32_t matrix[9] = {0x10000, 0, 0, 0, 0x10000, 0, 0, 0, 0x40000000};
+  for (auto value : matrix) {
+    body += big(static_cast<uint32_t>(value), 4);
+  }
+  body += big(static_cast<uint64_t>(width) << 16, 4) + big(static_cast<uint64_t>(height) << 16, 4);
+  return box("tkhd", body.substr(0, payload));
+}
+
+std::string movieHeader() {
+  return box("mvhd", std::string(4, '\0') + big(0, 4) + big(0, 4) + big(600, 4) + big(600, 4) + std::string(80, '\0'));
+}
+
+std::string littleEndian(uint32_t value, int bytes) {
+  std::string out;
+  for (int i = 0; i < bytes; i++) {
+    out.push_back(static_cast<char>((value >> (8 * i)) & 0xff));
+  }
+  return out;
+}
+
+// A JPEG whose only IFD0 entry is ExposureBiasValue, a signed rational of `numerator` over `denominator`.
+std::string jpegWithExposureBias(int32_t numerator, int32_t denominator) {
+  std::string tiff = "II" + littleEndian(42, 2) + littleEndian(8, 4) + littleEndian(1, 2) + littleEndian(0x9204, 2) + littleEndian(10, 2) +
+                     littleEndian(1, 4) + littleEndian(26, 4) + littleEndian(0, 4) + littleEndian(static_cast<uint32_t>(numerator), 4) +
+                     littleEndian(static_cast<uint32_t>(denominator), 4);
+  std::string app1 = std::string("Exif\0\0", 6) + tiff;
+  return std::string("\xFF\xD8", 2) + "\xFF\xE1" + big(app1.size() + 2, 2) + app1 + "\xFF\xDA" + big(2, 2) + "scan";
+}
+
+} // namespace
+
+TEST_CASE("isoVideoFacts stops at a box whose size runs past the file, even one that wraps the offset") {
+  TempDir dir;
+  // A box at 16 of an extended size of 2^64 - 16 ends, by wrapping, back at 0: the scan would
+  // visit the file's boxes again for ever.
+  auto wrapped = box("ftyp", "isom" + big(0, 4)) + big(1, 4) + "free" + big(0xFFFFFFFFFFFFFFF0ull, 8) + box("moov", movieHeader());
+  CHECK_FALSE(ngn::isoVideoFacts(writeFile(dir.path / "wrapped.mp4", wrapped)));
+  // A size past the end of the file, without wrapping.
+  auto past = box("ftyp", "isom" + big(0, 4)) + big(1000, 4) + "moov" + movieHeader();
+  CHECK_FALSE(ngn::isoVideoFacts(writeFile(dir.path / "past.mp4", past)));
+}
+
+TEST_CASE("isoVideoFacts reads a header's fields only inside its own box") {
+  TempDir dir;
+  // An mvhd that ends after its time scale: the duration would be its sibling's size and type.
+  auto shortMovie = box("moov", box("mvhd", std::string(4, '\0') + big(0, 4) + big(0, 4) + big(600, 4)) + box("trak", trackBox(640, 480)));
+  CHECK_FALSE(ngn::isoVideoFacts(writeFile(dir.path / "short-mvhd.mp4", box("ftyp", "isom" + big(0, 4)) + shortMovie)));
+  // A track header cut before its width and height is skipped, not read into the next track.
+  auto shortTrack = box("moov", movieHeader() + box("trak", trackBox(320, 240, 50)) + box("trak", trackBox(640, 480)));
+  auto facts = ngn::isoVideoFacts(writeFile(dir.path / "short-tkhd.mp4", box("ftyp", "isom" + big(0, 4)) + shortTrack));
+  REQUIRE(facts);
+  CHECK(facts->width == 640);
+  CHECK(facts->height == 480);
+  CHECK(facts->duration == doctest::Approx(1000));
+  // A movie whose only track is short has no size.
+  auto onlyShort = box("moov", movieHeader() + box("trak", trackBox(320, 240, 50)));
+  auto none = ngn::isoVideoFacts(writeFile(dir.path / "only-short.mp4", box("ftyp", "isom" + big(0, 4)) + onlyShort));
+  REQUIRE(none);
+  CHECK(none->width == 0);
+  CHECK(none->height == 0);
+}
+
+TEST_CASE("jpegExif keeps the sign of a signed rational") {
+  auto exif = ngn::jpegExif(jpegWithExposureBias(-1, 2));
+  REQUIRE(exif.isObject());
+  CHECK(exif["ExposureBiasValue"].asDouble() == doctest::Approx(-0.5));
+  CHECK(ngn::jpegExif(jpegWithExposureBias(3, -4))["ExposureBiasValue"].asDouble() == doctest::Approx(-0.75));
+  CHECK(ngn::jpegExif(jpegWithExposureBias(1, 3))["ExposureBiasValue"].asDouble() == doctest::Approx(1.0 / 3));
+}
+
+TEST_CASE("jpegExif reads an APP1 that fill bytes come before") {
+  auto plain = jpegWithExif(6);
+  // Any number of 0xFF fill bytes may come before a marker's code.
+  auto filled = plain.substr(0, 2) + std::string("\xFF\xFF\xFF", 3) + plain.substr(2);
+  auto exif = ngn::jpegExif(filled);
+  REQUIRE(exif.isObject());
+  CHECK(exif["Orientation"] == dynamic(6));
+  // Fill bytes with nothing after them are a cut file.
+  CHECK(ngn::jpegExif(plain.substr(0, 2) + std::string("\xFF\xFF\xFF\xFF", 4)).isNull());
+}
+
+TEST_CASE("makeFilePhotoPicker describes a 3GPP file as a video, and takes a huge selectionLimit as none") {
+  TempDir dir;
+  auto dialogs = std::make_shared<Dialogs>();
+  auto picker = ngn::makeFilePhotoPicker(dialogs, (dir.path / "caches").string(), [](const std::string &) { return std::nullopt; });
+  auto clip = writeFile(dir.path / "phone.3gp", "not parsed");
+  auto other = writeFile(dir.path / "phone.3gpp", "not parsed");
+  dialogs->chosen = std::vector<std::string>{clip, other};
+  auto out = std::make_shared<Waited<std::optional<std::vector<ngn::PhotoPicker::Picked>>>>();
+  picker->pick(dynamic::object("mediaTypes", "videos")("allowsMultipleSelection", true)("selectionLimit", 1e30),
+               [out](std::optional<std::vector<ngn::PhotoPicker::Picked>> picked) { out->set(std::move(picked)); });
+  auto picked = out->get();
+  REQUIRE(picked);
+  REQUIRE(picked->size() == 2);
+  for (const auto &one : *picked) {
+    CHECK(one.type == "video");
+    CHECK(one.mimeType == "video/3gpp");
+  }
+}
+
+TEST_CASE("NgNativeImagePicker leaves base64 null when the picked file has gone, and still answers exif the host gave") {
+  struct Gone final : ngn::PhotoPicker {
+    void pick(const dynamic &, std::function<void(std::optional<std::vector<Picked>>)> done) override {
+      Picked one;
+      one.uri = ngn::fileUri("/nonexistent-ngn-photo-dir/gone.jpg");
+      one.fileName = "gone.jpg";
+      one.mimeType = "image/jpeg";
+      one.type = "image";
+      one.fileSize = 1234;
+      one.exif = dynamic::object("Orientation", 3);
+      done(std::vector<Picked>{one});
+    }
+  };
+  auto module = ngn::makeImagePickerModule(std::make_shared<Gone>(), nullptr, false);
+  auto answer = *ask(*module, "launchImageLibraryAsync", dynamic::array(dynamic::object("base64", true)("exif", true))).value;
+  CHECK(answer["assets"][0]["base64"] == dynamic(nullptr));
+  CHECK(answer["assets"][0]["exif"]["Orientation"] == dynamic(3));
+  CHECK(answer["assets"][0]["fileSize"] == dynamic(1234.0));
+}

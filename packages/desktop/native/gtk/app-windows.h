@@ -57,8 +57,11 @@ class GtkWindows final : public WindowBackend {
     // WindowHost::lastWindowClosed). The host decides: the app's own window may still be open.
     std::function<void()> lastWindowClosed;
     // Runs a window's first show, now or later (once the app hides its splash screen, splash-screen.h),
-    // on any thread. Without it a window shows as its first frame mounts.
+    // on the main context, in the order the windows were ready, and in the same one dispatch as any
+    // other show the host holds past the splash. Without it a window shows as its first frame mounts.
     std::function<void(std::function<void()> show)> whenShown;
+    // A window was shown for the first time: not one closed while the splash held it.
+    std::function<void(SurfaceId surface)> presented;
   };
 
   // Windows of `application`, with the app's menus where `menus` says.

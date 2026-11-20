@@ -33,6 +33,7 @@ bool webUrl(const std::string &url) {
 LinkAuthSession::LinkAuthSession(Hooks hooks) : hooks_(std::move(hooks)) {}
 
 void LinkAuthSession::start(const Request &request, std::function<void(std::optional<std::string> url, std::string error)> done) {
+  uint64_t attempt = 0;
   {
     std::lock_guard lock(mutex_);
     if (done_) {
@@ -41,26 +42,30 @@ void LinkAuthSession::start(const Request &request, std::function<void(std::opti
     }
     scheme_ = lower(request.callbackScheme);
     done_ = std::move(done);
+    attempt = ++attempt_;
   }
+  // Each callback below belongs to this attempt: one that arrives after the session ended and
+  // another began is stale, and does not touch the new one.
   std::weak_ptr<LinkAuthSession> self = weak_from_this();
-  hooks_.openUrl(request.url, [self, url = request.url](bool opened) {
+  hooks_.openUrl(request.url, [self, attempt, url = request.url](bool opened) {
     if (auto session = self.lock(); session && !opened) {
-      session->finish(std::nullopt, "no browser opened " + url);
+      session->finish(attempt, std::nullopt, "no browser opened " + url);
     }
   });
   if (!hooks_.prompt) {
     return;
   }
-  auto hide = hooks_.prompt([self] {
+  auto hide = hooks_.prompt([self, attempt] {
     if (auto session = self.lock()) {
-      session->finish(std::nullopt, "");
+      session->finish(attempt, std::nullopt, "");
     }
   });
   std::unique_lock lock(mutex_);
-  if (done_) {
+  if (done_ && attempt_ == attempt) {
     hidePrompt_ = std::move(hide);
   } else {
-    // Ended before its prompt was up: the browser did not open, or a link came back at once.
+    // Ended before its prompt was up (the browser did not open, or a link came back at once), and
+    // maybe another session began since: this prompt is taken away without touching that one.
     lock.unlock();
     if (hide) {
       hide();
@@ -69,35 +74,49 @@ void LinkAuthSession::start(const Request &request, std::function<void(std::opti
 }
 
 void LinkAuthSession::cancel() {
-  finish(std::nullopt, "");
+  finish(std::nullopt, std::nullopt, "");
 }
 
 bool LinkAuthSession::receive(const std::string &url) {
+  Ending ending;
   {
     std::lock_guard lock(mutex_);
     auto colon = url.find(':');
     if (!done_ || scheme_.empty() || colon == std::string::npos || lower(url.substr(0, colon)) != scheme_) {
       return false;
     }
+    ending = take();
   }
-  finish(url, "");
+  end(std::move(ending), url, "");
   return true;
 }
 
-void LinkAuthSession::finish(std::optional<std::string> url, std::string error) {
-  std::function<void(std::optional<std::string>, std::string)> done;
-  std::function<void()> hide;
+LinkAuthSession::Ending LinkAuthSession::take() {
+  Ending ending;
+  ending.done.swap(done_);
+  ending.hide.swap(hidePrompt_);
+  return ending;
+}
+
+void LinkAuthSession::end(Ending ending, std::optional<std::string> url, std::string error) {
+  if (ending.hide) {
+    ending.hide();
+  }
+  if (ending.done) {
+    ending.done(std::move(url), std::move(error));
+  }
+}
+
+void LinkAuthSession::finish(std::optional<uint64_t> attempt, std::optional<std::string> url, std::string error) {
+  Ending ending;
   {
     std::lock_guard lock(mutex_);
-    done.swap(done_);
-    hide.swap(hidePrompt_);
+    if (attempt && *attempt != attempt_) {
+      return;
+    }
+    ending = take();
   }
-  if (hide) {
-    hide();
-  }
-  if (done) {
-    done(std::move(url), std::move(error));
-  }
+  end(std::move(ending), std::move(url), std::move(error));
 }
 
 std::shared_ptr<NativeModule> makeWebBrowserModule(std::shared_ptr<System> system, std::shared_ptr<AuthSession> sessions, bool noPrompts) {

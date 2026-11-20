@@ -211,3 +211,60 @@ TEST_CASE("NgNativeWebBrowser over a link auth session answers the redirect as s
   REQUIRE(answer);
   CHECK((*answer)["type"] == "cancel");
 }
+
+TEST_CASE("A link auth session ignores the late answers of a session that was cancelled, and keeps the new one") {
+  std::vector<std::function<void(bool)>> opens;
+  std::vector<std::function<void()>> cancels;
+  std::vector<bool> up;
+  auto session = std::make_shared<ngn::LinkAuthSession>(ngn::LinkAuthSession::Hooks{
+      .openUrl = [&](const std::string &, std::function<void(bool)> opened) { opens.push_back(std::move(opened)); },
+      .prompt = [&](std::function<void()> cancelled) {
+        cancels.push_back(std::move(cancelled));
+        up.push_back(true);
+        size_t index = up.size() - 1;
+        return std::function<void()>([&up, index] { up[index] = false; });
+      }});
+  std::optional<std::pair<std::optional<std::string>, std::string>> first, second;
+  session->start({.url = "https://id.example/a", .callbackScheme = "myapp"},
+                 [&](std::optional<std::string> url, std::string error) { first = std::pair(std::move(url), std::move(error)); });
+  session->cancel();
+  REQUIRE(first);
+  session->start({.url = "https://id.example/b", .callbackScheme = "myapp"},
+                 [&](std::optional<std::string> url, std::string error) { second = std::pair(std::move(url), std::move(error)); });
+  REQUIRE(opens.size() == 2);
+  // The first session's browser and prompt answer late: the second is not theirs to end.
+  opens[0](false);
+  cancels[0]();
+  CHECK_FALSE(second);
+  CHECK(up[1]);
+  // The second still ends on its own link and takes its own prompt away.
+  CHECK(session->receive("myapp://done"));
+  REQUIRE(second);
+  CHECK(second->first == std::optional<std::string>("myapp://done"));
+  CHECK_FALSE(up[1]);
+}
+
+TEST_CASE("A link auth session takes away the prompt of a session that ended while it was being shown") {
+  std::shared_ptr<ngn::LinkAuthSession> session;
+  std::vector<bool> up;
+  bool replaced = false;
+  session = std::make_shared<ngn::LinkAuthSession>(ngn::LinkAuthSession::Hooks{
+      .openUrl = [](const std::string &, std::function<void(bool)>) {},
+      .prompt = [&](std::function<void()>) {
+        // The session is cancelled and another begins before the first one's prompt is handed back.
+        if (!std::exchange(replaced, true)) {
+          session->cancel();
+          session->start({.url = "https://id.example/b", .callbackScheme = "myapp"}, [](std::optional<std::string>, std::string) {});
+        }
+        up.push_back(true);
+        size_t index = up.size() - 1;
+        return std::function<void()>([&up, index] { up[index] = false; });
+      }});
+  session->start({.url = "https://id.example/a", .callbackScheme = "myapp"}, [](std::optional<std::string>, std::string) {});
+  REQUIRE(up.size() == 2);
+  // The inner start's prompt is up[0], handed back first; the outer (stale) one is up[1].
+  CHECK(up[0]);
+  CHECK_FALSE(up[1]);
+  session->cancel();
+  CHECK_FALSE(up[0]);
+}

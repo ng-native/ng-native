@@ -15,6 +15,7 @@
 #include "ngn/native-module.h"
 #include "ngn/system.h"
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -66,11 +67,21 @@ class LinkAuthSession final : public AuthSession, public std::enable_shared_from
   bool receive(const std::string &url);
 
  private:
-  void finish(std::optional<std::string> url, std::string error);
+  struct Ending {
+    std::function<void(std::optional<std::string>, std::string)> done;
+    std::function<void()> hide;
+  };
+  // Takes the session's completion and prompt; call with mutex_ held.
+  Ending take();
+  static void end(Ending ending, std::optional<std::string> url, std::string error);
+  // Ends the session in progress, or only when it is still `attempt` (a callback of an earlier
+  // session ends nothing).
+  void finish(std::optional<uint64_t> attempt, std::optional<std::string> url, std::string error);
 
   Hooks hooks_;
   std::mutex mutex_;
   std::string scheme_;
+  uint64_t attempt_{0};
   std::function<void(std::optional<std::string>, std::string)> done_;
   std::function<void()> hidePrompt_;
 };

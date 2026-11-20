@@ -384,6 +384,7 @@ std::string mimeTypeOf(const std::string &name) {
       {"avif", "image/avif"}, {"heif", "image/heif"}, {"mp3", "audio/mpeg"}, {"m4a", "audio/mp4"},
       {"wav", "audio/wav"}, {"mp4", "video/mp4"}, {"m4v", "video/x-m4v"}, {"mov", "video/quicktime"},
       {"webm", "video/webm"}, {"mkv", "video/x-matroska"}, {"ogv", "video/ogg"}, {"avi", "video/x-msvideo"},
+      {"3gp", "video/3gpp"}, {"3gpp", "video/3gpp"}, {"3g2", "video/3gpp2"},
   };
   auto dot = name.rfind('.');
   if (dot == std::string::npos) {

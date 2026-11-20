@@ -172,8 +172,8 @@ TEST_CASE("a window the splash screen holds shows once the app hides it, from an
   auto splash = std::make_shared<ngn::SplashGate>();
   REQUIRE(splash->hold());
   auto windows = std::make_shared<ngn::gtk::GtkWindows>(
-      ngn::gtk::GtkWindows::Hooks{.whenShown = [&splash](std::function<void()> show) { splash->show(std::move(show)); }}, app,
-      ngn::MenuPlacement::PrimaryMenu);
+      ngn::gtk::GtkWindows::Hooks{.whenShown = [&splash](std::function<void()> show) { splash->show([show = std::move(show)] { ngn::gtk::onMainContext(show); }); }},
+      app, ngn::MenuPlacement::PrimaryMenu);
   auto host = std::make_shared<WindowHost>(windows, system);
   windows->setHost(host);
   auto open = [&] {
@@ -211,4 +211,47 @@ TEST_CASE("a launch's files become file URLs, and its links stay as they are") {
   REQUIRE(ngn::testing::gtkReady());
   auto urls = ngn::gtk::openUrls({"notes://note/7", "/home/ada/a b.md", "file:///home/ada/c.md"});
   CHECK(urls == std::vector<std::string>{"notes://note/7", "file:///home/ada/a%20b.md", "file:///home/ada/c.md"});
+}
+
+TEST_CASE("windows the splash screen holds show in the order they were ready, each in one dispatch, and report the ones that show") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkApplication *app = ngn::gtk::startApplication("dev.ngnative.SplashOrderTest");
+  auto system = std::make_shared<ngn::testing::FakeSystem>();
+  auto splash = std::make_shared<ngn::SplashGate>();
+  REQUIRE(splash->hold());
+  std::vector<SurfaceId> presented;
+  auto windows = std::make_shared<ngn::gtk::GtkWindows>(
+      ngn::gtk::GtkWindows::Hooks{.whenShown = [&splash](std::function<void()> show) { splash->show([show = std::move(show)] { ngn::gtk::onMainContext(show); }); },
+                                  .presented = [&presented](SurfaceId surface) { presented.push_back(surface); }},
+      app, ngn::MenuPlacement::PrimaryMenu);
+  auto host = std::make_shared<WindowHost>(windows, system);
+  windows->setHost(host);
+  auto open = [&] {
+    std::optional<SurfaceId> opened;
+    host->open({.title = "Notes"}, [&opened](SurfaceId surface) { opened = surface; });
+    ngn::testing::runUntil([&opened] { return opened.has_value(); });
+    windows->didMount(*opened);
+    return *opened;
+  };
+  auto first = open();
+  auto closed = open();
+  // The app's own window waits on the splash too, queued after these, as the host's does.
+  bool firstMappedWhenAppShown = false;
+  bool appShown = false;
+  splash->show([&] {
+    ngn::gtk::onMainContext([&] {
+      firstMappedWhenAppShown = gtk_widget_get_mapped(windows->window(first));
+      appShown = true;
+    });
+  });
+  windows->closeWindow(closed);
+  settle();
+  CHECK(presented.empty());
+  splash->release();
+  ngn::testing::runUntil([&] { return appShown; });
+  CHECK(firstMappedWhenAppShown);
+  CHECK(presented == std::vector<SurfaceId>{first});
+  windows.reset();
+  host.reset();
+  g_object_unref(app);
 }

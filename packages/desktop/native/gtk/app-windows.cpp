@@ -251,13 +251,12 @@ void GtkWindows::didMount(SurfaceId surface) {
     show(surface);
     return;
   }
-  // Held past the splash screen, which may let it go after these windows are gone.
+  // Held past the splash screen, which may let it go after these windows are gone. The hook
+  // answers on the main context, in one dispatch, so a window shows in the order it was ready.
   hooks_.whenShown([this, surface, alive = std::weak_ptr<void>(alive_)] {
-    onMainContext([this, surface, alive] {
-      if (!alive.expired()) {
-        show(surface);
-      }
-    });
+    if (!alive.expired()) {
+      show(surface);
+    }
   });
 }
 
@@ -269,6 +268,9 @@ void GtkWindows::show(SurfaceId surface) {
   }
   it->second.shown = true;
   presentWithoutInitialFocus(GTK_WINDOW(it->second.window));
+  if (hooks_.presented) {
+    hooks_.presented(surface);
+  }
   // The app learns the size the window opened at, which a saved frame decides.
   reportFrame(surface);
 }

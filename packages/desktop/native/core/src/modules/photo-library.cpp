@@ -391,8 +391,10 @@ std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoPicker>
             auto path = asset.type == "image" && (base64 || exif) ? pathOfUri(asset.uri) : std::nullopt;
             if (path) {
               std::ifstream in(*path, std::ios::binary);
-              std::string bytes{std::istreambuf_iterator<char>(in), {}};
-              if (base64) {
+              // A file that has gone since it was picked is no empty one: base64 stays null.
+              const bool readable = static_cast<bool>(in);
+              std::string bytes = readable ? std::string{std::istreambuf_iterator<char>(in), {}} : std::string();
+              if (base64 && readable) {
                 item["base64"] = base64Encode(bytes);
               }
               if (exif) {

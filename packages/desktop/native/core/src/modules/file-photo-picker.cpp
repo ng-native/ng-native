@@ -52,7 +52,8 @@ std::optional<Box> boxAt(std::istream &in, uint64_t at, uint64_t to) {
   } else if (size == 0) {
     size = to - at;
   }
-  if (!in || size < start - at || at + size > to) {
+  // `at` is inside the parent (checked above), so `to - at` cannot wrap, and a size past it would.
+  if (!in || size < start - at || size > to - at) {
     return std::nullopt;
   }
   return Box{type, start, at + size};
@@ -161,8 +162,12 @@ folly::dynamic valueOf(const Tiff &tiff, size_t entry) {
         break;
       default: {
         // A rational: 5 unsigned, 10 signed.
-        double num = type == 10 ? static_cast<int32_t>(tiff.read(at_i, 4)) : tiff.read(at_i, 4);
-        double den = type == 10 ? static_cast<int32_t>(tiff.read(at_i + 4, 4)) : tiff.read(at_i + 4, 4);
+        // Each branch is a double before the conditional joins them, or a signed one would turn unsigned.
+        auto word = [&](size_t from) {
+          return type == 10 ? static_cast<double>(static_cast<int32_t>(tiff.read(from, 4))) : static_cast<double>(tiff.read(from, 4));
+        };
+        double num = word(at_i);
+        double den = word(at_i + 4);
         values.push_back(den == 0 ? 0.0 : num / den);
       }
     }
@@ -213,7 +218,9 @@ class FilePhotoPicker final : public PhotoPicker, public std::enable_shared_from
     auto kinds = mediaKindsOf(options);
     bool multiple = options.getDefault("allowsMultipleSelection", false) == true;
     auto limit = options.getDefault("selectionLimit", 0);
-    size_t most = multiple ? (limit.isNumber() && limit.asDouble() >= 1 ? static_cast<size_t>(limit.asDouble()) : 0) : 1;
+    // 2^64 is the first double past size_t: a limit at or above it is no limit.
+    constexpr double pastSize = 18446744073709551616.0;
+    size_t most = multiple ? (limit.isNumber() && limit.asDouble() >= 1 ? (limit.asDouble() < pastSize ? static_cast<size_t>(limit.asDouble()) : 0) : 0) : 1;
     FileDialogs::OpenRequest request{.multiple = multiple};
     if (kinds.photos) {
       request.types.emplace_back("image/*");
@@ -303,6 +310,10 @@ std::optional<VideoFacts> isoVideoFacts(const std::string &path) {
   }
   VideoFacts facts;
   int version = versionAt(in, *mvhd);
+  // Version, flags, two times, the time scale and the duration: all inside the box.
+  if (mvhd->end - mvhd->start < (version == 1 ? 32u : 20u)) {
+    return std::nullopt;
+  }
   in.ignore(version == 1 ? 16 : 8);
   double scale = static_cast<double>(readBig(in, 4));
   double duration = static_cast<double>(readBig(in, version == 1 ? 8 : 4));
@@ -313,6 +324,10 @@ std::optional<VideoFacts> isoVideoFacts(const std::string &path) {
       continue;
     }
     int v = versionAt(in, *tkhd);
+    // Up to the width and height, which are the box's last fields: a shorter box has no size.
+    if (tkhd->end - tkhd->start < (v == 1 ? 96u : 84u)) {
+      continue;
+    }
     // Times, track id, reserved and duration; then reserved, layer, group, volume and reserved.
     in.ignore((v == 1 ? 32 : 20) + 16);
     int32_t matrix[9];
@@ -340,6 +355,13 @@ folly::dynamic jpegExif(const std::string &bytes) {
   }
   for (size_t at = 2; at + 4 <= bytes.size();) {
     if (static_cast<uint8_t>(bytes[at]) != 0xFF) {
+      return nullptr;
+    }
+    // Any number of 0xFF fill bytes may come before a marker's code.
+    while (at + 4 <= bytes.size() && static_cast<uint8_t>(bytes[at + 1]) == 0xFF) {
+      at++;
+    }
+    if (at + 4 > bytes.size()) {
       return nullptr;
     }
     auto marker = static_cast<uint8_t>(bytes[at + 1]);

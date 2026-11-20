@@ -68,7 +68,7 @@ up forever.
 
 A desktop app has no launch screen, so holding the splash keeps the app's first windows hidden past
 their first frame, and `hide()` shows them in the order they were ready. A window closed while held
-never shows. A hold after a window has shown answers false and holds nothing. A reload lets the
+never shows. A hold after a window has shown holds nothing. A reload lets the
 windows go, as hiding does. Neither host fades the windows in.
 
 ## Why this is a value, not a service

@@ -496,9 +496,6 @@ int main(int argc, char *argv[]) {
       showAppSurfaceIfUsed();
     } else {
       gHost.windows->didMount(surfaceId);
-      if (GtkWidget *window = gHost.windows->window(surfaceId)) {
-        watchFirstFrame(window, gHost.windows->surfaceWidget(surfaceId));
-      }
     }
   };
   // The cursor the views under the pointer ask for, on each surface: only the one under the
@@ -634,6 +631,14 @@ int main(int argc, char *argv[]) {
             }
           },
       .whenShown = showPastSplash,
+      // The first frame is the first window that draws, which a splash screen or a close can keep
+      // from being the first one mounted.
+      .presented =
+          [](SurfaceId surface) {
+            if (GtkWidget *window = gHost.windows->window(surface)) {
+              watchFirstFrame(window, gHost.windows->surfaceWidget(surface));
+            }
+          },
   }, gHost.application, menuPlacement);
   auto windowHost = std::make_shared<ngn::WindowHost>(gHost.windows, system);
   gHost.windows->setHost(windowHost);
