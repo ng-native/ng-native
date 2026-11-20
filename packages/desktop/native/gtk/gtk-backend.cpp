@@ -28,7 +28,8 @@ void applyViewProps(GtkWidget *widget, const ViewData &data) {
 }
 
 // The parent places the view (its frame and transform); the view lays out its own children and
-// draws itself again.
+// draws itself again. The parent's allocation draws it again too, which a child's blend mode,
+// drawn by the parent (view-widget.h), needs.
 void relayout(GtkWidget *widget) {
   if (GtkWidget *parent = gtk_widget_get_parent(widget)) {
     gtk_widget_queue_allocate(parent);

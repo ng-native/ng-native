@@ -12,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <vector>
 
 namespace {
 
@@ -97,4 +98,89 @@ TEST_CASE("an alert over a window is an AdwAlertDialog in it on libadwaita 1.5, 
   ngn::gtk::respondToAlert(alert, "b2");
   REQUIRE(answer);
   CHECK(std::get<0>(*answer) == 2);
+}
+
+namespace {
+
+void buttonsIn(GtkWidget *root, std::vector<GtkWidget *> &out) {
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child; child = gtk_widget_get_next_sibling(child)) {
+    if (GTK_IS_BUTTON(child)) {
+      out.push_back(child);
+    } else {
+      buttonsIn(child, out);
+    }
+  }
+}
+
+// Whether the alert's buttons, laid out, sit one above another rather than side by side.
+bool stacked(GtkWidget *alert, size_t count) {
+  std::vector<GtkWidget *> buttons;
+  buttonsIn(alert, buttons);
+  REQUIRE(buttons.size() == count);
+  ngn::testing::runUntil([&] { return gtk_widget_get_mapped(buttons[0]) && gtk_widget_get_width(buttons[0]) > 0; });
+  // Two more frames, for a layout that changes its mind once it knows its width.
+  for (int i = 0; i < 20; i++) {
+    g_main_context_iteration(nullptr, FALSE);
+    g_usleep(5000);
+  }
+  graphene_rect_t first, second;
+  REQUIRE(gtk_widget_compute_bounds(buttons[0], alert, &first));
+  REQUIRE(gtk_widget_compute_bounds(buttons[1], alert, &second));
+  return first.origin.x == doctest::Approx(second.origin.x) && first.origin.y != doctest::Approx(second.origin.y);
+}
+
+ngn::AlertRequest choice(int count) {
+  ngn::AlertRequest request;
+  request.title = "Pick one";
+  for (int i = 0; i < count; i++) {
+    request.buttons.push_back({std::string(1, static_cast<char>('A' + i))});
+  }
+  return request;
+}
+
+} // namespace
+
+// libadwaita 1.6 narrowed its dialog to 300sp and gave each response button a 100px minimum, so a
+// dialog of three never fits in one row there and libadwaita stacks them itself; older ones keep
+// three in one row up to 550px. Two fit in one row on both.
+TEST_CASE("a choice of more than three buttons stacks them, and two sit side by side, and three where libadwaita fits them") {
+  REQUIRE(ngn::testing::gtkReady());
+  // The host starts libadwaita before it shows a dialog, which loads its stylesheet; a test that
+  // runs first would otherwise measure the buttons without it.
+  adw_init();
+  bool threeFit = adw_get_major_version() == 1 && adw_get_minor_version() < 6;
+  for (int count : {2, 3, 4, 5}) {
+    CAPTURE(count);
+    CAPTURE(adw_get_minor_version());
+    std::optional<Answer> answer;
+    ngn::gtk::showAlert(choice(count), [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, nullptr);
+    GtkWidget *alert = ngn::gtk::shownAlert();
+    REQUIRE(alert);
+    bool sideBySide = count == 2 || (count == 3 && threeFit);
+    bool forced = count > 3;
+    if (sideBySide || forced) {
+      CHECK(stacked(alert, static_cast<size_t>(count)) == forced);
+    } else {
+      // Three on libadwaita 1.6 and later: the host leaves it to libadwaita, which stacks them.
+      CHECK(stacked(alert, static_cast<size_t>(count)));
+    }
+    ngn::gtk::respondToAlert(alert, "b1");
+    REQUIRE(answer);
+    CHECK(std::get<0>(*answer) == 1);
+  }
+}
+
+// With a window, the dialog is an AdwAlertDialog on libadwaita 1.5 and later, whose buttons are
+// reachable only once it is presented.
+TEST_CASE("a choice of four buttons over a window stacks them") {
+  REQUIRE(ngn::testing::gtkReady());
+  adw_init();
+  ngn::testing::MountedViews views(true, 400, 300);
+  std::optional<Answer> answer;
+  ngn::gtk::showAlert(choice(4), [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, GTK_WINDOW(views.window));
+  GtkWidget *alert = ngn::gtk::shownAlert();
+  REQUIRE(alert);
+  CHECK(stacked(alert, 4));
+  ngn::gtk::respondToAlert(alert, "b1");
+  REQUIRE(answer);
 }

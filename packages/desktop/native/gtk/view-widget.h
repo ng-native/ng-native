@@ -3,7 +3,10 @@
 // Yoga's frames are authoritative: a view asks GTK for no size of its own (`measure` gives 0) and
 // allocates each child at its Fabric frame, moved and transformed as the child's props say. It
 // paints its box and a Paragraph's text as GSK render nodes in its `snapshot`, then its children in
-// Fabric's order, cut to its shape when it clips its overflow. The approach of Basalt's basalt-gtk
+// Fabric's order, cut to its shape when it clips its overflow. Its `filter` (view-filter.h) applies
+// over all of that. A child's `mix-blend-mode` blends it with what its parent drew under it, the
+// parent's box and the children before it: each view is its own group, as `isolation: isolate`
+// makes it in CSS, and GSK has no plus-lighter. The approach of Basalt's basalt-gtk
 // (MIT, Copyright (c) 2026 Vince Vella); the code is ours.
 #pragma once
 
