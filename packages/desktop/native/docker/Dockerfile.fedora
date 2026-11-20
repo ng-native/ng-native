@@ -17,19 +17,19 @@
 ARG FEDORA=44
 FROM fedora:${FEDORA}
 
-# What Dockerfile installs, under Fedora's names: its llvm packages, GTK and libadwaita headers,
-# the libraries the static libcurl links dynamically, Xvfb, Weston, Mesa's software drivers, D-Bus
-# and the fonts, and pyatspi for the AT-SPI check. Fedora's repositories carry ninja, ccache and
-# Weston, so it needs no CRB and no EPEL.
+# What Dockerfile installs, under Fedora's names: its llvm packages, GTK, libadwaita and libsecret
+# headers, the libraries the static libcurl links dynamically, Xvfb, Weston, Mesa's software
+# drivers, D-Bus, the fonts, the English and German locales the GTK tests set, and pyatspi for the
+# AT-SPI check. Fedora's repositories carry ninja, ccache and Weston, so it needs no CRB and no EPEL.
 RUN dnf -y install \
       clang lld llvm cmake ninja-build ccache \
       git python3 perl perl-Digest-SHA nodejs \
       binutils diffutils file findutils procps-ng which \
       bzip2 tar unzip xz \
       libatomic sqlite-devel openssl-devel libnghttp2-devel zlib-devel \
-      gtk4-devel libadwaita-devel pango-devel cairo-devel \
+      gtk4-devel libadwaita-devel pango-devel cairo-devel libsecret-devel \
       xorg-x11-server-Xvfb weston mesa-dri-drivers dbus-daemon dbus-tools at-spi2-core python3-pyatspi \
-      dejavu-sans-fonts google-noto-sans-fonts \
+      dejavu-sans-fonts google-noto-sans-fonts glibc-langpack-en glibc-langpack-de \
  && dnf clean all
 
 ENV CC=clang CXX=clang++
