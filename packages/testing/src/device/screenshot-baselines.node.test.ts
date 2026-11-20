@@ -75,13 +75,22 @@ describe('screenshot references', () => {
     });
   });
 
-  it('match only the same pixels by default', () => {
+  it('match only pixels within a step of each channel by default, and exactly at a tolerance of 0', () => {
     inTemp((file) => {
       matchScreenshot(request(file));
       assert.equal(matchScreenshot(request(file)).pass, true);
-      const changed = matchScreenshot(request(file, { png: png(4, 4, [5], 1) }));
-      assert.equal(changed.pass, false, 'one pixel, one step of red, is a difference');
+      assert.equal(
+        matchScreenshot(request(file, { png: png(4, 4, [5], 1) })).pass,
+        true,
+        'one step of red, as a simulator varies between runs',
+      );
+      const changed = matchScreenshot(request(file, { png: png(4, 4, [5], 2) }));
+      assert.equal(changed.pass, false, 'two steps of red is a difference');
       assert.match(changed.message!, /^1 of 16 pixels/);
+      const exact = matchScreenshot(
+        request(file, { png: png(4, 4, [5], 1), comparatorOptions: { channelTolerance: 0 } }),
+      );
+      assert.equal(exact.pass, false, 'at 0, one step is a difference');
     });
   });
 
@@ -110,9 +119,10 @@ describe('screenshot references', () => {
         false,
         "the call's options win over the project's",
       );
+      assert.equal(matchScreenshot(request(file, { png: png(4, 4, [1], 10) })).pass, false);
       assert.equal(
         matchScreenshot(
-          request(file, { png: png(4, 4, [1], 1), comparatorOptions: { threshold: 0.1 } }),
+          request(file, { png: png(4, 4, [1], 10), comparatorOptions: { threshold: 0.1 } }),
         ).pass,
         true,
         'a threshold lets a small change of colour through',

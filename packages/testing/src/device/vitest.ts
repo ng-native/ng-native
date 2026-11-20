@@ -87,6 +87,8 @@ export function deviceTests(options: DeviceTestsOptions = {}): Plugin {
           include,
           pool: devicePool(pool),
           maxWorkers: 1,
+          // A first render on a simulator just booted, as on CI, can take a few seconds.
+          testTimeout: config.test?.testTimeout ?? 30_000,
           isolate: false,
           // Absolute: `**` does not match a directory whose name starts with a dot.
           forceRerunTriggers: sources.map((source) => `${path.resolve(root, source)}/**`),

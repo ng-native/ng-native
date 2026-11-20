@@ -65,4 +65,10 @@ export function tail(output: string, lines = 30): string {
   return output.trimEnd().split('\n').slice(-lines).join('\n');
 }
 
+/** A line on the pool's progress, with the seconds since `since`: a first run can take minutes. */
+export function progress(os: string, message: string, since?: number): void {
+  const took = since === undefined ? '' : ` (${((Date.now() - since) / 1000).toFixed(1)}s)`;
+  console.log(`[device tests ${os}] ${message}${took}`);
+}
+
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

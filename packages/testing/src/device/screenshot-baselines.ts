@@ -3,8 +3,9 @@
  * and comparing a capture with it. The app sends the PNG it captured; the disk is here.
  *
  * Comparison is Vitest browser mode's: `@blazediff/core`, a pixelmatch, with its option names. The
- * default is an exact match, where Vitest's allows a small difference: a native view draws the
- * same pixels on the same device every time, so any difference is a change.
+ * default is close to exact, where Vitest's allows a small difference: a pixel counts as changed
+ * once a channel moves by more than 1 of 255. An iOS simulator draws the odd edge pixel a step
+ * apart from one run to the next; anything a person could see is a change.
  */
 import { diff } from '@blazediff/core';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -23,6 +24,11 @@ export interface ScreenshotComparatorOptions {
   allowedMismatchedPixelRatio?: number;
   /** Whether pixels pixelmatch takes for anti-aliasing count as different. Default true. */
   includeAA?: boolean;
+  /**
+   * How far each of a pixel's channels may move, of 255, before the pixel is compared at all.
+   * Default 1, the step a simulator's rasteriser varies by between runs; 0 is an exact match.
+   */
+  channelTolerance?: number;
 }
 
 export interface ScreenshotOptions {
@@ -111,7 +117,14 @@ export function matchScreenshot(
     };
   }
 
-  const options = { threshold: 0, includeAA: true, ...defaults, ...request.comparatorOptions };
+  const options = {
+    threshold: 0,
+    includeAA: true,
+    channelTolerance: 1,
+    ...defaults,
+    ...request.comparatorOptions,
+  };
+  withinTolerance(expected.data, received.data, options.channelTolerance);
   const output = new PNG({ width: expected.width, height: expected.height });
   const mismatched = diff(
     expected.data,
@@ -147,4 +160,16 @@ export function matchScreenshot(
 function mkdirFor(file: string): string {
   mkdirSync(path.dirname(file), { recursive: true });
   return file;
+}
+
+/** Give each received pixel within `tolerance` of the expected one, on every channel, its value. */
+function withinTolerance(expected: Uint8Array, received: Uint8Array, tolerance: number): void {
+  if (tolerance <= 0) return;
+  for (let i = 0; i < expected.length; i += 4) {
+    let close = true;
+    for (let channel = 0; channel < 4 && close; channel++) {
+      close = Math.abs(expected[i + channel]! - received[i + channel]!) <= tolerance;
+    }
+    if (close) received.set(expected.subarray(i, i + 4), i);
+  }
 }

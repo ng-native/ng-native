@@ -287,16 +287,22 @@ describe('finding the crash report', () => {
 });
 
 describe('the macos Vitest project', () => {
-  const configOf = (options: Parameters<typeof deviceTests>[0]) =>
+  const configOf = (options: Parameters<typeof deviceTests>[0], user: object = {}) =>
     (
       deviceTests(options).config as unknown as (config: object) => {
         test: {
           name: string;
           pool: { name: string };
+          testTimeout: number;
           resolveSnapshotPath?: (path: string, extension: string) => string;
         };
       }
-    )({ root: tmpdir() }).test;
+    )({ root: tmpdir(), ...user }).test;
+
+  it('gives a test 30 seconds, for a first render on a device just booted, unless the project says', () => {
+    assert.equal(configOf({ platform: 'ios' }).testTimeout, 30_000);
+    assert.equal(configOf({ platform: 'ios' }, { test: { testTimeout: 5000 } }).testTimeout, 5000);
+  });
 
   it('is named for its platform, so vitest --project macos selects it', () => {
     assert.equal(configOf({ platform: 'macos' }).name, 'macos');

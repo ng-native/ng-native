@@ -33,6 +33,7 @@ import path from 'node:path';
 import type { PoolOptions, PoolRunnerInitializer, PoolWorker } from 'vitest/node';
 import { modulesOf, type BundleModule } from './bundle-modules.ts';
 import { mockedSpecifiers } from './mocks.ts';
+import { progress } from './command.ts';
 import { metroFor } from './metro-server.ts';
 import { DEFAULT_PORT } from './port.ts';
 import { type AppLauncher, type LaunchedApp } from './launcher.ts';
@@ -247,6 +248,7 @@ class DeviceWorker implements PoolWorker {
     const claiming = new AbortController();
     early.catch(() => claiming.abort());
     this.session = await Promise.race([claim(claiming.signal, true), early]);
+    progress(this.options.platform ?? 'app', 'connected', this.launchedAt);
     // From here a process that ends is a lost app at once, not after the silence is waited out.
     void app.exited.then((how) => {
       const session = this.session;

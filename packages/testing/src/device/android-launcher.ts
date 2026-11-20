@@ -6,7 +6,7 @@
 import { spawn } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
-import { runCommand, sleep } from './command.ts';
+import { progress, runCommand, sleep } from './command.ts';
 import type { AppLauncher, LaunchedApp } from './launcher.ts';
 import { androidSdk, nativeBuild } from './native-build.ts';
 
@@ -26,6 +26,7 @@ export function androidEmulatorLauncher(options: AndroidEmulatorOptions = {}): A
   return {
     async start(request): Promise<LaunchedApp> {
       const sdk = androidSdk();
+      const started = Date.now();
       const [serial, build] = await Promise.all([
         runningEmulator(sdk, options.device),
         nativeBuild(request.projectRoot, 'android', { abi: HOST_ABI, signal: request.signal }),
@@ -33,6 +34,7 @@ export function androidEmulatorLauncher(options: AndroidEmulatorOptions = {}): A
       const adb = async (...args: string[]) =>
         (await runCommand(path.join(sdk, 'platform-tools/adb'), ['-s', serial, ...args])).output;
       last = { adb, since: Date.now() };
+      progress('android', `${serial} booted and the build ready`, started);
       await adb('install', '-r', build.path);
       const pkg = await packageName(sdk, build.path);
       await adb('shell', 'pm', 'clear', pkg);
@@ -47,6 +49,7 @@ export function androidEmulatorLauncher(options: AndroidEmulatorOptions = {}): A
         .trim()
         .split('\n')
         .pop()!;
+      progress('android', 'installed; launching, and waiting for Metro to bundle the app', started);
       await adb('shell', 'am', 'start', '-W', '-n', activity);
       let stopped = false;
       const exited = (async () => {

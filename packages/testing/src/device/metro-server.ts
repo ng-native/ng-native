@@ -8,7 +8,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
-import { sleep, tail } from './command.ts';
+import { progress, sleep, tail } from './command.ts';
 
 export interface MetroServer {
   port: number;
@@ -37,6 +37,7 @@ export async function stopMetro(): Promise<void> {
 }
 
 async function startMetro(projectRoot: string, coverage: boolean): Promise<MetroServer> {
+  const started = Date.now();
   const port = await freePort();
   const cli = createRequire(`${projectRoot}/package.json`).resolve('expo/bin/cli');
   // Its own process group, so stopping it stops the workers Metro starts too.
@@ -68,7 +69,10 @@ async function startMetro(projectRoot: string, coverage: boolean): Promise<Metro
     if (ended !== null) {
       throw new Error(`Metro for the device tests stopped as it started (${ended}):\n${output}`);
     }
-    if (await running(port)) return { port, stop };
+    if (await running(port)) {
+      progress('metro', `serving on port ${port}`, started);
+      return { port, stop };
+    }
     if (Date.now() > deadline) {
       await stop();
       throw new Error(`Metro for the device tests did not start within two minutes:\n${output}`);

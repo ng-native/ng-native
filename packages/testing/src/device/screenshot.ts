@@ -161,9 +161,10 @@ declare module 'vitest' {
   // Vitest's own type parameters, which an augmentation must repeat exactly.
   interface Matchers<R extends void | Promise<void> = void | Promise<void>, T = unknown> {
     /**
-     * Compare a node, a region of the window or `screen` (all of it) with its reference screenshot in
-     * `__screenshots__/<test file>/<name>-<platform>.png`, recording the reference when there is
-     * none. Exact by default; see `ToMatchScreenshotOptions`. Await it.
+     * Compare a node, a region of the window or `screen` (all of it) with its reference
+     * screenshot in `__screenshots__/<test file>/<name>-<platform>.png`, recording the reference
+     * when there is none. A pixel differs once a channel moves by more than 1 of 255; see
+     * `ToMatchScreenshotOptions`. Await it.
      */
     toMatchScreenshot(name?: string, options?: ToMatchScreenshotOptions): Promise<void>;
     toMatchScreenshot(options?: ToMatchScreenshotOptions): Promise<void>;

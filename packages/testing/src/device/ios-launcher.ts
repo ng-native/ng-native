@@ -6,7 +6,7 @@
 import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { runCommand, sleep } from './command.ts';
+import { progress, runCommand, sleep } from './command.ts';
 import type { AppLauncher, LaunchedApp } from './launcher.ts';
 import { crashReportSince } from './macos-launcher.ts';
 import { nativeBuild } from './native-build.ts';
@@ -31,6 +31,7 @@ export function iosSimulatorLauncher(options: IosSimulatorOptions = {}): AppLaun
   let executable = '';
   return {
     async start(request): Promise<LaunchedApp> {
+      const started = Date.now();
       const [simulator, build] = await Promise.all([
         bootedSimulator(options.device),
         nativeBuild(request.projectRoot, 'ios', { signal: request.signal }),
@@ -43,7 +44,9 @@ export function iosSimulatorLauncher(options: IosSimulatorOptions = {}): AppLaun
       await runCommand('xcrun', ['simctl', 'uninstall', simulator.udid, bundle], {
         allowFailure: true,
       });
+      progress('ios', `${simulator.name} booted and the build ready`, started);
       await runCommand('xcrun', ['simctl', 'install', simulator.udid, build.path]);
+      progress('ios', 'installed; launching, and waiting for Metro to bundle the app', started);
       // Attached to the app's console, the command lasts as long as the app does.
       const child = spawn(
         'xcrun',

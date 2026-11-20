@@ -233,9 +233,11 @@ The reference for `card` in `card.device.ts` is `__screenshots__/card.device.ts/
 a count. A missing reference is recorded and the test passes, except on CI, where it fails;
 `vitest -u` records every reference again. Commit the references.
 
-The match is exact by default: one pixel changed fails the test, and the failure writes the capture
-(`card-ios-actual.png`) and a difference (`card-ios-diff.png`) next to the reference. They go once
-the screenshot matches again. Allow a difference for every screenshot in the project, or in one
+The match is all but exact by default: a pixel whose colour moves by more than one step of 255 in
+any channel fails the test. An iOS simulator draws the odd edge pixel a step apart from one run to
+the next, which this allows; `channelTolerance: 0` asks for an exact match. A failure writes the
+capture (`card-ios-actual.png`) and a difference (`card-ios-diff.png`) next to the reference. They
+go once the screenshot matches again. Allow more for every screenshot in the project, or in one
 call:
 
 ```ts
@@ -251,10 +253,11 @@ await expect(chart).toMatchScreenshot('chart', {
 });
 ```
 
-`threshold` (0 to 1) is how far a pixel's colour may move before it counts as different,
-`allowedMismatchedPixels` and `allowedMismatchedPixelRatio` how many pixels may differ, and
-`includeAA: false` leaves out pixels taken for anti-aliasing. The names are those of Vitest's
-browser mode.
+`channelTolerance` (0 to 255, default 1) is how far each channel may move before a pixel is
+compared at all, `threshold` (0 to 1) how far its colour may then move before it counts as
+different, `allowedMismatchedPixels` and `allowedMismatchedPixelRatio` how many pixels may differ,
+and `includeAA: false` leaves out pixels taken for anti-aliasing. The names other than
+`channelTolerance` are those of Vitest's browser mode.
 
 A simulator or emulator draws text and anti-aliasing a little differently from another model or OS
 version, so references belong to one: record them where the tests run on CI. When CI is the only

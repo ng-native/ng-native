@@ -11,7 +11,7 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { runCommand } from './command.ts';
+import { progress, runCommand } from './command.ts';
 
 export interface NativeBuild {
   /** The `.app` (iOS simulator) or `.apk` (Android). */
@@ -36,7 +36,7 @@ export async function nativeBuild(
 
   mkdirSync(dir, { recursive: true });
   writeFileSync(log, '');
-  console.log(`Building the ${os} development build for device tests; the log is ${log}`);
+  progress(os, `building the development build, which takes minutes the first time; log: ${log}`);
   const env = { ...process.env, CI: '1' };
   const native = path.join(projectRoot, os);
   try {
