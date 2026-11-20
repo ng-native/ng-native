@@ -213,6 +213,7 @@ constructor's `this` as well as `removed`. Pass the function through `releaseOnD
 returns one that calls yours until the component is destroyed, and then holds nothing:
 
 ```ts
+import { Gesture } from 'react-native-gesture-handler';
 import { scheduleOnRN } from 'react-native-worklets';
 import { releaseOnDestroy } from '@ng-native/components/reanimated';
 
