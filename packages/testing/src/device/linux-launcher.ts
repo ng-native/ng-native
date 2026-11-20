@@ -292,6 +292,9 @@ export function linuxLaunchCommand(
       '--name',
       name,
       ...userArgs(),
+      // Docker Desktop resolves host.docker.internal itself; Docker Engine on Linux needs the mapping.
+      '--add-host',
+      'host.docker.internal:host-gateway',
       ...mounts.flatMap((mount) => ['-v', `${mount}:${mount}:ro`]),
       ...Object.entries(containerEnv).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
       image,
@@ -323,6 +326,17 @@ function signalName(number: number): string | undefined {
   return Object.entries(constants.signals).find(([, value]) => value === number)?.[0];
 }
 
+/** SIGKILLs the process group a detached child leads, or the child alone where that is not possible. */
+function killGroup(child: ChildProcess): void {
+  try {
+    if (child.pid !== undefined && process.platform !== 'win32')
+      process.kill(-child.pid, 'SIGKILL');
+    else child.kill('SIGKILL');
+  } catch {
+    // Nothing is left in the group.
+  }
+}
+
 /** How many lines of the host's output a lost host's failure quotes. */
 const TAIL_LINES = 30;
 
@@ -345,6 +359,8 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
         cwd: options.cwd,
         env: launch.env as NodeJS.ProcessEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
+        // Its own process group, so a host that ignores SIGTERM can be ended with its display.
+        detached: process.platform !== 'win32',
       });
       const keep = (chunk: Buffer) => {
         for (const line of chunk.toString().split('\n').filter(Boolean)) {
@@ -371,8 +387,13 @@ export function linuxLauncher(options: LinuxLauncherOptions = {}): AppLauncher {
           if (child.exitCode === null && child.signalCode === null) {
             child.kill('SIGTERM');
             await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 3000))]);
-            if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+            if (child.exitCode === null && child.signalCode === null) {
+              killGroup(child);
+              await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 3000))]);
+            }
           }
+          // The session shell can be gone while the host or its display are not.
+          killGroup(child);
           if (launch.container) {
             spawnSync(options.docker ?? 'docker', ['rm', '-f', launch.container], {
               stdio: 'ignore',

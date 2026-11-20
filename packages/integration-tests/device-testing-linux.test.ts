@@ -16,10 +16,19 @@
  *    ports it forwards to the machine running Vitest.
  */
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
   desktopCliHost,
@@ -214,6 +223,49 @@ describe('the Linux launcher', () => {
     }
   });
 
+  it('ends a host that ignores SIGTERM together with what it started', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'linux-stubborn-'));
+    const pids = join(dir, 'pids');
+    const script = join(dir, 'host.cjs');
+    writeFileSync(
+      script,
+      `const { spawn } = require('node:child_process');
+process.on('SIGTERM', () => {});
+const child = spawn('sleep', ['60'], { stdio: 'ignore' });
+require('node:fs').writeFileSync(process.env.PIDS, process.pid + ' ' + child.pid);
+setInterval(() => {}, 1000);`,
+    );
+    const alive = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    try {
+      const app = await linuxLauncher({
+        host: process.execPath,
+        args: [script],
+        display: 'inherit',
+        container: false,
+        env: { PIDS: pids },
+      }).start({ port: 1, runId: 'stubborn', stateDir: join(dir, 'state') });
+      for (let i = 0; i < 100 && !existsSync(pids); i++) await wait(50);
+      const [host, grandchild] = readFileSync(pids, 'utf8').split(' ').map(Number) as [
+        number,
+        number,
+      ];
+      assert.ok(alive(host!) && alive(grandchild!));
+      await app.stop();
+      await wait(200);
+      assert.equal(alive(host!), false, 'the host is gone');
+      assert.equal(alive(grandchild!), false, 'what it started is gone');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('fails the start when the host ends before it connects, with its status', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'linux-pool-'));
     try {
@@ -327,6 +379,17 @@ describe('the Linux launch from another OS', () => {
     ]);
   });
 
+  it('maps host.docker.internal for Docker Engine on Linux, which does not define it', () => {
+    const { args } = linuxLaunchCommand(
+      { host: '/cache/build/gtk/ngn-linux', container: 'ngn-el9', metroPort: 8082 },
+      runRequest,
+      {},
+    );
+    const at = args.indexOf('--add-host');
+    assert.ok(at > 0 && at < args.indexOf('ngn-el9'));
+    assert.equal(args[at + 1], 'host.docker.internal:host-gateway');
+  });
+
   it("mounts a bundle file's folder, which the container could not see otherwise", () => {
     const { args } = linuxLaunchCommand(
       { host: '/h/b/gtk/ngn-linux', container: 'ngn-el9', bundle: '/Users/me/out/main.js' },
@@ -373,6 +436,39 @@ describe('the Linux launch from another OS', () => {
 });
 
 describe('the linux Vitest project', () => {
+  it("asks the desktop CLI from the project's root, not the folder Vitest was started in", async () => {
+    const savedHost = process.env['NGN_DESKTOP_HOST'];
+    const savedPath = process.env['PATH'];
+    delete process.env['NGN_DESKTOP_HOST'];
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'linux-root-')));
+    const bin = join(dir, 'bin');
+    const app = join(dir, 'app');
+    mkdirSync(bin);
+    mkdirSync(app);
+    writeFileSync(
+      join(bin, 'ng-native-desktop'),
+      `#!/bin/sh\npwd > ${JSON.stringify(join(dir, 'cwd'))}\necho ${JSON.stringify(join(dir, 'no-host'))}\n`,
+    );
+    chmodSync(join(bin, 'ng-native-desktop'), 0o755);
+    process.env['PATH'] = `${bin}${delimiter}${savedPath}`;
+    try {
+      const { pool } = (
+        deviceTests({ platform: 'linux', port: await freePort(), connectTimeout: 500 }).config as (
+          config: object,
+        ) => { test: { pool: ReturnType<typeof devicePool> } }
+      )({ root: app }).test;
+      const worker = pool.createPoolWorker({ project: { config: { root: app } } } as never);
+      await assert.rejects(worker.start());
+      await worker.stop();
+      assert.equal(readFileSync(join(dir, 'cwd'), 'utf8').trim(), app);
+    } finally {
+      process.env['PATH'] = savedPath;
+      if (savedHost === undefined) delete process.env['NGN_DESKTOP_HOST'];
+      else process.env['NGN_DESKTOP_HOST'] = savedHost;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   const configOf = (options: Parameters<typeof deviceTests>[0]) =>
     (
       deviceTests(options).config as (config: object) => {
