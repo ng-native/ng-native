@@ -205,6 +205,10 @@ static ngn::InputDispatcher *gViewInput;
 @implementation NGNView {
   NSPointerArray *_labelledBy;
   NSPointerArray *_describedBy;
+  // The views that name this one, which hear when its text changes.
+  NSHashTable<NGNView *> *_namedBy;
+  // Whether the relations' text is on the accessibilityControl, to be cleared once they go.
+  BOOL _controlRelated;
   Props::Shared _props;
   LayoutMetrics _layout;
   State::Shared _state;
@@ -403,8 +407,51 @@ static BOOL focusFromKeyboard() {
     }
     return views.count > 0 ? array : nil;
   };
+  for (NGNView *old in [_labelledBy.allObjects arrayByAddingObjectsFromArray:_describedBy.allObjects]) {
+    [old->_namedBy removeObject:self];
+  }
   _labelledBy = weakly(labelledBy);
   _describedBy = weakly(describedBy);
+  for (NGNView *named in [labelledBy arrayByAddingObjectsFromArray:describedBy]) {
+    if (!named->_namedBy) {
+      named->_namedBy = [NSHashTable weakObjectsHashTable];
+    }
+    [named->_namedBy addObject:self];
+  }
+  [self refreshControlRelations];
+}
+
+- (NSView *)accessibilityControl {
+  return nil;
+}
+
+- (void)refreshControlRelations {
+  NSView *control = [self accessibilityControl];
+  if (!control) {
+    return;
+  }
+  BOOL related = _labelledBy != nil || _describedBy != nil;
+  if (!related && !_controlRelated) {
+    return;
+  }
+  // The element AppKit reads is the control: the view named is its title element, and the text
+  // of the views named its label and help. With the relations gone, the control reads its own.
+  control.accessibilityTitleUIElement = _labelledBy.allObjects.firstObject;
+  control.accessibilityLabel = [self textOfRelation:_labelledBy];
+  control.accessibilityHelp = [self textOfRelation:_describedBy];
+  _controlRelated = related;
+}
+
+// This view's text changed, or the text of a view inside it: the views that name it, or one above
+// it, read it again.
+- (void)relatedTextChanged {
+  for (NSView *view = self; view; view = view.superview) {
+    if ([view isKindOfClass:NGNView.class]) {
+      for (NGNView *namer in ((NGNView *)view)->_namedBy.allObjects) {
+        [namer refreshControlRelations];
+      }
+    }
+  }
 }
 
 // The text of the views a relation names, in order: each one's label, or the text inside it, as
@@ -645,6 +692,7 @@ static BOOL focusFromKeyboard() {
   if ([_componentName isEqualToString:@"Paragraph"]) {
     [self setNeedsDisplay:YES];
   }
+  [self relatedTextChanged];
 }
 
 - (void)updateLayout:(const LayoutMetrics &)metrics {
@@ -683,6 +731,7 @@ static BOOL focusFromKeyboard() {
 - (void)updateState:(const State::Shared &)state {
   _state = state;
   [self setNeedsDisplay:YES];
+  [self relatedTextChanged];
 }
 
 - (void)updateEventEmitter:(const EventEmitter::Shared &)emitter {

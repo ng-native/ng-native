@@ -269,12 +269,42 @@ TEST_CASE("a sidebar with an autosave name keeps whether it is collapsed, which 
   launch(false, [&](MountedViews &views, auto &sent) {
     CHECK(collapsed(views));
     CHECK(sent.count("topSidebarCollapse") + sent.count("sidebarCollapse") == 1);
-    // The app opening it is saved too.
+    // An update that leaves the collapsed input alone (a width) keeps it as restored and saved.
     views.update(views.mounting->tree().find(3)->view,
-                 parsedProps<ngn::SidebarComponentDescriptor>(dynamic::object("collapsed", false)("autosaveName", "mail")));
+                 parsedProps<ngn::SidebarComponentDescriptor>(dynamic::object("collapsed", false)("autosaveName", "mail")("paneMinWidth", 200)));
+    CHECK(collapsed(views));
+    CHECK(preferences["NgNativeSidebarCollapsed mail"] == true);
+    // The app changing the input is saved too.
+    views.update(views.mounting->tree().find(3)->view,
+                 parsedProps<ngn::SidebarComponentDescriptor>(dynamic::object("collapsed", true)("autosaveName", "mail")("paneMinWidth", 200)));
+    views.update(views.mounting->tree().find(3)->view,
+                 parsedProps<ngn::SidebarComponentDescriptor>(dynamic::object("collapsed", false)("autosaveName", "mail")("paneMinWidth", 200)));
     CHECK_FALSE(collapsed(views));
   });
   CHECK(preferences["NgNativeSidebarCollapsed mail"] == false);
+}
+
+TEST_CASE("a sidebar inserted after its split was placed restores what the user left too") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views{true, 800, 500};
+  auto &splits = views.backend->splitViews();
+  std::map<std::string, folly::dynamic> preferences{{"NgNativeSidebarCollapsed mail", true}};
+  splits.readPreference = [&preferences](const std::string &key) -> std::optional<folly::dynamic> {
+    auto it = preferences.find(key);
+    return it == preferences.end() ? std::nullopt : std::optional(it->second);
+  };
+  splits.writePreference = [&preferences](const std::string &key, const folly::dynamic &value) { preferences[key] = value; };
+  auto split = view(2, "NgNativeSplitView", nullptr, {{0, 0}, {800, 500}});
+  auto sidebar = view(
+      3, "NgNativeSidebar",
+      parsedProps<ngn::SidebarComponentDescriptor>(dynamic::object("collapsed", false)("autosaveName", "mail")), {{0, 0}, {240, 500}});
+  auto content = view(4, "NgNativeSplitContent", nullptr, {{240, 0}, {560, 500}});
+  views.mount({ShadowViewMutation::CreateMutation(split), ShadowViewMutation::CreateMutation(sidebar),
+               ShadowViewMutation::CreateMutation(content)});
+  views.mount({ShadowViewMutation::InsertMutation(MountedViews::kSurface, split, 0), ShadowViewMutation::InsertMutation(2, content, 0)});
+  views.mount({ShadowViewMutation::InsertMutation(2, sidebar, 0)});
+  CHECK(adw_navigation_split_view_get_collapsed(ADW_NAVIGATION_SPLIT_VIEW(splits.splitWidget(2))));
+  CHECK(preferences["NgNativeSidebarCollapsed mail"] == true);
 }
 
 TEST_CASE("a sidebar's sections are a list box over their frames, its rows selected as the app says") {
@@ -307,4 +337,47 @@ TEST_CASE("a sidebar's sections are a list box over their frames, its rows selec
   // The sections gone, so is the list.
   s.views.mount({ShadowViewMutation::RemoveMutation(3, s.section, 0)});
   CHECK(s.splits().lists(3).empty());
+}
+
+TEST_CASE("the window's header bar goes back over the window while its split view is covered, and over the content when it shows again") {
+  REQUIRE(ngn::testing::gtkReady());
+  Split s;
+  const auto *chrome = ngn::gtk::chromeOf(s.views.surface);
+  REQUIRE(chrome);
+  auto holder = [&] { return gtk_widget_get_ancestor(chrome->headerBar, ADW_TYPE_TOOLBAR_VIEW); };
+  CHECK(holder() != chrome->toolbarView);
+  CHECK(gtk_widget_is_ancestor(holder(), GTK_WIDGET(s.widget())));
+
+  // A screen pushed over the one that holds the split view hides it, and the header bar is the
+  // pushed screen's to show.
+  s.views.backend->setCovered(MountedViews::kSurface, 2, true);
+  CHECK(holder() == chrome->toolbarView);
+  s.views.backend->setCovered(MountedViews::kSurface, 2, false);
+  CHECK(holder() != chrome->toolbarView);
+  CHECK(gtk_widget_is_ancestor(holder(), GTK_WIDGET(s.widget())));
+  // The split view is deleted while covered: nothing to take it back.
+  s.views.backend->setCovered(MountedViews::kSurface, 2, true);
+  s.views.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, s.split, 0), ShadowViewMutation::DeleteMutation(s.split)});
+  CHECK(holder() == chrome->toolbarView);
+}
+
+TEST_CASE("a compact window showing the sidebar alone has a button in its header bar that brings the content back") {
+  REQUIRE(ngn::testing::gtkReady());
+  Split s;
+  GtkWidget *button = s.splits().contentButton(2);
+  REQUIRE(button);
+  CHECK(gtk_widget_is_ancestor(button, GTK_WIDGET(s.widget())));
+  CHECK_FALSE(gtk_widget_get_visible(button));
+  // Compact with the content in front: the window's own header bar, with Show Sidebar, is in reach.
+  s.splits().setCompact(2, true);
+  CHECK_FALSE(gtk_widget_get_visible(button));
+  CHECK(s.splits().toggle(MountedViews::kSurface));
+  REQUIRE_FALSE(s.showsContent());
+  CHECK(gtk_widget_get_visible(button));
+  g_signal_emit_by_name(button, "clicked");
+  CHECK(s.showsContent());
+  CHECK_FALSE(gtk_widget_get_visible(button));
+  // Wide, the sidebar and the content are side by side: no need of it.
+  s.splits().setCompact(2, false);
+  CHECK_FALSE(gtk_widget_get_visible(button));
 }

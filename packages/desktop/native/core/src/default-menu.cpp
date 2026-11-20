@@ -164,6 +164,10 @@ void collectShortcuts(const std::vector<MenuItem> &items, std::vector<ShortcutEn
 std::vector<ShortcutGroup> menuShortcuts(const std::vector<MenuItem> &menus) {
   std::vector<ShortcutGroup> groups;
   for (const auto &m : menus) {
+    // A disabled top-level menu is skipped as findMenuItem skips it: its keys select nothing.
+    if (m.separator || m.disabled) {
+      continue;
+    }
     ShortcutGroup group{.title = m.title};
     collectShortcuts(m.items, group.entries);
     if (!group.entries.empty()) {

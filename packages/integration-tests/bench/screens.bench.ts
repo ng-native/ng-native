@@ -251,13 +251,15 @@ class FlingRichRecycled {
 
 /**
  * A fast fling: one scroll event a frame, 60 points each (about 3700 points a second), over a
- * ten-thousand-row list whose viewport is a phone's height.
+ * ten-thousand-row list whose viewport is a phone's height. A filled run lets the window grow to
+ * its `windowSize` first, as a list at rest does, so each frame carries the larger window.
  */
 async function scroll(): Promise<void> {
-  for (const [name, type] of [
-    ['by index', FlingByIndex],
-    ['rich rows', FlingRich],
-    ['rich, slot', FlingRichRecycled],
+  for (const [name, type, filled] of [
+    ['by index', FlingByIndex, false],
+    ['rich rows', FlingRich, false],
+    ['rich, slot', FlingRichRecycled, false],
+    ['rich, slot, filled', FlingRichRecycled, true],
   ] as const) {
     const fabric = createFakeFabric();
     const app = mount(1, type, fabric);
@@ -266,6 +268,11 @@ async function scroll(): Promise<void> {
     const list = () => found;
     fabric.emit(list(), 'topLayout', { layout: { width: 390, height: 844 } });
     app.applicationRef.tick();
+    // The list grows a viewport every 50ms until it is full.
+    for (let batch = 0; filled && batch < 8; batch++) {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      app.applicationRef.tick();
+    }
     const frames: number[] = [];
     const createdBefore = fabric.calls.createNode;
     let y = 0;

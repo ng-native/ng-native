@@ -43,6 +43,9 @@ enum class NavigationInput { MouseButton4, MouseButton5, SwipeLeft, SwipeRight }
 // with text editing).
 std::optional<NavigationDirection> navigationFor(NavigationInput input, bool rightToLeft = false);
 std::optional<NavigationDirection> navigationFor(const KeyChord &chord, const HostOs &os);
+// Whether a focused text input owns the press: the OS's primary modifier with Z, X, C, V or A, a
+// letter in either case.
+bool editingChord(const KeyChord &chord, const HostOs &os);
 
 // A window's back and forward history, as the app's router reports it (`setHistory`): the titles
 // of the entries behind and ahead, nearest first.

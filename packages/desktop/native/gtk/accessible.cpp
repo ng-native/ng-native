@@ -108,7 +108,12 @@ GtkAccessibleRole gtkRole(AriaRole role) {
 }
 
 GtkWidget *accessibleWidget(const ViewData &view) {
-  return view.field ? fieldWidget(*view.field) : view.widget;
+  // The editor, not a multiline field's scrolled window: that one is only a group.
+  return view.field ? view.field->text : view.widget;
+}
+
+GtkWidget *relationWidget(const ViewData &view) {
+  return view.control ? view.control : accessibleWidget(view);
 }
 
 namespace {

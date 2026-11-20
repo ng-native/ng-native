@@ -96,13 +96,12 @@ const char *directionName(NavigationDirection direction) {
   return direction == NavigationDirection::Back ? "back" : "forward";
 }
 
-// The keys a focused text input owns.
+} // namespace
+
 bool editingChord(const KeyChord &chord, const HostOs &os) {
   static const std::vector<std::string> keys{"z", "x", "c", "v", "a"};
-  return chord.modifiers == os.primaryModifier && std::find(keys.begin(), keys.end(), chord.key) != keys.end();
+  return chord.modifiers == os.primaryModifier && std::find(keys.begin(), keys.end(), normalKey(chord.key)) != keys.end();
 }
-
-} // namespace
 
 KeyChord parseChord(const folly::dynamic &chord) {
   KeyChord out{.key = normalKey(text(chord, "key"))};

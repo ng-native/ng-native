@@ -517,6 +517,8 @@ void GtkBackend::setCovered(SurfaceId, Tag tag, bool covered) {
     gtk_widget_set_child_visible(it->second, !covered);
     // A child shown again has no allocation until its parent allocates it.
     relayout(it->second);
+    // A window split view in it is no longer shown, or shown again: the header bar follows.
+    splitViews_->placeHeaders();
   }
 }
 
@@ -544,12 +546,12 @@ void GtkBackend::applyRelations(Tag tag) {
   }
   auto it = relations_.find(tag);
   AxRelations relations = it == relations_.end() ? AxRelations{} : it->second;
-  GtkAccessible *source = GTK_ACCESSIBLE(accessibleWidget(*viewData(widget)));
+  GtkAccessible *source = GTK_ACCESSIBLE(relationWidget(*viewData(widget)));
   auto point = [&](GtkAccessibleRelation relation, const std::vector<Tag> &tags) {
     GList *targets = nullptr;
     for (Tag target : tags) {
       if (GtkWidget *w = view(target)) {
-        targets = g_list_append(targets, accessibleWidget(*viewData(w)));
+        targets = g_list_append(targets, relationWidget(*viewData(w)));
       }
     }
     if (targets) {
@@ -558,6 +560,9 @@ void GtkBackend::applyRelations(Tag tag) {
       GValue value = G_VALUE_INIT;
       g_value_init(&value, G_TYPE_POINTER);
       g_value_set_pointer(&value, targets);
+      // GTK compares two lists of references by membership, so one in another order is "the same"
+      // and would keep the old order: the old value goes first.
+      gtk_accessible_reset_relation(source, relation);
       gtk_accessible_update_relation_value(source, 1, &relation, &value);
       g_value_unset(&value);
     } else {
@@ -571,6 +576,7 @@ void GtkBackend::applyRelations(Tag tag) {
 void GtkBackend::didMount(SurfaceId surfaceId) {
   modals_->settle();
   splitViews_->layOut();
+  splitViews_->placeHeaders();
   headers_->refresh();
   if (onMount) {
     onMount(surfaceId);

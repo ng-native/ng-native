@@ -422,3 +422,27 @@ TEST_CASE("a synchronous update on the UI thread merges the changed props into t
   f.mounting->synchronouslyUpdateViewOnUIThread(99, folly::dynamic::object("opacity", 0.5));
   CHECK(f.backend->calls.empty());
 }
+
+TEST_CASE("a synchronous update of a relation or an id reaches the backend at once") {
+  Fixture f;
+  auto props = [](std::string id) {
+    auto p = std::make_shared<ngn::DesktopViewProps>();
+    p->nativeId = std::move(id);
+    return p;
+  };
+  auto field = shadowView(4, "View", {}, props(""));
+  auto label = shadowView(2, "View", {}, props("name"));
+  f.mount({ShadowViewMutation::CreateMutation(field), ShadowViewMutation::InsertMutation(1, field, 0),
+           ShadowViewMutation::CreateMutation(label), ShadowViewMutation::InsertMutation(1, label, 1)});
+  auto &calls = f.backend->calls;
+  calls.clear();
+
+  folly::dynamic names = folly::dynamic::array("name");
+  f.mounting->synchronouslyUpdateViewOnUIThread(4, folly::dynamic::object("accessibilityLabelledBy", names));
+  CHECK(std::count(calls.begin(), calls.end(), "relations 4 labelledBy=2 describedBy=") == 1);
+
+  // The view it names takes another id: the relation goes, with no transaction.
+  calls.clear();
+  f.mounting->synchronouslyUpdateViewOnUIThread(2, folly::dynamic::object("nativeID", "other"));
+  CHECK(std::count(calls.begin(), calls.end(), "relations 4 labelledBy= describedBy=") == 1);
+}

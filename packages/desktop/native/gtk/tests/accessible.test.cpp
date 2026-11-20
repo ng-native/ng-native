@@ -9,6 +9,8 @@
 #include "../accessible-text.h"
 #include "../text-field.h"
 
+#include "ngn/native-controls.h"
+
 #include <doctest/doctest.h>
 
 #include <react/renderer/components/text/ParagraphState.h>
@@ -541,4 +543,63 @@ TEST_CASE("a relation moves to the new widget of a view whose role changes, at e
   views.update(button, desktopViewProps(dynamic::object("role", "link")("accessibilityLabelledBy", dynamic::array("name"))));
   REQUIRE(views.view(3) != before);
   CHECK(relates(views.view(3), GTK_ACCESSIBLE_RELATION_LABELLED_BY, views.view(2)));
+}
+
+TEST_CASE("a single-line field is a text box and a multiline one's editor is, where its scrolled window is only a group") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  // A GtkText has no accessible role of its own, which leaves its label nowhere to be heard.
+  views.add(MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("accessibilityLabel", "Title")), {{10, 10}, {150, 40}}));
+  GtkWidget *single = ngn::gtk::viewData(views.view(2))->field->text;
+  CHECK(roleOf(single) == GTK_ACCESSIBLE_ROLE_TEXT_BOX);
+  CHECK(hasProperty(single, GTK_ACCESSIBLE_PROPERTY_LABEL, "Title"));
+
+  views.add(MountedViews::shadow(3, "TextInput", textInputProps(dynamic::object("multiline", true)("accessibilityLabel", "Notes")), {{10, 60}, {150, 80}}));
+  const auto *multi = ngn::gtk::viewData(views.view(3))->field;
+  REQUIRE(multi->scroll);
+  CHECK(ngn::gtk::accessibleWidget(*ngn::gtk::viewData(views.view(3))) == multi->text);
+  CHECK(roleOf(multi->text) == GTK_ACCESSIBLE_ROLE_TEXT_BOX);
+  CHECK(hasProperty(multi->text, GTK_ACCESSIBLE_PROPERTY_LABEL, "Notes"));
+  CHECK_FALSE(gtk_test_accessible_has_property(GTK_ACCESSIBLE(multi->scroll), GTK_ACCESSIBLE_PROPERTY_LABEL));
+
+  // A relation is the editor's too.
+  views.add(MountedViews::shadow(4, "View", desktopViewProps(dynamic::object("nativeID", "notes")("accessibilityLabel", "Notes")), {{0, 150}, {100, 20}}));
+  views.update(MountedViews::shadow(3, "TextInput", nullptr, {}),
+               textInputProps(dynamic::object("multiline", true)("accessibilityLabelledBy", dynamic::array("notes"))));
+  CHECK(relates(multi->text, GTK_ACCESSIBLE_RELATION_LABELLED_BY, views.view(4)));
+  CHECK_FALSE(gtk_test_accessible_has_relation(GTK_ACCESSIBLE(multi->scroll), GTK_ACCESSIBLE_RELATION_LABELLED_BY));
+}
+
+TEST_CASE("a relation of a native control is on the control that fills its view, not on the view") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views(false, 300, 200);
+  views.add(MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("nativeID", "name")("accessibilityLabel", "Notifications")), {{0, 0}, {100, 20}}));
+  auto button = MountedViews::shadow(
+      3, "NgNativeButton",
+      ngn::testing::parsedProps<ngn::NativeButtonComponentDescriptor>(dynamic::object("title", "Go")("nativeID", "go")("accessibilityLabelledBy", dynamic::array("name"))),
+      {{0, 30}, {100, 30}});
+  views.add(button);
+  GtkWidget *control = ngn::gtk::viewData(views.view(3))->control;
+  REQUIRE(control);
+  CHECK(relates(control, GTK_ACCESSIBLE_RELATION_LABELLED_BY, views.view(2)));
+  CHECK_FALSE(gtk_test_accessible_has_relation(GTK_ACCESSIBLE(views.view(3)), GTK_ACCESSIBLE_RELATION_LABELLED_BY));
+  // And a view pointing at the control points at it, not at its view.
+  views.update(MountedViews::shadow(2, "View", nullptr, {}),
+               desktopViewProps(dynamic::object("nativeID", "name")("accessibilityLabel", "Notifications")("accessibilityDescribedBy", dynamic::array("go"))));
+  CHECK(relates(views.view(2), GTK_ACCESSIBLE_RELATION_DESCRIBED_BY, control));
+}
+
+TEST_CASE("a relation written in another order replaces the one GTK holds, which it would take for the same") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  views.add(MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("nativeID", "a")), {{0, 0}, {100, 20}}));
+  views.add(MountedViews::shadow(3, "View", desktopViewProps(dynamic::object("nativeID", "b")), {{0, 20}, {100, 20}}));
+  auto field = MountedViews::shadow(4, "View", desktopViewProps(dynamic::object("accessibilityLabelledBy", dynamic::array("a", "b"))), {{0, 40}, {100, 20}});
+  views.add(field);
+  views.update(field, desktopViewProps(dynamic::object("accessibilityLabelledBy", dynamic::array("b", "a"))));
+  // Both are still named. GTK's test backend cannot read their order back: the reset before the
+  // update is the backend's, checked against GTK's comparison by membership.
+  char *error = gtk_test_accessible_check_relation(GTK_ACCESSIBLE(views.view(4)), GTK_ACCESSIBLE_RELATION_LABELLED_BY, views.view(3), views.view(2), nullptr);
+  CHECK(error == nullptr);
+  g_free(error);
 }

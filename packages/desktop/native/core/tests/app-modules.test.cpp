@@ -321,7 +321,8 @@ TEST_CASE("RNGestureHandlerModule drives the recognisers on the UI thread, and i
     CHECK(f.events[0].rfind("onGestureHandlerStateChange ", 0) == 0);
     CHECK(f.events.back().find("\"oldState\":4") != std::string::npos);
     CHECK(f.events.back().find("\"state\":5") != std::string::npos);
-    CHECK(module->call("installUIRuntimeBindings") == false);
+    // Ready, so the gesture handler has no "please report" warning to give.
+    CHECK(module->call("installUIRuntimeBindings") == true);
   }
   // The runtime went: its handlers and its event sink go with it.
   drain();
@@ -331,7 +332,7 @@ TEST_CASE("RNGestureHandlerModule drives the recognisers on the UI thread, and i
   // A host with no recognisers answers every method and recognises nothing.
   auto bare = ngn::makeGestureHandlerModule(Fixture{}.services);
   bare->call("createGestureHandler", dynamic::array("PanGestureHandler", 1, dynamic::object()));
-  CHECK(bare->call("installUIRuntimeBindings") == false);
+  CHECK(bare->call("installUIRuntimeBindings") == true);
 }
 
 TEST_CASE("an alert puts its default button on the right, then Cancel, and answers with the key") {
