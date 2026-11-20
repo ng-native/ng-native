@@ -84,7 +84,9 @@ so a run never joins another one.
 
 The host runs on a session bus of its own, where a fake desktop portal stands in for the system's
 (`org.freedesktop.portal.Desktop`), so a request to a portal shows nothing and waits for no one.
-The fake implements the FileChooser, OpenURI and Notification portals, and no others. It cancels a
+The fake implements the FileChooser, OpenURI and Notification portals, and no others. The host
+calls these portals itself whenever one answers, outside a Flatpak too, so its file pickers, links
+and notifications reach the fake with no `GDK_DEBUG=portals`. It cancels a
 file chooser, as you cancelling it would, and opens a link; a test changes that by writing
 `portals/answers.json` in the run's state folder before the call, and reads what the host asked
 from `portals/calls.jsonl` beside it. Appending a line to `portals/signals.jsonl` sends a

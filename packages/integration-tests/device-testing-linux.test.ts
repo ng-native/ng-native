@@ -253,6 +253,7 @@ setInterval(() => {}, 1000);`,
         args: [script],
         display: 'inherit',
         container: false,
+        fakeSystemUi: false,
         env: { PIDS: pids },
       }).start({ port: 1, runId: 'stubborn', stateDir: join(dir, 'state') });
       for (let i = 0; i < 100 && !existsSync(pids); i++) await wait(50);
@@ -395,10 +396,9 @@ describe('the Linux launch from another OS', () => {
       runRequest,
       {},
     );
-    assert.ok(
-      !args.includes('--user'),
-      'the container starts as root, which makes the passwd entry',
-    );
+    // As root even where the image names another user: root makes the passwd entry.
+    assert.equal(args[args.indexOf('--user') + 1], '0:0');
+    assert.ok(args.indexOf('--user') < args.indexOf('ngn-el9'));
     const user = `${process.getuid?.()}:${process.getgid?.()}`;
     assert.ok(args.includes(`NGN_AS_USER=${user}`), 'and drops to the caller (ROOT_PRELUDE)');
     assert.ok(args.includes(`NGN_FAKE_PORTALS=${FAKE_PORTALS}`));
@@ -413,7 +413,7 @@ describe('the Linux launch from another OS', () => {
       runRequest,
       {},
     );
-    assert.ok(plain.args.includes('--user'));
+    assert.equal(plain.args[plain.args.indexOf('--user') + 1], user);
     assert.ok(!plain.args.some((arg) => arg.startsWith('NGN_FAKE_PORTALS')));
     assert.doesNotMatch(plain.args.join('\n'), /dbus-daemon/);
   });

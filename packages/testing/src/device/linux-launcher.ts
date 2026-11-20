@@ -9,8 +9,10 @@
  * session bus where the fake owns `org.freedesktop.portal.Desktop`, so a file chooser, a link or a
  * notification asks nobody and a test can see the call and answer it, as the macOS host's fake
  * system UI answers as a person cancelling would. Its control folder is `portals` in the launch's
- * state folder, described in the script's header. `fakeSystemUi: false` leaves the session's own
- * bus and portals in use.
+ * state folder, described in the script's header. The host calls the portals itself whenever one
+ * answers (portal.h), and GTK's own dialogs only where none does, so nothing selects GTK's portal
+ * path (`GDK_DEBUG=portals`) here. `fakeSystemUi: false` leaves the session's own bus and portals
+ * in use.
  *
  * Linux has no crash report location of its own, so the host writes `crash.txt` in its state
  * folder as it dies of a fatal signal. The session script prints it after the host, where the
@@ -424,13 +426,13 @@ export function linuxLaunchCommand(
 }
 
 /**
- * Who the container runs as. With a fake system UI it starts as root, makes the caller's user
- * known to the image and drops to it (`ROOT_PRELUDE`, told the user as `NGN_AS_USER`); without one
- * it starts as that user, so what it writes to a mount is theirs.
+ * Who the container runs as. With a fake system UI it starts as root, whatever user the image
+ * names, makes the caller's user known to the image and drops to it (`ROOT_PRELUDE`, told the user
+ * as `NGN_AS_USER`); without one it starts as that user, so what it writes to a mount is theirs.
  */
 function containerUser(fakeSystemUi: boolean): { flags: string[]; env: Record<string, string> } {
   const user = process.getuid && process.getgid ? `${process.getuid()}:${process.getgid()}` : '';
-  if (fakeSystemUi) return { flags: [], env: { NGN_AS_USER: user } };
+  if (fakeSystemUi) return { flags: ['--user', '0:0'], env: { NGN_AS_USER: user } };
   return { flags: user ? ['--user', user] : [], env: {} };
 }
 
