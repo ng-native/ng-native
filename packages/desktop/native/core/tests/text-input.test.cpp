@@ -209,3 +209,24 @@ TEST_CASE("controlledTextIsCurrent takes JavaScript's text only when it answers 
   CHECK_FALSE(ngn::controlledTextIsCurrent(2, 3, false));
   CHECK_FALSE(ngn::controlledTextIsCurrent(3, 3, true));
 }
+
+TEST_CASE("newSelection applies a selection prop only when it is new, start before end") {
+  ngn::DesktopTextInputProps none, first, same, other, backwards;
+  first.selection = facebook::react::Selection{2, 5};
+  same.selection = facebook::react::Selection{2, 5};
+  other.selection = facebook::react::Selection{1, 1};
+  backwards.selection = facebook::react::Selection{6, 3};
+  CHECK_FALSE(ngn::newSelection(nullptr, none));
+  CHECK(ngn::newSelection(nullptr, first) == std::make_pair(2, 5));
+  CHECK(ngn::newSelection(&none, first) == std::make_pair(2, 5));
+  // Unchanged: the user may have moved the selection since, which stays.
+  CHECK_FALSE(ngn::newSelection(&first, same));
+  CHECK(ngn::newSelection(&first, other) == std::make_pair(1, 1));
+  CHECK(ngn::newSelection(&first, backwards) == std::make_pair(3, 6));
+  // Negative ends are clamped to the start of the text, both of them.
+  ngn::DesktopTextInputProps negative, mixed;
+  negative.selection = facebook::react::Selection{-3, -1};
+  mixed.selection = facebook::react::Selection{-2, 4};
+  CHECK(ngn::newSelection(nullptr, negative) == std::make_pair(0, 0));
+  CHECK(ngn::newSelection(nullptr, mixed) == std::make_pair(0, 4));
+}

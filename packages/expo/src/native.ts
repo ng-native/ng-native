@@ -45,7 +45,11 @@ export const isApple = (platform: ModulePlatform | null): boolean =>
   platform === 'ios' || platform === 'macos';
 
 /** The OSes whose modules are the desktop host's TurboModules, never an Expo module. */
-const DESKTOP_PLATFORMS: ReadonlySet<ModulePlatform> = new Set(['macos']);
+const DESKTOP_PLATFORMS: ReadonlySet<ModulePlatform> = new Set(['macos', 'linux']);
+
+/** Whether `platform` is a desktop OS, where the desktop host's modules stand in for Expo's. */
+export const isDesktopPlatform = (platform: ModulePlatform | null): boolean =>
+  platform !== null && DESKTOP_PLATFORMS.has(platform);
 
 /**
  * The Expo modules whose services have a desktop source in v1, and the desktop host's TurboModule
@@ -132,7 +136,7 @@ export class MissingModuleError extends Error {
         (platform === 'web'
           ? `${module} is not installed. Install it with "npx expo install ${module}", then restart the dev server.`
           : DESKTOP_PLATFORMS.has(platform)
-            ? `${module} has no module in this build of the desktop host. Rebuild it with "npm run macos": ` +
+            ? `${module} has no module in this build of the desktop host. Rebuild it with "npm run ${platform}": ` +
               `the desktop host contains only the native modules it was built with.`
             : `${module} is not in this build of the app. Install it with "npx expo install ${module}", ` +
               `then rebuild the app ("npx expo run:${platform}", or a new EAS build): a development ` +
@@ -285,6 +289,8 @@ function desktopModule<T>(
   } catch (error) {
     failure = error;
   }
+  const hostModule = typeof desktop === 'string' ? desktop : DESKTOP_MODULES[module];
+  if (hostModule && absentByDesign(hostModule)) return null;
   return missing(new MissingModuleError(module, platform, failure));
 }
 
@@ -293,6 +299,22 @@ function turboModule(name: string): unknown {
   const registry = (require('react-native') as typeof import('react-native'))
     .TurboModuleRegistry as { get(name: string): unknown };
   return registry.get(name);
+}
+
+/**
+ * Whether the desktop host leaves its module `name` out by design: the OS gives it nothing to
+ * stand on, as Linux has no haptics or calendar store. The host's `NgNativeHost` names those, and
+ * the service is absent there, never a host to rebuild. A host older than `NgNativeHost` left out
+ * none, so a module missing from it is one it was built without.
+ */
+export function absentByDesign(name: string): boolean {
+  const host = optional(
+    () =>
+      turboModule('NgNativeHost') as {
+        getConstants?(): { absentModules?: readonly string[] };
+      } | null,
+  );
+  return optional(() => host?.getConstants?.().absentModules?.includes(name)) === true;
 }
 
 /** What Angular asks of any injected value, and `await` of any value: never the module's. */

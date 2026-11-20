@@ -66,6 +66,12 @@ describe('a declared program', () => {
       '/usr/bin/nice',
       'nohup',
       '/usr/bin/nohup',
+      'pkexec',
+      '/usr/bin/busybox',
+      'flatpak-spawn',
+      '/usr/bin/systemd-run',
+      'nsenter',
+      '/usr/sbin/chroot',
     ]) {
       assert.ok(programProblem(program), `${program} is refused`);
     }

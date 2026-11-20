@@ -2,7 +2,8 @@
 // self-hosted server: EAS Update refuses `macos`, and the iOS client is Swift over RCT and
 // ExpoModulesCore, neither of which the desktop host has. Toolkit-free: requests go through the
 // Http interface (network.h), the hash and the signature through UpdateCrypto, which a backend
-// implements over the OS's own (CommonCrypto and Security on macOS), and files through
+// implements over the OS's own (CommonCrypto and Security on macOS, the system OpenSSL 3 on Linux:
+// openssl-update-crypto.h), and files through
 // std::filesystem under the app's data directory.
 //
 // - check: GET the server's URL with the protocol's headers (platform, runtime version, the
@@ -23,7 +24,9 @@
 //   of a downloaded update is marked before it starts and cleared once it has run for a while
 //   (markLaunchSucceeded); a marker still set at the next startup means that launch crashed, so the
 //   update is marked failed and the one before it, or the embedded bundle, runs instead. Expo's own
-//   recovery covers JavaScript errors only; a native crash needs this marker.
+//   recovery covers JavaScript errors only; a native crash needs this marker. An update for
+//   another runtime version, or fetched over an embedded bundle that a package or app update has
+//   since replaced, is stale: it never runs, and its folder is deleted.
 //
 // `assetRequestHeaders` from a multipart response's extensions are not sent with the asset requests.
 #pragma once
@@ -133,6 +136,9 @@ struct LaunchState {
     std::string runtimeVersion;
     // The launch asset, relative to the directory.
     std::string file;
+    // The embedded bundle it was fetched over (its size and modification time): a package or app
+    // update that brings another one makes it stale, and the new embedded bundle runs.
+    std::string embedded;
     bool operator==(const Update &) const = default;
   };
   std::optional<Update> current;
@@ -150,6 +156,8 @@ class UpdatesClient {
   bool enabled() const {
     return !config_.url.empty();
   }
+  // Why updates are off, for a check; empty when they are on.
+  std::string offReason() const;
   const UpdatesConfig &config() const {
     return config_;
   }
@@ -202,6 +210,10 @@ class UpdatesClient {
   void save(const LaunchState &state) const;
   std::string pathOf(const LaunchState::Update &update) const;
   bool usable(const LaunchState::Update &update, const LaunchState &state) const;
+  // For another runtime version, or fetched over another embedded bundle: never run, nor kept.
+  bool stale(const LaunchState::Update &update) const;
+  // Deletes the folders of the updates neither `state` nor this launch names.
+  void prune(const LaunchState &state) const;
   void markLocked();
   // Why a manifest's (or the `what` named) signature header does not verify its bytes, when the
   // app requires signing.

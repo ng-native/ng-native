@@ -24,6 +24,7 @@ const VALID = {
       extensions: ['md', 'markdown'],
       role: 'editor',
       utis: ['net.daringfireball.markdown'],
+      mimeTypes: ['text/markdown', 'text/x-markdown'],
     },
   ],
   capabilities: {
@@ -47,7 +48,7 @@ describe('the desktop plugin options', () => {
 
   it('names where each problem is', () => {
     const problems = desktopOptionProblems({
-      documentTypes: [{ name: '', extensions: ['.md'], role: 'owner' }],
+      documentTypes: [{ name: '', extensions: ['.md'], role: 'owner', mimeTypes: ['markdown'] }],
       capabilities: {
         spawn: [
           { program: '/bin/sh', args: ['-c', '{cmd:.*}'] },
@@ -63,6 +64,7 @@ describe('the desktop plugin options', () => {
       'documentTypes[0].name',
       'documentTypes[0].extensions[0]',
       'documentTypes[0].role',
+      'documentTypes[0].mimeTypes[0]',
       'capabilities.spawn[0]',
       'capabilities.spawn[1]',
       'capabilities.env[1]',

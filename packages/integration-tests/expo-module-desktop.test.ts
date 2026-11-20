@@ -75,6 +75,46 @@ describe('expoModule on macOS', () => {
   });
 });
 
+describe('expoModule on Linux', () => {
+  it("never calls the Expo loader, and answers the desktop host's TurboModule, as on macOS", () => {
+    const desktop = { from: 'desktop' };
+    on('linux', { NgNativeHaptics: desktop });
+    const { calls, load } = loader();
+    assert.equal(expoModule('expo-haptics', load, { desktop: 'NgNativeHaptics' }), desktop);
+    assert.equal(expoModule('expo-brightness', load), null);
+    assert.deepEqual(calls, []);
+  });
+
+  it('is null for a module the host leaves out by design, so the service is inert, not rebuilt', () => {
+    const host = { getConstants: () => ({ absentModules: ['NgNativeHaptics', 'NgNativeCamera'] }) };
+    on('linux', { NgNativeHost: host });
+    assert.equal(expoModule('expo-haptics', loader().load, { desktop: 'NgNativeHaptics' }), null);
+    // A desktop loader's module is the one DESKTOP_MODULES names for the package.
+    assert.equal(expoModule('expo-camera', loader().load, { desktop: () => null }), null);
+    // One the host does not name is still a host built without it.
+    const stale = expoModule('expo-calendar', loader().load, { desktop: 'NgNativeCalendar' });
+    assert.throws(() => (stale as Record<string, unknown>)['x'], MissingModuleError);
+  });
+
+  it('says to rebuild a host older than NgNativeHost, which left out no module by design', () => {
+    on('linux', { NgNativeHost: {} });
+    const found = expoModule('expo-haptics', loader().load, { desktop: 'NgNativeHaptics' });
+    assert.throws(() => (found as Record<string, unknown>)['impactAsync'], MissingModuleError);
+  });
+
+  it('says to rebuild the desktop host with npm run linux when the module is not in it', () => {
+    on('linux');
+    const found = expoModule('expo-haptics', loader().load, { desktop: 'NgNativeHaptics' });
+    assert.throws(
+      () => (found as Record<string, unknown>)['impactAsync'],
+      (error: unknown) =>
+        error instanceof MissingModuleError &&
+        /npm run linux/.test(error.message) &&
+        !/npm run macos/.test(error.message),
+    );
+  });
+});
+
 describe('expoModule with an options object', () => {
   it('takes platforms as the array form does', () => {
     on('android');
@@ -429,6 +469,32 @@ describe('notifications on macOS', () => {
     assert.deepEqual(await notifications.channels(), []);
     assert.deepEqual(await notifications.categories(), []);
     assert.equal(await notifications.dismissAll(), undefined);
+  });
+});
+
+describe('notifications on a host with no push service', () => {
+  it('answers no device token, and unregisters nothing, where the host has no push methods', async () => {
+    // Linux's: the notification centre without getDevicePushTokenAsync or unregister.
+    const centre = asHost('NgNativeNotifications', {
+      getPermissionsAsync: async () => ({ status: 'granted', granted: true }),
+      requestPermissionsAsync: async () => ({ status: 'granted', granted: true }),
+    });
+    (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+      if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
+      return {
+        Platform: { OS: 'linux' },
+        TurboModuleRegistry: {
+          get: (name: string) => (name === 'NgNativeNotifications' ? centre : null),
+        },
+        DeviceEventEmitter: { addListener: () => ({ remove() {} }) },
+      };
+    };
+    const { Notifications } = await import('@ng-native/expo/notifications');
+    const { injectService } = await import('@ng-native/testing');
+    const notifications = injectService(Notifications);
+    assert.equal(notifications.available(), true);
+    assert.equal(await notifications.getDevicePushToken(), null);
+    assert.equal(await notifications.unregister(), undefined);
   });
 });
 

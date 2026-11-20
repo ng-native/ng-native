@@ -23,4 +23,19 @@ std::optional<facebook::react::Point> layerPointAt(
     const facebook::react::Transform &transform,
     facebook::react::Point point);
 
+// The plane's picture under `transform` as a 2D map in steps a 2D toolkit takes: the point is
+// scaled, then skewed along x (degrees), then rotated (degrees, clockwise with y down), then moved.
+// A transform with no perspective draws the plane (z = 0) with such a map whatever it does in z,
+// which is what a renderer that only draws 2D (GSK's cairo one) needs. Nothing when the transform
+// has perspective, or flattens the plane to a line or a point.
+struct PlaneSteps {
+  facebook::react::Float scaleX{1};
+  facebook::react::Float scaleY{1};
+  facebook::react::Float skewX{0};
+  facebook::react::Float rotate{0};
+  facebook::react::Float translateX{0};
+  facebook::react::Float translateY{0};
+};
+std::optional<PlaneSteps> planeSteps(const facebook::react::Transform &transform);
+
 } // namespace ngn

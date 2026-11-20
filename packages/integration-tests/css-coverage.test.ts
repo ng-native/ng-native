@@ -205,6 +205,21 @@ describe('filter, per platform', () => {
     );
   });
 
+  it('keeps any filter in a Linux build and a rule scoped to Linux, and refuses drop-shadow on macOS', () => {
+    // The GTK host draws every function; the macOS host every one but drop-shadow().
+    const css = '.a { filter: grayscale(1) blur(2px) drop-shadow(1px 1px 2px red) }';
+    assert.deepEqual(compileCss(css, 'test', { platform: 'linux' }).rules[0].declarations, {
+      filter: [
+        { grayscale: 1 },
+        { blur: 2 },
+        { dropShadow: { offsetX: 1, offsetY: 1, standardDeviation: 2, color: 'rgb(255, 0, 0)' } },
+      ],
+    });
+    const scoped = compileCss('.platform-linux .a { filter: sepia(1) }', 'test');
+    assert.deepEqual(scoped.rules[0].declarations, { filter: [{ sepia: 1 }] });
+    assert.throws(() => compileCss(css, 'test', { platform: 'macos' }), /not drawn on macOS/);
+  });
+
   it('keeps any filter in an Android build, and refuses it in an iOS one', () => {
     const css = '.a { filter: grayscale(1) }';
     assert.deepEqual(compileCss(css, 'test', { platform: 'android' }).rules[0].declarations, {
@@ -411,6 +426,29 @@ describe('skew, per platform', () => {
         filter: [{ grayscale: 1 }, { blur: 4 }, { hueRotate: 90 }],
       });
     }
+  });
+
+  // Linux runs the same desktop core, which hands the toolkit the whole matrix as macOS's does.
+  it('keeps a skew and every filter in a Linux build, unscoped and scoped to Linux', () => {
+    for (const css of [
+      '.a { transform: skewX(12deg) }',
+      '.platform-linux .a { transform: skewX(12deg) }',
+    ]) {
+      assert.deepEqual(compileCss(css, 'test', { platform: 'linux' }).rules[0].declarations, {
+        transform: [{ skewX: '12deg' }],
+      });
+    }
+    for (const css of ['.a { filter: blur(4px) }', '.platform-linux .a { filter: blur(4px) }']) {
+      assert.deepEqual(compileCss(css, 'test', { platform: 'linux' }).rules[0].declarations, {
+        filter: [{ blur: 4 }],
+      });
+    }
+  });
+
+  it('checks a Linux build for Linux alone: a rule scoped to iOS is not refused there', () => {
+    const css = '.platform-ios .a { filter: blur(4px) }';
+    assert.throws(() => compileCss(css, 'test', { platform: 'ios' }), /not drawn on iOS/);
+    assert.doesNotThrow(() => compileCss(css, 'test', { platform: 'linux' }));
   });
 
   it('refuses drop-shadow in a macOS build, unscoped and scoped to macOS alike', () => {

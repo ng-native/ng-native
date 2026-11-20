@@ -5,11 +5,14 @@ import type { system } from './host.mjs';
 import {
   choosePrebuilt,
   entryName,
+  findHost,
   fetchPrebuilt,
   prebuiltName,
   readManifest,
+  RELEASE_HOSTS,
   signPrebuiltFiles,
   withHost,
+  withReleaseHosts,
   type PrebuiltHost,
 } from './prebuilt.mjs';
 
@@ -57,6 +60,66 @@ describe('the prebuilt manifest', () => {
     assert.equal(entryName('release'), 'prebuilt-host-release.json');
   });
 
+  it('names a Linux archive and entry by its architecture, apart from the macOS ones', () => {
+    assert.equal(
+      prebuiltName('0.23.0', '0.88.0', 'release', { os: 'linux', arch: 'arm64' }),
+      'ng-native-desktop-host-0.23.0-rn-0.88.0-linux-arm64.tar.gz',
+    );
+    assert.equal(
+      prebuiltName('0.23.0', '0.88.0', 'debug', { os: 'linux', arch: 'x64' }),
+      'ng-native-desktop-host-0.23.0-rn-0.88.0-linux-x64-debug.tar.gz',
+    );
+    assert.equal(
+      entryName('debug', { os: 'linux', arch: 'x64' }),
+      'prebuilt-host-linux-x64-debug.json',
+    );
+    assert.equal(entryName('release', { os: 'macos' }), 'prebuilt-host-release.json');
+    assert.throws(() => entryName('debug', { os: 'linux' }), /x64 or arm64/);
+    // Every host a release publishes has an entry file of its own.
+    const names = RELEASE_HOSTS.map((slot) => entryName(slot.flavour, slot));
+    assert.equal(new Set(names).size, 6);
+  });
+
+  it('puts every release host’s entry in the manifest, and stops on one missing or mislabelled', () => {
+    const entries: Record<string, object> = Object.fromEntries(
+      RELEASE_HOSTS.map((slot) => [
+        entryName(slot.flavour, slot),
+        {
+          ...HOST,
+          flavour: slot.flavour,
+          ...(slot.os === 'linux' && slot),
+          url: entryName(slot.flavour, slot),
+        },
+      ]),
+    );
+    const read = (name: string) => {
+      if (!(name in entries)) throw new Error(`ENOENT ${name}`);
+      return JSON.stringify(entries[name]);
+    };
+    const manifest = withReleaseHosts({ version: 1, hosts: [] }, read);
+    assert.equal(manifest.hosts.length, 6);
+    assert.equal(
+      findHost(manifest, { reactNative: '0.88.0', flavour: 'debug', os: 'linux', arch: 'arm64' })
+        ?.url,
+      'prebuilt-host-linux-arm64-debug.json',
+    );
+    // A Linux host never answers for the macOS one.
+    assert.equal(
+      findHost(manifest, { reactNative: '0.88.0', flavour: 'debug' })?.url,
+      'prebuilt-host-debug.json',
+    );
+    delete entries['prebuilt-host-linux-arm64-release.json'];
+    assert.throws(
+      () => withReleaseHosts({ version: 1, hosts: [] }, read),
+      /ENOENT prebuilt-host-linux-arm64-release/,
+    );
+    entries['prebuilt-host-linux-arm64-release.json'] = { ...HOST, os: 'linux', arch: 'x64' };
+    assert.throws(
+      () => withReleaseHosts({ version: 1, hosts: [] }, read),
+      /prebuilt-host-linux-arm64-release.json is not the linux-arm64 release host/,
+    );
+  });
+
   it('reads a manifest, and anything else as none', () => {
     assert.deepEqual(readManifest(JSON.stringify(MANIFEST)), MANIFEST);
     for (const text of ['', '{', '{"version":2,"hosts":[]}', '{"version":1}']) {
@@ -90,6 +153,22 @@ describe('the prebuilt manifest', () => {
 describe('choosePrebuilt', () => {
   it("takes the app's React Native version when its host libraries match or are absent", () => {
     assert.deepEqual(choosePrebuilt(MANIFEST, APP), { host: HOST });
+  });
+
+  it('takes a host for the OS asked, and a Linux host for the architecture asked', () => {
+    const x64: PrebuiltHost = { ...HOST, os: 'linux', arch: 'x64', sha256: 'b'.repeat(64) };
+    const arm64: PrebuiltHost = { ...HOST, os: 'linux', arch: 'arm64', sha256: 'c'.repeat(64) };
+    const all = { version: 1, hosts: [x64, arm64, HOST] };
+    // An entry that names no OS is a macOS one, whatever comes before it.
+    assert.deepEqual(choosePrebuilt(all, APP), { host: HOST });
+    assert.deepEqual(choosePrebuilt(all, { ...APP, os: 'linux', arch: 'arm64' }), { host: arm64 });
+    assert.deepEqual(choosePrebuilt(all, { ...APP, os: 'linux', arch: 'x64' }), { host: x64 });
+    assert.deepEqual(choosePrebuilt(MANIFEST, { ...APP, os: 'linux', arch: 'x64' }), {
+      reason: 'no prebuilt release Linux x64 host for React Native 0.88.0',
+    });
+    // One Linux entry per architecture: a new arm64 host replaces only the arm64 one.
+    const newer = { ...arm64, sha256: 'e'.repeat(64) };
+    assert.deepEqual(withHost(all, newer).hosts, [x64, HOST, newer]);
   });
 
   it('takes the debug host for a dev run and the release host for a packaged app', () => {

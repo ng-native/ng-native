@@ -28,9 +28,11 @@ export interface AccessibilitySettings {
   /**
    * The user's text size, as a multiplier of the default.
    *
-   * Not an event: it is read at startup and again when the app comes back, because changing it
-   * means leaving for Settings. Text scales natively without anything here, so this is for the
-   * layouts that have to give way to it - a row height, a line clamp, an icon beside a label.
+   * Read at startup and again when the app comes back to the foreground, because changing it on
+   * iOS and Android means leaving for Settings. On Linux the GTK host reports a change in the
+   * desktop's text scaling while the app runs, and this follows it. Text scales natively without
+   * anything here, so this is for the layouts that have to give way to it - a row height, a line
+   * clamp, an icon beside a label.
    */
   readonly fontScale: number;
 }
@@ -95,6 +97,15 @@ export function accessibilitySource(): AccessibilitySource {
           if (state === 'active') listener({ fontScale: systemFontScale(native) });
         }),
       ];
+      // The GTK host never reports the app becoming active, but it passes a change in the
+      // desktop's text scaling on as a `Dimensions` change.
+      if (platformOs() === 'linux') {
+        subscriptions.push(
+          native.Dimensions.addEventListener('change', () =>
+            listener({ fontScale: systemFontScale(native) }),
+          ),
+        );
+      }
       return () => subscriptions.forEach((subscription) => subscription.remove());
     },
     announce: (message) => info.announceForAccessibility(message),

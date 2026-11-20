@@ -48,6 +48,15 @@ test('renders as macOS: its tokens, its view names and recording fakes of its se
   assert.equal(instance.processes.available(), true);
 });
 
+test('renders as Linux: a desktop, not an Apple OS, with recording fakes of the desktop services', async () => {
+  const { instance } = await render(Gate, { os: 'linux' });
+  assert.ok(screen.getByText('linux  true false'));
+  assert.equal(nativePlatform(), 'linux');
+  assert.equal(screen.getByTestId('button').viewName, 'NgNativeButton');
+  assert.equal(instance.dock.available(), true);
+  assert.equal(instance.processes.available(), true);
+});
+
 test("renders as the project's OS when the render names none, fakes included", async () => {
   // The Vitest preset's `os`, from `expo.platforms`: a desktop-only app tests as macOS.
   const before = process.env['NG_NATIVE_TEST_OS'];

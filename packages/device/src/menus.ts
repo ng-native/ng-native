@@ -357,7 +357,7 @@ export class Menus {
 
   /** The menu bar as it is drawn: the OS's defaults with the app's merged in. */
   readonly menuBar: Signal<MenuGroupModel[]> = computed(() =>
-    mergeMenuBar(defaultMenuBar(this.native?.appName || 'App'), this.appGroups()),
+    mergeMenuBar(defaultMenuBar(this.native?.appName || 'App', this.os), this.appGroups()),
   );
 
   private readonly sentBar = computed(() => {
@@ -413,7 +413,7 @@ export class Menus {
     const warned = new Set<string>();
     effect(() => {
       if (!this.menuBarShown()) return;
-      const defaults = defaultMenuBar(this.native?.appName || 'App');
+      const defaults = defaultMenuBar(this.native?.appName || 'App', this.os);
       for (const label of unmergedGroups(defaults, this.menuBar())) {
         if (warned.has(label)) continue;
         warned.add(label);

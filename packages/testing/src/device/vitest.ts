@@ -9,16 +9,19 @@
  * Vitest never imports a device test (Metro does) and so cannot see what one depends on.
  *
  * A project per platform runs every file on each, and `vitest --project macos` runs the one:
- * the project is named for its `platform`, as `name` says, and for `macos` the pool starts the
- * desktop host itself (`macosLauncher()`), with fresh state for each run.
+ * the project is named for its `platform`, as `name` says, and for `macos` and `linux` the pool
+ * starts the desktop host itself (`macosLauncher()`, `linuxLauncher()`), with fresh state for each
+ * run.
  *
  *     projects: [
  *       { plugins: [ngNative()], test: { name: 'node' } },
  *       { plugins: [deviceTests({ platform: 'macos' })] },
+ *       { plugins: [deviceTests({ platform: 'linux' })] },
  *     ]
  */
 import path from 'node:path';
 import type { Plugin } from 'vite';
+import { linuxLauncher } from './linux-launcher.ts';
 import { macosLauncher } from './macos-launcher.ts';
 import { devicePool, type DevicePoolOptions } from './pool.ts';
 
@@ -33,12 +36,18 @@ export interface DeviceTestsOptions extends DevicePoolOptions {
 
 export function deviceTests(options: DeviceTestsOptions = {}): Plugin {
   const { include = ['src/**/*.device.ts'], sources = ['src'], name, ...pool } = options;
-  // A Mac app is a process the pool can open; a simulator is one a person has open.
+  // A desktop app is a process the pool can open; a simulator is one a person has open.
   if (pool.platform === 'macos' && pool.launch === undefined) pool.launch = macosLauncher();
   return {
     name: 'ng-native:device-tests',
     config(config) {
       const root = path.resolve(config.root ?? process.cwd());
+      // The Linux host is found by the desktop CLI, which reads the app's configuration from its
+      // working directory: the project's root, not the folder Vitest was started in.
+      const launching =
+        pool.platform === 'linux' && pool.launch === undefined
+          ? { ...pool, launch: linuxLauncher({ cwd: root }) }
+          : pool;
       return {
         test: {
           name: name ?? pool.platform ?? 'device',
@@ -53,7 +62,7 @@ export function deviceTests(options: DeviceTestsOptions = {}): Plugin {
               ),
           }),
           include,
-          pool: devicePool(pool),
+          pool: devicePool(launching),
           maxWorkers: 1,
           isolate: false,
           // Absolute: `**` does not match a directory whose name starts with a dot.
@@ -66,4 +75,5 @@ export function deviceTests(options: DeviceTestsOptions = {}): Plugin {
 
 export { devicePool, type DevicePoolOptions } from './pool.ts';
 export { macosLauncher, type MacosLauncherOptions } from './macos-launcher.ts';
+export { linuxLauncher, type LinuxDisplay, type LinuxLauncherOptions } from './linux-launcher.ts';
 export type { AppLauncher, LaunchRequest, LaunchedApp } from './launcher.ts';

@@ -1,6 +1,7 @@
 /**
- * Icons in the macOS menu bar's status area, each with a menu or a press of its own. `<tray-icon>`
- * in `@ng-native/components` registers here. Absent on iOS and Android, where nothing is drawn.
+ * Icons in the macOS menu bar's status area, or a Linux panel's as StatusNotifierItems, each with
+ * a menu or a press of its own. `<tray-icon>` in `@ng-native/components` registers here. Absent on
+ * iOS and Android, and on a Linux desktop with no StatusNotifierWatcher, where nothing is drawn.
  *
  * The host contract, on the `NgNativeTray` module: `setIcons(icons)` takes every icon each time one
  * changes, as `{ id, title, sfSymbol, image, tooltip, menu }`, `menu` as `serializeMenu` makes it
@@ -18,6 +19,7 @@ import {
 } from '@angular/core';
 import type { MenuEntry } from './menu-model.ts';
 import { serializeMenu, type NativeMenuEntry } from './menus.ts';
+import { injectOs } from './os.ts';
 import { reactNative } from './react-native.ts';
 
 /** One icon as an app describes it. */
@@ -79,16 +81,18 @@ export class Tray {
   });
 
   private readonly native = inject(Tray.SOURCE);
+  /** The desktop OS whose shortcuts the menus show: Linux's own, else a Mac's. */
+  private readonly menuOs = injectOs() === 'linux' ? 'linux' : 'macos';
   private readonly icons = signal<readonly { id: string; model: Signal<TrayIconModel> }[]>([]);
   private next = 0;
 
-  /** Whether the OS has a status area for the app: macOS. */
+  /** Whether the OS has a status area for the app: macOS, and Linux with a StatusNotifierWatcher. */
   readonly available: Signal<boolean> = signal(this.native !== null).asReadonly();
 
   private readonly sent = computed(() =>
     this.icons().map(({ id, model }) => {
       const { menu, press, ...icon } = model();
-      const serialized = serializeMenu(menu, 'macos');
+      const serialized = serializeMenu(menu, this.menuOs);
       return {
         icon: { id, ...icon, menu: serialized.entries.length ? serialized.entries : null },
         actions: serialized.actions,

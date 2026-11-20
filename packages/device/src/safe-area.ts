@@ -39,10 +39,11 @@ export class SafeArea {
   private readonly current = signal<Insets>(NOTHING);
   private readonly measured = signal<Frame | null>(null);
   private readonly controls = signal(0);
+  private readonly trailingControls = signal(0);
   /** What each provider still up last reported, the latest last. */
   private readonly reports = new Map<
     object,
-    { insets: Insets; frame: Frame; titlebarLeading: number }
+    { insets: Insets; frame: Frame; titlebarLeading: number; titlebarTrailing: number }
   >();
   private reporter: object | null = null;
 
@@ -62,10 +63,19 @@ export class SafeArea {
    * On macOS, how far the window's close, minimise and zoom buttons reach into the reporting
    * pane from its leading edge: what `--safe-area-inset-titlebar-leading` holds. Their width in a
    * window with no sidebar and in the sidebar pane under them; zero in the content pane beside a
-   * sidebar, which they do not reach, and on every other OS. One value for the app: the latest
-   * report's, not one per pane.
+   * sidebar, which they do not reach. On Linux, the reach of the window controls on the leading
+   * side, in a window whose content runs under its header bar; zero on every other OS. One value
+   * for the app: the latest report's, not one per pane.
    */
   readonly titlebarLeading: Signal<number> = this.controls.asReadonly();
+
+  /**
+   * How far a desktop window's title bar controls reach into the reporting pane from its trailing
+   * edge: what `--safe-area-inset-titlebar-trailing` holds. Zero on macOS, whose controls are on
+   * the leading side, on Linux in a window whose content stays below its header bar (the default
+   * title bar), and on every OS with no title bar. One value for the app, as `titlebarLeading` is.
+   */
+  readonly titlebarTrailing: Signal<number> = this.trailingControls.asReadonly();
 
   /** Whether anything has reported yet, for a layout that would rather wait than jump. */
   readonly known = computed(() => this.measured() !== null);
@@ -74,14 +84,21 @@ export class SafeArea {
    * Called by `<safe-area-provider>` when native reports. Not for apps: an inset written from
    * anywhere else is a number that stops matching the screen the moment the device rotates.
    */
-  report(insets: Insets, frame: Frame, from?: object, titlebarLeading = 0): void {
+  report(
+    insets: Insets,
+    frame: Frame,
+    from?: object,
+    titlebarLeading = 0,
+    titlebarTrailing = 0,
+  ): void {
     this.current.set(insets);
     this.measured.set(frame);
     this.controls.set(titlebarLeading);
+    this.trailingControls.set(titlebarTrailing);
     this.reporter = from ?? null;
     if (!from) return;
     this.reports.delete(from);
-    this.reports.set(from, { insets, frame, titlebarLeading });
+    this.reports.set(from, { insets, frame, titlebarLeading, titlebarTrailing });
   }
 
   /**
@@ -97,6 +114,7 @@ export class SafeArea {
     this.current.set(previous?.[1].insets ?? NOTHING);
     this.measured.set(previous?.[1].frame ?? null);
     this.controls.set(previous?.[1].titlebarLeading ?? 0);
+    this.trailingControls.set(previous?.[1].titlebarTrailing ?? 0);
     return true;
   }
 }

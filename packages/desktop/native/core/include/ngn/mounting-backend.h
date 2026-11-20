@@ -5,6 +5,7 @@
 // other; the backend attaches it to the surface's main container.
 #pragma once
 
+#include "ngn/accessibility-relations.h"
 #include "ngn/expo-ui.h"
 #include "ngn/screen-stacks.h"
 #include "ngn/split-view.h"
@@ -81,6 +82,10 @@ class MountingBackend {
 
   // A live region on the surface changed its text (live-regions.h): the screen reader says it.
   virtual void announce(SurfaceId /*surfaceId*/, const Announcement & /*announcement*/) {}
+
+  // The views `tag` is labelled and described by changed (accessibility-relations.h): empty when it
+  // has none now. Sent after the transaction's mutations, so every view named is mounted.
+  virtual void setAccessibilityRelations(SurfaceId /*surfaceId*/, Tag /*tag*/, const AxRelations & /*relations*/) {}
 
   // Called once a transaction's mutations have all been applied.
   virtual void didMount(SurfaceId /*surfaceId*/) {}

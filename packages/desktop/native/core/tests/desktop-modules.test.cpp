@@ -9,19 +9,34 @@
 
 namespace {
 
+struct NoTray final : ngn::TrayBackend {
+  void setIcons(std::vector<ngn::TrayIcon>) override {}
+};
+
+struct NoDock final : ngn::DockBackend {
+  void setMenu(std::optional<std::vector<ngn::MenuItem>>) override {}
+  void bounce(int, bool) override {}
+  void cancelBounce(int) override {}
+};
+
 ngn::DesktopModuleSources sources() {
   return {
       .system = std::make_shared<ngn::testing::FakeSystem>(),
       .state = std::make_shared<ngn::HostState>(),
+      .tray = std::make_shared<ngn::TrayHost>(std::make_shared<NoTray>()),
+      .dock = std::make_shared<ngn::DockHost>(std::make_shared<NoDock>()),
       .notifications = [](std::shared_ptr<ngn::NotificationEvents>) { return std::shared_ptr<ngn::NotificationCenter>(); },
   };
 }
 
 } // namespace
 
-TEST_CASE("addDesktopModules registers each desktop module under the name @ng-native's JavaScript asks for") {
+TEST_CASE("addDesktopModules registers or names as absent each desktop module, under the name @ng-native's JavaScript asks for") {
   ngn::ModuleRegistry registry;
-  ngn::addDesktopModules(registry, sources());
+  auto made = ngn::addDesktopModules(registry, sources());
+  auto names = registry.names();
+  names.insert(names.end(), made.absent.begin(), made.absent.end());
+  std::sort(names.begin(), names.end());
   std::vector<std::string> expected{
       "NgNativeAddressSearch",
       "NgNativeAppleAuthentication",
@@ -39,6 +54,7 @@ TEST_CASE("addDesktopModules registers each desktop module under the name @ng-na
       "NgNativeFileSystem",
       "NgNativeFont",
       "NgNativeHaptics",
+      "NgNativeHost",
       "NgNativeImageManipulator",
       "NgNativeImagePicker",
       "NgNativeKeepAwake",
@@ -72,7 +88,171 @@ TEST_CASE("addDesktopModules registers each desktop module under the name @ng-na
       "RNCWebViewModule",
   };
   std::sort(expected.begin(), expected.end());
-  CHECK(registry.names() == expected);
+  CHECK(names == expected);
+}
+
+TEST_CASE("addDesktopModules leaves out each module the backend gives no source for, and NgNativeHost names it") {
+  ngn::ModuleRegistry registry;
+  auto made = ngn::addDesktopModules(registry, sources());
+  // What the core makes over the host's own objects, the two whose null source is an answer, and the
+  // tray and Dock, which sources() gives.
+  std::vector<std::string> registered{
+      "NgNativeApplication", "NgNativeAsset", "NgNativeClipboard", "NgNativeDevice", "NgNativeDock", "NgNativeHost",
+      "NgNativeProcesses", "NgNativeTray", "NgNativeSqlite", "NgNativeStoreReview", "NgNativeWebBrowser", "RNCWebViewModule",
+  };
+  std::sort(registered.begin(), registered.end());
+  CHECK(registry.names() == registered);
+  CHECK(std::find(made.absent.begin(), made.absent.end(), "NgNativeMaps") != made.absent.end());
+  // The modules Linux crashed in, among the rest.
+  for (const char *name : {"NgNativeBattery", "NgNativeAppleAuthentication", "NgNativeHaptics", "NgNativeSplashScreen",
+                           "NgNativeCalendar", "NgNativeCamera", "NgNativeImagePicker", "NgNativeMediaLibrary",
+                           "NgNativeAudio", "NgNativeVideo", "NgNativeLocalLlm", "NgNativeTrackingTransparency",
+                           "NgNativeLocalAuthentication", "NgNativeLocation", "NgNativeNotifications"}) {
+    CHECK(std::find(made.absent.begin(), made.absent.end(), name) != made.absent.end());
+    CHECK_FALSE(registry.module(name, nullptr));
+  }
+  auto names = ngn::makeHostModule(made.absent)->call("getConstants")["absentModules"];
+  REQUIRE(names.size() == made.absent.size());
+  CHECK(names[0] == made.absent[0]);
+}
+
+TEST_CASE("addDesktopModules plays audio with an output alone, and records nothing without an input") {
+  struct Output final : ngn::AudioOutput {
+    std::unique_ptr<ngn::AudioTrack> open(const std::string &, double, std::function<void(Change)>) override { return nullptr; }
+  };
+  auto given = sources();
+  given.audioOutput = std::make_shared<Output>();
+  ngn::ModuleRegistry registry;
+  ngn::addDesktopModules(registry, given);
+  auto names = registry.names();
+  CHECK(std::find(names.begin(), names.end(), "NgNativeAudio") != names.end());
+}
+
+TEST_CASE("addDesktopModules registers a module once its source is given, and no longer names it as absent") {
+  auto given = sources();
+  given.splash = std::make_shared<ngn::SplashGate>();
+  ngn::ModuleRegistry registry;
+  auto made = ngn::addDesktopModules(registry, given);
+  auto names = registry.names();
+  CHECK(std::find(names.begin(), names.end(), "NgNativeSplashScreen") != names.end());
+  CHECK(std::find(made.absent.begin(), made.absent.end(), "NgNativeSplashScreen") == made.absent.end());
+  CHECK(std::find(made.absent.begin(), made.absent.end(), "NgNativeHaptics") != made.absent.end());
+}
+
+TEST_CASE("addDesktopModules registers ImagePicker over a picker with no photo library, and leaves MediaLibrary out") {
+  struct Picker final : ngn::PhotoPicker {
+    void pick(const folly::dynamic &, std::function<void(std::optional<std::vector<Picked>>)> done) override {
+      done(std::nullopt);
+    }
+  };
+  auto given = sources();
+  given.photoPicker = std::make_shared<Picker>();
+  ngn::ModuleRegistry registry;
+  auto made = ngn::addDesktopModules(registry, given);
+  auto has = [&](const char *name) { return std::find(made.absent.begin(), made.absent.end(), name) == made.absent.end(); };
+  CHECK(has("NgNativeImagePicker"));
+  CHECK(registry.module("NgNativeImagePicker", nullptr));
+  CHECK_FALSE(has("NgNativeMediaLibrary"));
+  CHECK_FALSE(has("NgNativeCamera"));
+}
+
+TEST_CASE("addDesktopModules leaves out the tray and the Dock without a source for them") {
+  auto given = sources();
+  given.tray = nullptr;
+  ngn::ModuleRegistry registry;
+  ngn::addDesktopModules(registry, given);
+  auto names = registry.names();
+  CHECK(std::count(names.begin(), names.end(), "NgNativeTray") == 0);
+  CHECK(std::count(names.begin(), names.end(), "NgNativeDock") == 1);
+  given.dock = nullptr;
+  ngn::ModuleRegistry without;
+  ngn::addDesktopModules(without, given);
+  names = without.names();
+  CHECK(std::count(names.begin(), names.end(), "NgNativeDock") == 0);
+}
+
+TEST_CASE("makeDesktopImagePicker gives a picker with no photo library the camera, where the backend has one, as addDesktopModules registers it") {
+  struct Picker final : ngn::PhotoPicker {
+    void pick(const folly::dynamic &, std::function<void(std::optional<std::vector<Picked>>)> done) override {
+      done(std::nullopt);
+    }
+  };
+  struct Hardware final : ngn::CameraHardware {
+    Access access() override { return Access::Granted; }
+    void requestAccess(std::function<void(Access)> done) override { done(Access::Granted); }
+    bool hasCamera() override { return true; }
+    bool microphoneAllowed() override { return false; }
+  };
+  struct Sheet final : ngn::CameraSheet {
+    void shoot(const ngn::CameraSheetRequest &, std::function<void(ngn::CameraTake, const std::string &)> done) override { done({}, ""); }
+  };
+  struct Microphone final : ngn::AudioInput {
+    Access access() override { return Access::Granted; }
+    void requestAccess(std::function<void(Access)> done) override { done(Access::Granted); }
+    bool hasMicrophone() override { return true; }
+    std::unique_ptr<ngn::AudioRecording> prepare(const std::string &, const ngn::RecordingSettings &, std::string &) override { return nullptr; }
+  };
+  auto permission = [](const ngn::DesktopModuleSources &given) {
+    ngn::ModuleRegistry registry;
+    ngn::addDesktopModules(registry, given);
+    CHECK(registry.module("NgNativeImagePicker", nullptr));
+    auto picker = ngn::makeDesktopImagePicker(given);
+    REQUIRE(picker);
+    std::optional<folly::dynamic> answer;
+    picker->callWithPromise("getCameraPermissionsAsync", folly::dynamic::array(),
+                          {.resolve = [&](folly::dynamic v) { answer = v; }, .reject = [](const std::string &) {}});
+    REQUIRE(answer);
+    return (*answer)["status"];
+  };
+  auto given = sources();
+  given.photoPicker = std::make_shared<Picker>();
+  CHECK(permission(given) == "denied");
+  given.cameraHardware = std::make_shared<Hardware>();
+  given.cameraSheet = std::make_shared<Sheet>();
+  given.audioInput = std::make_shared<Microphone>();
+  CHECK(permission(given) == "granted");
+}
+
+TEST_CASE("addDesktopModules registers a photo library's picker with its camera and no microphone") {
+  struct Library final : ngn::PhotoLibrary {
+    void pick(const folly::dynamic &, std::function<void(std::optional<std::vector<Picked>>)> done) override { done(std::nullopt); }
+    Access access(bool) override { return Access::Denied; }
+    void requestAccess(bool, std::function<void(Access)> done) override { done(Access::Denied); }
+    std::vector<Asset> assets(const Query &) override { return {}; }
+    std::optional<Asset> asset(const std::string &) override { return std::nullopt; }
+    void fileUri(const std::string &, std::function<void(std::optional<std::string>)> done) override { done(std::nullopt); }
+    std::vector<Album> albums() override { return {}; }
+    std::vector<std::string> albumAssets(const std::string &) override { return {}; }
+    std::function<void()> watch(std::function<void()>) override { return [] {}; }
+    void create(const std::string &, const std::optional<std::string> &, std::function<void(std::optional<std::string>, const std::string &)> done) override {
+      done(std::nullopt, "no");
+    }
+    void remove(const std::vector<std::string> &, Done done) override { done("no"); }
+    void setFavorite(const std::string &, bool, Done done) override { done("no"); }
+    void createAlbum(const std::string &, const std::vector<std::string> &, bool, std::function<void(std::optional<Album>, const std::string &)> done) override {
+      done(std::nullopt, "no");
+    }
+    void deleteAlbums(const std::vector<std::string> &, bool, Done done) override { done("no"); }
+    void changeAlbum(const std::string &, const std::vector<std::string> &, bool, Done done) override { done("no"); }
+  };
+  struct Hardware final : ngn::CameraHardware {
+    Access access() override { return Access::Granted; }
+    void requestAccess(std::function<void(Access)> done) override { done(Access::Granted); }
+    bool hasCamera() override { return true; }
+    bool microphoneAllowed() override { return false; }
+  };
+  struct Sheet final : ngn::CameraSheet {
+    void shoot(const ngn::CameraSheetRequest &, std::function<void(ngn::CameraTake, const std::string &)> done) override { done({}, ""); }
+  };
+  auto given = sources();
+  given.photos = std::make_shared<Library>();
+  given.cameraHardware = std::make_shared<Hardware>();
+  given.cameraSheet = std::make_shared<Sheet>();
+  REQUIRE_FALSE(given.audioInput);
+  ngn::ModuleRegistry registry;
+  ngn::addDesktopModules(registry, given);
+  CHECK(registry.module("NgNativeImagePicker", nullptr));
+  CHECK(ngn::makeDesktopImagePicker(given));
 }
 
 TEST_CASE("addDesktopModules makes the notification centre and push tokens over one set of events, and gives them back") {
@@ -97,4 +277,14 @@ TEST_CASE("addDesktopModules makes the notification centre and push tokens over 
   CHECK(made.fonts);
   CHECK(made.cameraViews);
   CHECK(made.mapViews);
+}
+
+TEST_CASE("addDesktopModules registers NgNativeMaps where the backend draws map views") {
+  ngn::ModuleRegistry registry;
+  auto given = sources();
+  given.mapViews = true;
+  auto made = ngn::addDesktopModules(registry, given);
+  auto names = registry.names();
+  CHECK(std::find(names.begin(), names.end(), "NgNativeMaps") != names.end());
+  CHECK(std::find(made.absent.begin(), made.absent.end(), "NgNativeMaps") == made.absent.end());
 }

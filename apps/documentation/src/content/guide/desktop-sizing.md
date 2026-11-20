@@ -1,6 +1,6 @@
 ---
 title: Sizing for the Mac
-summary: The sizes a Mac app uses, and how to give a Mac its own with the macos variant.
+summary: The sizes a Mac app uses, the macos variant that gives a Mac its own, and sizing for GNOME.
 ---
 
 # Sizing for the Mac
@@ -20,8 +20,8 @@ smaller type and denser rows than a phone, so an app gives the Mac its own sizes
 
 ## Giving the Mac its own
 
-The `macos:` and `desktop:` Tailwind variants, and the `platform-macos` class on the root, match on
-a Mac only:
+The `macos:` Tailwind variant and the `platform-macos` class on the root match on a Mac only, and
+`desktop:` on a Mac and on Linux:
 
 ```html
 <text class="text-base macos:text-[13px]">Inbox</text> <view class="h-11 macos:h-7">...</view>
@@ -41,3 +41,23 @@ The native controls (`<native-button>`, `<switch>`, `<segmented-control>`, `<dat
 `regular` (the default) or `large`. Give them no width or height of your own.
 
 The sidebar's rows, the toolbar and the menu bar are drawn by AppKit at the system's sizes.
+
+## Sizing for GNOME
+
+On Linux, `rem` is 16 points and text with no size is 14 points too, but text follows the desktop's
+text scaling: GNOME's Large Text and its text scaling factor set `fontScale`, which text sizes are
+multiplied by, as Dynamic Type's are on iOS. Layout sizes in points do not scale with it.
+
+The least a target can be on Linux is 24 by 24 points, WCAG 2.2's minimum target size. WCAG allows
+exceptions, such as a smaller target with enough space around it.
+
+The `linux:` Tailwind variant and the `platform-linux` class match on Linux only, and `desktop:`
+matches on macOS and Linux:
+
+```html
+<text class="text-base linux:text-[15px]">Inbox</text>
+```
+
+The native controls are GTK's and libadwaita's, measured as GTK lays them out at the desktop's own
+sizes; `controlSize` does nothing there. Give them no width or height of your own. The header bar,
+its buttons and the window controls are libadwaita's, at its sizes.

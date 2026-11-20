@@ -52,6 +52,10 @@ inline facebook::react::Props::Shared textInputProps(folly::dynamic raw) {
   return parsedProps<DesktopTextInputComponentDescriptor>(std::move(raw));
 }
 
+inline facebook::react::Props::Shared nativeButtonProps(folly::dynamic raw) {
+  return parsedProps<NativeButtonComponentDescriptor>(std::move(raw));
+}
+
 inline facebook::react::Props::Shared datePickerProps(folly::dynamic raw) {
   return parsedProps<DatePickerComponentDescriptor>(std::move(raw));
 }

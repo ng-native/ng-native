@@ -11,7 +11,10 @@ namespace {
 const std::set<std::string> kRefusedPrograms{
     "sh",  "bash",  "zsh",  "dash", "ksh",  "mksh", "csh", "tcsh",      "fish", "nu",
     "env", "xargs", "sudo", "doas", "su",   "osascript", "cmd", "powershell", "pwsh",
-    "nice", "nohup"};
+    "nice", "nohup",
+    // Linux's: escalation (pkexec), a shell of its own (busybox), and leaving a Flatpak sandbox,
+    // the session or the mount namespace (flatpak-spawn --host, systemd-run, nsenter, chroot).
+    "pkexec", "busybox", "flatpak-spawn", "systemd-run", "nsenter", "chroot"};
 
 std::string lower(std::string s) {
   std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });

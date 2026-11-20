@@ -18,7 +18,7 @@ import { createFakeFabric } from '@ng-native/testing';
 import { build, committedProps } from './tailwind-cli.ts';
 
 const CLASSES =
-  '{hover:,press:,hovered:,focus-visible:,ios:,web:,native:,macos:,desktop:,dark:}bg-red-500 pb-safe h-hairline font-mono';
+  '{hover:,press:,hovered:,focus-visible:,ios:,web:,native:,macos:,linux:,desktop:,dark:}bg-red-500 pb-safe h-hairline font-mono';
 
 describe('the two Tailwind presets', () => {
   let native = '';
@@ -117,6 +117,17 @@ describe('the two Tailwind presets', () => {
     assert.equal(background('platform-web', 'native:bg-red-500'), undefined);
   });
 
+  it('matches linux:, desktop: and native: on Linux, and not macos:', () => {
+    const background = (root: string, classes: string) =>
+      propsOn(native, root, classes)['backgroundColor'];
+    for (const variant of ['linux', 'desktop', 'native']) {
+      assert.notEqual(background('platform-linux', `${variant}:bg-red-500`), undefined, variant);
+    }
+    assert.equal(background('platform-linux', 'macos:bg-red-500'), undefined);
+    assert.equal(background('platform-macos', 'linux:bg-red-500'), undefined);
+    assert.equal(background('platform-ios', 'linux:bg-red-500'), undefined);
+  });
+
   it('names a monospace font both platforms actually have', () => {
     /*
      * Tailwind's `--font-mono` is a stack beginning `ui-monospace`, and the native compiler takes
@@ -160,6 +171,7 @@ describe('the two Tailwind presets', () => {
     assert.equal(fontOn(native, 'platform-ios'), 'Menlo');
     assert.equal(fontOn(native, 'platform-android'), 'monospace');
     assert.equal(fontOn(native, 'platform-macos'), 'Menlo');
+    assert.equal(fontOn(native, 'platform-linux'), 'monospace');
     assert.equal(fontOn(native, ''), 'Courier New');
   });
 

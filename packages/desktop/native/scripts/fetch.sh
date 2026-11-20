@@ -9,7 +9,9 @@
 # Native's Android build would normally download (glog, fmt, double-conversion, boost headers,
 # fast_float), nlohmann_json for the dev-server client, doctest for the core tests, on macOS
 # Sparkle's framework, which `package --format dmg` embeds for whole-app updates, and elsewhere ICU,
-# which Hermes's Unicode layer needs there (build-icu.sh builds it).
+# which Hermes's Unicode layer needs there (build-icu.sh builds it), and curl, which the GTK host's
+# HTTP and WebSocket client is built on (cmake/curl.cmake). `--curl` fetches curl on macOS too,
+# for the GTK build there.
 # Each source records what it was fetched at, so a changed pin fetches it again. A download whose
 # checksum or commit does not match fails the script; nothing is ever used unverified.
 #
@@ -18,7 +20,11 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
-RN_PKG="$(cd "${1:?usage: fetch.sh <node_modules/react-native>}" && pwd)"
+RN_PKG="$(cd "${1:?usage: fetch.sh <node_modules/react-native> [--curl]}" && pwd)"
+with_curl=0
+if [ "$(uname -s)" != "Darwin" ] || [ "${2:-}" = "--curl" ]; then
+  with_curl=1
+fi
 RN_VERSION="$(node -p 'require(process.argv[1] + "/package.json").version' "$RN_PKG")"
 
 # --- Pins, per supported React Native version ----------------------------------------------------
@@ -55,6 +61,9 @@ ICU_URL=https://github.com/unicode-org/icu/releases/download/release-77-1/icu4c-
 ICU_SHA256=588e431f77327c39031ffbb8843c0e3bc122c211374485fa87dc5f3faff24061
 ICU_DATA_URL=https://github.com/unicode-org/icu/releases/download/release-77-1/icu4c-77_1-data.zip
 ICU_DATA_SHA256=1e08bfafa442260ccabf9a872d4eab12de813d42b90769df056bab032b37e1d3
+# curl's release tarball; its SHA-256 matches the digest GitHub lists for the release's asset.
+CURL_URL=https://curl.se/download/curl-8.23.0.tar.xz
+CURL_SHA256=8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5
 
 if [ "$(cat "$RN_PKG/sdks/.hermesv1version")" != "$HERMES_TAG" ]; then
   echo "fetch.sh: react-native names Hermes $(cat "$RN_PKG/sdks/.hermesv1version"), pinned $HERMES_TAG" >&2
@@ -172,6 +181,18 @@ if [ "$(uname -s)" != "Darwin" ] && ! fresh icu "$ICU_SHA256-$ICU_DATA_SHA256"; 
   mv "$SRC/.icu.tmp/icu" "$SRC/icu"
   rm -rf "$SRC/.icu.tmp"
   stamp icu "$ICU_SHA256-$ICU_DATA_SHA256"
+fi
+
+# curl without its test suite, which its build leaves out.
+if [ "$with_curl" = 1 ] && ! fresh curl "$CURL_SHA256"; then
+  echo "==> curl"
+  rm -rf "$SRC/curl" "$SRC/.curl.tmp"
+  mkdir -p "$SRC/.curl.tmp/x"
+  download "$CURL_URL" "$CURL_SHA256" "$SRC/.curl.tmp/curl.tar.xz"
+  tar -xJf "$SRC/.curl.tmp/curl.tar.xz" -C "$SRC/.curl.tmp/x" --exclude='*/tests'
+  mv "$SRC/.curl.tmp/x/"curl-* "$SRC/curl"
+  rm -rf "$SRC/.curl.tmp"
+  stamp curl "$CURL_SHA256"
 fi
 t1=$(date +%s)
 

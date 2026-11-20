@@ -38,13 +38,13 @@ function targets(root, name, lint = false, desktopOnly = false) {
   return {
     serve: expo('start'),
     build: expo('export', ['--output-dir', outputDir]),
-    // A desktop-only app runs with `ng-native-desktop`: the Expo CLI has no `run:macos`.
+    // A desktop-only app runs with `ng-native-desktop`: the Expo CLI has no `run:macos` or `run:linux`.
     ...(desktopOnly
       ? desktopTargets()
       : { 'run-ios': expo('run:ios'), 'run-android': expo('run:android') }),
     test: {
       builder: '@ng-native/schematics:vitest',
-      options: desktopOnly ? { project: native.DESKTOP_TEST_PROJECT } : {},
+      options: desktopOnly ? { project: native.DESKTOP_TEST_PROJECTS } : {},
     },
     typecheck: { builder: '@ng-native/schematics:typecheck', options: {} },
     // With `--linter=eslint`, angular-eslint's builder, which `ng lint` runs, with the project's
@@ -100,7 +100,8 @@ function commands(name, lint, desktopOnly) {
   const runs = desktopOnly
     ? [
         [`ng serve ${name}`, 'Metro, the dev server the app loads from'],
-        [`ng run ${name}:macos`, 'builds the desktop host and opens the app from Metro'],
+        [`ng run ${name}:macos`, 'on a Mac: builds the desktop host and opens the app from Metro'],
+        [`ng run ${name}:linux`, 'on Linux: the same, in GTK'],
       ]
     : [
         [
@@ -120,7 +121,7 @@ function commands(name, lint, desktopOnly) {
       ? [
           [
             `ng run ${name}:package`,
-            'the .app; "args": ["--format", "dmg"] (or "mas") on the target in angular.json to ship it',
+            'the .app, or the app folder on Linux; "args": ["--format", "dmg"] (or "mas", "deb", "rpm", "flatpak") on the target in angular.json to ship it',
           ],
         ]
       : []),
@@ -145,7 +146,7 @@ function writeFiles(tree, root, name, bundleIdentifier, lint, desktopOnly) {
   for (const file of desktopOnly ? native.DESKTOP_ONLY_FILES : []) {
     tree.create(path.join(root, file), native.sourceFile(file, true));
   }
-  const platforms = desktopOnly ? ['macos'] : undefined;
+  const platforms = desktopOnly ? native.DESKTOP_OSES : undefined;
   tree.create(path.join(root, 'app.json'), native.appJson(name, bundleIdentifier, platforms));
   tree.create(
     path.join(root, 'AGENTS.md'),
@@ -230,7 +231,7 @@ function application(options) {
 function created(root, name, lint, desktopOnly) {
   return (
     `Created ${root}. Run it with: ng serve ${name} (Metro), ` +
-    `ng run ${name}:${desktopOnly ? 'macos' : 'run-ios'}, ` +
+    `ng run ${name}:${desktopOnly ? 'macos or ng run ' + name + ':linux' : 'run-ios'}, ` +
     `ng test ${name}, ng run ${name}:typecheck, ` +
     (lint ? `ng lint ${name}, ` : '') +
     `ng build ${name}.`

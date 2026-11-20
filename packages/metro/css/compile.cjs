@@ -3175,12 +3175,13 @@ const KEPT_BY_LIGHTNINGCSS = new Set(['UnsupportedPseudoClass', 'UnsupportedPseu
 const NATIVE = ['ios', 'android'];
 
 /** The platforms a build can name, each of which a sheet is then built for alone. */
-const BUILDS = [...NATIVE, 'macos'];
+const BUILDS = [...NATIVE, 'macos', 'linux'];
 
 /**
  * What a platform leaves out of a filter list: iOS draws brightness() and opacity() alone, and the
- * macOS host every function but drop-shadow(). The macOS host also hands AppKit the whole transform
- * matrix, skews included, so a skew is refused on Android alone.
+ * macOS host every function but drop-shadow(). The GTK host on Linux draws every function. The
+ * desktop host hands the toolkit the whole transform matrix, skews included, so a skew is refused
+ * on Android alone.
  */
 function undrawnIn(list, platforms) {
   if (platforms.includes('ios')) {
@@ -3199,6 +3200,7 @@ const PLATFORM_CLASS = {
   'platform-ios': 'ios',
   'platform-android': 'android',
   'platform-macos': 'macos',
+  'platform-linux': 'linux',
 };
 
 /**

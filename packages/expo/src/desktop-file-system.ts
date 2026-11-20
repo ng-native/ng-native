@@ -9,7 +9,7 @@
  * `bytes()` answer a promise.
  */
 import { base64Of, bytesOf } from './base64.ts';
-import { desktopHost } from './desktop-host.ts';
+import { desktopHost, rebuildHost } from './desktop-host.ts';
 import type {
   FileChange,
   FileEntry,
@@ -148,7 +148,7 @@ export async function desktopFolder(
       if (!files) {
         throw new Error(
           '[angular-native] this build of the desktop host has no NgNativeFileSystem to create a ' +
-            'file with: rebuild it with "npm run macos".',
+            `file with: ${rebuildHost()}.`,
         );
       }
       return new HostFile(files, files.createFileSync(uri, name).uri);

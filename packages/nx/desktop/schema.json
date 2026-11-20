@@ -1,15 +1,15 @@
 {
   "$schema": "https://json-schema.org/schema",
   "$id": "NgNativeNxDesktop",
-  "title": "macOS in an Angular Native app",
-  "description": "Adds macOS to an Angular Native app: @ng-native/desktop, macos in expo.platforms with Expo's out-of-tree platforms flag, the config plugin, and macos and package targets.",
+  "title": "macOS and Linux in an Angular Native app",
+  "description": "Adds macOS and Linux to an Angular Native app: @ng-native/desktop, macos and linux in expo.platforms with Expo's out-of-tree platforms flag, the config plugin, and macos, linux and package targets.",
   "type": "object",
   "properties": {
     "project": {
       "type": "string",
       "description": "The Angular Native app.",
       "$default": { "$source": "argv", "index": 0 },
-      "x-prompt": "Which app should run on macOS?",
+      "x-prompt": "Which app should run on macOS and Linux?",
       "x-dropdown": "projects"
     },
     "skipInstall": {

@@ -156,16 +156,17 @@ import { page } from '../screen-styles.ts';
 
       <x-section
         title="Effects"
-        note="Drawn over the whole view, its children included. macOS only here."
+        note="Drawn over the whole view, its children included. Not on iOS here."
       >
         <x-example
           title="filter"
-          note="Each function in the order listed."
-          code="grayscale(1) | sepia(1) | hue-rotate(90deg) | blur(4px)"
+          note="Each function in the order listed. drop-shadow() on Linux and Android."
+          code="grayscale(1) | sepia(1) | hue-rotate(90deg) | blur(4px) | drop-shadow(...)"
         >
           <view [style]="row">
             <view class="fx fx-gray"></view><view class="fx fx-sepia"></view
-            ><view class="fx fx-hue"></view><view class="fx fx-blur"></view>
+            ><view class="fx fx-hue"></view><view class="fx fx-blur"></view
+            ><view class="fx fx-shadow"></view>
           </view>
         </x-example>
         <x-example
@@ -209,23 +210,36 @@ import { page } from '../screen-styles.ts';
       border-bottom-color: var(--line);
     }
 
+    /* The filter rules are scoped: iOS draws only brightness() and opacity(), and macOS no drop-shadow(). */
     .fx {
       width: 56px;
       height: 56px;
       border-radius: 8px;
       background-color: rgb(59, 110, 245);
     }
-    .platform-macos .fx-gray {
+    .platform-macos .fx-gray,
+    .platform-linux .fx-gray,
+    .platform-android .fx-gray {
       filter: grayscale(1);
     }
-    .platform-macos .fx-sepia {
+    .platform-macos .fx-sepia,
+    .platform-linux .fx-sepia,
+    .platform-android .fx-sepia {
       filter: sepia(1);
     }
-    .platform-macos .fx-hue {
+    .platform-macos .fx-hue,
+    .platform-linux .fx-hue,
+    .platform-android .fx-hue {
       filter: hue-rotate(90deg);
     }
-    .platform-macos .fx-blur {
+    .platform-macos .fx-blur,
+    .platform-linux .fx-blur,
+    .platform-android .fx-blur {
       filter: blur(4px);
+    }
+    .platform-linux .fx-shadow,
+    .platform-android .fx-shadow {
+      filter: drop-shadow(6px 6px 3px rgb(200, 60, 160));
     }
 
     .blend-host {
@@ -250,11 +264,13 @@ import { page } from '../screen-styles.ts';
       border-radius: 24px;
       background-color: rgb(200, 60, 160);
     }
-    .platform-macos .blend-multiply {
+    .platform-macos .blend-multiply,
+    .platform-linux .blend-multiply {
       left: 25%;
       mix-blend-mode: multiply;
     }
-    .platform-macos .blend-screen {
+    .platform-macos .blend-screen,
+    .platform-linux .blend-screen {
       left: 62%;
       mix-blend-mode: screen;
     }

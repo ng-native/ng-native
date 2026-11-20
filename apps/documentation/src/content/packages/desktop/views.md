@@ -44,6 +44,14 @@ and `repeat`, which tiles the picture from the box's top left corner at its pixe
 its source's `scale`, as React Native iOS does. With a `tintColor` it shows the colour in the shape
 of its picture, keeping the picture's alpha, as React Native iOS does.
 
+On Linux the GTK host paints the same box with GTK's render nodes: gradients and their tiles, each
+side's width and colour, and a dashed or dotted border stroked as on macOS. It draws every `filter`
+function, `drop-shadow()` included, in order over the view and its children; every
+`mix-blend-mode` but `plus-lighter`, which draws normally; and an `<image>`'s `tintColor` and
+`resizeMode: 'repeat'` as the macOS host does. A child's blend mode blends it with its parent's own
+painting and the siblings drawn before it, as if every view set `isolation: isolate`: over a parent
+with no background it shows as it is.
+
 ## Modals
 
 A `<modal>` with `pageSheet`, `formSheet` or no presentation style is an NSWindow sheet on its
@@ -84,6 +92,23 @@ size's height in the middle of its element, with `@ng-native/expo`'s iOS contrac
 than what has been typed since is skipped, Return sends `(search)`, the clear button and Escape
 empty the field and send `(cancel)` (keeping the keyboard), and `focus()` and `blur()` are its view
 commands. Its type is its CSS's, and `tintColor` colours the cursor.
+
+On Linux the controls are GTK's and libadwaita's, sized for Yoga as GTK lays them out:
+`<native-button>` is a `GtkButton` (a `default` one is the window's suggested action, a
+`destructive` one a destructive action, a `plain` one flat, and one with no `kind` a plain push
+button), `<switch>` a `GtkSwitch`, `<activity-indicator>` an `AdwSpinner` on libadwaita 1.6 and
+later and a `GtkSpinner` before it (or whenever it stays shown while stopped), `<segmented-control>`
+an `AdwToggleGroup` on libadwaita 1.7 and later and a linked row of toggle buttons before it, and
+`<search-field>` a `GtkSearchEntry`, which sends each change as it is typed. `<date-time-picker>`
+is a button showing the date that opens a `GtkCalendar`, keeping the time of day and the picker's
+bounds. A `time` picker opens an hour and a minute in spin buttons, as GNOME Clocks and Calendar
+pick a time, on the picker's day and within its bounds. The hour runs 1 to 12 beside an AM and PM
+button on a 12-hour clock: GNOME's own setting (`clock-format`, read through the settings portal or
+GSettings and followed as it changes), or the locale's time format where there is none. The minute
+steps by `minuteInterval` (1 to 30, dividing 60, else 1), and a time between two steps shows the
+step before it. A `datetime` picker opens both, and a `countdown` one picks hours and minutes on a
+24-hour clock, with no AM and PM. `controlSize`, `sfSymbol` and the search field's font props do
+nothing there.
 
 ## Text inputs
 
@@ -140,7 +165,8 @@ When the app has them installed, the host compiles in the Fabric components of
   the field is being typed in keeps it typing.
 - The window's content runs under the title bar and toolbar, and each safe-area view gets the part
   of the window's safe area it overlaps: `RNCSafeAreaProvider`'s `insetsChange` (with the window
-  controls' width as `titlebarLeading`), `RNCSafeAreaView` and `RNSSafeAreaView`.
+  controls' width as `titlebarLeading`, and `titlebarTrailing` for controls on the trailing side,
+  which a Mac window has none of), `RNCSafeAreaView` and `RNSSafeAreaView`.
 - A screen whose `stackPresentation` is not `push` is presented over its stack, as a `<modal>`
   is: `modal`, `formSheet` and `pageSheet` as a sheet on the window, `fullScreenModal`,
   `transparentModal` and the contained ones as a cover in the window, and one with an `anchor`
@@ -196,7 +222,9 @@ When the app has them installed, the host compiles in the Fabric components of
   read when the view is made, and `clearHistory` and `clearFormData` do nothing, as WebKit has no
   way to.
 - Worklets run on the UI thread, and Reanimated's shared values, animations and worklet styles move
-  views at the display's rate, with no frames requested while nothing animates.
+  views at the display's rate, with no frames requested while nothing animates. On Linux the
+  frames come from the frame clock of a shown window, the active one first, and from a 60 Hz timer
+  while no window is shown.
 
 ## Expo's views
 

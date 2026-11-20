@@ -140,7 +140,7 @@ describe('the OS support table', () => {
 });
 
 /** A device on `os` whose host has every module a service asks for, or none. */
-function on(os: 'ios' | 'macos' | 'android' | 'web', modules: boolean): () => void {
+function on(os: 'ios' | 'macos' | 'linux' | 'android' | 'web', modules: boolean): () => void {
   const host = globalThis as Record<string, unknown>;
   const fabric = Object.getOwnPropertyDescriptor(host, 'nativeFabricUIManager');
   // React Native is reached for only where Fabric is there, as on a device.
@@ -164,8 +164,9 @@ function on(os: 'ios' | 'macos' | 'android' | 'web', modules: boolean): () => vo
 /** Modules the JavaScript side has a contract for and the desktop host does not register yet. */
 const HOST_OWES = new Set(['NgNativeUndo']);
 
-const PLATFORM: Readonly<Record<SupportOs, 'ios' | 'macos' | 'android' | 'web'>> = {
+const PLATFORM: Readonly<Record<SupportOs, 'ios' | 'macos' | 'linux' | 'android' | 'web'>> = {
   macos: 'macos',
+  linux: 'linux',
   ipados: 'ios',
   iphone: 'ios',
   android: 'android',
@@ -200,10 +201,10 @@ describe('each service the table lists', () => {
   }
 
   it('matches the desktop host: a service is on macOS exactly where the host has its module', () => {
-    // The desktop modules are registered for every backend by the core (desktop-modules.cpp).
+    // The desktop modules the core registers (desktop-modules.cpp): each one AppKit gives a source.
     const host = read('packages/desktop/native/core/src/modules/desktop-modules.cpp');
     const registered = new Set(
-      [...host.matchAll(/addModule\(registry, "(\w+)"/g)].map((m) => m[1]),
+      [...host.matchAll(/(?:addModule\(registry,|addSourced\([^,]+,) "(\w+)"/g)].map((m) => m[1]),
     );
     assert.ok(registered.size > 5, `read ${registered.size} modules from the host`);
     const disagree: string[] = [];
@@ -211,6 +212,43 @@ describe('each service the table lists', () => {
       for (const [name, module] of Object.entries(row.services ?? {})) {
         const onMac = row.on.macos !== 'absent';
         if (onMac !== (registered.has(module) || HOST_OWES.has(module))) disagree.push(name);
+      }
+    }
+    assert.deepEqual(disagree, []);
+  });
+
+  it('matches the GTK host: a service is on Linux exactly where the host gives its module a source', () => {
+    // The core registers a module behind addSourced only when every source it names is given;
+    // the GTK host's main.cpp gives the sources in its addDesktopModules call.
+    const core = read('packages/desktop/native/core/src/modules/desktop-modules.cpp');
+    const always = new Set([...core.matchAll(/addModule\(registry, "(\w+)"/g)].map((m) => m[1]));
+    const sourced = [...core.matchAll(/addSourced\(([^,]+), "(\w+)"/g)].map((m) => ({
+      module: m[2]!,
+      sources: [...m[1]!.matchAll(/(?:\bs\.)?(\w+)/g)].map((s) => s[1]!),
+    }));
+    assert.ok(sourced.length > 20, `read ${sourced.length} sourced modules from the core`);
+
+    const gtk = read('packages/desktop/native/gtk/main.cpp');
+    const call = gtk.slice(gtk.indexOf('ngn::addDesktopModules('));
+    const indent = /\n(\s+)\.\w+ =/.exec(call)![1]!;
+    const given = new Set(
+      [...call.matchAll(new RegExp(`\\n${indent}\\.(\\w+) =`, 'g'))].map((m) => m[1]),
+    );
+    assert.ok(given.has('updates') && given.has('crypto'), `read ${[...given]} from the GTK host`);
+
+    // Registered on every desktop host, yet there only where a source answers for it: a store
+    // review is available over a review prompt.
+    const answered: Readonly<Record<string, boolean>> = {
+      NgNativeStoreReview: given.has('reviewPrompt'),
+    };
+    const onGtk = (module: string) =>
+      answered[module] ??
+      (always.has(module) ||
+        sourced.some((m) => m.module === module && m.sources.every((s) => given.has(s))));
+    const disagree: string[] = [];
+    for (const row of OS_SUPPORT) {
+      for (const [name, module] of Object.entries(row.services ?? {})) {
+        if ((row.on.linux !== 'absent') !== onGtk(module)) disagree.push(`${name} (${module})`);
       }
     }
     assert.deepEqual(disagree, []);

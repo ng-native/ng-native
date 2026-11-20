@@ -5,6 +5,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <chrono>
 
 using namespace facebook::react;
 using folly::dynamic;
@@ -512,4 +513,119 @@ TEST_CASE("a percentage radius follows the view's size") {
   REQUIRE(calls.size() == 1);
   // 50% of the new width.
   CHECK(calls[0].rfind("fill M100,0", 0) == 0);
+}
+
+TEST_CASE("describeBox gives each corner's radius and each side's width and colour, the logical sides by the direction") {
+  dynamic raw = dynamic::object("backgroundColor", kGreen)("borderTopLeftRadius", 4)("borderBottomRightRadius", 8)(
+      "borderTopWidth", 1)("borderStartWidth", 3)("borderStartColor", kRed)("borderTopColor", kBlue);
+  Box ltr(raw, 100, 50);
+  auto box = ngn::describeBox(ltr.view(), ltr.layout);
+  CHECK(box.bounds.width == 100);
+  CHECK(box.bounds.height == 50);
+  CHECK(box.background == 0xff00ff00u);
+  CHECK(box.radii.topLeft.x == 4);
+  CHECK(box.radii.topRight.x == 0);
+  CHECK(box.radii.bottomRight.y == 8);
+  CHECK(box.borderWidths.top == 1);
+  CHECK(box.borderWidths.left == 3);
+  CHECK(box.borderWidths.right == 0);
+  CHECK(box.borderColors.left == 0xffff0000u);
+  CHECK(box.borderColors.top == 0xff0000ffu);
+  CHECK_FALSE(box.clips);
+  CHECK(box.borderStyle == BorderStyle::Solid);
+
+  Box rtl(raw, 100, 50, LayoutDirection::RightToLeft);
+  auto mirrored = ngn::describeBox(rtl.view(), rtl.layout);
+  CHECK(mirrored.borderWidths.right == 3);
+  CHECK(mirrored.borderWidths.left == 0);
+  CHECK(mirrored.borderColors.right == 0xffff0000u);
+}
+
+TEST_CASE("describeBox keeps the shadows in CSS's order, a uniform border style, and whether the view clips") {
+  auto shadows = dynamic::array(
+      dynamic::object("offsetX", 1)("offsetY", 2)("blurRadius", 3)("spreadDistance", 4)("color", kRed),
+      dynamic::object("offsetX", 0)("offsetY", 0)("blurRadius", 6)("color", kBlue)("inset", true));
+  Box b(dynamic::object("boxShadow", shadows)("borderWidth", 2)("borderStyle", "dashed")("overflow", "hidden"), 100, 50);
+  auto box = ngn::describeBox(b.view(), b.layout);
+  REQUIRE(box.shadows.size() == 2);
+  CHECK(box.shadows[0].offsetX == 1);
+  CHECK(box.shadows[0].spreadDistance == 4);
+  CHECK_FALSE(box.shadows[0].inset);
+  CHECK(box.shadows[1].inset);
+  CHECK(box.borderStyle == BorderStyle::Dashed);
+  CHECK(box.clips);
+  CHECK_FALSE(box.background);
+}
+
+TEST_CASE("describeBox gives each background image as a gradient and its tiles, the last listed first") {
+  auto image = [](int64_t color) {
+    auto stops = dynamic::array(dynamic(dynamic::object("color", color)("position", nullptr)), dynamic(dynamic::object("color", kBlue)("position", nullptr)));
+    return dynamic::object("type", "linear-gradient")("direction", dynamic::object("type", "angle")("value", 90))("colorStops", stops);
+  };
+  Box b(
+      dynamic::object("borderWidth", 2)("experimental_backgroundImage", dynamic::array(image(kRed), image(kGreen)))(
+          "experimental_backgroundSize", dynamic::array(dynamic(dynamic::object("x", 20)("y", 20)), dynamic(dynamic::object("x", "100%")("y", "100%")))),
+      100,
+      44);
+  auto box = ngn::describeBox(b.view(), b.layout);
+  REQUIRE(box.backgroundImages.size() == 2);
+  // The second image, listed last, at the bottom: the padding box's size, placed at its corner
+  // and repeated out over the border.
+  const auto &bottom = box.backgroundImages[0];
+  REQUIRE(bottom.tiles.size() == 3 * 3);
+  CHECK(bottom.tiles[4] == SvgRect{2, 2, 96, 40});
+  CHECK(bottom.gradient.stops.front().second == 0xff00ff00u);
+  // To the right across a tile: from its left edge to its right.
+  CHECK(bottom.gradient.x1 == doctest::Approx(0));
+  CHECK(bottom.gradient.x2 == doctest::Approx(96));
+  // The first, on top, in 20 by 20 tiles from the padding box's corner over the border box.
+  const auto &top = box.backgroundImages[1];
+  CHECK(top.gradient.stops.front().second == 0xffff0000u);
+  REQUIRE(top.tiles.size() == 6 * 4);
+  CHECK(top.tiles[0] == SvgRect{-18, -18, 20, 20});
+  CHECK(top.gradient.x2 == doctest::Approx(20));
+}
+
+TEST_CASE("describeBox leaves out a background image with nothing to draw") {
+  dynamic empty = dynamic::object("type", "linear-gradient")("direction", dynamic::object("type", "angle")("value", 90))("colorStops", dynamic::array());
+  Box b(dynamic::object("experimental_backgroundImage", dynamic::array(empty)), 100, 50);
+  CHECK(ngn::describeBox(b.view(), b.layout).backgroundImages.empty());
+}
+
+TEST_CASE("drawBorder draws a described box's border as drawViewBox does, dashed and dotted ones included") {
+  for (std::string style : {"dashed", "dotted"}) {
+    CAPTURE(style);
+    Box b(dynamic::object("borderWidth", 2)("borderColor", kRed)("borderStyle", style)("borderRadius", 6), 100, 50);
+    Recorder canvas;
+    ngn::drawBorder(ngn::describeBox(b.view(), b.layout), canvas);
+    auto drawn = fills(canvas.calls);
+    REQUIRE(drawn.size() == 1);
+    CHECK(drawn == fills(b.drawn()));
+    CHECK(drawn[0].find(style == "dashed" ? " dash 6 6 " : " dash 2 2 ") != std::string::npos);
+  }
+  Box solid(dynamic::object("borderWidth", 2)("borderColor", kRed)("borderTopLeftRadius", 6), 100, 50);
+  Recorder canvas;
+  ngn::drawBorder(ngn::describeBox(solid.view(), solid.layout), canvas);
+  REQUIRE_FALSE(fills(canvas.calls).empty());
+  CHECK(fills(canvas.calls) == fills(solid.drawn()));
+}
+
+TEST_CASE("viewBox does not build the background's tiles, which a draw builds once for itself") {
+  auto stops = dynamic::array(dynamic(dynamic::object("color", kRed)("position", nullptr)), dynamic(dynamic::object("color", kBlue)("position", nullptr)));
+  dynamic image = dynamic::object("type", "linear-gradient")("direction", dynamic::object("type", "angle")("value", 90))("colorStops", stops);
+  // 65536 one-point tiles, the most a layer keeps.
+  Box b(dynamic::object("experimental_backgroundImage", dynamic::array(image))("experimental_backgroundSize", dynamic::array(dynamic(dynamic::object("x", 1)("y", 1)))), 256, 256);
+  auto fastest = [&](auto &&run) {
+    std::chrono::nanoseconds best = std::chrono::nanoseconds::max();
+    for (int i = 0; i < 5; i++) {
+      auto start = std::chrono::steady_clock::now();
+      run();
+      best = std::min(best, std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start));
+    }
+    return best;
+  };
+  auto described = fastest([&] { ngn::describeBox(b.view(), b.layout); });
+  auto shaped = fastest([&] { b.box(); });
+  // Building the tiles is most of describeBox; shaping a box for Core Animation needs none of it.
+  CHECK(shaped * 4 < described);
 }

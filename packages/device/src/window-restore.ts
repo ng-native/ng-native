@@ -53,7 +53,7 @@ const SETTINGS_KEY = 'ngNative.windows';
  */
 function settingsStore(): WindowRestoreStore | null {
   const os = injectOs();
-  if (os !== 'macos' && os !== 'ios') return null;
+  if (os !== 'macos' && os !== 'linux' && os !== 'ios') return null;
   const settings = reactNative()?.Settings;
   if (!settings) return null;
   return {

@@ -1,0 +1,7 @@
+---
+__default__: patch
+---
+
+A Linux package made by `ng-native-desktop package --os linux` now starts its app: the GTK host reads the `metadata.json` beside it, as a macOS app reads its `Info.plist`, for the bundle, the app's name and id and its declared capabilities, and ignores its arguments and environment as a packaged macOS app does. Before, a packaged Linux app printed the host's usage and exited. A `.deb` now also depends on the libraries the host links beyond GTK (OpenSSL 3, nghttp2, zlib, SQLite, libatomic and the C++ runtime), without which it did not start on a system missing one, and the Linux host no longer crashes when an app asks `expo-localization` for its locales: it answers English in the system's region on the Gregorian calendar until it reads the desktop's own.
+
+On Linux, each view's accessible role follows ARIA's: the landmarks (`main`, `navigation`, `banner`, `region`, `form`), `table`, `listbox`, `option`, `note`, `togglebutton` and the other ARIA roles GTK has take their own GTK role, where before they took the nearest of AppKit's (a landmark was a group, a table a grid, a toggle button a checkbox). `complementary` and `contentinfo` are a region, `figure` a group and `term` static text, since GTK has no role for them. A view whose role changes after it is shown, a text that empties among them, now takes the new role, keeping its children and the focus. Static text is named by what it says, which is what Orca speaks.

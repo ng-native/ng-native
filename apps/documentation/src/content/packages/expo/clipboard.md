@@ -56,6 +56,9 @@ export class ShareLink {
   for permission.
 - **`write(text)`** - puts text on the clipboard. Resolves once native has it.
 
+On Linux the GTK host's clipboard is the desktop's, through GTK. GTK reads another app's text
+asynchronously, so `changes` moves once that text has been read, and `read()` answers it.
+
 The change listener lives as long as the app does and is removed when the app is destroyed.
 `Clipboard` is a root service, which makes it one per app rather than one per process: an app that
 is mounted and unmounted - by a test's `unmount()`, a reload, or a host that embeds it - gets a

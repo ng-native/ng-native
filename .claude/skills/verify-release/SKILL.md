@@ -1,6 +1,6 @@
 ---
 name: verify-release
-description: Check a release of the packages the way a new user meets it - wait for it on npm, then follow every setup route's documentation literally in fresh projects (the Expo template, the desktop template, the manual setup guide, the Angular CLI, Nx in both presets, and macOS setup in each), run the generators and schematics, upgrade projects made on the previous release, run the results on an iOS simulator and an Android emulator, and file what breaks or what the docs get wrong. Also runs before a release against a local registry. Use when a release has just been published, when asked to check a release or the setup guides, or before cutting one.
+description: Check a release of the packages the way a new user meets it - wait for it on npm, then follow every setup route's documentation literally in fresh projects (the Expo template, the desktop template, the manual setup guide, the Angular CLI, Nx in both presets, and macOS and, in a release that ships it, Linux setup in each), run the generators and schematics, upgrade projects made on the previous release, run the results on an iOS simulator and an Android emulator, and file what breaks or what the docs get wrong. Also runs before a release against a local registry. Use when a release has just been published, when asked to check a release or the setup guides, or before cutting one.
 ---
 
 # Verify a release
@@ -100,7 +100,7 @@ a page on the simulator.
 
 ### The desktop routes
 
-On a Mac, the macOS setup from the published packages, each route following its page literally.
+On a Mac, the macOS setup from the published packages, each route following its page literally. `npm run linux` and `nx run <app>:linux` are for the Linux routes below.
 Each runs the common checks with `expo export --platform macos` in place of `--platform all` (and
 `--platform all` too where the app also has iOS and Android), then:
 
@@ -138,6 +138,36 @@ the package until the download works. Neither that source-built host nor the new
 cache, which the bench picks without `--host`, is a valid input. Every metric passes or carries a
 waiver in `scripts/bench-macos-budget.json`. A breach without one blocks the release; a metric it
 could not measure fails it as a breach does.
+
+### The Linux routes
+
+For a release that ships Linux, the desktop routes above run again for `linux`, on the same fresh
+apps: their `app.json` lists both OSes, and the Nx and Angular CLI generators add a `linux` target
+beside `macos`. The Linux half has two parts, one from the Mac and one on Linux.
+
+- **Packaging, from the Mac.** `npm run package -- --os linux --format <format>` writes
+  `dist/linux/` (`nx run <app>:package` takes the same flags, and the Angular CLI's `package` target
+  takes them as `args`). `app` (a folder and a `.tar.gz`) and `deb` need no tools. `rpm` runs in an
+  AlmaLinux 9 container and `flatpak` in a Fedora 44 one, through Docker or Podman, so both need one
+  running: without it `package` stops first and names the missing tool. Run all four formats on the
+  template app, and `app` and `deb` on each other route. Each package carries the `.desktop` file,
+  the hicolor icons and the `.metainfo.xml` (`dpkg-deb -c`, `rpm -qlp`).
+- **Running, on Linux.** The dev loop (`npm run linux` and `npm start` on the same side port), then
+  `npm run package -- --format app`, then launch the result and screenshot its first window: in the
+  Docker image under `packages/desktop/native/docker`, and in the UTM Ubuntu arm64 VM, where the
+  `.deb` installs with `apt install ./<file>` and the app starts from its menu entry. The Metro log
+  shows no error. It counts as the one native build while it runs.
+
+Signing keys (`NGN_GPG_KEY`) are checked only when the release changed packaging.
+
+When the release changes `packages/desktop` or the Linux host, also run `pnpm bench:linux --host
+<build>/gtk/ngn-linux` against a release GTK host built in the `ngn-el9` image (on a Mac it runs in
+that image itself), judged against `scripts/bench-linux-budget.json` the same way, and the Linux
+manual pass in [docs/linux-manual-pass.md](../../../docs/linux-manual-pass.md): the whole checklist,
+in the GNOME and the KDE Plasma session of the UTM VM. Report the VM's own numbers from
+`bench:linux` beside the gated ones, ungated. Besides the launch, idle and memory numbers it judges
+a second launch on a workload (a 2,000-view mount, scrolling, a divider drag and a second window),
+which it exports itself from `examples/notes/bench/linux-bench.ts`.
 
 Upgrades of a desktop app (step 4) start from the second release that has `@ng-native/desktop`.
 

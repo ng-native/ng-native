@@ -1,4 +1,5 @@
 #include "ngn/text-input.h"
+#include "ngn/desktop-view-props.h"
 
 #include <react/renderer/components/iostextinput/conversions.h>
 #include <react/renderer/components/iostextinput/propsConversions.h>
@@ -20,7 +21,10 @@ DesktopTextInputProps::DesktopTextInputProps(
     : BaseTextInputProps(context, sourceProps, rawProps),
       traits(convertRawProp(context, rawProps, sourceProps.traits, {})),
       selection(convertRawProp(context, rawProps, "selection", sourceProps.selection, std::optional<Selection>())),
-      smartQuotes(convertRawProp(context, rawProps, "smartQuotes", sourceProps.smartQuotes, std::optional<bool>())) {}
+      smartQuotes(convertRawProp(context, rawProps, "smartQuotes", sourceProps.smartQuotes, std::optional<bool>())),
+      accessibilityDescribedBy(convertRawProp(
+          context, rawProps, "accessibilityDescribedBy", sourceProps.accessibilityDescribedBy, {})),
+      aria(parseAriaFields(context, sourceProps.aria, rawProps)) {}
 
 namespace {
 
@@ -134,6 +138,19 @@ std::u16string fitReplacement(
 
 bool controlledTextIsCurrent(int mostRecentEventCount, int fieldEventCount, bool composing) {
   return mostRecentEventCount >= fieldEventCount && !composing;
+}
+
+std::optional<std::pair<int, int>> newSelection(const DesktopTextInputProps *before, const DesktopTextInputProps &now) {
+  if (!now.selection) {
+    return std::nullopt;
+  }
+  if (before && before->selection && before->selection->start == now.selection->start &&
+      before->selection->end == now.selection->end) {
+    return std::nullopt;
+  }
+  int start = std::max(0, std::min(now.selection->start, now.selection->end));
+  int end = std::max(0, std::max(now.selection->start, now.selection->end));
+  return std::make_pair(start, end);
 }
 
 } // namespace ngn

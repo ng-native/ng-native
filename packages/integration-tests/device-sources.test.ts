@@ -127,15 +127,23 @@ describe('the accessibility source', () => {
         return { remove: () => removed.push(event) };
       },
     },
+    Dimensions: {
+      addEventListener: (event: string, handler: () => void) => {
+        dimensionsHandler = handler;
+        return { remove: () => removed.push(`dimensions ${event}`) };
+      },
+    },
     PixelRatio: { getFontScale: () => fontScale },
   });
   let announced: string[] = [];
   let removed: string[] = [];
   let handlers = new Map<string, (value: boolean) => void>();
   let appStateHandler: (state: string) => void = () => {};
+  let dimensionsHandler: () => void = () => {};
   let fontScale = 1.5;
 
   afterEach(() => {
+    dimensionsHandler = () => {};
     announced = [];
     removed = [];
     handlers = new Map();
@@ -206,6 +214,28 @@ describe('the accessibility source', () => {
     fontScale = 3;
     appStateHandler('background');
     assert.deepEqual(seen, [{ fontScale: 2 }]);
+  });
+
+  it('re-reads fontScale on a Dimensions change on Linux, where the app never reports active', () => {
+    const seen: unknown[] = [];
+    const stop = withNative({ ...native(), Platform: { OS: 'linux' } }, () =>
+      accessibilitySource().subscribe((v) => seen.push(v)),
+    );
+
+    fontScale = 2;
+    dimensionsHandler();
+    assert.deepEqual(seen, [{ fontScale: 2 }]);
+
+    stop();
+    assert.ok(removed.includes('dimensions change'), 'the Dimensions listener is removed');
+  });
+
+  it('does not listen to Dimensions off Linux', () => {
+    const stop = withNative({ ...native(), Platform: { OS: 'android' } }, () =>
+      accessibilitySource().subscribe(() => {}),
+    );
+    stop();
+    assert.ok(!removed.includes('dimensions change'));
   });
 
   it('passes an announcement through', () => {
@@ -1088,25 +1118,29 @@ describe('the sharing source', () => {
     assert.equal(result.action, 'sharedAction');
   });
 
-  it("is the desktop host's NgNativeSharing on macOS, and absent without it", async () => {
-    const asked: unknown[] = [];
-    const host = {
-      share: async (request: unknown) => (asked.push(request), { action: 'dismissedAction' }),
-    };
-    const mac = (modules: Record<string, unknown>) => ({
-      Platform: { OS: 'macos' },
-      TurboModuleRegistry: { get: (name: string) => modules[name] ?? null },
-      Share: {
-        share: () => Promise.reject(new Error('Unsupported platform')),
-      },
-    });
-    assert.equal(
-      withNative(mac({}) as never, () => sharingSource()),
-      null,
-    );
-    const source = withNative(mac({ NgNativeSharing: host }) as never, () => sharingSource());
-    assert.equal((await source!.share({ url: 'https://example.com' })).action, 'dismissedAction');
-    assert.deepEqual(asked, [{ url: 'https://example.com' }]);
+  it("is the desktop host's NgNativeSharing on macOS and Linux, and absent without it", async () => {
+    for (const os of ['macos', 'linux']) {
+      const asked: unknown[] = [];
+      const host = {
+        share: async (request: unknown) => (asked.push(request), { action: 'dismissedAction' }),
+      };
+      const desktop = (modules: Record<string, unknown>) => ({
+        Platform: { OS: os },
+        TurboModuleRegistry: { get: (name: string) => modules[name] ?? null },
+        Share: {
+          share: () => Promise.reject(new Error('Unsupported platform')),
+        },
+      });
+      assert.equal(
+        withNative(desktop({}) as never, () => sharingSource()),
+        null,
+        os,
+      );
+      const source = withNative(desktop({ NgNativeSharing: host }) as never, () => sharingSource());
+      const result = await source!.share({ url: 'https://example.com' });
+      assert.equal(result.action, 'dismissedAction', os);
+      assert.deepEqual(asked, [{ url: 'https://example.com' }], os);
+    }
   });
 
   it('passes a url straight through on iOS, which reads it itself', async () => {
@@ -1224,6 +1258,23 @@ describe('the OS and its version', () => {
     assert.equal(
       withNative(native, () => fromRoot(OS_VERSION)),
       35,
+    );
+  });
+
+  it("is Linux and its distribution's major version on Linux, and no version on a rolling release", () => {
+    // The GTK host's Platform.Version is os-release's VERSION_ID, and empty where it has none.
+    const native = { Platform: { OS: 'linux', Version: '24.04' } };
+    assert.equal(
+      withNative(native, () => fromRoot(OS)),
+      'linux',
+    );
+    assert.equal(
+      withNative(native, () => fromRoot(OS_VERSION)),
+      24,
+    );
+    assert.equal(
+      withNative({ Platform: { OS: 'linux', Version: '' } }, () => fromRoot(OS_VERSION)),
+      null,
     );
   });
 

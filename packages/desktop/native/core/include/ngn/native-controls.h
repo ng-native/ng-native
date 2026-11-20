@@ -16,10 +16,12 @@
 #include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/core/ConcreteComponentDescriptor.h>
 #include <react/renderer/core/LayoutConstraints.h>
+#include <react/renderer/core/LayoutContext.h>
 #include <react/renderer/graphics/Color.h>
 #include <react/utils/ContextContainer.h>
 
 #include <optional>
+#include <string_view>
 #include <string>
 #include <vector>
 
@@ -44,8 +46,8 @@ class NativeControlProps final : public facebook::react::ViewProps, public HasDe
 
   // Button.
   std::string title;
-  // `default`, `cancel`, `destructive` or `plain`.
-  std::string kind{"default"};
+  // `default`, `cancel`, `destructive` or `plain`, or empty when the element sets none.
+  std::string kind;
   std::string sfSymbol;
 
   // Switch.
@@ -69,6 +71,8 @@ class NativeControlProps final : public facebook::react::ViewProps, public HasDe
   std::optional<double> maximumDate;
   // `date`, `time`, `datetime` or `countdown`.
   std::string mode{"date"};
+  // The minutes a time is picked in steps of (iOS's minuteInterval): 1 to 30, dividing 60.
+  int minuteInterval{1};
   // `default`, `spinner`, `compact` or `inline`.
   std::string display{"default"};
 
@@ -100,11 +104,13 @@ struct NativeControlState {
   int measured{0};
 };
 
-// The size layout gives a control: the one ControlSizes holds for its inputs (control-sizes.cpp).
+// The size layout gives a control: the one ControlSizes holds for its inputs (control-sizes.cpp),
+// at the text size multiplier the layout runs with.
 facebook::react::Size measureControl(
     const facebook::react::ShadowNode &node,
     ControlKind kind,
-    const facebook::react::ContextContainer *context);
+    const facebook::react::ContextContainer *context,
+    float fontScale);
 
 // The control a Fabric component name is, if it is one.
 std::optional<ControlKind> controlKind(std::string_view componentName);
@@ -139,13 +145,28 @@ class NativeControlShadowNode final : public facebook::react::ConcreteViewShadow
       const facebook::react::LayoutContext &layoutContext,
       const facebook::react::LayoutConstraints &layoutConstraints) const override {
     const auto &context = this->getContextContainer();
-    return layoutConstraints.clamp(measureControl(*this, Kind, context.get()));
+    return layoutConstraints.clamp(measureControl(*this, Kind, context.get(), layoutContext.fontSizeMultiplier));
   }
 };
 
 template <const char *Name, ControlKind Kind>
 using NativeControlComponentDescriptor =
     facebook::react::ConcreteComponentDescriptor<NativeControlShadowNode<Name, Kind>>;
+
+// Whether a strftime time format, as the C library's locale gives it (nl_langinfo(T_FMT)), writes a
+// 12-hour clock: it has %I, %l, %r, %p or %P. A date picker's time follows it on Linux.
+bool twelveHourClock(std::string_view timeFormat);
+// The hour of the day, 0 to 23, for an hour on a 12-hour clock (1 to 12) in the morning or after
+// noon; and the 12-hour clock's hour for an hour of the day.
+int dayHour(int clockHour, bool afterNoon);
+int clockHour(int dayHour);
+// GNOME's clock-format (org.gnome.desktop.interface, through the settings portal): true for
+// `12h`, false for `24h`, nothing for anything else, where the locale's format decides.
+std::optional<bool> clockFormatTwelveHour(std::string_view clockFormat);
+// A minuteInterval as UIDatePicker takes it: one that does not divide 60 evenly, or is outside 1
+// to 30, is 1. And a minute rounded down to it, as the picker shows a time between two steps.
+int pickerMinuteInterval(int minuteInterval);
+int minuteOnInterval(int minute, int minuteInterval);
 
 using NativeButtonComponentDescriptor = NativeControlComponentDescriptor<NativeButtonComponentName, ControlKind::Button>;
 using SwitchControlComponentDescriptor =

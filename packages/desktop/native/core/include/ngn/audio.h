@@ -101,6 +101,8 @@ class AudioRecording {
   virtual double currentTime() = 0;
   // The average power in dBFS, when metering.
   virtual std::optional<double> metering() = 0;
+  // Once stopped: why the file was not finished, or empty when it was.
+  virtual std::string error() { return {}; }
 };
 
 class AudioInput {

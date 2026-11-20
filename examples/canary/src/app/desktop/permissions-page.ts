@@ -10,10 +10,13 @@ import {
 } from '@angular/core';
 import { TurboModuleRegistry } from 'react-native';
 import { ScrollView, Text, View } from '@ng-native/components';
+import { CURRENT_WINDOW } from '@ng-native/device';
 import { audioPlayer, audioRecorder, recordingPermission } from '@ng-native/expo/audio';
 import { Calendar, EntityTypes } from '@ng-native/expo/calendar';
 import { registerExpoViews } from '@ng-native/expo';
+import { Browser } from '@ng-native/expo/browser';
 import { Camera, cameraPermission, microphonePermission } from '@ng-native/expo/camera';
+import { DocumentPicker } from '@ng-native/expo/document-picker';
 import { ImagePicker } from '@ng-native/expo/image-picker';
 import { Location } from '@ng-native/expo/location';
 import { MapView } from '@ng-native/expo/map-view';
@@ -21,6 +24,7 @@ import { MediaLibrary } from '@ng-native/expo/media-library';
 
 type Album = NonNullable<Awaited<ReturnType<MediaLibrary['album']>>>;
 import { Notifications } from '@ng-native/expo/notifications';
+import { Printing } from '@ng-native/expo/printing';
 import { Tracking } from '@ng-native/expo/tracking';
 import { NativeHeader } from '@ng-native/router';
 import { page } from '../screen-styles.ts';
@@ -95,18 +99,15 @@ export class PermissionsPage {
   private readonly location = inject(Location);
   private readonly media = inject(MediaLibrary);
   private readonly picker = inject(ImagePicker);
+  private readonly browser = inject(Browser);
   private readonly tracking = inject(Tracking);
   private readonly notifications = inject(Notifications);
+  private readonly documents = inject(DocumentPicker);
+  private readonly printing = inject(Printing);
+  private readonly window = inject(CURRENT_WINDOW);
   private readonly cameraAccess = cameraPermission();
   private readonly microphone = microphonePermission();
   private readonly recording = recordingPermission();
-  private readonly recorder = audioRecorder({
-    extension: '.m4a',
-    sampleRate: 44100,
-    numberOfChannels: 1,
-    bitRate: 128000,
-    ios: { outputFormat: 'aac ', audioQuality: 96 },
-  } as never);
 
   protected readonly page = page;
   protected readonly lines = signal<string[]>([]);
@@ -173,11 +174,15 @@ export class PermissionsPage {
         location: () => this.checkLocation(),
         photos: () => this.checkPhotos(),
         picker: () => this.checkPicker(),
+        'picker-media': () => this.checkPickerMedia(),
+        'sign-in': () => this.checkSignIn(),
         capture: () => this.checkCapture(),
         'capture-video': () => this.checkCaptureVideo(),
         'photos-cleanup': () => this.cleanUpPhoto(),
         tracking: () => this.checkTracking(),
         notifications: () => this.checkNotifications(),
+        documents: () => this.checkDocuments(),
+        print: () => this.checkPrint(),
         status: () => this.checkStatus(),
       };
       const step = steps[check];
@@ -232,7 +237,16 @@ export class PermissionsPage {
     await this.recording.check();
     this.note(`microphone ${this.recording.status()}`);
     this.note(`microphone ask ${await this.recording.ensure()} (${this.recording.status()})`);
-    const recorder = this.recorder.native;
+    // Made here, not with the page: audioRecorder() throws where the host has no audio module.
+    const recorder = runInInjectionContext(this.injector, () =>
+      audioRecorder({
+        extension: '.m4a',
+        sampleRate: 44100,
+        numberOfChannels: 1,
+        bitRate: 128000,
+        ios: { outputFormat: 'aac ', audioQuality: 96 },
+      } as never),
+    ).native;
     await recorder.prepareToRecordAsync();
     recorder.record();
     this.note('recording');
@@ -425,6 +439,36 @@ export class PermissionsPage {
     this.note(`picked ${picked.length} ${picked.map((each) => each.uri).join(', ')}`);
   }
 
+  /** Images and videos at once, with base64 and EXIF: what the picker answers for each file. */
+  private async checkPickerMedia(): Promise<void> {
+    this.note(`library permission ${await this.picker.libraryPermission.ensure()}`);
+    const picked = await this.picker.pick({
+      mediaTypes: ['images', 'videos'],
+      allowsMultipleSelection: true,
+      base64: true,
+      exif: true,
+    });
+    this.note(`picked ${picked.length}`);
+    for (const each of picked) {
+      this.note(
+        `${each.type} ${each.fileName} ${each.mimeType} ${each.width}x${each.height} ` +
+          `${each.fileSize} bytes, duration ${each.duration ?? 'none'}, ` +
+          `base64 ${each.base64?.length ?? 'none'}, exif ${this.json(each.exif)}`,
+      );
+    }
+  }
+
+  /** A sign-in against a provider on 127.0.0.1:8765 that redirects to canary://signed-in. */
+  private async checkSignIn(): Promise<void> {
+    // After the window is up, as a sign-in from a button would be.
+    await wait(1500);
+    const returned = await this.browser.signIn(
+      'http://127.0.0.1:8765/authorize?state=s1',
+      'canary://signed-in',
+    );
+    this.note(`signed in ${returned ?? 'null (cancelled)'}`);
+  }
+
   private async takePng(): Promise<void> {
     const png = await this.camera()?.takePicture({ imageType: 'png' });
     this.note(`picture png ${png?.uri} ${png?.width}x${png?.height} ${png?.format}`);
@@ -474,6 +518,27 @@ export class PermissionsPage {
       `tracking ask again ${await this.tracking.permission.request()} (${this.tracking.permission.status()})`,
     );
     this.note(`advertising id ${this.tracking.advertisingId()}`);
+  }
+
+  private async checkDocuments(): Promise<void> {
+    const picked = await this.documents.pick({ type: ['text/plain'], multiple: true });
+    this.note(`picked ${picked.length} ${picked.map((each) => each.name).join(', ')}`);
+    const saved = await this.documents.save({
+      suggestedName: 'ngn-perm-test.txt',
+      contents: 'saved by the canary',
+      types: ['text/plain'],
+    });
+    this.note(`saved ${saved}`);
+    const folder = await this.documents.pickDirectory();
+    this.note(`folder ${folder?.uri ?? 'none'}`);
+  }
+
+  private async checkPrint(): Promise<void> {
+    if (!this.window) throw new Error('no window to print');
+    // Once the window this page opened in has drawn.
+    await wait(1500);
+    await this.printing.print({ window: this.window });
+    this.note('print dialog closed');
   }
 
   private async checkNotifications(): Promise<void> {

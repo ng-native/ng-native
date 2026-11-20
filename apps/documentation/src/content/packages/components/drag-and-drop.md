@@ -1,13 +1,13 @@
 ---
 title: Drag and drop
-summary: Files, text and urls dragged onto a view, and a view dragged out, on macOS and iPadOS.
+summary: Files, text and urls dragged onto a view, and a view dragged out, on macOS, Linux and iPad.
 ---
 
 # Drag and drop
 
 Two directives from `@ng-native/components` carry drags between an app and the rest of the system,
-on macOS and iPadOS. On iPhone, Android and the web host neither does anything: no event fires and
-nothing can be dragged.
+on macOS, Linux and iPadOS. On iPhone, Android and the web host neither does anything: no event
+fires and nothing can be dragged.
 
 On iPadOS both take the native side of `@ng-native/components`, which a development build has and
 Expo Go does not. The view is found by its `nativeID`, and an element without one is given one
@@ -65,7 +65,7 @@ Without the `FileDrop` import the bindings do nothing, since the view never take
 ## Dragging a view out
 
 `[dragItem]` makes a view draggable, to Finder, another app, or a `(fileDrop)` view in the same
-app. A mouse drag starts it on macOS and a long press on iPadOS.
+app. A mouse drag starts it on macOS and Linux, and a long press on iPadOS.
 
 ```angular-html
 <view [dragItem]="{ files: [note.path] }"
@@ -92,6 +92,16 @@ A view with `dragItem` set (`{ files, text, url }`) can be dragged out. A press 
 AppKit's drag threshold on it, or on a view inside it, becomes an NSDraggingSession: Finder takes
 the files, a text field the text and a browser the URL, and a view that takes drops takes any of
 them. The press is cancelled for the views under it, so a drag out is not also a click.
+
+## On Linux
+
+The GTK host behaves as macOS does, with GTK's drag and drop. A drop is read as a file list or as
+text, a file's own `file://` URL included; inside a Flatpak, GTK reads a dropped file through the
+document portal, so its URL is one the app can open. A drag out offers its files as a file list and
+as a URI list, and its text, or else its URL, as text, with the view's look under the pointer. A
+drag that carries a URI list and other text as well arrives with its URLs only.
+
+## Opening a file with the app
 
 A file from Open With, a drop on the Dock icon or a double click on one of the app's document types
 reaches `Linking` as its `file://` URL: the initial URL when the app is still launching, a `url`

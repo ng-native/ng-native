@@ -1,7 +1,13 @@
 #include "ngn/launch-settings.h"
 
 #include <doctest/doctest.h>
+#include <folly/json.h>
 
+#include <unistd.h>
+
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <map>
 
 namespace {
@@ -84,7 +90,27 @@ TEST_CASE("A packaged app runs what its Info.plist says, whatever argv and the e
     CHECK(settings.appId == "com.example.notes");
     CHECK(settings.capabilitiesJson.empty());
     CHECK(settings.initialUrl.empty());
+    CHECK_FALSE(settings.dbusService);
   }
+}
+
+TEST_CASE("A packaged app takes the links and files a Linux launcher opens it on, and the bus's service switch") {
+  auto result = launch(
+      {.args = {"--gapplication-service", "notes://note/7", "/home/ada/a.md", "file:///home/ada/b.md", "--title", "Evil", "evil",
+                "{\"x\":1}"},
+       .env = from({}),
+       .plist = from(kPackagedPlist),
+       .resourcePath = "/usr/lib/notes"});
+  REQUIRE(std::holds_alternative<ngn::LaunchSettings>(result));
+  auto settings = std::get<ngn::LaunchSettings>(result);
+  CHECK(settings.dbusService);
+  CHECK(settings.openArgs == std::vector<std::string>{"notes://note/7", "/home/ada/a.md", "file:///home/ada/b.md"});
+  CHECK(settings.title == "Notes");
+  CHECK(settings.initialUrl.empty());
+  // A dev run takes the switch too, beside its bundle.
+  auto dev = std::get<ngn::LaunchSettings>(launch({.args = {"/tmp/b.js", "--gapplication-service"}, .env = from({}), .plist = from({})}));
+  CHECK(dev.dbusService);
+  CHECK(dev.bundle == "/tmp/b.js");
 }
 
 TEST_CASE("The dev switches (input script, rotor and commit logs) work in a dev run and never in a packaged app") {
@@ -219,4 +245,80 @@ TEST_CASE("Another test launch's Keychain services are stale, this one's and the
   CHECK(ngn::isStaleTestService("ngn-test-run-10.com.example", own));
   CHECK_FALSE(ngn::isStaleTestService("ngn-test-run-1.com.example", own));
   CHECK_FALSE(ngn::isStaleTestService("com.example", own));
+}
+
+namespace {
+
+// A folder of its own for one test, removed as the test ends however it ends.
+struct Folder {
+  std::filesystem::path path = std::filesystem::temp_directory_path() /
+      ("ngn-metadata-" + std::to_string(getpid()) + "-" + std::to_string(rand()));
+  Folder() { std::filesystem::create_directories(path); }
+  ~Folder() { std::filesystem::remove_all(path); }
+  void write(const std::string &text) const { std::ofstream(path / "metadata.json") << text; }
+};
+
+} // namespace
+
+TEST_CASE("A Linux package's metadata.json makes it a packaged app, as a macOS app's Info.plist does") {
+  Folder folder;
+  // What bin/package-linux.mjs writes.
+  folder.write(R"({
+    "CFBundleName": "Notes",
+    "CFBundleIdentifier": "com.example.notes",
+    "CFBundleShortVersionString": "1.0.0",
+    "NGNBundleFile": "main.hbc",
+    "NGNModuleName": "main",
+    "NGNDistribution": "deb",
+    "NGNCapabilities": {"spawn": [{"program": "/usr/bin/git"}]},
+    "NGNUpdatesURL": "https://updates.example/manifest",
+    "NGNRuntimeVersion": "1"
+  })");
+  auto metadata = ngn::packagedMetadata(folder.path.string());
+  REQUIRE(std::holds_alternative<ngn::LaunchSources::Lookup>(metadata));
+  auto lookup = std::get<ngn::LaunchSources::Lookup>(metadata);
+  REQUIRE(lookup);
+  CHECK(lookup("NGNDistribution") == "deb");
+  CHECK_FALSE(lookup("SUFeedURL"));
+
+  // argv and the environment are ignored, as for a macOS app.
+  auto result = ngn::launchSettings(
+      {.args = {"/tmp/evil.js", "--capabilities", "{}"}, .env = from(kUpdatesEnv), .plist = lookup, .resourcePath = folder.path.string()},
+      ngn::linuxOs());
+  REQUIRE(std::holds_alternative<ngn::LaunchSettings>(result));
+  auto settings = std::get<ngn::LaunchSettings>(result);
+  CHECK(settings.packaged);
+  CHECK(settings.bundle == (folder.path / "main.hbc").string());
+  CHECK(settings.module == "main");
+  CHECK(settings.title == "Notes");
+  CHECK(settings.appId == "com.example.notes");
+  CHECK(folly::parseJson(settings.capabilitiesJson) == folly::parseJson(R"({"spawn": [{"program": "/usr/bin/git"}]})"));
+  auto config = ngn::updatesConfigFrom(settings, ngn::linuxOs(), "/data", settings.bundle);
+  CHECK(config.url == "https://updates.example/manifest");
+  CHECK(config.platform == "linux");
+}
+
+TEST_CASE("A host with no metadata.json beside it is a dev run, and a broken one does not start") {
+  Folder folder;
+  auto none = ngn::packagedMetadata(folder.path.string());
+  REQUIRE(std::holds_alternative<ngn::LaunchSources::Lookup>(none));
+  CHECK_FALSE(std::get<ngn::LaunchSources::Lookup>(none));
+  auto dev = ngn::launchSettings(
+      {.args = {"/tmp/b.js"}, .env = from({}), .plist = std::get<ngn::LaunchSources::Lookup>(none)}, ngn::linuxOs());
+  REQUIRE(std::holds_alternative<ngn::LaunchSettings>(dev));
+  CHECK_FALSE(std::get<ngn::LaunchSettings>(dev).packaged);
+
+  for (const char *text : {"{\"NGNBundleFile\": ", "[\"main.hbc\"]", "{}", "{\"NGNBundleFile\": null}", "{\"NGNBundleFile\": \"\"}"}) {
+    CAPTURE(text);
+    folder.write(text);
+    CHECK(std::holds_alternative<std::string>(ngn::packagedMetadata(folder.path.string())));
+  }
+
+  // One that is there but cannot be opened (a link to itself, which root cannot open either) does
+  // not start, rather than run as a dev build from argv.
+  std::filesystem::remove(folder.path / "metadata.json");
+  std::filesystem::create_symlink("metadata.json", folder.path / "metadata.json");
+  auto unreadable = ngn::packagedMetadata(folder.path.string());
+  REQUIRE(std::holds_alternative<std::string>(unreadable));
+  CHECK(std::get<std::string>(unreadable).find("cannot be read") != std::string::npos);
 }

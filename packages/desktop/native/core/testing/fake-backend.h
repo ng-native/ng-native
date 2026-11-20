@@ -41,6 +41,7 @@ class FakeBackend final : public MountingBackend, public DesktopPropsSink {
   // The trees setExpoUITree was given, by host.
   std::map<Tag, std::shared_ptr<const ExpoUINode>> expoUITrees;
   void announce(SurfaceId surfaceId, const Announcement &announcement) override;
+  void setAccessibilityRelations(SurfaceId surfaceId, Tag tag, const AxRelations &relations) override;
   void didMount(SurfaceId surfaceId) override;
   // The components the backend adds, as a library compiled in would.
   std::vector<facebook::react::ComponentDescriptorProvider> providers;

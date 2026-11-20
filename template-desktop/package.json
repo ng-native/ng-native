@@ -1,15 +1,16 @@
 {
   "name": "@ng-native/template-desktop",
   "version": "0.25.0",
-  "description": "A macOS app in Angular, rendering real AppKit views. Use with create-expo-app --template.",
+  "description": "A macOS and Linux app in Angular, rendering real AppKit and GTK views. Use with create-expo-app --template.",
   "license": "MIT",
   "main": "src/main.ts",
   "scripts": {
     "start": "expo start",
     "macos": "ng-native-desktop run",
+    "linux": "ng-native-desktop run --os linux",
     "package": "ng-native-desktop package",
     "typecheck": "node metro.config.js && ngc -p tsconfig.json --noEmit",
-    "test": "vitest run --project node-macos"
+    "test": "vitest run --project node-macos --project node-linux"
   },
   "dependencies": {
     "@ng-native/components": "workspace:*",

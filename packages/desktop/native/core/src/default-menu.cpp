@@ -1,5 +1,7 @@
 #include "ngn/default-menu.h"
 
+#include <cctype>
+
 namespace ngn {
 
 namespace {
@@ -83,6 +85,138 @@ std::vector<MenuItem> macOSMenuBar(const DefaultMenuOptions &options) {
   }
   bar.push_back(menu("Help", {}, MenuRole::Help));
   return bar;
+}
+
+MenuPlacement linuxMenuPlacement(std::string_view currentDesktop) {
+  while (!currentDesktop.empty()) {
+    auto colon = currentDesktop.find(':');
+    if (currentDesktop.substr(0, colon) == "KDE") {
+      return MenuPlacement::MenuBar;
+    }
+    currentDesktop = colon == std::string_view::npos ? std::string_view() : currentDesktop.substr(colon + 1);
+  }
+  return MenuPlacement::PrimaryMenu;
+}
+
+std::vector<MenuItem> linuxMenuBar(const DefaultMenuOptions &options) {
+  const std::string &app = options.appName;
+  std::vector<MenuItem> bar{
+      menu("File", {item("Close Window", MenuCommand::CloseWindow, "w", Control), separator(), item("Print...", MenuCommand::Print, "p", Control)}),
+      menu(
+          "Edit",
+          {
+              item("Undo", MenuCommand::Undo, "z", Control),
+              item("Redo", MenuCommand::Redo, "z", Control | Shift),
+              separator(),
+              item("Cut", MenuCommand::Cut, "x", Control),
+              item("Copy", MenuCommand::Copy, "c", Control),
+              item("Paste", MenuCommand::Paste, "v", Control),
+              item("Delete", MenuCommand::Delete),
+              item("Select All", MenuCommand::SelectAll, "a", Control),
+          }),
+      menu(
+          "View",
+          {
+              item("Back", MenuCommand::Back, options.os.back.key, options.os.back.modifiers),
+              item("Forward", MenuCommand::Forward, options.os.forward.key, options.os.forward.modifiers),
+              separator(),
+              item("Show Sidebar", MenuCommand::ToggleSidebar, "F9", 0),
+              item("Full Screen", MenuCommand::ToggleFullScreen, "F11", 0),
+          }),
+  };
+  if (options.developer) {
+    bar.push_back(menu(
+        "Developer",
+        {
+            item("Reload", MenuCommand::Reload, "r", Control),
+            item("Open DevTools", MenuCommand::OpenDevTools, "i", Control | Shift),
+        }));
+  }
+  bar.push_back(menu(
+      app,
+      {
+          item("Keyboard Shortcuts", MenuCommand::KeyboardShortcuts, "?", Control | Shift),
+          separator(),
+          item("About " + app, MenuCommand::About),
+          separator(),
+          item("Quit", MenuCommand::Quit, "q", Control),
+      }));
+  return bar;
+}
+
+namespace {
+
+void collectShortcuts(const std::vector<MenuItem> &items, std::vector<ShortcutEntry> &out) {
+  for (const auto &m : items) {
+    if (m.separator || m.disabled) {
+      continue;
+    }
+    if (!m.items.empty()) {
+      collectShortcuts(m.items, out);
+    } else if (!m.key.empty()) {
+      out.push_back({.title = m.title, .chord = {.key = m.key, .modifiers = m.modifiers}});
+    }
+  }
+}
+
+} // namespace
+
+std::vector<ShortcutGroup> menuShortcuts(const std::vector<MenuItem> &menus) {
+  std::vector<ShortcutGroup> groups;
+  for (const auto &m : menus) {
+    // A disabled top-level menu is skipped as findMenuItem skips it: its keys select nothing.
+    if (m.separator || m.disabled) {
+      continue;
+    }
+    ShortcutGroup group{.title = m.title};
+    collectShortcuts(m.items, group.entries);
+    if (!group.entries.empty()) {
+      groups.push_back(std::move(group));
+    }
+  }
+  return groups;
+}
+
+namespace {
+
+std::string lowerKey(std::string key) {
+  if (key.size() == 1) {
+    key[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(key[0])));
+  }
+  return key;
+}
+
+} // namespace
+
+const MenuItem *findMenuItem(const std::vector<MenuItem> &menus, const KeyChord &chord) {
+  for (const auto &m : menus) {
+    if (m.separator || m.disabled) {
+      continue;
+    }
+    if (m.items.empty() && !m.key.empty() && m.modifiers == chord.modifiers && lowerKey(m.key) == lowerKey(chord.key)) {
+      return &m;
+    }
+    if (auto found = findMenuItem(m.items, chord)) {
+      return found;
+    }
+  }
+  return nullptr;
+}
+
+bool isEditingCommand(MenuCommand command) {
+  switch (command) {
+    case MenuCommand::Undo:
+    case MenuCommand::Redo:
+    case MenuCommand::Cut:
+    case MenuCommand::Copy:
+    case MenuCommand::Paste:
+    case MenuCommand::PasteAndMatchStyle:
+    case MenuCommand::Delete:
+    case MenuCommand::SelectAll:
+      return true;
+    default:
+      return false;
+  }
 }
 
 const MenuItem *findMenuItem(const std::vector<MenuItem> &menus, MenuCommand command) {

@@ -6,6 +6,8 @@
 // React Native's BaseTextInputShadowNode over it: it measures and lays out as on iOS.
 #pragma once
 
+#include "ngn/desktop-props.h"
+
 #include <react/renderer/components/iostextinput/primitives.h>
 #include <react/renderer/components/textinput/BaseTextInputProps.h>
 #include <react/renderer/components/textinput/BaseTextInputShadowNode.h>
@@ -16,6 +18,8 @@
 
 #include <cstddef>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace ngn {
 
@@ -31,6 +35,10 @@ class DesktopTextInputProps final : public facebook::react::BaseTextInputProps {
   std::optional<facebook::react::Selection> selection{};
   // Curly quotes and em dashes as the user types. Unset follows `autoCorrect`.
   std::optional<bool> smartQuotes{};
+  // `accessibilityDescribedBy` (`aria-describedby`), as a view's desktop props have it.
+  std::vector<std::string> accessibilityDescribedBy;
+  // `aria-required`, `aria-invalid` and the rest, as a view's desktop props have them.
+  AriaFields aria;
 };
 
 extern const char DesktopTextInputComponentName[];
@@ -130,5 +138,10 @@ std::u16string fitReplacement(
 // (`mostRecentEventCount` at least the field's own count), and never while an input method is
 // composing.
 bool controlledTextIsCurrent(int mostRecentEventCount, int fieldEventCount, bool composing);
+
+// The `selection` prop as a field applies it, start before end in UTF-16 units, when it is new in
+// `now` against `before` (null for a field just made): React Native iOS applies it only then, so
+// the user moving the selection away is not undone by an unchanged prop.
+std::optional<std::pair<int, int>> newSelection(const DesktopTextInputProps *before, const DesktopTextInputProps &now);
 
 } // namespace ngn

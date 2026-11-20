@@ -3,13 +3,19 @@
 # draws its first frame, then it keeps running for a moment. Fails on a crash or an exit before
 # then, an uncaught JavaScript error, or no first frame in time. Prints the host's log either way.
 #
-#   launch-probe.sh <ngn-macos> <bundle.js> [seconds, default 60]
+#   launch-probe.sh <ngn-macos or ngn-linux> <bundle.js> [seconds, default 60]
+#
+# With NGN_EXPECT_RENDERER=<GSK renderer class> (and GSK_DEBUG=renderer, which makes GTK log it), the
+# probe also fails unless GTK says it is using that renderer. GSK_RENDERER only picks the renderer GTK
+# tries first, and a failed one falls back to GL or Cairo with the frame still drawn. GTK logs
+# "Using renderer of type 'GskVulkanRenderer' ..." up to 4.14 and "Using renderer 'GskVulkanRenderer' ..."
+# from 4.16 (gsk/gskrenderer.c).
 #
 # A test launch (NGN_TESTS=1): the host keeps its state in a new directory, takes no focus and
 # shows no system prompt, so the probe leaves nothing behind on the machine it runs on.
 set -euo pipefail
-host="${1:?usage: launch-probe.sh <ngn-macos> <bundle.js> [seconds]}"
-bundle="${2:?usage: launch-probe.sh <ngn-macos> <bundle.js> [seconds]}"
+host="${1:?usage: launch-probe.sh <host> <bundle.js> [seconds]}"
+bundle="${2:?usage: launch-probe.sh <host> <bundle.js> [seconds]}"
 limit="${3:-60}"
 
 work="$(mktemp -d)"
@@ -50,6 +56,11 @@ while ! grep -q '^\[ngn\] first frame' "$log"; do
   sleep 0.2
 done
 grep -q '^\[ngn\] commit' "$log" || fail "the first frame came with no commit"
+
+if [ -n "${NGN_EXPECT_RENDERER:-}" ]; then
+  grep -qE "Using renderer (of type )?'$NGN_EXPECT_RENDERER'" "$log" \
+    || fail "GTK did not use the $NGN_EXPECT_RENDERER renderer it was asked for"
+fi
 
 # Still running a moment after the first frame: a crash in the commits that follow fails too.
 sleep 3

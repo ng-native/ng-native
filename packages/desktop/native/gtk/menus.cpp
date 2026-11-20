@@ -1,0 +1,447 @@
+#include "menus.h"
+
+#include "app-windows.h"
+#include "screens.h"
+
+#include <dlfcn.h>
+
+#include <algorithm>
+#include <cstring>
+#include <map>
+#include <string>
+
+namespace ngn::gtk {
+
+namespace {
+
+// GDK's names for the keys the web names otherwise, both ways.
+const std::map<std::string, guint> &namedKeys() {
+  static const std::map<std::string, guint> keys{
+      {"ArrowLeft", GDK_KEY_Left}, {"ArrowRight", GDK_KEY_Right}, {"ArrowUp", GDK_KEY_Up}, {"ArrowDown", GDK_KEY_Down},
+      {"Enter", GDK_KEY_Return}, {"Escape", GDK_KEY_Escape}, {"Backspace", GDK_KEY_BackSpace}, {"Delete", GDK_KEY_Delete},
+      {"Tab", GDK_KEY_Tab}, {"Insert", GDK_KEY_Insert}, {"Home", GDK_KEY_Home}, {"End", GDK_KEY_End}, {"PageUp", GDK_KEY_Page_Up},
+      {"PageDown", GDK_KEY_Page_Down}, {"F1", GDK_KEY_F1}, {"F2", GDK_KEY_F2}, {"F3", GDK_KEY_F3}, {"F4", GDK_KEY_F4},
+      {"F5", GDK_KEY_F5}, {"F6", GDK_KEY_F6}, {"F7", GDK_KEY_F7}, {"F8", GDK_KEY_F8}, {"F9", GDK_KEY_F9},
+      {"F10", GDK_KEY_F10}, {"F11", GDK_KEY_F11}, {"F12", GDK_KEY_F12},
+  };
+  return keys;
+}
+
+const char *webName(guint keyval) {
+  switch (keyval) {
+    case GDK_KEY_KP_Enter:
+      return "Enter";
+    case GDK_KEY_ISO_Left_Tab:
+      return "Tab";
+  }
+  for (const auto &[name, value] : namedKeys()) {
+    if (value == keyval) {
+      return name.c_str();
+    }
+  }
+  return nullptr;
+}
+
+std::string actionName(int index) {
+  return "item-" + std::to_string(index);
+}
+
+struct Chosen {
+  MenuItem item;
+  std::function<void(const MenuItem &)> chosen;
+};
+
+// `disabled` when a menu above is: its items are too, as findMenuItem skips the whole branch.
+void addItems(GMenu *menu, const std::vector<MenuItem> &items, GSimpleActionGroup *group, const std::function<void(const MenuItem &)> &chosen, int &next,
+              bool disabled) {
+  GMenu *section = g_menu_new();
+  auto flush = [&] {
+    if (g_menu_model_get_n_items(G_MENU_MODEL(section)) > 0) {
+      g_menu_append_section(menu, nullptr, G_MENU_MODEL(section));
+      g_object_unref(section);
+      section = g_menu_new();
+    }
+  };
+  for (const auto &item : items) {
+    if (item.separator) {
+      flush();
+      continue;
+    }
+    // A menu with nothing in it, such as the Window menu AppKit fills, which GTK has no list for.
+    if (item.items.empty() && item.command == MenuCommand::None) {
+      continue;
+    }
+    if (!item.items.empty()) {
+      GMenu *sub = g_menu_new();
+      addItems(sub, item.items, group, chosen, next, disabled || item.disabled);
+      if (item.inlineItems) {
+        flush();
+        g_menu_append_section(menu, nullptr, G_MENU_MODEL(sub));
+      } else {
+        g_menu_append_submenu(section, item.title.c_str(), G_MENU_MODEL(sub));
+      }
+      g_object_unref(sub);
+      continue;
+    }
+    std::string name = actionName(next++);
+    GSimpleAction *action = item.checked ? g_simple_action_new_stateful(name.c_str(), nullptr, g_variant_new_boolean(TRUE))
+                                         : g_simple_action_new(name.c_str(), nullptr);
+    g_simple_action_set_enabled(action, !disabled && !item.disabled);
+    g_signal_connect_data(
+        action, item.checked ? "change-state" : "activate", G_CALLBACK(+[](GSimpleAction *, GVariant *, gpointer data) {
+          auto *c = static_cast<Chosen *>(data);
+          c->chosen(c->item);
+        }),
+        new Chosen{item, chosen}, [](gpointer data, GClosure *) { delete static_cast<Chosen *>(data); }, GConnectFlags(0));
+    g_action_map_add_action(G_ACTION_MAP(group), G_ACTION(action));
+    g_object_unref(action);
+    GMenuItem *entry = g_menu_item_new(item.title.c_str(), ("menu." + name).c_str());
+    if (auto accel = acceleratorOf(item); !accel.empty()) {
+      g_menu_item_set_attribute(entry, "accel", "s", accel.c_str());
+    }
+    g_menu_append_item(section, entry);
+    g_object_unref(entry);
+  }
+  flush();
+  g_object_unref(section);
+}
+
+// A button kind's role for the window's keys, set by native-controls.cpp as "default" or "cancel".
+GtkWidget *findKeyButton(GtkWidget *widget, const char *role) {
+  if (!gtk_widget_get_mapped(widget) || !gtk_widget_is_sensitive(widget)) {
+    return nullptr;
+  }
+  if (const char *kind = static_cast<const char *>(g_object_get_data(G_OBJECT(widget), "ngn-key-role")); kind && std::strcmp(kind, role) == 0) {
+    return widget;
+  }
+  for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
+    if (GtkWidget *found = findKeyButton(child, role)) {
+      return found;
+    }
+  }
+  return nullptr;
+}
+
+} // namespace
+
+KeyChord chordOf(guint keyval, GdkModifierType state) {
+  KeyChord chord;
+  if (const char *name = webName(keyval)) {
+    chord.key = name;
+  } else if (gunichar c = gdk_keyval_to_unicode(keyval); c != 0) {
+    char text[8] = {};
+    g_unichar_to_utf8(c, text);
+    chord.key = text;
+  }
+  if (state & GDK_CONTROL_MASK) chord.modifiers |= Control;
+  if (state & GDK_SHIFT_MASK) chord.modifiers |= Shift;
+  if (state & GDK_ALT_MASK) chord.modifiers |= Option;
+  return chord;
+}
+
+std::string acceleratorOf(const MenuItem &item) {
+  // None on Command either: Super is the desktop's, so no press here chooses the item, and a Ctrl
+  // label would name a press that does not.
+  if (item.key.empty() || (item.modifiers & Command)) {
+    return {};
+  }
+  guint keyval = 0;
+  if (auto named = namedKeys().find(item.key); named != namedKeys().end()) {
+    keyval = named->second;
+  } else if (g_utf8_strlen(item.key.c_str(), -1) == 1) {
+    keyval = gdk_unicode_to_keyval(g_utf8_get_char(item.key.c_str()));
+  } else {
+    // A key named some other way, such as "Pause": shown as its first letter, it would be another key.
+    return {};
+  }
+  unsigned state = 0;
+  if (item.modifiers & Control) state |= GDK_CONTROL_MASK;
+  if (item.modifiers & Shift) state |= GDK_SHIFT_MASK;
+  if (item.modifiers & Option) state |= GDK_ALT_MASK;
+  gchar *name = gtk_accelerator_name(gdk_keyval_to_lower(keyval), static_cast<GdkModifierType>(state));
+  std::string out = name ? name : "";
+  g_free(name);
+  return out;
+}
+
+namespace {
+
+// Whether the libadwaita running has AdwShortcutsDialog (1.8), past the floor the host builds
+// against: GtkBuilder finds the type by the same function.
+bool haveShortcutsDialog() {
+  static bool have = dlsym(RTLD_DEFAULT, "adw_shortcuts_dialog_get_type") != nullptr;
+  return have;
+}
+
+} // namespace
+
+GtkWidget *keyboardShortcutsWindow(const std::vector<ShortcutGroup> &groups, GtkWindow *parent) {
+  auto escaped = [](const std::string &text) {
+    gchar *out = g_markup_escape_text(text.c_str(), -1);
+    std::string result = out;
+    g_free(out);
+    return result;
+  };
+  bool dialog = haveShortcutsDialog();
+  // A group is an AdwShortcutsSection of AdwShortcutsItems in the dialog, a GtkShortcutsGroup of
+  // GtkShortcutsShortcuts in the window's one section.
+  const char *groupClass = dialog ? "AdwShortcutsSection" : "GtkShortcutsGroup";
+  const char *itemClass = dialog ? "AdwShortcutsItem" : "GtkShortcutsShortcut";
+  std::string ui = dialog ? "<interface><object class=\"AdwShortcutsDialog\" id=\"window\">"
+                          : "<interface><object class=\"GtkShortcutsWindow\" id=\"window\"><property name=\"modal\">1</property>"
+                            "<child><object class=\"GtkShortcutsSection\"><property name=\"section-name\">shortcuts</property>";
+  for (const auto &group : groups) {
+    ui += std::string("<child><object class=\"") + groupClass + "\"><property name=\"title\">" + escaped(group.title) + "</property>";
+    for (const auto &entry : group.entries) {
+      std::string accelerator = acceleratorOf(MenuItem{.key = entry.chord.key, .modifiers = entry.chord.modifiers});
+      if (accelerator.empty()) {
+        continue;
+      }
+      ui += std::string("<child><object class=\"") + itemClass + "\"><property name=\"title\">" + escaped(entry.title) +
+          "</property><property name=\"accelerator\">" + escaped(accelerator) + "</property></object></child>";
+    }
+    ui += "</object></child>";
+  }
+  ui += dialog ? "</object></interface>" : "</object></child></object></interface>";
+  GtkBuilder *builder = gtk_builder_new_from_string(ui.c_str(), -1);
+  // The window stays in GTK's list of toplevels once the builder goes, until it is closed; the
+  // dialog is the caller's reference until presentKeyboardShortcuts shows it.
+  GtkWidget *window = GTK_WIDGET(g_object_ref(gtk_builder_get_object(builder, "window")));
+  g_object_unref(builder);
+  if (!dialog) {
+    g_object_unref(window);
+    if (parent) {
+      gtk_window_set_transient_for(GTK_WINDOW(window), parent);
+    }
+  }
+  return window;
+}
+
+void presentKeyboardShortcuts(GtkWidget *shortcuts, GtkWindow *parent) {
+  if (GTK_IS_WINDOW(shortcuts)) {
+    gtk_window_present(GTK_WINDOW(shortcuts));
+    return;
+  }
+  // adw_dialog_present (libadwaita 1.5): the parent holds the dialog while it shows.
+  using Present = void (*)(GtkWidget *, GtkWidget *);
+  static auto present = reinterpret_cast<Present>(dlsym(RTLD_DEFAULT, "adw_dialog_present"));
+  if (present) {
+    present(shortcuts, parent ? GTK_WIDGET(parent) : nullptr);
+  }
+  g_object_unref(shortcuts);
+}
+
+GMenuModel *buildMenu(const std::vector<MenuItem> &items, GSimpleActionGroup *group, std::function<void(const MenuItem &)> chosen) {
+  GMenu *menu = g_menu_new();
+  int next = 0;
+  addItems(menu, items, group, chosen, next, false);
+  return G_MENU_MODEL(menu);
+}
+
+GtkWidget *nestedPopoverMenu(GMenuModel *model) {
+  return gtk_popover_menu_new_from_model_full(model, GTK_POPOVER_MENU_NESTED);
+}
+
+GtkMenus::GtkMenus(std::function<void(const MenuItem &item)> chosen) : chosen_(std::move(chosen)) {}
+
+GtkMenus::~GtkMenus() {
+  for (auto &slot : slots_) {
+    if (*slot) {
+      g_object_remove_weak_pointer(G_OBJECT(*slot), reinterpret_cast<gpointer *>(slot.get()));
+    }
+  }
+  g_clear_object(&model_);
+  g_clear_object(&actions_);
+}
+
+void GtkMenus::setMenuBar(std::vector<MenuItem> bar) {
+  onMainContext([this, alive = std::weak_ptr<void>(alive_), bar = std::move(bar)]() mutable {
+    // Queued, so these menus may have gone by the time it runs.
+    if (alive.expired()) {
+      return;
+    }
+    bar_ = std::move(bar);
+    g_clear_object(&model_);
+    g_clear_object(&actions_);
+    actions_ = g_simple_action_group_new();
+    model_ = buildMenu(bar_, actions_, chosen_);
+    for (auto &slot : slots_) {
+      if (*slot) {
+        show(*slot);
+      }
+    }
+  });
+}
+
+void GtkMenus::attach(GtkWidget *surface) {
+  const WindowChrome *chrome = chromeOf(surface);
+  if (!chrome) {
+    return;
+  }
+  GtkWidget *slot = chrome->menuBar ? chrome->menuBar : chrome->primaryMenu;
+  if (!slot) {
+    return;
+  }
+  // The slots of windows that have gone.
+  std::erase_if(slots_, [](const std::unique_ptr<GtkWidget *> &held) { return *held == nullptr; });
+  auto held = std::make_unique<GtkWidget *>(slot);
+  g_object_add_weak_pointer(G_OBJECT(slot), reinterpret_cast<gpointer *>(held.get()));
+  slots_.push_back(std::move(held));
+  if (model_) {
+    show(slot);
+  }
+}
+
+void GtkMenus::show(GtkWidget *slot) {
+  if (GTK_IS_POPOVER_MENU_BAR(slot)) {
+    gtk_popover_menu_bar_set_menu_model(GTK_POPOVER_MENU_BAR(slot), model_);
+  } else {
+    // Nested, as the menu bar's are.
+    gtk_menu_button_set_popover(GTK_MENU_BUTTON(slot), model_ ? nestedPopoverMenu(model_) : nullptr);
+  }
+  // The items' actions are the window's `menu` group, so each window's slot reaches them.
+  if (GtkRoot *root = gtk_widget_get_root(slot)) {
+    gtk_widget_insert_action_group(GTK_WIDGET(root), "menu", G_ACTION_GROUP(actions_));
+  }
+  gtk_widget_set_visible(slot, model_ != nullptr && g_menu_model_get_n_items(model_) > 0);
+}
+
+bool popUpContextMenu(GtkWidget *widget, facebook::react::Point point, const std::vector<MenuItem> &items, std::function<void(const MenuItem &)> chosen) {
+  if (items.empty()) {
+    return false;
+  }
+  GSimpleActionGroup *group = g_simple_action_group_new();
+  GMenuModel *model = buildMenu(items, group, std::move(chosen));
+  // Only separators and empty menus: nothing to draw, so the view's own menu instead.
+  if (g_menu_model_get_n_items(model) == 0) {
+    g_object_unref(model);
+    g_object_unref(group);
+    return false;
+  }
+  GtkWidget *popover = nestedPopoverMenu(model);
+  g_object_unref(model);
+  gtk_widget_insert_action_group(popover, "menu", G_ACTION_GROUP(group));
+  g_object_unref(group);
+  gtk_widget_set_parent(popover, widget);
+  gtk_popover_set_has_arrow(GTK_POPOVER(popover), FALSE);
+  gtk_widget_set_halign(popover, gtk_widget_get_direction(widget) == GTK_TEXT_DIR_RTL ? GTK_ALIGN_END : GTK_ALIGN_START);
+  GdkRectangle at{static_cast<int>(point.x), static_cast<int>(point.y), 1, 1};
+  gtk_popover_set_pointing_to(GTK_POPOVER(popover), &at);
+  // It goes once closed, after the item chosen has run.
+  // Held until then, so a view that goes first takes nothing from under it.
+  g_signal_connect(popover, "closed", G_CALLBACK(+[](GtkPopover *p, gpointer) {
+    g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, [](gpointer data) -> gboolean {
+      if (gtk_widget_get_parent(GTK_WIDGET(data))) {
+        gtk_widget_unparent(GTK_WIDGET(data));
+      }
+      return G_SOURCE_REMOVE;
+    }, g_object_ref(p), g_object_unref);
+  }), nullptr);
+  gtk_popover_popup(GTK_POPOVER(popover));
+  return true;
+}
+
+bool textInputFocused(GtkWindow *window) {
+  GtkWidget *focus = gtk_root_get_focus(GTK_ROOT(window));
+  for (GtkWidget *w = focus; w; w = gtk_widget_get_parent(w)) {
+    if (GTK_IS_EDITABLE(w) || GTK_IS_TEXT_VIEW(w)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+GtkWidget *keyButton(GtkWindow *window, bool cancel) {
+  GtkWidget *content = gtk_window_get_child(window);
+  return content ? findKeyButton(content, cancel ? "cancel" : "default") : nullptr;
+}
+
+void routeKeys(GtkWindow *window, std::shared_ptr<KeyRouting> routing) {
+  // Before the focused widget, as an app's shortcuts and the menus' keys come first.
+  GtkEventController *first = gtk_event_controller_key_new();
+  gtk_event_controller_set_propagation_phase(first, GTK_PHASE_CAPTURE);
+  g_signal_connect_data(
+      first, "key-pressed", G_CALLBACK(+[](GtkEventControllerKey *c, guint keyval, guint, GdkModifierType state, gpointer data) -> gboolean {
+        auto *routing = static_cast<std::shared_ptr<KeyRouting> *>(data)->get();
+        auto *window = GTK_WINDOW(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(c)));
+        // The browser keys some keyboards have go back and forward too.
+        if (keyval == GDK_KEY_Back || keyval == GDK_KEY_Forward) {
+          routing->navigate(keyval == GDK_KEY_Back ? NavigationDirection::Back : NavigationDirection::Forward, window);
+          return TRUE;
+        }
+        // Super is the desktop's, never an app's.
+        if (state & GDK_SUPER_MASK) {
+          return FALSE;
+        }
+        auto chord = chordOf(keyval, static_cast<GdkModifierType>(state & gtk_accelerator_get_default_mod_mask()));
+        if (chord.key.empty()) {
+          // No chord for the shortcuts and menus to match, but the keypad's arrows, Home, End and
+          // Tab are the focus's as their plain keys are, which have a chord. The chord the others
+          // read stays empty, so no binding of Home answers keypad Home.
+          return routing->focus && routing->focus(window, keyval, state);
+        }
+        bool text = textInputFocused(window);
+        if (routing->shortcut && routing->shortcut(chord, text)) {
+          return TRUE;
+        }
+        if (routing->focus && routing->focus(window, keyval, state)) {
+          return TRUE;
+        }
+        if (auto direction = routing->navigation ? routing->navigation(chord) : std::nullopt) {
+          routing->navigate(*direction, window);
+          return TRUE;
+        }
+        const MenuItem *item = routing->menuKey ? routing->menuKey(chord) : nullptr;
+        // A focused text input keeps its editing keys, from the app's items as from the OS's.
+        if (!item || (text && (isEditingCommand(item->command) || (routing->editingKey && routing->editingKey(chord))))) {
+          return FALSE;
+        }
+        routing->choose(*item, window);
+        return TRUE;
+      }),
+      new std::shared_ptr<KeyRouting>(routing), [](gpointer data, GClosure *) { delete static_cast<std::shared_ptr<KeyRouting> *>(data); },
+      GConnectFlags(0));
+  gtk_widget_add_controller(GTK_WIDGET(window), first);
+
+  // After it, for a press nothing in the window used: Return and Escape on the window's buttons.
+  GtkEventController *last = gtk_event_controller_key_new();
+  g_signal_connect(last, "key-pressed", G_CALLBACK(+[](GtkEventControllerKey *c, guint keyval, guint, GdkModifierType state, gpointer) -> gboolean {
+    if ((state & gtk_accelerator_get_default_mod_mask()) != 0) {
+      return FALSE;
+    }
+    bool cancel = keyval == GDK_KEY_Escape;
+    if (!cancel && keyval != GDK_KEY_Return && keyval != GDK_KEY_KP_Enter) {
+      return FALSE;
+    }
+    GtkWidget *button = keyButton(GTK_WINDOW(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(c))), cancel);
+    if (!button) {
+      return FALSE;
+    }
+    // As a press of it: GTK shows it pressed, then clicks it.
+    gtk_widget_activate(button);
+    return TRUE;
+  }), nullptr);
+  gtk_widget_add_controller(GTK_WIDGET(window), last);
+
+  // Mouse buttons 8 and 9, GDK's numbers for the side buttons, go back and forward.
+  GtkGesture *side = gtk_gesture_click_new();
+  gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(side), 0);
+  gtk_event_controller_set_propagation_phase(GTK_EVENT_CONTROLLER(side), GTK_PHASE_CAPTURE);
+  g_signal_connect_data(
+      side, "pressed", G_CALLBACK(+[](GtkGestureClick *g, int, double, double, gpointer data) {
+        guint button = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(g));
+        if (button != 8 && button != 9) {
+          gtk_gesture_set_state(GTK_GESTURE(g), GTK_EVENT_SEQUENCE_DENIED);
+          return;
+        }
+        auto *routing = static_cast<std::shared_ptr<KeyRouting> *>(data)->get();
+        auto *window = GTK_WINDOW(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(g)));
+        routing->navigate(*navigationFor(button == 8 ? NavigationInput::MouseButton4 : NavigationInput::MouseButton5), window);
+        gtk_gesture_set_state(GTK_GESTURE(g), GTK_EVENT_SEQUENCE_CLAIMED);
+      }),
+      new std::shared_ptr<KeyRouting>(routing), [](gpointer data, GClosure *) { delete static_cast<std::shared_ptr<KeyRouting> *>(data); },
+      GConnectFlags(0));
+  gtk_widget_add_controller(GTK_WIDGET(window), GTK_EVENT_CONTROLLER(side));
+}
+
+} // namespace ngn::gtk

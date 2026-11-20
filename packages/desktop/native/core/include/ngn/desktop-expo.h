@@ -125,6 +125,10 @@ class FileDialogs {
     // MIME types ("text/plain", "image/*"); empty for any file.
     std::vector<std::string> types;
     bool multiple{false};
+    // The panel's title and the types' filter's name, where the OS shows them; empty for the
+    // host's own ("Open File", the types listed).
+    std::string title;
+    std::string filterName;
   };
   struct SaveRequest {
     std::string suggestedName;
@@ -182,7 +186,9 @@ class LocaleSource {
   virtual CalendarFacts calendars() = 0;
 };
 
-// `regionCode` is the system's region ("GB"), which a language tag with no region of its own takes.
+// `regionCode` is the system's region ("GB"), which a language tag with no region of its own takes;
+// empty when the system has none. A null `source` (a backend without one) answers English in that
+// region on the Gregorian calendar, with no time zone.
 std::shared_ptr<NativeModule> makeLocalizationModule(std::shared_ptr<LocaleSource> source, std::string regionCode);
 
 } // namespace ngn

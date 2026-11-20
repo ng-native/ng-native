@@ -1,0 +1,22 @@
+{
+  "$comment": "The desktop performance budget's ceilings on Linux, for pnpm bench:linux, measured in the ngn-el9 image under Xvfb with GSK_RENDERER=cairo at CI runner class (4 vCPU, 16 GB). Provisional, from the Linux spec's section 12 (mountMs, scrollFrameMs, resizeCommitMs, resizeCommitsPerFrame and extraWindowMb are measured on a second launch, of examples/notes/bench/linux-bench.ts): the first stable median plus 20 to 30% replaces each. A cairo number is never compared with another renderer's. A waiver is { metric, reason, pr }.",
+  "ceilings": {
+    "launchMs": 800,
+    "idleCpu": 0.1,
+    "idleWakeups": 5,
+    "memoryMb": 110,
+    "hostMb": 30,
+    "mountMs": 15,
+    "scrollFrameMs": 10,
+    "resizeCommitMs": 8,
+    "resizeCommitsPerFrame": 1,
+    "extraWindowMb": 20
+  },
+  "waivers": [
+    {
+      "metric": "memoryMb",
+      "reason": "The first nightly runs (2026-11-18) measured 133.9 MB PSS on x86_64 and 132.6 MB on arm64 against the provisional 110 MB. Waived until enough nightly runs give the stable median that, plus 20 to 30%, replaces the provisional ceiling.",
+      "pr": "https://github.com/ng-native/ng-native/pull/1574"
+    }
+  ]
+}

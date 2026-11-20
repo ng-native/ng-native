@@ -2,8 +2,10 @@ name: Desktop host
 
 # The desktop host in @ng-native/desktop. On ubuntu, the toolkit-free core and its tests build with
 # no backend and no Hermes, which proves AppKit never leaks into the core. In the AlmaLinux 9 image
-# (native/docker), on x86_64 and arm64, the core, Hermes over a static ICU and the runtime half
-# build and their tests run, still with no backend, and what they link needs glibc 2.34 at most.
+# (native/docker), on x86_64 and arm64, the GTK host builds over Hermes with a static ICU, its tests
+# run (the GTK view tests under Xvfb), what it links needs glibc 2.34 at most, and it is launched on
+# an example app's bundle to its first frame under Xvfb and headless Weston, and the example's
+# in-app tests run on it (`vitest --project linux`).
 # On macOS, the AppKit host
 # builds as an app would build it, the core tests run there too, and the built host is launched on an
 # example app's bundle to its first frame. A pull request runs it only when
@@ -12,8 +14,9 @@ name: Desktop host
 # through ccache, kept per job and saved only from main, which every pull request restores: a set
 # saved per pull request run filled the repository's 10 GB of Actions cache and evicted main's.
 #
-# On main, `prebuilt-host` also makes both universal prebuilt hosts the release publishes, when
-# anything they are built from changed, so the release finds their caches warm.
+# On main, `prebuilt-host` also makes both universal prebuilt hosts the release publishes, and
+# `prebuilt-host-linux` the Linux ones for x86_64 and arm64, when anything they are built from
+# changed, so the release finds their caches warm. A manual run makes the Linux ones on any branch.
 on:
   push:
     branches: [main]
@@ -67,6 +70,9 @@ jobs:
           filters: |
             desktop:
               - 'packages/desktop/**'
+              - 'packages/testing/device/fake-portals.py'
+              - 'packages/testing/src/device/fake-portals.node.test.ts'
+              - 'packages/testing/src/device/linux-launcher.ts'
               - '.github/workflows/desktop.yml'
               - 'scripts/desktop-host-pins.mjs'
               - '.github/actions/desktop-prebuilt/**'
@@ -120,7 +126,7 @@ jobs:
       - if: always()
         run: ccache --show-stats
 
-  # The Linux build below the backend, in the AlmaLinux 9 image so its glibc is the floor. The image
+  # The Linux build with the GTK backend, in the AlmaLinux 9 image so its glibc is the floor. The image
   # is built on each run from native/docker: a few minutes of dnf, against a 2 GB image per
   # architecture that would take much of the repository's 10 GB of Actions cache. The workspace,
   # installed on the runner, is mounted at its own path, and the build runs as the runner's user,
@@ -172,22 +178,168 @@ jobs:
           path: ${{ env.NGN_DESKTOP_CACHE }}/*/src
           key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
 
-      - name: Build the core, Hermes and the runtime half, and run their tests
+      # The GTK host and its tests: the core and runtime tests as they are, the GTK view tests under
+      # Xvfb, which needs no window manager and draws with Mesa's software GL.
+      - name: Build the GTK host and run its tests
         run: |
-          mkdir -p "$CCACHE_DIR" "$NGN_DESKTOP_CACHE"
+          mkdir -p "$CCACHE_DIR" "$NGN_DESKTOP_CACHE" "$GITHUB_WORKSPACE/.linux-probe"
+          # The runner's user in the image's passwd, which dbus-daemon looks itself up in.
+          docker run --rm ngn-el9 cat /etc/passwd > "$RUNNER_TEMP/passwd"
+          echo "runner:x:$(id -u):$(id -g)::/tmp:/bin/bash" >> "$RUNNER_TEMP/passwd"
           docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
-            -e NGN_DESKTOP_CACHE -e NGN_JOBS -e NGN_COMPILER_LAUNCHER \
+            -e NGN_DESKTOP_CACHE -e NGN_JOBS -e NGN_COMPILER_LAUNCHER -e GITHUB_WORKSPACE -e CI \
             -e CCACHE_DIR -e CCACHE_BASEDIR -e CCACHE_NOHASHDIR -e CCACHE_SLOPPINESS -e CCACHE_MAXSIZE \
+            -v "$RUNNER_TEMP/passwd:/etc/passwd:ro" \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
             bash -euo pipefail -c '
               ccache --zero-stats > /dev/null
               start=$(date +%s)
-              build=$(native/scripts/build.sh --backend none --runtime --test --no-debug-info | tail -n 1)
-              echo "Built and tested in $(( $(date +%s) - start ))s"
+              # With the libraries the canary uses: worklets and Reanimated, whose shared C++ needs
+              # the Linux shims (native/shim/worklets), so a change that breaks them on glibc fails
+              # here, and svg, screens and safe area, for the AT-SPI run on the canary below.
+              lib=../../examples/canary/node_modules
+              build=$(native/scripts/build.sh --backend gtk --no-debug-info \
+                --library $lib/react-native-svg --library $lib/react-native-screens \
+                --library $lib/react-native-safe-area-context \
+                --library $lib/react-native-worklets --library $lib/react-native-reanimated | tail -n 1)
+              echo "Built in $(( $(date +%s) - start ))s"
               ccache --show-stats
-              native/docker/glibc-floor.sh 2.34 "$build/ngn_core_tests" "$build/ngn_runtime_tests" \
+              echo "$build" > "$GITHUB_WORKSPACE/.linux-probe/build-dir"
+              "$build/ngn_core_tests"
+              "$build/ngn_runtime_tests"
+              xvfb=$(native/scripts/start-xvfb.sh "$GITHUB_WORKSPACE/.linux-probe/xvfb-gtk-tests.log")
+              trap "kill $xvfb" EXIT
+              mkdir -p "$GITHUB_WORKSPACE/.linux-probe/gtk-tests"
+              # A session bus of their own, for the tray and the launcher badge (status-notifier.test.cpp).
+              DISPLAY=:99 GDK_BACKEND=x11 NGN_GTK_TEST_SHOTS="$GITHUB_WORKSPACE/.linux-probe/gtk-tests" \
+                dbus-run-session -- "$build/gtk/ngn_gtk_tests"
+              native/docker/glibc-floor.sh 2.34 "$build/ngn_core_tests" "$build/ngn_runtime_tests" "$build/gtk/ngn-linux" \
                 "$NGN_DESKTOP_CACHE"/*/hermes-$(uname -m)/bin/hermesc
             '
+
+      # The Linux test launcher's fake system UI (packages/testing/device/fake-portals.py) on a
+      # session bus of its own, in the image that has dbus-daemon and PyGObject. As root: dbus-daemon
+      # takes no client whose user the image has no passwd entry for.
+      - name: Test the fake system UI of the Linux test launcher
+        run: |
+          docker run --rm --init -e NGN_REQUIRE_FAKE_SYSTEM_UI=1 \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ngn-el9 \
+            node --test packages/testing/src/device/fake-portals.node.test.ts
+
+      # A .deb depends on DEB_DEPENDS and nothing else: with only those installed in a clean Ubuntu
+      # 24.04, every library the built host loads must be found. (An rpm's requirements are
+      # rpmbuild's own, read from the binary.)
+      - name: Check the deb's dependencies against the host
+        working-directory: packages/desktop
+        run: |
+          packages=$(node -e "import('./bin/package-linux.mjs').then((m) => console.log(m.DEB_DEPENDS.map((d) => d.split(' ')[0]).join(' ')))")
+          test -n "$packages"
+          host="$(cat "$GITHUB_WORKSPACE/.linux-probe/build-dir")/gtk/ngn-linux"
+          docker run --rm -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" ubuntu:24.04 \
+            "$PWD/native/scripts/deb-depends-check.sh" "$host" $packages
+
+      # The host launched on the notes example's release bundle to its first frame, under Xvfb (X11)
+      # and headless Weston (Wayland), as launch-probe.sh checks it: a commit, a first frame, no crash
+      # and no JavaScript error, then read over AT-SPI (atspi-check.py). The bundle is the Linux one,
+      # as a Linux package carries it. Each launch saves its window, drawn in-process, for the
+      # artifact below.
+      - name: Launch the GTK host on an app
+        env:
+          EXPO_NO_TELEMETRY: '1'
+        run: |
+          probe="$GITHUB_WORKSPACE/.linux-probe"
+          (cd examples/notes && pnpm exec expo export:embed --platform linux --dev false \
+            --bundle-output "$probe/notes/main.js" --assets-dest "$probe/notes/assets")
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e NGN_DESKTOP_CACHE -e GITHUB_WORKSPACE \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
+            bash -euo pipefail -c '
+              probe="$GITHUB_WORKSPACE/.linux-probe"
+              host="$(cat "$probe/build-dir")/gtk/ngn-linux"
+              export GTK_A11Y=none
+              xvfb=$(native/scripts/start-xvfb.sh "$probe/xvfb-launch.log")
+              DISPLAY=:99 GDK_BACKEND=x11 NGN_CAPTURE="$probe/x11.png" \
+                native/scripts/launch-probe.sh "$host" "$probe/notes/main.js"
+              kill $xvfb
+              export XDG_RUNTIME_DIR="$(mktemp -d)"
+              weston --backend=headless-backend.so --use-pixman --socket=ngn-wayland --width=1280 --height=800 \
+                > "$probe/weston.log" 2>&1 &
+              weston=$!
+              for _ in $(seq 50); do [ -S "$XDG_RUNTIME_DIR/ngn-wayland" ] && break; sleep 0.2; done
+              WAYLAND_DISPLAY=ngn-wayland GDK_BACKEND=wayland NGN_CAPTURE="$probe/wayland.png" \
+                native/scripts/launch-probe.sh "$host" "$probe/notes/main.js"
+              kill $weston
+            '
+          # The same app read over AT-SPI as a screen reader reads it: its buttons and its text, each
+          # named, a row described by its preview (aria-describedby), then a Tab that must focus a node
+          # AT-SPI reports. As root: dbus-daemon will not start for a user the image has no passwd
+          # entry for.
+          docker run --rm -e GITHUB_WORKSPACE \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
+            bash -euo pipefail -c '
+              probe="$GITHUB_WORKSPACE/.linux-probe"
+              python3 native/scripts/atspi-check.test.py
+              native/scripts/start-xvfb.sh "$probe/xvfb-atspi.log" > /dev/null
+              DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
+                "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/notes/main.js" --role "push button" --role label --relation described-by --tab
+            '
+          # The canary's Device screen on Debian 13, whose GTK 4.18 announces and says a heading's
+          # level over AT-SPI, as el9's 4.12 does neither: a level-2 heading, its Announce button heard
+          # as an announcement (Accessibility.announce), pressed through AT-SPI as Orca presses it, and
+          # its declared action (accessibilityActions) invoked the same way, answered by another.
+          # The host is el9's, which a .deb installs on Debian 13 with DEB_DEPENDS.
+          (cd examples/canary && pnpm exec expo export:embed --platform linux --dev false \
+            --bundle-output "$probe/canary/main.js" --assets-dest "$probe/canary/assets")
+          packages=$(cd packages/desktop && node -e "import('./bin/package-linux.mjs').then((m) => console.log(m.DEB_DEPENDS.map((d) => d.split(' ')[0]).join(' ')))")
+          test -n "$packages"
+          docker run --rm -e GITHUB_WORKSPACE -e PACKAGES="$packages" \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" debian:13 \
+            bash -euo pipefail -c '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends $PACKAGES xvfb dbus at-spi2-core python3-pyatspi \
+                gir1.2-atspi-2.0 fonts-dejavu-core > /dev/null
+              probe="$GITHUB_WORKSPACE/.linux-probe"
+              native/scripts/start-xvfb.sh "$probe/xvfb-debian.log" > /dev/null
+              DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
+                "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/canary/main.js" --url canary://device \
+                --heading 2 --announce "Announce to a screen reader" --action "Announce to a screen reader=repeat"
+            '
+
+      # The notes example's in-app tests on the GTK host, as `vitest --project linux` runs them
+      # anywhere: Metro on the runner serves the dev bundle with the test host, and Vitest, in the
+      # image beside the host on the runner's network, starts the host on a headless Weston of its
+      # own for each launch (linuxLauncher). The first bundle is fetched once here, so the host's
+      # first load is not the cold one.
+      - name: Run the in-app tests on the GTK host
+        env:
+          EXPO_NO_TELEMETRY: '1'
+          EXPO_PUBLIC_DEVICE_TESTS: '1'
+        run: |
+          probe="$GITHUB_WORKSPACE/.linux-probe"
+          (cd examples/notes && exec pnpm exec expo start --port 8081 > "$probe/metro.log" 2>&1) &
+          metro=$!
+          trap "kill $metro" EXIT
+          for _ in $(seq 120); do curl -fs -o /dev/null http://127.0.0.1:8081/status && break; sleep 1; done
+          curl -fs -o /dev/null --max-time 600 \
+            'http://127.0.0.1:8081/.expo/.virtual-metro-entry.bundle?platform=linux&dev=true'
+          # The runner's passwd and group, so the user has an entry in the image: the launcher's fake
+          # system UI runs a session bus, which takes no client the system does not know.
+          docker run --rm --init --network host --user "$(id -u):$(id -g)" -e HOME=/tmp -e GTK_A11Y=none \
+            -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro \
+            -e NGN_DESKTOP_HOST="$(cat "$probe/build-dir")/gtk/ngn-linux" \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/examples/notes" ngn-el9 \
+            node_modules/.bin/vitest run --project linux
+
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-first-frame-${{ matrix.arch }}
+          path: |
+            .linux-probe/*.png
+            .linux-probe/gtk-tests/*.png
+            .linux-probe/weston.log
+            .linux-probe/metro.log
+          if-no-files-found: ignore
 
       - if: github.event_name != 'pull_request'
         uses: actions/cache/save@v6
@@ -270,6 +422,48 @@ jobs:
 
       - if: always()
         run: ccache --show-stats
+
+  # The prebuilt Linux hosts, both flavours on x86_64 and arm64, as the release makes them (the
+  # same action and caches), on a push to main that changed anything they are built from, or by
+  # hand on any branch. Each archive and its entry are kept as an artifact, so a branch's host can
+  # be run (NGN_DESKTOP_FROM_SOURCE unset, a prebuilt.json naming it). Nothing is published.
+  prebuilt-host-linux:
+    name: prebuilt-host-linux (${{ matrix.arch }}, ${{ matrix.flavour }})
+    needs: changes
+    if: >-
+      always() && (github.event_name == 'workflow_dispatch' ||
+      (github.ref == 'refs/heads/main' &&
+      (needs.changes.outputs.desktop == 'true' || needs.changes.outputs.pins == 'true')))
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+        flavour: [debug, release]
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/desktop-prebuilt-linux
+        with:
+          flavour: ${{ matrix.flavour }}
+          version: 0.0.0-main
+          base-url: https://github.com/${{ github.repository }}/releases/download/main
+          out: .prebuilt
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: prebuilt-host-linux-${{ matrix.arch }}-${{ matrix.flavour }}
+          path: .prebuilt
+          include-hidden-files: true
+          if-no-files-found: error
 
   # Both universal prebuilt hosts, as the release makes them (the same action and caches), on a push
   # to main that changed anything they are built from, or by hand. A release on main then finds the

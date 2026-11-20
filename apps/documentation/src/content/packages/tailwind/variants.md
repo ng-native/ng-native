@@ -13,12 +13,13 @@ and `web.css` in a browser build.
 ## Platform, disabled and dark variants
 
 Tailwind cannot infer what platform it is running on, so the variants match a class on the root:
-`platform-ios`, `platform-android`, `platform-macos` or `platform-web`. `mount` puts it there
-itself - on a device from `nativePlatform()`, and `platform-web` from `@ng-native/web`'s `mount` -
-so `ios:`, `android:`, `macos:`, `desktop:` (macOS today), `web:` and `native:` (any OS but the
-web, macOS included) work with nothing to set up. A variant
-whose class is never present simply never matches rather than erroring - `ios:pt-2` in a shared
-class string is not a mistake on a web page, it is just not an iPhone.
+`platform-ios`, `platform-android`, `platform-macos`, `platform-linux` or `platform-web`. `mount`
+puts it there itself - on a device from `nativePlatform()`, and `platform-web` from
+`@ng-native/web`'s `mount` - so `ios:`, `android:`, `macos:`, `linux:`, `desktop:` (macOS and
+Linux), `web:` and `native:` (any OS but the web, the desktop OSes included) work with nothing to
+set up. `linux:` matches in the GTK host on Linux and in a test that renders as Linux.
+A variant whose class is never present simply never matches rather than erroring - `ios:pt-2` in a
+shared class string is not a mistake on a web page, it is just not an iPhone.
 
 Variants stack: `android:dark:bg-zinc-950` applies on Android in dark mode, whether the two classes
 sit on one ancestor, as they do on the root, or on two.

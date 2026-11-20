@@ -91,7 +91,7 @@ std::string cameraMountError(CameraMount mount) {
     case CameraMount::NotPermitted:
       return "Camera permissions not granted - component could not be rendered.";
     case CameraMount::NoCamera:
-      return "Camera could not be started - this Mac has no camera.";
+      return "Camera could not be started - this computer has no camera.";
     default:
       return "";
   }
@@ -134,13 +134,7 @@ std::string contentsOf(const std::string &path) {
   return {std::istreambuf_iterator<char>(in), {}};
 }
 
-// What expo-image-picker's mediaTypes (a MediaType, a list of them, or the deprecated
-// MediaTypeOptions) let the camera take. As on iOS, live photos are photos, and a request that
-// names neither photos nor videos (left out, or an empty list) takes photos.
-struct MediaKinds {
-  bool photos{false};
-  bool videos{false};
-};
+} // namespace
 
 MediaKinds mediaKindsOf(const folly::dynamic &options) {
   MediaKinds kinds;
@@ -162,6 +156,8 @@ MediaKinds mediaKindsOf(const folly::dynamic &options) {
   kinds.photos = kinds.photos || !kinds.videos;
   return kinds;
 }
+
+namespace {
 
 // AVFoundation's session preset for expo-image-picker's videoQuality, which on iOS is
 // UIImagePickerController's QualityType; High for any other value.
@@ -258,7 +254,7 @@ void launchPickerCamera(const PickerCamera &camera, bool noPrompts, const folly:
     return;
   }
   if (!camera.hardware->hasCamera()) {
-    promise.reject("ImagePicker: this Mac has no camera");
+    promise.reject("ImagePicker: this computer has no camera");
     return;
   }
   auto kinds = mediaKindsOf(options);
@@ -270,10 +266,11 @@ void launchPickerCamera(const PickerCamera &camera, bool noPrompts, const folly:
   // no sound when the microphone is refused. Only an app that cannot ask (no
   // NSMicrophoneUsageDescription, so the request leaves it undetermined) is rejected, as iOS
   // rejects it.
+  // Sound needs a microphone there too: Linux's PipeWire records silence, with no error, from none.
   using Access = AudioInput::Access;
   auto access = camera.microphone ? camera.microphone->access() : Access::Denied;
   if (access != Access::NotDetermined) {
-    showPickerCamera(camera, options, kinds, access == Access::Granted, std::move(promise));
+    showPickerCamera(camera, options, kinds, access == Access::Granted && camera.microphone->hasMicrophone(), std::move(promise));
     return;
   }
   camera.microphone->requestAccess([camera, options, kinds, promise](Access decided) {
@@ -281,7 +278,7 @@ void launchPickerCamera(const PickerCamera &camera, bool noPrompts, const folly:
       promise.reject(kMissingMicrophone);
       return;
     }
-    showPickerCamera(camera, options, kinds, decided == Access::Granted, promise);
+    showPickerCamera(camera, options, kinds, decided == Access::Granted && camera.microphone->hasMicrophone(), promise);
   });
 }
 

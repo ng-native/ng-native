@@ -1,6 +1,7 @@
 /**
  * `<search-field>`: the platform's own search field anywhere, not only in a navigation bar. It is
- * `@ng-native/expo`'s own native view, `UISearchBar` on iOS and `SearchView` on Android.
+ * `@ng-native/expo`'s own native view, `UISearchBar` on iOS and `SearchView` on Android, and
+ * the desktop host's own view on macOS and Linux.
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
@@ -116,32 +117,36 @@ describe('a search field', () => {
     ]);
   });
 
-  it("is the desktop host's own view on macOS, focused and blurred by its view commands", async () => {
-    const global = globalThis as Record<string, unknown>;
-    const had = 'require' in global;
-    const before = global['require'];
-    global['require'] = (id: string) => {
-      if (id === 'react-native') return { Platform: { OS: 'macos' } };
-      throw new Error(`Cannot find module '${id}'`);
-    };
-    try {
-      const app = await render(mod['SearchFieldHost'] as Type<unknown>);
-      await idle();
-      const field = screen.getByTestId('field');
-      assert.match(field.viewName, /^ViewManagerAdapter_NgNativeSearchField/);
-      assert.notEqual(field.props['display'], 'none', 'drawn, not taken for a missing view');
-      const host = app.instance as Host;
-      await host.field().focus();
-      await host.field().blur();
-      const sent = app.fabric.commands
-        .filter((command) => command.viewName.startsWith('ViewManagerAdapter_NgNativeSearchField'))
-        .map((command) => command.name);
-      assert.deepEqual(sent, ['focus', 'blur']);
-    } finally {
-      if (had) global['require'] = before;
-      else delete global['require'];
-    }
-  });
+  for (const os of ['macos', 'linux']) {
+    it(`is the desktop host's own view on ${os}, focused and blurred by its view commands`, async () => {
+      const global = globalThis as Record<string, unknown>;
+      const had = 'require' in global;
+      const before = global['require'];
+      global['require'] = (id: string) => {
+        if (id === 'react-native') return { Platform: { OS: os } };
+        throw new Error(`Cannot find module '${id}'`);
+      };
+      try {
+        const app = await render(mod['SearchFieldHost'] as Type<unknown>);
+        await idle();
+        const field = screen.getByTestId('field');
+        assert.match(field.viewName, /^ViewManagerAdapter_NgNativeSearchField/);
+        assert.notEqual(field.props['display'], 'none', 'drawn, not taken for a missing view');
+        const host = app.instance as Host;
+        await host.field().focus();
+        await host.field().blur();
+        const sent = app.fabric.commands
+          .filter((command) =>
+            command.viewName.startsWith('ViewManagerAdapter_NgNativeSearchField'),
+          )
+          .map((command) => command.name);
+        assert.deepEqual(sent, ['focus', 'blur']);
+      } finally {
+        if (had) global['require'] = before;
+        else delete global['require'];
+      }
+    });
+  }
 
   it('empties the field and the query on clear', async () => {
     const { field, host } = await start();

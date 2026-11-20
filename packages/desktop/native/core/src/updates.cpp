@@ -216,7 +216,7 @@ folly::dynamic toJson(const std::optional<LaunchState::Update> &update) {
     return nullptr;
   }
   return folly::dynamic::object("id", update->id)("createdAt", update->createdAt)("runtimeVersion", update->runtimeVersion)(
-      "file", update->file);
+      "file", update->file)("embedded", update->embedded);
 }
 
 std::optional<LaunchState::Update> updateFrom(const folly::dynamic &json) {
@@ -228,7 +228,37 @@ std::optional<LaunchState::Update> updateFrom(const folly::dynamic &json) {
     return value != nullptr && value->isString() ? value->asString() : std::string();
   };
   return LaunchState::Update{
-      .id = text("id"), .createdAt = text("createdAt"), .runtimeVersion = text("runtimeVersion"), .file = text("file")};
+      .id = text("id"),
+      .createdAt = text("createdAt"),
+      .runtimeVersion = text("runtimeVersion"),
+      .file = text("file"),
+      .embedded = text("embedded")};
+}
+
+// The bytes' digest as the manifest writes it, or nothing when the system's crypto cannot hash: a
+// download then fails with an error, as a hash that does not match does, instead of throwing from
+// the network's callback.
+std::optional<std::string> hashOrNothing(UpdateCrypto &crypto, const std::string &bytes) {
+  try {
+    return base64Url(crypto.sha256(bytes));
+  } catch (const std::exception &) {
+    return std::nullopt;
+  }
+}
+
+// The embedded bundle as it is on disk now, by its content: a package or app update that replaces
+// it changes the digest, even to a file of the same size and modification time (a build that
+// normalises timestamps). Empty for a bundle that is not a readable file.
+std::string fingerprintOf(const std::string &bundle, UpdateCrypto &crypto) {
+  std::error_code error;
+  if (!fs::is_regular_file(bundle, error)) {
+    return "";
+  }
+  try {
+    return base64Url(crypto.sha256(readFile(bundle)));
+  } catch (const std::exception &) {
+    return "";
+  }
 }
 
 // The response body and status of one request, gathered from its callbacks.
@@ -435,9 +465,25 @@ std::optional<std::string> UpdatesClient::signatureProblem(
   return std::nullopt;
 }
 
+bool UpdatesClient::stale(const LaunchState::Update &update) const {
+  return update.runtimeVersion != config_.runtimeVersion || update.embedded != fingerprintOf(config_.embeddedBundle, *crypto_);
+}
+
+void UpdatesClient::prune(const LaunchState &state) const {
+  std::error_code error;
+  for (const auto &entry : fs::directory_iterator(config_.directory, error)) {
+    auto name = entry.path().filename().string();
+    bool keep = !entry.is_directory() || (state.current && name == state.current->id) ||
+        (state.previous && name == state.previous->id) || (running_ && name == running_->id);
+    if (!keep) {
+      fs::remove_all(entry.path(), error);
+    }
+  }
+}
+
 bool UpdatesClient::usable(const LaunchState::Update &update, const LaunchState &state) const {
   // Only `<uuid>/launch-asset`, whatever the state file says.
-  if (!isUuid(update.id) || update.file != update.id + "/launch-asset" || update.runtimeVersion != config_.runtimeVersion ||
+  if (!isUuid(update.id) || update.file != update.id + "/launch-asset" || stale(update) ||
       std::find(state.failed.begin(), state.failed.end(), update.id) != state.failed.end() || !fs::exists(pathOf(update))) {
     return false;
   }
@@ -484,6 +530,11 @@ std::string UpdatesClient::launch() {
     }
     state.launching.clear();
   }
+  // An update for another runtime version, or fetched over the embedded bundle a package update
+  // has since replaced, is dropped with its files.
+  if (state.previous && stale(*state.previous)) {
+    state.previous.reset();
+  }
   if (state.current && !usable(*state.current, state)) {
     state.current.reset();
   }
@@ -493,6 +544,7 @@ std::string UpdatesClient::launch() {
   }
   try {
     save(state);
+    prune(state);
   } catch (const std::exception &) {
     // Without its launch mark a crash in the update would never roll it back: the embedded
     // bundle runs instead.
@@ -585,9 +637,13 @@ std::string UpdatesClient::beginReload() {
   return running_ ? pathOf(*running_) : config_.embeddedBundle;
 }
 
+std::string UpdatesClient::offReason() const {
+  return enabled() ? "" : "Updates are off: the app has no updates URL (updates.url in app.json).";
+}
+
 void UpdatesClient::check(std::function<void(CheckResult)> done) {
   if (!enabled()) {
-    done({.error = "updates are off: the app has no updates URL"});
+    done({.error = offReason()});
     return;
   }
   HttpRequest request{.url = config_.url, .withCredentials = false};
@@ -754,6 +810,7 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
           .createdAt = found.createdAt,
           .runtimeVersion = found.runtimeVersion,
           .file = found.id + "/launch-asset",
+          .embedded = fingerprintOf(config_.embeddedBundle, *crypto_),
       };
       for (const auto &[file, bytes] : fetching.files) {
         writeFile(config_.directory / update.id / file, bytes);
@@ -773,14 +830,7 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
       state.current = update;
       save(state);
       // Only the updates the state names, and the one running, are kept.
-      for (const auto &entry : fs::directory_iterator(config_.directory)) {
-        auto name = entry.path().filename().string();
-        bool keep = !entry.is_directory() || name == update.id || (state.previous && name == state.previous->id) ||
-            (running_ && name == running_->id);
-        if (!keep) {
-          fs::remove_all(entry.path());
-        }
-      }
+      prune(state);
       found_.reset();
       result.isNew = true;
       result.manifest = found.raw;
@@ -821,7 +871,12 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
       }
     }
     download(asset.url, "the asset " + asset.key, [this, fetching, asset, path, done](std::string bytes) {
-      if (base64Url(crypto_->sha256(bytes)) != asset.hash) {
+      auto hash = hashOrNothing(*crypto_, bytes);
+      if (!hash) {
+        done({.error = "the asset " + asset.key + " could not be hashed: the update was not kept"});
+        return;
+      }
+      if (*hash != asset.hash) {
         done({.error = "the asset " + asset.key + "'s hash is not the manifest's: the update was not kept"});
         return;
       }
@@ -831,7 +886,12 @@ void UpdatesClient::fetch(std::function<void(FetchResult)> done) {
   };
 
   download(found->launchUrl, "the launch asset", [this, fetching, done](std::string bytes) {
-    if (base64Url(crypto_->sha256(bytes)) != fetching->manifest.launchHash) {
+    auto hash = hashOrNothing(*crypto_, bytes);
+    if (!hash) {
+      done({.error = "the launch asset could not be hashed: it was not kept"});
+      return;
+    }
+    if (*hash != fetching->manifest.launchHash) {
       done({.error = "the launch asset's hash is not the manifest's: it was not kept"});
       return;
     }
@@ -906,12 +966,11 @@ std::shared_ptr<NativeModule> makeUpdatesModule(
         }
         return assets;
       });
-      auto refuse = [on, development](JsPromise &p) {
+      auto refuse = [on, development, client](JsPromise &p) {
         if (on) {
           return false;
         }
-        p.reject(development ? "Updates are off in development, where the bundle comes from the dev server."
-                             : "Updates are off: the app has no updates URL (updates.url in app.json).");
+        p.reject(development ? "Updates are off in development, where the bundle comes from the dev server." : client->offReason());
         return true;
       };
       promise("checkForUpdateAsync", [client, refuse](const folly::dynamic &, JsPromise p) {

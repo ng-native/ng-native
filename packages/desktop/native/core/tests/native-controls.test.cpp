@@ -89,9 +89,9 @@ struct Control {
 };
 
 // A layout off the UI thread, as the JS thread's.
-Size measure(const ShadowNode &node, Size max = {1000, 1000}) {
+Size measure(const ShadowNode &node, Size max = {1000, 1000}, float fontScale = 1) {
   const auto &layoutable = dynamic_cast<const LayoutableShadowNode &>(node);
-  return layoutable.measureContent({}, {.minimumSize = {0, 0}, .maximumSize = max});
+  return layoutable.measureContent({.fontSizeMultiplier = fontScale}, {.minimumSize = {0, 0}, .maximumSize = max});
 }
 
 template <class Descriptor>
@@ -143,6 +143,8 @@ TEST_CASE("a segmented control and a date picker parse what their elements commi
   CHECK(d->mode == "time");
   CHECK(d->display == "compact");
   CHECK_FALSE(d->minimumDate.has_value());
+  CHECK(d->minuteInterval == 1);
+  CHECK(picker.props(folly::dynamic::object("mode", "countdown")("minuteInterval", 15))->minuteInterval == 15);
 }
 
 TEST_CASE("a control measures as the toolkit draws it at its control size") {
@@ -231,6 +233,22 @@ TEST_CASE("a control's size is measured again when a measured input changes, and
         Size{140, 22});
   CHECK(c.measurer->kinds.size() == 3);
   CHECK(c.backend->pending() == 0);
+}
+
+TEST_CASE("a control is measured again when the desktop's text scaling changes") {
+  Control<ngn::NativeButtonComponentDescriptor> c;
+  auto save = c.node(folly::dynamic::object("title", "Save"));
+  CHECK(c.measureOnUiThread(*save) == Size{120, 22});
+  // The same props laid out at a new text size multiplier miss the size held for the old one.
+  CHECK(measure(*save, {1000, 1000}, 1.25) == Size{120, 22});
+  c.backend->drain();
+  CHECK(c.measurer->titles == std::vector<std::string>{"Save", "Save"});
+  CHECK(*c.relaidOut == std::vector<Tag>{9});
+  // And back: measured again, the size for 1.25 let go.
+  measure(*save);
+  c.backend->drain();
+  CHECK(c.measurer->titles.size() == 3);
+  CHECK(c.sizes->held() == 1);
 }
 
 TEST_CASE("a measurement a control no longer wants is not made") {
@@ -412,4 +430,53 @@ TEST_CASE("a search field parses what <search-field> commits, its type included"
   c.measureOnUiThread(*c.node(folly::dynamic::object("controlSize", "large")));
   CHECK(c.measurer->kinds == std::vector<ngn::ControlKind>{ngn::ControlKind::SearchField});
   CHECK(c.measurer->sizes == std::vector<ngn::ControlSize>{ngn::ControlSize::Large});
+}
+
+TEST_CASE("a button's kind is empty until the element sets one") {
+  Control<ngn::NativeButtonComponentDescriptor> c;
+  CHECK(c.props(folly::dynamic::object("title", "Save"))->kind.empty());
+  CHECK(c.props(folly::dynamic::object("kind", "default"))->kind == "default");
+}
+
+TEST_CASE("a time format writes a 12-hour clock when it has the hour of 12 or the AM and PM") {
+  CHECK(ngn::twelveHourClock("%r"));
+  CHECK(ngn::twelveHourClock("%I:%M:%S %p"));
+  CHECK(ngn::twelveHourClock("%l:%M %P"));
+  CHECK_FALSE(ngn::twelveHourClock("%T"));
+  CHECK_FALSE(ngn::twelveHourClock("%H:%M:%S"));
+  CHECK_FALSE(ngn::twelveHourClock(""));
+  // A literal percent sign is not a conversion.
+  CHECK_FALSE(ngn::twelveHourClock("%H%%p"));
+}
+
+TEST_CASE("an hour on a 12-hour clock and its half of the day give the hour of the day, and back") {
+  CHECK(ngn::dayHour(12, false) == 0);
+  CHECK(ngn::dayHour(1, false) == 1);
+  CHECK(ngn::dayHour(11, false) == 11);
+  CHECK(ngn::dayHour(12, true) == 12);
+  CHECK(ngn::dayHour(1, true) == 13);
+  CHECK(ngn::dayHour(11, true) == 23);
+  CHECK(ngn::clockHour(0) == 12);
+  CHECK(ngn::clockHour(13) == 1);
+  CHECK(ngn::clockHour(12) == 12);
+}
+
+TEST_CASE("GNOME's clock-format names a 12 or 24-hour clock, and anything else leaves it to the locale") {
+  CHECK(ngn::clockFormatTwelveHour("12h") == std::optional<bool>(true));
+  CHECK(ngn::clockFormatTwelveHour("24h") == std::optional<bool>(false));
+  CHECK_FALSE(ngn::clockFormatTwelveHour(""));
+  CHECK_FALSE(ngn::clockFormatTwelveHour("12H"));
+}
+
+TEST_CASE("a minuteInterval is one UIDatePicker takes, and a minute is shown at the step before it") {
+  for (int interval : {1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30}) {
+    CHECK(ngn::pickerMinuteInterval(interval) == interval);
+  }
+  for (int interval : {0, -5, 7, 25, 45, 60}) {
+    CHECK(ngn::pickerMinuteInterval(interval) == 1);
+  }
+  CHECK(ngn::minuteOnInterval(37, 15) == 30);
+  CHECK(ngn::minuteOnInterval(45, 15) == 45);
+  CHECK(ngn::minuteOnInterval(59, 30) == 30);
+  CHECK(ngn::minuteOnInterval(37, 7) == 37);
 }

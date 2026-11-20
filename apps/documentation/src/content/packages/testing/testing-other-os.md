@@ -28,11 +28,13 @@ export default defineConfig({
 ```
 
 The Node projects take a `node-` prefix, because the projects that run inside the app are named
-for their platform: `vitest --project macos` runs the in-app tests on a Mac.
+for their platform: `vitest --project macos` runs the in-app tests on a Mac, and
+`vitest --project linux` on Linux.
 
 An extensionless import resolves a platform file first, as Metro does: on macOS `./storage` is
 `storage.macos.ts`, then `storage.ios.ts`, then `storage.native.ts`, then `storage.ts`. On Android
-it is `.android`, then `.native`.
+it is `.android`, then `.native`. An `os` of `'linux'` resolves `.linux`, then `.ios`, then
+`.native`, and renders as Linux, a desktop OS.
 
 ## One render as another OS
 

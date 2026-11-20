@@ -114,3 +114,116 @@ TEST_CASE("File has Print... on Command-P, after Close Window") {
   CHECK(file[2].key == "p");
   CHECK(file[2].modifiers == ngn::Command);
 }
+
+TEST_CASE("Linux's menu bar: the app's groups, then the app's menu with About and Quit on Ctrl+Q") {
+  auto bar = ngn::defaultMenuBar({.appName = "Notes", .os = ngn::linuxOs()});
+  CHECK(titles(bar) == std::vector<std::string>{"File", "Edit", "View", "Notes"});
+  auto quit = ngn::findMenuItem(bar, MenuCommand::Quit);
+  REQUIRE(quit);
+  CHECK(quit->key == "q");
+  CHECK(quit->modifiers == ngn::Control);
+  CHECK(bar.back().items.back().command == MenuCommand::Quit);
+  // Nothing of macOS's own: no Hide, Services, Minimize, Zoom or window list.
+  for (auto command : {MenuCommand::Hide, MenuCommand::HideOthers, MenuCommand::ShowAll, MenuCommand::Minimize, MenuCommand::Zoom,
+                       MenuCommand::BringAllToFront}) {
+    CHECK_FALSE(ngn::findMenuItem(bar, command));
+  }
+  auto undo = ngn::findMenuItem(bar, MenuCommand::Undo);
+  REQUIRE(undo);
+  CHECK(undo->modifiers == ngn::Control);
+  auto back = ngn::findMenuItem(bar, MenuCommand::Back);
+  REQUIRE(back);
+  CHECK(back->key == "ArrowLeft");
+  CHECK(back->modifiers == ngn::Option);
+}
+
+TEST_CASE("Linux's app menu opens Keyboard Shortcuts on Ctrl+Shift+?, before About") {
+  auto bar = ngn::defaultMenuBar({.appName = "Notes", .os = ngn::linuxOs()});
+  auto shortcuts = ngn::findMenuItem(bar, MenuCommand::KeyboardShortcuts);
+  REQUIRE(shortcuts);
+  CHECK(shortcuts->title == "Keyboard Shortcuts");
+  CHECK(shortcuts->key == "?");
+  CHECK(shortcuts->modifiers == (ngn::Control | ngn::Shift));
+  CHECK(&bar.back().items.front() == shortcuts);
+  CHECK(ngn::findMenuItem(bar, ngn::KeyChord{.key = "?", .modifiers = ngn::Control | ngn::Shift}) == shortcuts);
+  // macOS has no such window.
+  CHECK_FALSE(ngn::findMenuItem(ngn::defaultMenuBar({.appName = "Notes", .os = ngn::macOS()}), MenuCommand::KeyboardShortcuts));
+}
+
+TEST_CASE("the Keyboard Shortcuts window lists each menu's keys, through submenus, leaving out the rest") {
+  ngn::MenuItem keyed{.title = "Save", .key = "s", .modifiers = ngn::Control};
+  ngn::MenuItem plain{.title = "Share"};
+  ngn::MenuItem off{.title = "Export", .key = "e", .modifiers = ngn::Control, .disabled = true};
+  ngn::MenuItem nested{.title = "Open Recent", .items = {ngn::MenuItem{.title = "Clear", .key = "Delete", .modifiers = ngn::Control}}};
+  std::vector<ngn::MenuItem> bar{
+      ngn::MenuItem{.title = "File", .items = {keyed, ngn::MenuItem{.separator = true}, plain, off, nested}},
+      ngn::MenuItem{.title = "Window", .items = {plain}},
+  };
+  auto groups = ngn::menuShortcuts(bar);
+  REQUIRE(groups.size() == 1);
+  CHECK(groups[0].title == "File");
+  CHECK(groups[0].entries == std::vector<ngn::ShortcutEntry>{
+                                 {.title = "Save", .chord = {.key = "s", .modifiers = ngn::Control}},
+                                 {.title = "Clear", .chord = {.key = "Delete", .modifiers = ngn::Control}},
+                             });
+}
+
+TEST_CASE("the Keyboard Shortcuts window leaves out a disabled menu, whose keys select nothing") {
+  ngn::MenuItem save{.title = "Save", .key = "s", .modifiers = ngn::Control};
+  std::vector<ngn::MenuItem> bar{
+      ngn::MenuItem{.title = "File", .items = {save}, .disabled = true},
+      ngn::MenuItem{.title = "Edit", .items = {ngn::MenuItem{.title = "Undo", .key = "z", .modifiers = ngn::Control}}},
+  };
+  CHECK(ngn::findMenuItem(bar, ngn::KeyChord{.key = "s", .modifiers = ngn::Control}) == nullptr);
+  auto groups = ngn::menuShortcuts(bar);
+  REQUIRE(groups.size() == 1);
+  CHECK(groups[0].title == "Edit");
+}
+
+TEST_CASE("Linux's Developer menu reloads on Ctrl+R") {
+  CHECK_FALSE(ngn::findMenuItem(ngn::defaultMenuBar({.appName = "Notes", .os = ngn::linuxOs()}), MenuCommand::Reload));
+  auto bar = ngn::defaultMenuBar({.appName = "Notes", .developer = true, .os = ngn::linuxOs()});
+  auto reload = ngn::findMenuItem(bar, MenuCommand::Reload);
+  REQUIRE(reload);
+  CHECK(reload->key == "r");
+  CHECK(reload->modifiers == ngn::Control);
+}
+
+TEST_CASE("Linux puts the menus in a menu bar on KDE Plasma and in the header bar's primary menu elsewhere") {
+  using ngn::MenuPlacement;
+  CHECK(ngn::linuxMenuPlacement("KDE") == MenuPlacement::MenuBar);
+  // Any entry of the list: a distribution may name its own session first.
+  CHECK(ngn::linuxMenuPlacement("Neon:KDE") == MenuPlacement::MenuBar);
+  CHECK(ngn::linuxMenuPlacement("KDE:wlroots") == MenuPlacement::MenuBar);
+  CHECK(ngn::linuxMenuPlacement("GNOME") == MenuPlacement::PrimaryMenu);
+  CHECK(ngn::linuxMenuPlacement("ubuntu:GNOME") == MenuPlacement::PrimaryMenu);
+  // A name holding KDE is not KDE, and no desktop at all is the header bar's menu.
+  CHECK(ngn::linuxMenuPlacement("KDEX:GNOME") == MenuPlacement::PrimaryMenu);
+  CHECK(ngn::linuxMenuPlacement("") == MenuPlacement::PrimaryMenu);
+  CHECK(ngn::linuxMenuPlacement("::") == MenuPlacement::PrimaryMenu);
+}
+
+TEST_CASE("a key press finds the enabled item it chooses, by its key and exactly its modifiers") {
+  auto bar = ngn::linuxMenuBar({.appName = "Notes", .developer = true, .os = ngn::linuxOs()});
+  bar.insert(bar.begin(), ngn::MenuItem{
+                              .title = "Note",
+                              .items = {ngn::MenuItem{.title = "New", .command = ngn::MenuCommand::AppItem, .key = "n", .modifiers = ngn::Control, .id = "new"},
+                                        ngn::MenuItem{.title = "Off", .command = ngn::MenuCommand::AppItem, .key = "o", .modifiers = ngn::Control, .id = "off", .disabled = true}},
+                          });
+  auto find = [&bar](std::string key, unsigned modifiers) { return ngn::findMenuItem(bar, ngn::KeyChord{.key = std::move(key), .modifiers = modifiers}); };
+  REQUIRE(find("q", ngn::Control));
+  CHECK(find("q", ngn::Control)->command == ngn::MenuCommand::Quit);
+  // Shift+Ctrl+Z comes as a capital Z.
+  REQUIRE(find("Z", ngn::Control | ngn::Shift));
+  CHECK(find("Z", ngn::Control | ngn::Shift)->command == ngn::MenuCommand::Redo);
+  CHECK(find("z", ngn::Control)->command == ngn::MenuCommand::Undo);
+  CHECK(find("ArrowLeft", ngn::Option)->command == ngn::MenuCommand::Back);
+  CHECK(find("F11", 0)->command == ngn::MenuCommand::ToggleFullScreen);
+  CHECK(find("n", ngn::Control)->id == "new");
+  // A disabled item, a key with other modifiers, and a menu's title choose nothing.
+  CHECK_FALSE(find("o", ngn::Control));
+  CHECK_FALSE(find("q", ngn::Control | ngn::Shift));
+  CHECK_FALSE(find("q", 0));
+  CHECK(ngn::isEditingCommand(ngn::MenuCommand::Paste));
+  CHECK_FALSE(ngn::isEditingCommand(ngn::MenuCommand::Quit));
+}
