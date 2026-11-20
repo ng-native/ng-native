@@ -171,8 +171,9 @@ variant compiles to exactly that), and it is kept.
 
 On macOS the desktop host draws every function but `drop-shadow()` as Core Image filters on the
 view's layer, applied in the order written over the view and its children, so a macOS build keeps
-them. A `filter` that holds a `drop-shadow()` is dropped whole with a warning, a `blur()` in the
-same value too (use `box-shadow`, or scope the rule to Android). A blur's edge spreads past the
+them. A stylesheet's `filter` that holds a `drop-shadow()` is dropped whole with a warning, a
+`blur()` in the same value too (use `box-shadow`, or scope the rule to Android); a `filter` set from
+a script at runtime skips the shadow and draws its other functions. A blur's edge spreads past the
 view's box, as on the web.
 
 A component's stylesheet is compiled for the platform Metro is bundling, so an unscoped rule keeps
