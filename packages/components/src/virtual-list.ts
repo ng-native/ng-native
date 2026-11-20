@@ -1374,7 +1374,7 @@ export class VirtualList<T> extends ScrollViewProps {
     return style!;
   }
 
-  private onScroll(
+  protected onScroll(
     event: NativeSyntheticEvent<{ contentOffset?: { x?: number; y?: number } }>,
   ): void {
     const contentOffset = event.nativeEvent?.contentOffset;
