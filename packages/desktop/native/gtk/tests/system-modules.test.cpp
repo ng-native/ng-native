@@ -35,6 +35,54 @@ std::string readFile(const std::string &path) {
   return text.str();
 }
 
+// The bytes zlib inflates `deflated` to, or none where they are not zlib's.
+std::string inflated(const std::string &deflated) {
+  GConverter *decompressor = G_CONVERTER(g_zlib_decompressor_new(G_ZLIB_COMPRESSOR_FORMAT_ZLIB));
+  std::string out;
+  std::vector<char> buffer(64 * 1024);
+  size_t at = 0;
+  for (;;) {
+    gsize read = 0, written = 0;
+    GError *error = nullptr;
+    auto result = g_converter_convert(decompressor, deflated.data() + at, deflated.size() - at, buffer.data(), buffer.size(),
+                                      G_CONVERTER_INPUT_AT_END, &read, &written, &error);
+    if (result == G_CONVERTER_ERROR) {
+      g_clear_error(&error);
+      out.clear();
+      break;
+    }
+    at += read;
+    out.append(buffer.data(), written);
+    if (result == G_CONVERTER_FINISHED) {
+      break;
+    }
+  }
+  g_object_unref(decompressor);
+  return out;
+}
+
+// A PDF file's text with each of its streams inflated after it. Cairo 1.17.6 and later write the
+// page tree of a PDF 1.5 file into compressed object streams, where the file's bytes no longer
+// show it; older cairo writes it as plain text.
+std::string readPdf(const std::string &path) {
+  std::string pdf = readFile(path), text = pdf;
+  for (size_t at = pdf.find("stream"); at != std::string::npos; at = pdf.find("stream", at)) {
+    size_t start = at + 6;
+    if (at >= 3 && pdf.compare(at - 3, 3, "end") == 0) {
+      at = start;
+      continue;
+    }
+    start += pdf.compare(start, 2, "\r\n") == 0 ? 2 : 1;
+    size_t end = pdf.find("endstream", start);
+    if (end == std::string::npos) {
+      break;
+    }
+    text += "\n" + inflated(pdf.substr(start, end - start));
+    at = end + 9;
+  }
+  return text;
+}
+
 // The first page's MediaBox width and height, from cairo's PDF.
 std::pair<double, double> pageSize(const std::string &pdf) {
   std::smatch box;
@@ -212,13 +260,13 @@ TEST_CASE("Printing a window or an image draws it onto one page, turned for land
   CHECK(ngn::gtk::exportWidget(label, true, landscape));
   CHECK(ngn::gtk::exportImage(pngBytes(40, 20), false, image));
   for (const auto &path : {portrait, landscape, image}) {
-    auto pdf = readFile(path);
+    auto pdf = readPdf(path);
     CHECK(pdf.rfind("%PDF", 0) == 0);
     CHECK(pdf.find("/Count 1") != std::string::npos);
   }
-  auto [width, height] = pageSize(readFile(portrait));
+  auto [width, height] = pageSize(readPdf(portrait));
   CHECK(height > width);
-  auto turned = pageSize(readFile(landscape));
+  auto turned = pageSize(readPdf(landscape));
   CHECK(turned.first > turned.second);
   CHECK_FALSE(ngn::gtk::exportImage("not an image", false, image + ".bad"));
   for (const auto &path : {portrait, landscape, image}) {

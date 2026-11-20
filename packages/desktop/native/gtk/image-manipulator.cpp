@@ -37,6 +37,26 @@ GdkPixbuf *uprightPixbuf(const std::string &bytes) {
   return upright;
 }
 
+// `pixbuf`'s colour channels in a new pixbuf without alpha, or a new reference to it where it has
+// none.
+GdkPixbuf *withoutAlpha(GdkPixbuf *pixbuf) {
+  if (!gdk_pixbuf_get_has_alpha(pixbuf)) {
+    return GDK_PIXBUF(g_object_ref(pixbuf));
+  }
+  int width = gdk_pixbuf_get_width(pixbuf), height = gdk_pixbuf_get_height(pixbuf);
+  GdkPixbuf *opaque = gdk_pixbuf_new(GDK_COLORSPACE_RGB, FALSE, 8, width, height);
+  const guchar *from = gdk_pixbuf_read_pixels(pixbuf);
+  guchar *to = gdk_pixbuf_get_pixels(opaque);
+  int fromStride = gdk_pixbuf_get_rowstride(pixbuf), toStride = gdk_pixbuf_get_rowstride(opaque);
+  int channels = gdk_pixbuf_get_n_channels(pixbuf);
+  for (int y = 0; y < height; ++y) {
+    for (int x = 0; x < width; ++x) {
+      std::copy_n(from + y * fromStride + x * channels, 3, to + y * toStride + x * 3);
+    }
+  }
+  return opaque;
+}
+
 // Cairo reports a failure (a size it cannot allocate, say) as an error object, not null: a later
 // step drawing on it would go on to a blank image that encodes as if it were the edit.
 void throwUnlessOk(cairo_status_t status) {
@@ -199,9 +219,12 @@ class PixbufCodec final : public ImageCodec {
       auto level = std::to_string(static_cast<int>(std::lround(std::clamp(quality, 0.0, 1.0) * 100)));
       saved = gdk_pixbuf_save_to_buffer(result, &buffer, &length, "webp", &error, "quality", level.c_str(), nullptr);
     } else {
-      // JPEG has no alpha: gdk-pixbuf's writer takes the colour channels only.
+      // JPEG has no alpha, so it is given the colour channels only: gdk-pixbuf 2.44 and later
+      // write JPEG through glycin, whose encoder refuses an image with alpha.
       auto level = std::to_string(static_cast<int>(std::lround(std::clamp(quality, 0.0, 1.0) * 100)));
-      saved = gdk_pixbuf_save_to_buffer(result, &buffer, &length, "jpeg", &error, "quality", level.c_str(), nullptr);
+      GdkPixbuf *opaque = withoutAlpha(result);
+      saved = gdk_pixbuf_save_to_buffer(opaque, &buffer, &length, "jpeg", &error, "quality", level.c_str(), nullptr);
+      g_object_unref(opaque);
     }
     g_object_unref(result);
     if (!saved) {
