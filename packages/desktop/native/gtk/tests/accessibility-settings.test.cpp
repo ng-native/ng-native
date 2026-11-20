@@ -299,7 +299,7 @@ TEST_CASE("the portal is asked with Read only where it has no ReadOne, and no mo
   {
     // The older portal: Read answers.
     ngn::gtk::AccessibilitySettingsWatcher watcher([](const ngn::AccessibilitySettings &) {}, bus.client);
-    ngn::testing::runUntil([&] { return watcher.sources().portalReducedMotion; });
+    ngn::testing::runUntil([&] { return watcher.sources().portalReducedMotion && portal.read == kKeys; });
     CHECK(portal.readOne == kKeys);
     CHECK(portal.read == kKeys);
   }
@@ -307,7 +307,8 @@ TEST_CASE("the portal is asked with Read only where it has no ReadOne, and no mo
   portal.readWorks = false;
   portal.readOne = portal.read = 0;
   ngn::gtk::AccessibilitySettingsWatcher watcher([](const ngn::AccessibilitySettings &) {}, bus.client);
-  ngn::testing::runUntil([&] { return portal.read > 0; });
+  // Both settings fall back, then nothing more is asked.
+  ngn::testing::runUntil([&] { return portal.read == kKeys; });
   idleFor(300);
   CHECK(portal.readOne == kKeys);
   CHECK(portal.read == kKeys);
