@@ -14343,8 +14343,9 @@ export class Engine implements HostEngine {
 
   /**
    * Turn motion off or back on: see `EngineOptions.motion`. It holds for each node from its next
-   * style change: a transition or animation already running goes on until the node restyles,
-   * when a finite animation lands on its end and one that repeats forever is cancelled.
+   * commit of its style. One whose animation the engine plays in JavaScript is recommitted every
+   * frame, so takes it at once; one native plays, or a node at rest, takes it when it is next
+   * restyled. Then a finite animation lands on its end, and one that repeats forever is cancelled.
    */
   setMotion(motion: 'on' | 'off' = 'on'): void {
     this.motion = motion;
