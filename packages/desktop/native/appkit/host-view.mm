@@ -616,11 +616,7 @@ static BOOL focusFromKeyboard() {
 - (BOOL)sendAccessibilityAction:(const std::string &)name {
   auto viewProps = std::dynamic_pointer_cast<const ViewProps>(_props);
   auto emitter = std::dynamic_pointer_cast<const ViewEventEmitter>(_emitter);
-  if (!viewProps || !viewProps->onAccessibilityAction || !emitter) {
-    return NO;
-  }
-  emitter->onAccessibilityAction(name);
-  return YES;
+  return viewProps && ngn::sendAxAction(*viewProps, emitter.get(), name);
 }
 
 // One of AppKit's standard actions, as the core decides it reaches the app (accessibility.h).

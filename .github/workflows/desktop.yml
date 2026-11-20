@@ -266,13 +266,15 @@ jobs:
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/packages/desktop" ngn-el9 \
             bash -euo pipefail -c '
               probe="$GITHUB_WORKSPACE/.linux-probe"
+              python3 native/scripts/atspi-check.test.py
               Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
               DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
                 "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/notes/main.js" --role "push button" --role label --relation described-by --tab
             '
           # The canary's Device screen on Debian 13, whose GTK 4.18 announces and says a heading's
           # level over AT-SPI, as el9's 4.12 does neither: a level-2 heading, its Announce button heard
-          # as an announcement (Accessibility.announce), pressed through AT-SPI as Orca presses it.
+          # as an announcement (Accessibility.announce), pressed through AT-SPI as Orca presses it, and
+          # its declared action (accessibilityActions) invoked the same way, answered by another.
           # The host is el9's, which a .deb installs on Debian 13 with DEB_DEPENDS.
           (cd examples/canary && pnpm exec expo export:embed --platform linux --dev false \
             --bundle-output "$probe/canary/main.js" --assets-dest "$probe/canary/assets")
@@ -289,7 +291,7 @@ jobs:
               Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
               DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
                 "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/canary/main.js" --url canary://device \
-                --heading 2 --announce "Announce to a screen reader"
+                --heading 2 --announce "Announce to a screen reader" --action "Announce to a screen reader=repeat"
             '
 
       # The notes example's in-app tests on the GTK host, as `vitest --project linux` runs them

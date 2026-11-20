@@ -1,5 +1,7 @@
 #include "accessibility-settings.h"
 
+#include "settings-portal.h"
+
 #include <adwaita.h>
 #include <gtk/gtk.h>
 
@@ -9,9 +11,6 @@
 namespace ngn::gtk {
 
 namespace {
-
-// The org.freedesktop.appearance keys read from the settings portal.
-constexpr const char *kPortalKeys[] = {"reduced-motion", "contrast"};
 
 // An int or enum GtkSettings property newer than the floor, or `fallback` where GTK lacks it.
 int settingOr(GtkSettings *settings, const char *name, int fallback) {
@@ -27,14 +26,11 @@ int settingOr(GtkSettings *settings, const char *name, int fallback) {
   return out;
 }
 
-// A portal value, which ReadOne gives as is and the older Read wraps in another variant.
+// A portal number, 0 where the value is none.
 guint32 portalNumber(GVariant *value) {
-  GVariant *inner = value;
-  while (inner && g_variant_is_of_type(inner, G_VARIANT_TYPE_VARIANT)) {
-    inner = g_variant_get_variant(inner);
-  }
+  GVariant *inner = portalValue(value);
   guint32 n = inner && g_variant_is_of_type(inner, G_VARIANT_TYPE_UINT32) ? g_variant_get_uint32(inner) : 0;
-  if (inner && inner != value) {
+  if (inner) {
     g_variant_unref(inner);
   }
   return n;
@@ -66,7 +62,13 @@ AccessibilitySettingsWatcher::AccessibilitySettingsWatcher(std::function<void(co
   readGtk();
   report();
 
-  // The session bus, or the connection a test gives in its place.
+  // The settings portal's reduced-motion and contrast, on the session bus or the test's connection.
+  portal_ = std::make_unique<SettingsPortal>(
+      std::vector<std::string>{"reduced-motion", "contrast"}, [this](const std::string &key, GVariant *value) { readPortal(key, value); },
+      connection);
+
+  // AT-SPI's own status, which says whether a screen reader runs: on the session bus, or the test's
+  // connection.
   auto proxyOn = [connection](GDBusProxyFlags flags, const char *name, const char *path, const char *interface, GCancellable *cancellable,
                               GAsyncReadyCallback ready, gpointer data) {
     if (connection) {
@@ -75,44 +77,6 @@ AccessibilitySettingsWatcher::AccessibilitySettingsWatcher(std::function<void(co
       g_dbus_proxy_new_for_bus(G_BUS_TYPE_SESSION, flags, nullptr, name, path, interface, cancellable, ready, data);
     }
   };
-
-  // The settings portal's reduced-motion and contrast, read once it answers and followed as they
-  // change.
-  proxyOn(
-      G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES, "org.freedesktop.portal.Desktop",
-      "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Settings", cancellable_,
-      +[](GObject *, GAsyncResult *result, gpointer data) {
-        GDBusProxy *proxy = g_dbus_proxy_new_finish(result, nullptr);
-        if (!proxy) {
-          return;
-        }
-        auto *self = static_cast<AccessibilitySettingsWatcher *>(data);
-        self->portal_ = proxy;
-        // A portal that restarts need not say its value again: read it as a new owner appears, and
-        // let go of the old one's as it goes.
-        g_signal_connect_swapped(proxy, "notify::g-name-owner", G_CALLBACK(+[](AccessibilitySettingsWatcher *self) {
-          self->portalOwnerChanged();
-        }), self);
-        auto changed = +[](AccessibilitySettingsWatcher *self, const char *, const char *signal, GVariant *params) {
-          const char *ns = nullptr;
-          const char *key = nullptr;
-          GVariant *value = nullptr;
-          if (std::strcmp(signal, "SettingChanged") == 0 && g_variant_is_of_type(params, G_VARIANT_TYPE("(ssv)"))) {
-            g_variant_get(params, "(&s&sv)", &ns, &key, &value);
-            if (std::strcmp(ns, "org.freedesktop.appearance") == 0) {
-              self->readPortal(key, value);
-            }
-            g_variant_unref(value);
-          }
-        };
-        g_signal_connect_swapped(proxy, "g-signal", G_CALLBACK(changed), self);
-        for (const char *key : kPortalKeys) {
-          self->readPortalSetting(key, false);
-        }
-      },
-      this);
-
-  // AT-SPI's own status, which says whether a screen reader runs.
   proxyOn(
       G_DBUS_PROXY_FLAGS_NONE, "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Status", cancellable_,
       +[](GObject *, GAsyncResult *result, gpointer data) {
@@ -138,10 +102,6 @@ AccessibilitySettingsWatcher::~AccessibilitySettingsWatcher() {
     g_signal_handlers_disconnect_by_data(settings, this);
   }
   g_signal_handlers_disconnect_by_data(adw_style_manager_get_default(), this);
-  if (portal_) {
-    g_signal_handlers_disconnect_by_data(portal_, this);
-    g_clear_object(&portal_);
-  }
   if (status_) {
     g_signal_handlers_disconnect_by_data(status_, this);
     g_clear_object(&status_);
@@ -161,70 +121,11 @@ void AccessibilitySettingsWatcher::readGtk() {
   sources_.highContrast = adw_style_manager_get_high_contrast(adw_style_manager_get_default()) || gtkContrast;
 }
 
-void AccessibilitySettingsWatcher::portalOwnerChanged() {
-  // Replies asked of the last owner are no longer this one's to give.
-  portalRead_++;
-  char *owner = g_dbus_proxy_get_name_owner(portal_);
-  if (owner) {
-    g_free(owner);
-    for (const char *key : kPortalKeys) {
-      readPortalSetting(key, false);
-    }
-    return;
-  }
-  sources_.portalReducedMotion = false;
-  sources_.portalContrast = false;
-  report();
-}
-
-namespace {
-
-// A read of one of the portal's settings, for the owner it was asked of. The key is one of
-// kPortalKeys, which outlive the call.
-struct PortalRead {
-  AccessibilitySettingsWatcher *self;
-  const char *key;
-  unsigned generation;
-  bool legacy;
-};
-
-} // namespace
-
-void AccessibilitySettingsWatcher::readPortalSetting(const char *key, bool legacy) {
-  // ReadOne where the portal has it (version 2), Read on an older one.
-  g_dbus_proxy_call(
-      portal_, legacy ? "Read" : "ReadOne", g_variant_new("(ss)", "org.freedesktop.appearance", key),
-      G_DBUS_CALL_FLAGS_NONE, -1, cancellable_,
-      +[](GObject *proxy, GAsyncResult *result, gpointer data) {
-        std::unique_ptr<PortalRead> read(static_cast<PortalRead *>(data));
-        GError *error = nullptr;
-        GVariant *reply = g_dbus_proxy_call_finish(G_DBUS_PROXY(proxy), result, &error);
-        if (!reply) {
-          bool cancelled = g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
-          bool unknown = g_error_matches(error, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_METHOD);
-          g_error_free(error);
-          // Only ReadOne's missing method asks the older Read: if that fails too, the portal has no
-          // such setting, and the source stays off.
-          if (!cancelled && unknown && !read->legacy && read->generation == read->self->portalRead_) {
-            read->self->readPortalSetting(read->key, true);
-          }
-          return;
-        }
-        if (read->generation == read->self->portalRead_) {
-          GVariant *value = g_variant_get_child_value(reply, 0);
-          read->self->readPortal(read->key, value);
-          g_variant_unref(value);
-        }
-        g_variant_unref(reply);
-      },
-      new PortalRead{this, key, portalRead_, legacy});
-}
-
-void AccessibilitySettingsWatcher::readPortal(const char *key, GVariant *value) {
+void AccessibilitySettingsWatcher::readPortal(const std::string &key, GVariant *value) {
   // reduced-motion 1 is reduce; contrast 1 is higher.
-  if (std::strcmp(key, "reduced-motion") == 0) {
+  if (key == "reduced-motion") {
     sources_.portalReducedMotion = portalNumber(value) == 1;
-  } else if (std::strcmp(key, "contrast") == 0) {
+  } else if (key == "contrast") {
     sources_.portalContrast = portalNumber(value) == 1;
   }
   report();

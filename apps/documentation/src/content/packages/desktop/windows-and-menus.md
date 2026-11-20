@@ -54,11 +54,13 @@ Help (shown only when the app handles `help`), About and Quit (Ctrl+Q). Print...
 are shown, but do nothing on Linux unless the app gives a `print` or `toggleSidebar` item a handler.
 Preferences has Ctrl+comma, and Help F1, only when the app's own `settings` or `help` item names it
 (`shortcut: 'F1'` for Help), as an app's item replaces the default one whole.
-Keyboard Shortcuts opens a window listing every key the menus take, then each `[shortcut]` given a
-`shortcutLabel` under the app's name, unless the app handles `keyboardShortcuts` itself.
+Keyboard Shortcuts lists every key the menus take, then each `[shortcut]` given a `shortcutLabel`
+under the app's name, unless the app handles `keyboardShortcuts` itself: in libadwaita's shortcuts
+dialog with libadwaita 1.8 or later, and in GTK's shortcuts window below it.
 `mod` is Ctrl. The Super key is the desktop's, so an item on `cmd` or `meta` shows no key and no
 press chooses it. A key press goes to the app's `[shortcut]` first, then the back and forward keys
-(Alt+Left and Alt+Right, a keyboard's Back and Forward keys, and mouse buttons 8 and 9), then the
+(Alt+Left and Alt+Right, the other way round in a right-to-left locale as GTK's own apps have
+them, a keyboard's Back and Forward keys, and mouse buttons 8 and 9), then the
 menus' keys, and a focused text input keeps Ctrl+Z, X, C, V and A. A press nothing in the window
 used then reaches its buttons: Return presses a `default` `<native-button>` and Escape a `cancel`
 one, while a focused text input or button keeps Return for itself. Close Window (Ctrl+W) closes the

@@ -14,6 +14,7 @@
  *   arrive on `ngNativeProcesses`.
  */
 import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
+import { injectOs } from './os.ts';
 import { reactNative } from './react-native.ts';
 import {
   compileCapability,
@@ -176,6 +177,8 @@ export class Processes {
   );
 
   private readonly native = inject(Processes.SOURCE);
+  /** The OS the app runs on, whose template script rebuilds the host. */
+  private readonly os = injectOs();
   private readonly capabilities: readonly CompiledCapability[] = (
     this.native?.spawnCapabilities ?? []
   ).map(compileCapability);
@@ -218,7 +221,7 @@ export class Processes {
       throw new UndeclaredCapabilityError(
         `[angular-native] ${program} ${JSON.stringify(args)} matches no spawn capability. ` +
           'Declare the program and its arguments in capabilities.spawn of the @ng-native/desktop ' +
-          'plugin options in app.json, then rebuild with npm run macos.',
+          `plugin options in app.json, then rebuild with npm run ${this.os}.`,
       );
     }
     const env = filterEnvironment(

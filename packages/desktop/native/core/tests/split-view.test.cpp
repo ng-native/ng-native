@@ -483,3 +483,23 @@ TEST_CASE("a source list keeps the sections the user folded until they go, and f
   folds.setList(list);
   CHECK_FALSE(folds.folded(3));
 }
+
+TEST_CASE("a source list that changed only its selection is told apart from one that changed its rows") {
+  ngn::SourceList tabs{.groups = {{.rows = {{.tag = 3, .label = "Library", .selected = true}, {.tag = 4, .label = "Search"}}}}};
+  auto chosen = tabs;
+  chosen.groups[0].rows[0].selected = false;
+  chosen.groups[0].rows[1].selected = true;
+  CHECK(ngn::onlySelectionDiffers(tabs, chosen));
+  // The same list is no change at all.
+  CHECK_FALSE(ngn::onlySelectionDiffers(tabs, tabs));
+  // A badge, a label or a row more is a change of rows, whatever the selection did.
+  auto badged = chosen;
+  badged.groups[0].rows[1].badge = "2";
+  CHECK_FALSE(ngn::onlySelectionDiffers(tabs, badged));
+  auto renamed = tabs;
+  renamed.groups[0].rows[0].label = "Albums";
+  CHECK_FALSE(ngn::onlySelectionDiffers(tabs, renamed));
+  auto longer = chosen;
+  longer.groups[0].rows.push_back({.tag = 5, .label = "Profile"});
+  CHECK_FALSE(ngn::onlySelectionDiffers(tabs, longer));
+}

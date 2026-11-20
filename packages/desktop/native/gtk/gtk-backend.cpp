@@ -8,6 +8,7 @@
 #include "scroll-view.h"
 #include "text-field.h"
 #include "view-widget.h"
+#include "window-scale.h"
 
 #include "ngn/library-components.h"
 
@@ -120,11 +121,14 @@ void GtkBackend::hostView(Tag tag, GtkWidget *slot) {
   GtkWidget *placeholder = makeViewWidget();
   g_object_ref_sink(placeholder);
   gtk_widget_set_child_visible(placeholder, FALSE);
+  // Unparenting makes a widget visible again: a covered screen (a tab not chosen) stays hidden.
+  gboolean childVisible = gtk_widget_get_child_visible(widget);
   if (GtkWidget *parent = gtk_widget_get_parent(widget)) {
     gtk_widget_insert_after(placeholder, parent, widget);
     gtk_widget_unparent(widget);
   }
   gtk_widget_set_parent(widget, slot);
+  gtk_widget_set_child_visible(widget, childVisible);
   hosted_[tag] = {.placeholder = placeholder, .slot = slot};
   gtk_widget_queue_resize(slot);
 }
@@ -138,10 +142,12 @@ void GtkBackend::unhostView(Tag tag) {
   hosted_.erase(it);
   GtkWidget *widget = view(tag);
   if (widget && gtk_widget_get_parent(widget) == hosted.slot) {
+    gboolean childVisible = gtk_widget_get_child_visible(widget);
     gtk_widget_unparent(widget);
     if (GtkWidget *parent = gtk_widget_get_parent(hosted.placeholder)) {
       gtk_widget_insert_after(widget, parent, hosted.placeholder);
     }
+    gtk_widget_set_child_visible(widget, childVisible);
     relayout(widget);
   }
   if (gtk_widget_get_parent(hosted.placeholder)) {
@@ -154,6 +160,15 @@ bool GtkBackend::isHosted(Tag tag) const {
   auto it = hosted_.find(tag);
   GtkWidget *widget = view(tag);
   return it != hosted_.end() && widget && gtk_widget_get_parent(widget) == it->second.slot;
+}
+
+void GtkBackend::windowRescaled(GtkWidget *window) {
+  for (const auto &[tag, widget] : views_) {
+    ViewData *d = viewData(widget);
+    if (d && d->image && GTK_WIDGET(gtk_widget_get_root(widget)) == window) {
+      applyImageProps(*d, windowScale(widget));
+    }
+  }
 }
 
 GtkWidget *GtkBackend::searchEntry(Tag tag) const {
@@ -316,7 +331,7 @@ void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int ind
   hideSvgElement(c->second);
   // An Image's source was picked before it had a window, at the first monitor's scale.
   if (ViewData *d = viewData(c->second); d && d->image) {
-    applyImageProps(*d, gtk_widget_get_scale_factor(c->second));
+    applyImageProps(*d, windowScale(c->second));
   }
   if (viewData(c->second)->component == "ModalHostView") {
     modals_->mounted(surfaceId, child);
@@ -350,7 +365,7 @@ void GtkBackend::updateProps(const ShadowView &view) {
   applyScrollViewProps(*d);
   applyControlProps(*d);
   if (d->image) {
-    applyImageProps(*d, gtk_widget_get_scale_factor(it->second));
+    applyImageProps(*d, windowScale(it->second));
   }
   if (GtkWidget *entry = searchEntry(view.tag); entry && view.props) {
     applySearchBar(entry, *view.props);
@@ -391,17 +406,27 @@ void GtkBackend::applyActions(ViewData &d, const AxInfo &info) {
   if (d.field || d.control) {
     return;
   }
-  applyAccessibleActions(d.widget, info, [this](GtkWidget *widget, AxVerb verb) {
-    ViewData *v = viewData(widget);
-    auto props = v ? std::dynamic_pointer_cast<const facebook::react::ViewProps>(v->props) : nullptr;
-    auto emitter = v ? std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(v->emitter) : nullptr;
-    if (!props) {
-      return false;
-    }
-    SurfaceId surface = v->surfaceId;
-    Tag tag = v->tag;
-    return performAxVerb(*props, emitter.get(), verb, [this, surface, tag] { return hooks.activate(surface, tag); });
-  });
+  applyAccessibleActions(
+      d.widget, info,
+      {.perform =
+           [this](GtkWidget *widget, AxVerb verb) {
+             ViewData *v = viewData(widget);
+             auto props = v ? std::dynamic_pointer_cast<const facebook::react::ViewProps>(v->props) : nullptr;
+             auto emitter = v ? std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(v->emitter) : nullptr;
+             if (!props) {
+               return false;
+             }
+             SurfaceId surface = v->surfaceId;
+             Tag tag = v->tag;
+             return performAxVerb(*props, emitter.get(), verb, [this, surface, tag] { return hooks.activate(surface, tag); });
+           },
+       .send =
+           [](GtkWidget *widget, const std::string &name) {
+             ViewData *v = viewData(widget);
+             auto props = v ? std::dynamic_pointer_cast<const facebook::react::ViewProps>(v->props) : nullptr;
+             auto emitter = v ? std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(v->emitter) : nullptr;
+             return props && sendAxAction(*props, emitter.get(), name);
+           }});
 }
 
 void GtkBackend::followRole(const ShadowView &view) {
