@@ -205,15 +205,19 @@ describe('filter, per platform', () => {
     );
   });
 
-  it('keeps any filter in a Linux build and a rule scoped to Linux, and refuses it on macOS', () => {
-    // The GTK host draws every function; the macOS host draws none beyond what iOS does.
-    const css = '.a { filter: grayscale(1) blur(2px) }';
+  it('keeps any filter in a Linux build and a rule scoped to Linux, and refuses drop-shadow on macOS', () => {
+    // The GTK host draws every function; the macOS host every one but drop-shadow().
+    const css = '.a { filter: grayscale(1) blur(2px) drop-shadow(1px 1px 2px red) }';
     assert.deepEqual(compileCss(css, 'test', { platform: 'linux' }).rules[0].declarations, {
-      filter: [{ grayscale: 1 }, { blur: 2 }],
+      filter: [
+        { grayscale: 1 },
+        { blur: 2 },
+        { dropShadow: { offsetX: 1, offsetY: 1, standardDeviation: 2, color: 'rgb(255, 0, 0)' } },
+      ],
     });
     const scoped = compileCss('.platform-linux .a { filter: sepia(1) }', 'test');
     assert.deepEqual(scoped.rules[0].declarations, { filter: [{ sepia: 1 }] });
-    assert.throws(() => compileCss(css, 'test', { platform: 'macos' }), /not drawn on iOS/);
+    assert.throws(() => compileCss(css, 'test', { platform: 'macos' }), /not drawn on macOS/);
   });
 
   it('keeps any filter in an Android build, and refuses it in an iOS one', () => {
