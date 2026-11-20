@@ -205,6 +205,17 @@ describe('filter, per platform', () => {
     );
   });
 
+  it('keeps any filter in a Linux build and a rule scoped to Linux, and refuses it on macOS', () => {
+    // The GTK host draws every function; the macOS host draws none beyond what iOS does.
+    const css = '.a { filter: grayscale(1) blur(2px) }';
+    assert.deepEqual(compileCss(css, 'test', { platform: 'linux' }).rules[0].declarations, {
+      filter: [{ grayscale: 1 }, { blur: 2 }],
+    });
+    const scoped = compileCss('.platform-linux .a { filter: sepia(1) }', 'test');
+    assert.deepEqual(scoped.rules[0].declarations, { filter: [{ sepia: 1 }] });
+    assert.throws(() => compileCss(css, 'test', { platform: 'macos' }), /not drawn on iOS/);
+  });
+
   it('keeps any filter in an Android build, and refuses it in an iOS one', () => {
     const css = '.a { filter: grayscale(1) }';
     assert.deepEqual(compileCss(css, 'test', { platform: 'android' }).rules[0].declarations, {
@@ -407,7 +418,7 @@ describe('skew, per platform', () => {
   });
 
   // Linux runs the same desktop core, which hands the toolkit the whole matrix as macOS's does.
-  it('keeps a skew and refuses an iOS filter in a Linux build, unscoped and scoped to Linux', () => {
+  it('keeps a skew and every filter in a Linux build, unscoped and scoped to Linux', () => {
     for (const css of [
       '.a { transform: skewX(12deg) }',
       '.platform-linux .a { transform: skewX(12deg) }',
@@ -417,7 +428,9 @@ describe('skew, per platform', () => {
       });
     }
     for (const css of ['.a { filter: blur(4px) }', '.platform-linux .a { filter: blur(4px) }']) {
-      assert.throws(() => compileCss(css, 'test', { platform: 'linux' }), /not drawn on iOS/);
+      assert.deepEqual(compileCss(css, 'test', { platform: 'linux' }).rules[0].declarations, {
+        filter: [{ blur: 4 }],
+      });
     }
   });
 

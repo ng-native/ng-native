@@ -91,6 +91,37 @@ TEST_CASE("an Image draws its source where its resizeMode puts it") {
   CHECK(views.pixel(10, 50).a == 0);
 }
 
+TEST_CASE("an Image with resizeMode repeat tiles its source from the top left at its size in points") {
+  REQUIRE(ngn::testing::gtkReady());
+  ImageLoading loading;
+  // Four pixels: red at the top left, clear in the rest.
+  guchar pixels[16] = {255, 0, 0, 255};
+  GBytes *bytes = g_bytes_new(pixels, sizeof pixels);
+  GdkTexture *texture = gdk_memory_texture_new(2, 2, GDK_MEMORY_R8G8B8A8, bytes, 8);
+  g_bytes_unref(bytes);
+  GBytes *png = gdk_texture_save_to_png_bytes(texture);
+  g_object_unref(texture);
+  gchar *base64 = g_base64_encode(static_cast<const guchar *>(g_bytes_get_data(png, nullptr)), g_bytes_get_size(png));
+  g_bytes_unref(png);
+  std::string uri = std::string("data:image/png;base64,") + base64;
+  g_free(base64);
+  MountedViews views;
+  auto image = MountedViews::shadow(2, "Image", imageProps(dynamic::object("source", source(uri))("resizeMode", "repeat")), {{0, 0}, {100, 100}});
+  views.add(image);
+  waitForLoad(views, 2);
+  // A tile every 2 points: red on the even points, clear on the odd ones, all the way across.
+  CHECK(reddish(views.pixel(0, 0)));
+  CHECK(reddish(views.pixel(60, 60)));
+  CHECK(reddish(views.pixel(98, 2)));
+  CHECK(views.pixel(1, 1).a == 0);
+  CHECK(views.pixel(61, 61).a == 0);
+
+  // Stretched, as `stretch` draws it, the red is the top left quarter alone.
+  views.update(image, imageProps(dynamic::object("source", source(uri))("resizeMode", "stretch")));
+  CHECK(reddish(views.pixel(10, 10)));
+  CHECK(views.pixel(90, 90).a == 0);
+}
+
 TEST_CASE("an Image is cut to its view's rounded shape") {
   REQUIRE(ngn::testing::gtkReady());
   ImageLoading loading;
@@ -101,6 +132,22 @@ TEST_CASE("an Image is cut to its view's rounded shape") {
   CHECK(reddish(views.pixel(50, 50)));
   CHECK(views.pixel(3, 3).a < 40);
   CHECK(views.pixel(96, 96).a < 40);
+}
+
+TEST_CASE("an Image's tintColor fills the image's shape with the tint, and leaves the rest clear") {
+  REQUIRE(ngn::testing::gtkReady());
+  ImageLoading loading;
+  MountedViews views;
+  auto image = MountedViews::shadow(2, "Image", imageProps(dynamic::object("source", source(kWideRed))("resizeMode", "contain")("tintColor", kGreen)), {{0, 0}, {100, 100}});
+  views.add(image);
+  waitForLoad(views, 2);
+  CHECK(greenish(views.pixel(50, 50)));
+  // Contained: nothing above the band the image fills.
+  CHECK(views.pixel(50, 10).a == 0);
+
+  // Without the tint, the image's own colour.
+  views.update(image, imageProps(dynamic::object("source", source(kWideRed))("resizeMode", "contain")));
+  CHECK(reddish(views.pixel(50, 50)));
 }
 
 TEST_CASE("an Image's border is drawn over its image, as a layer's border is") {

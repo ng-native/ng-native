@@ -174,12 +174,14 @@ void unfocused(GtkEventControllerFocus *, gpointer user) {
   }
 }
 
-// Whether a key press is the Latin letter `latin` the way GTK's shortcut triggers match it: by the
-// keyval it produced, or by what its hardware key makes in the first layout group, so that Ctrl+Z
-// still undoes on a Cyrillic or Greek layout.
+// Whether a key press is the Latin letter `latin`: by the keyval it produced when that is a Latin
+// letter, so that Ctrl+Y redoes on a German layout whose Y sits where the first group has Z, and
+// otherwise by what its hardware key makes in the first layout group, so that Ctrl+Z still undoes
+// on a Cyrillic or Greek layout.
 bool pressesLatin(GtkWidget *widget, guint keyval, guint keycode, guint latin) {
-  if (gdk_keyval_to_lower(keyval) == latin) {
-    return true;
+  guint produced = gdk_keyval_to_lower(keyval);
+  if (produced >= GDK_KEY_a && produced <= GDK_KEY_z) {
+    return produced == latin;
   }
   GdkKeymapKey *keys = nullptr;
   guint *keyvals = nullptr;
@@ -199,11 +201,18 @@ bool pressesLatin(GtkWidget *widget, guint keyval, guint keycode, guint latin) {
 gboolean keyPressed(GtkEventControllerKey *, guint keyval, guint keycode, GdkModifierType state, gpointer user) {
   auto *field = static_cast<TextField *>(user);
   // GtkText's own undo and redo keys, run here so that its replay is known (a multiline field's
-  // buffer signals its own).
-  if (!field->scroll && (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) == GDK_CONTROL_MASK) {
-    bool shift = state & GDK_SHIFT_MASK;
-    const char *action = pressesLatin(field->text, keyval, keycode, GDK_KEY_z) ? (shift ? "text.redo" : "text.undo")
-                         : !shift && pressesLatin(field->text, keyval, keycode, GDK_KEY_y) ? "text.redo" : nullptr;
+  // buffer signals its own): Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z, and the Undo and Redo keys GTK 4.18
+  // and later bind.
+  if (!field->scroll) {
+    const char *action = nullptr;
+    GdkModifierType modifiers = static_cast<GdkModifierType>(state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK));
+    if (modifiers == GDK_CONTROL_MASK) {
+      bool shift = state & GDK_SHIFT_MASK;
+      action = pressesLatin(field->text, keyval, keycode, GDK_KEY_z) ? (shift ? "text.redo" : "text.undo")
+               : !shift && pressesLatin(field->text, keyval, keycode, GDK_KEY_y) ? "text.redo" : nullptr;
+    } else if (!modifiers && !(state & GDK_SHIFT_MASK)) {
+      action = keyval == GDK_KEY_Undo ? "text.undo" : keyval == GDK_KEY_Redo ? "text.redo" : nullptr;
+    }
     if (action) {
       field->replaying = true;
       gtk_widget_activate_action(field->text, action, nullptr);
@@ -578,7 +587,10 @@ void makeTextField(GtkWidget *widget, ViewData &view) {
       }
     }), field);
   } else {
-    field->text = gtk_text_new();
+    // A GtkText is no accessible element (its role is none: it is made to be the delegate of a
+    // GtkEditable that is one, as a GtkEntry is), so it is made a text box, which takes the label
+    // and relations and exposes the text.
+    field->text = GTK_WIDGET(g_object_new(GTK_TYPE_TEXT, "accessible-role", GTK_ACCESSIBLE_ROLE_TEXT_BOX, nullptr));
     g_signal_connect_swapped(field->text, "changed", G_CALLBACK(changed), field);
     g_signal_connect_swapped(field->text, "notify::cursor-position", G_CALLBACK(selectionMoved), field);
     g_signal_connect_swapped(field->text, "notify::selection-bound", G_CALLBACK(selectionMoved), field);
@@ -669,8 +681,10 @@ void applyTextFieldProps(ViewData &view) {
     if (controlledTextIsCurrent(props->mostRecentEventCount, field.eventCount, false) &&
         (!props->text.empty() || props->defaultValue.empty() || field.eventCount > 0)) {
       auto previous = std::dynamic_pointer_cast<const DesktopTextInputProps>(field.applied);
-      if (field.pendingText && previous && previous->text == props->text) {
-        // The text is the same as the props before it: a held setTextAndSelection stays.
+      if (field.pendingText && previous && previous->text == props->text &&
+          field.pendingText->seen >= props->mostRecentEventCount) {
+        // The text is the same as the props before it, which answer no newer edit: a held
+        // setTextAndSelection stays.
       } else if (field.composing) {
         cancelPendingApply(field);
         field.pendingText.emplace(TextField::Pending{props->text, props->mostRecentEventCount, std::nullopt});

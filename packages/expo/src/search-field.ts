@@ -13,7 +13,8 @@
  * It is `@ng-native/expo`'s own native view: UIKit's `UISearchBar` on iOS, with its Cancel button,
  * dictation and clear button, AndroidX's `SearchView` on Android, which has no Cancel button, and
  * AppKit's `NSSearchField` on macOS, drawn by the desktop host at its `controlSize`, whose clear
- * button and Escape send `(cancel)`.
+ * button and Escape send `(cancel)`, and GTK's `GtkSearchEntry` on Linux, also drawn by the
+ * desktop host, where Escape sends `(cancel)`.
  * The events are `<native-search-bar>`'s: `(search)` for the keyboard's search key with the text,
  * `(cancel)`, `(searchFocus)` and `(searchBlur)`, and `focus()`, `blur()` and `clear()` from code.
  * The text is a two-way `value` rather than the bar's `query`, because it is a Signal Forms control
@@ -46,7 +47,7 @@ import {
   type PostScriptNames,
   registerViewName,
 } from '@ng-native/fabric';
-import { currentPlatform, optional } from './native.ts';
+import { currentPlatform, isDesktopPlatform, optional } from './native.ts';
 import { expoViewName } from './register-expo-view.ts';
 import { optionalBoolean } from './transforms.ts';
 
@@ -108,7 +109,7 @@ export class SearchField {
     {
       // The desktop host draws the field itself, and `focus()` and `blur()` are its view commands.
       factory: () =>
-        currentPlatform() === 'macos'
+        isDesktopPlatform(currentPlatform())
           ? {}
           : optional(() => {
               const core = require('expo-modules-core') as typeof import('expo-modules-core');
@@ -143,7 +144,7 @@ export class SearchField {
   readonly search = output<string>();
   /**
    * The field was emptied by its Cancel button on iOS, which also takes the keyboard away, or by
-   * its clear button or Escape on macOS, which leave it.
+   * its clear button or Escape on macOS, or by Escape on Linux, which leave it.
    */
   readonly cancel = output<void>();
   readonly searchFocus = output<void>();
@@ -206,7 +207,7 @@ export class SearchField {
   }
 
   private async call(name: 'focus' | 'blur'): Promise<void> {
-    if (currentPlatform() === 'macos') {
+    if (isDesktopPlatform(currentPlatform())) {
       if (!this.missing) this.engine?.dispatchCommand(this.node, name);
       return;
     }

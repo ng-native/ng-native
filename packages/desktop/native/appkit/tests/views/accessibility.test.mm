@@ -99,6 +99,57 @@ TEST_CASE("selected and expanded are reported from the state") {
   CHECK(view.isAccessibilityExpanded);
 }
 
+TEST_CASE("an item's place in its set, a table's counts and a refused value are read while the props say them") {
+  MountedViews m;
+  auto item = MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("accessible", true)("role", "listitem")(
+      "accessibilityPosInSet", 3)("accessibilitySetSize", 10)("accessibilityRequired", true)("accessibilityInvalid", true)));
+  m.add(item);
+  m.add(MountedViews::shadow(3, "View", viewProps(folly::dynamic::object("role", "grid")("accessibilityRowCount", 50)(
+      "accessibilityColumnCount", 4))));
+  NGNView *view = m.view(2);
+  NGNView *grid = m.view(3);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  CHECK([[view accessibilityAttributeValue:@"AXARIAPosInSet"] isEqual:@3]);
+  CHECK([[view accessibilityAttributeValue:@"AXARIASetSize"] isEqual:@10]);
+  CHECK([[view accessibilityAttributeValue:@"AXInvalid"] isEqual:@"true"]);
+  CHECK([view.accessibilityAttributeNames containsObject:@"AXARIAPosInSet"]);
+  CHECK(view.isAccessibilityRequired);
+  CHECK([[grid accessibilityAttributeValue:NSAccessibilityRowCountAttribute] isEqual:@50]);
+  CHECK([[grid accessibilityAttributeValue:NSAccessibilityColumnCountAttribute] isEqual:@4]);
+
+  m.update(item, viewProps(folly::dynamic::object("accessible", true)("role", "listitem")));
+  CHECK_FALSE([view.accessibilityAttributeNames containsObject:@"AXARIAPosInSet"]);
+  CHECK(([view accessibilityAttributeValue:@"AXInvalid"] == nil));
+  CHECK_FALSE(view.isAccessibilityRequired);
+#pragma clang diagnostic pop
+}
+
+TEST_CASE("a text input's field is required and refused as its props say") {
+  MountedViews m;
+  auto input = MountedViews::shadow(2, "TextInput", ngn::testing::textInputProps(folly::dynamic::object(
+      "accessibilityRequired", true)("accessibilityInvalid", true)));
+  m.add(input);
+  NSView *field = (NSView *)[m.view(2) keyboardResponder];
+  CHECK(field.isAccessibilityRequired);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  CHECK([[field accessibilityAttributeValue:@"AXInvalid"] isEqual:@"true"]);
+  m.update(input, ngn::testing::textInputProps(folly::dynamic::object()));
+  CHECK_FALSE(field.isAccessibilityRequired);
+  CHECK([[field accessibilityAttributeValue:@"AXInvalid"] isEqual:@"false"]);
+
+  // A multiline input's text view, the same.
+  auto notes = MountedViews::shadow(3, "TextInput", ngn::testing::textInputProps(folly::dynamic::object("multiline", true)(
+      "accessibilityRequired", true)("accessibilityInvalid", true)));
+  m.add(notes);
+  NSView *text = (NSView *)[m.view(3) keyboardResponder];
+  CHECK([text isKindOfClass:NSTextView.class]);
+  CHECK(text.isAccessibilityRequired);
+  CHECK([[text accessibilityAttributeValue:@"AXInvalid"] isEqual:@"true"]);
+#pragma clang diagnostic pop
+}
+
 TEST_CASE("a role AppKit lacks is a group that says what it is") {
   MountedViews m;
   m.add(MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("role", "alert")("accessibilityLabel", "Offline"))));
@@ -139,4 +190,64 @@ TEST_CASE("hidden and presentational views are no elements") {
     CAPTURE(tag);
     CHECK_FALSE(m.view(tag).isAccessibilityElement);
   }
+}
+
+TEST_CASE("a view is labelled and described by the views its props name, ahead of its own label and hint") {
+  MountedViews m;
+  m.add(MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("nativeID", "name")("accessibilityLabel", "Name"))));
+  m.add(MountedViews::shadow(3, "View", viewProps(folly::dynamic::object("nativeID", "hint")("accessibilityLabel", "As on your passport"))));
+  auto field = MountedViews::shadow(4, "View", viewProps(folly::dynamic::object("accessible", true)("role", "button")(
+      "accessibilityLabel", "Own")("accessibilityHint", "Own hint")("accessibilityLabelledBy", folly::dynamic::array("name"))(
+      "accessibilityDescribedBy", folly::dynamic::array("hint"))));
+  m.add(field);
+  NGNView *view = m.view(4);
+  CHECK([view.accessibilityLabel isEqualToString:@"Name"]);
+  CHECK([view.accessibilityHelp isEqualToString:@"As on your passport"]);
+  CHECK((view.accessibilityTitleUIElement == m.view(2)));
+
+  // The view named goes: the view's own hint is read again.
+  auto hint = m.mounting->tree().find(3)->view;
+  m.mount({ShadowViewMutation::RemoveMutation(MountedViews::kSurface, hint, 1), ShadowViewMutation::DeleteMutation(hint)});
+  CHECK([view.accessibilityHelp isEqualToString:@"Own hint"]);
+  // The props stop naming the label: the view's own label is read again.
+  m.update(field, viewProps(folly::dynamic::object("accessible", true)("role", "button")("accessibilityLabel", "Own")));
+  CHECK([view.accessibilityLabel isEqualToString:@"Own"]);
+  CHECK((view.accessibilityTitleUIElement == nil));
+}
+
+TEST_CASE("a native control is labelled and described by the views its props name, on the control that is the element") {
+  MountedViews m;
+  auto name = MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("nativeID", "name")("accessibilityLabel", "Notifications")));
+  m.add(name);
+  m.add(MountedViews::shadow(3, "View", viewProps(folly::dynamic::object("nativeID", "hint")("accessibilityLabel", "Sent by email"))));
+  auto props = [](bool related) {
+    folly::dynamic raw = folly::dynamic::object("title", "Go");
+    if (related) {
+      raw["accessibilityLabelledBy"] = folly::dynamic::array("name");
+      raw["accessibilityDescribedBy"] = folly::dynamic::array("hint");
+    }
+    return ngn::testing::nativeButtonProps(std::move(raw));
+  };
+  auto button = MountedViews::shadow(4, "NgNativeButton", props(true));
+  m.add(button);
+  NGNView *view = m.view(4);
+  NSView *control = [view accessibilityControl];
+  REQUIRE((control != nil));
+  CHECK_FALSE(view.isAccessibilityElement);
+  CHECK([control.accessibilityLabel isEqualToString:@"Notifications"]);
+  CHECK([control.accessibilityHelp isEqualToString:@"Sent by email"]);
+  CHECK((control.accessibilityTitleUIElement == m.view(2)));
+
+  // The text of the view named changes: the control reads the new one.
+  m.update(name, viewProps(folly::dynamic::object("nativeID", "name")("accessibilityLabel", "Alerts")));
+  CHECK([control.accessibilityLabel isEqualToString:@"Alerts"]);
+  // The control's own props applied again keep what the relations say.
+  m.update(button, props(true));
+  CHECK([control.accessibilityLabel isEqualToString:@"Alerts"]);
+
+  // The props stop naming them: the label and help they gave go.
+  m.update(button, props(false));
+  CHECK_FALSE([control.accessibilityLabel isEqualToString:@"Alerts"]);
+  CHECK((control.accessibilityHelp == nil));
+  CHECK((control.accessibilityTitleUIElement == nil));
 }

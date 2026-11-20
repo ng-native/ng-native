@@ -273,6 +273,19 @@ void AppKitBackend::announce(SurfaceId, const Announcement &announcement) {
   postAnnouncement(announcement);
 }
 
+void AppKitBackend::setAccessibilityRelations(SurfaceId, Tag tag, const AxRelations &relations) {
+  auto views = [this](const std::vector<Tag> &tags) {
+    NSMutableArray<NGNView *> *found = [NSMutableArray array];
+    for (Tag target : tags) {
+      if (NGNView *v = views_[@(target)]) {
+        [found addObject:v];
+      }
+    }
+    return found;
+  };
+  [views_[@(tag)] setLabelledBy:views(relations.labelledBy) describedBy:views(relations.describedBy)];
+}
+
 void AppKitBackend::didMount(SurfaceId surfaceId) {
   [NGNPresentedScreenView refreshChrome];
   [NGNModalHostView fitPopovers];

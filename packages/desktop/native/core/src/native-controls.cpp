@@ -91,6 +91,7 @@ NativeControlProps::NativeControlProps(
       minimumDate(convertRawProp(context, rawProps, "minimumDate", sourceProps.minimumDate, {})),
       maximumDate(convertRawProp(context, rawProps, "maximumDate", sourceProps.maximumDate, {})),
       mode(convertRawProp(context, rawProps, "mode", sourceProps.mode, std::string{"date"})),
+      minuteInterval(convertRawProp(context, rawProps, "minuteInterval", sourceProps.minuteInterval, 1)),
       display(convertRawProp(context, rawProps, "displayIOS", sourceProps.display, std::string{"default"})),
       text(convertRawProp(context, rawProps, "text", sourceProps.text, {})),
       mostRecentEventCount(
@@ -124,6 +125,46 @@ std::optional<ControlKind> controlKind(std::string_view componentName) {
     return ControlKind::SearchField;
   }
   return std::nullopt;
+}
+
+bool twelveHourClock(std::string_view timeFormat) {
+  for (size_t i = 0; i + 1 < timeFormat.size(); ++i) {
+    if (timeFormat[i] != '%') {
+      continue;
+    }
+    char conversion = timeFormat[++i];
+    if (conversion == 'I' || conversion == 'l' || conversion == 'r' || conversion == 'p' || conversion == 'P') {
+      return true;
+    }
+  }
+  return false;
+}
+
+int dayHour(int clockHour, bool afterNoon) {
+  return clockHour % 12 + (afterNoon ? 12 : 0);
+}
+
+int clockHour(int dayHour) {
+  return dayHour % 12 == 0 ? 12 : dayHour % 12;
+}
+
+std::optional<bool> clockFormatTwelveHour(std::string_view clockFormat) {
+  if (clockFormat == "12h") {
+    return true;
+  }
+  if (clockFormat == "24h") {
+    return false;
+  }
+  return std::nullopt;
+}
+
+int pickerMinuteInterval(int minuteInterval) {
+  return minuteInterval >= 1 && minuteInterval <= 30 && 60 % minuteInterval == 0 ? minuteInterval : 1;
+}
+
+int minuteOnInterval(int minute, int minuteInterval) {
+  int step = pickerMinuteInterval(minuteInterval);
+  return minute - minute % step;
 }
 
 } // namespace ngn

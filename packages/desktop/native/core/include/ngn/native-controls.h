@@ -21,6 +21,7 @@
 #include <react/utils/ContextContainer.h>
 
 #include <optional>
+#include <string_view>
 #include <string>
 #include <vector>
 
@@ -70,6 +71,8 @@ class NativeControlProps final : public facebook::react::ViewProps, public HasDe
   std::optional<double> maximumDate;
   // `date`, `time`, `datetime` or `countdown`.
   std::string mode{"date"};
+  // The minutes a time is picked in steps of (iOS's minuteInterval): 1 to 30, dividing 60.
+  int minuteInterval{1};
   // `default`, `spinner`, `compact` or `inline`.
   std::string display{"default"};
 
@@ -149,6 +152,21 @@ class NativeControlShadowNode final : public facebook::react::ConcreteViewShadow
 template <const char *Name, ControlKind Kind>
 using NativeControlComponentDescriptor =
     facebook::react::ConcreteComponentDescriptor<NativeControlShadowNode<Name, Kind>>;
+
+// Whether a strftime time format, as the C library's locale gives it (nl_langinfo(T_FMT)), writes a
+// 12-hour clock: it has %I, %l, %r, %p or %P. A date picker's time follows it on Linux.
+bool twelveHourClock(std::string_view timeFormat);
+// The hour of the day, 0 to 23, for an hour on a 12-hour clock (1 to 12) in the morning or after
+// noon; and the 12-hour clock's hour for an hour of the day.
+int dayHour(int clockHour, bool afterNoon);
+int clockHour(int dayHour);
+// GNOME's clock-format (org.gnome.desktop.interface, through the settings portal): true for
+// `12h`, false for `24h`, nothing for anything else, where the locale's format decides.
+std::optional<bool> clockFormatTwelveHour(std::string_view clockFormat);
+// A minuteInterval as UIDatePicker takes it: one that does not divide 60 evenly, or is outside 1
+// to 30, is 1. And a minute rounded down to it, as the picker shows a time between two steps.
+int pickerMinuteInterval(int minuteInterval);
+int minuteOnInterval(int minute, int minuteInterval);
 
 using NativeButtonComponentDescriptor = NativeControlComponentDescriptor<NativeButtonComponentName, ControlKind::Button>;
 using SwitchControlComponentDescriptor =

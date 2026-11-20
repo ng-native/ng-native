@@ -10,19 +10,32 @@
 // NGN_CAPTURE=<file.png> saves the first window's content, drawn in-process (capture.h), a second
 // after its first frame, or with an input script (NGN_INPUT_SCRIPT) a second after the script has
 // played.
+#include "accessibility-settings.h"
+#include "animation-frames.h"
 #include "app-windows.h"
 #include "capture.h"
+#include "clock-format.h"
+#include "file-dialogs.h"
+#include "file-system.h"
+#include "focus.h"
 #include "gtk-backend.h"
 #include "host-sources.h"
 #include "image-view.h"
 #include "input-replay.h"
 #include "launcher-badge.h"
 #include "menus.h"
+#include "native-controls.h"
+#include "notifications.h"
 #include "pango-text.h"
+#include "printing.h"
+#include "proxy-resolver.h"
 #include "scroll-view.h"
+#include "secret-store.h"
 #include "status-notifier.h"
 #include "surface-input.h"
+#include "system-access.h"
 #include "view-widget.h"
+#include "window-scale.h"
 
 #include "ngn/core-modules.h"
 #include "ngn/crash-report.h"
@@ -31,10 +44,13 @@
 #include "ngn/dev-server.h"
 #include "ngn/file-system.h"
 #include "ngn/host-os.h"
+#include "accent-colour.h"
 #include "ngn/host-state.h"
 #include "ngn/host-views.h"
 #include "ngn/launch-settings.h"
+#include "ngn/launch-frame.h"
 #include "ngn/layout-animations.h"
+#include "ngn/openssl-update-crypto.h"
 #include "ngn/processes.h"
 #include "ngn/runtime.h"
 
@@ -48,6 +64,7 @@
 #include <cstdio>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
 
 using facebook::react::Float;
@@ -65,12 +82,15 @@ struct Host {
   std::unique_ptr<ngn::InputDispatcher> input;
   std::unique_ptr<ngn::Runtime> runtime;
   std::shared_ptr<ngn::HostState> state;
+  // The desktop's accessibility settings, into the host state as they change.
+  std::unique_ptr<ngn::gtk::AccessibilitySettingsWatcher> accessibility;
   std::shared_ptr<ngn::gtk::GtkWindows> windows;
   std::shared_ptr<ngn::MenuHost> menus;
   std::shared_ptr<ngn::gtk::GtkMenus> gtkMenus;
   // The app's undo history, which Edit > Undo and Redo run while no text input has the focus.
   std::shared_ptr<ngn::UndoManager> undo = ngn::gtk::makeUndoManager();
   ngn::HostOs os;
+  std::unique_ptr<ngn::gtk::AccentFollower> accent;
   std::string bundle;
   // The app's own surface and the window it gets once the app renders into it.
   GtkWidget *appWindow{nullptr};
@@ -84,7 +104,20 @@ struct Host {
   bool firstFrame{false};
   bool quit{false};
   guint animationTimer{0};
+  // The Expo Updates client (updates.h), and which launch owes its first frame on screen.
+  std::shared_ptr<ngn::UpdatesClient> updates;
+  ngn::LaunchFrame launchFrame;
 } gHost;
+
+// The bundle the runtime runs now, for SourceCode's scriptURL: set at launch and before a reload
+// into an update, read on the JavaScript thread.
+std::mutex gBundleMutex;
+std::string gBundle;
+
+void setRunningBundle(const std::string &bundle) {
+  std::lock_guard lock(gBundleMutex);
+  gBundle = bundle;
+}
 
 // The event beat: React Native's RunLoopObserverManager wants a tick as the UI thread is about to
 // go idle. GLib calls a source's prepare before each poll, which is that moment.
@@ -97,7 +130,7 @@ gboolean beatPrepare(GSource *, gint *timeout) {
 }
 GSourceFuncs gBeatFuncs = {beatPrepare, nullptr, nullptr, nullptr, nullptr, nullptr};
 
-ngn::SurfaceMetrics metricsFor(int width, int height, int scale) {
+ngn::SurfaceMetrics metricsFor(int width, int height, double scale) {
   return {.size = {static_cast<Float>(width), static_cast<Float>(height)}, .pointScale = static_cast<float>(scale), .fontScale = ngn::gtk::desktopFontScale()};
 }
 
@@ -115,7 +148,7 @@ void followFontScale() {
     GtkWidget *widget = surfaceWidgetOf(surface);
     if (widget && gHost.runtime) {
       gHost.runtime->updateSurface(
-          surface, metricsFor(gtk_widget_get_width(widget), gtk_widget_get_height(widget), gtk_widget_get_scale_factor(widget)));
+          surface, metricsFor(gtk_widget_get_width(widget), gtk_widget_get_height(widget), ngn::gtk::windowScale(widget)));
     }
   }
 }
@@ -123,7 +156,7 @@ void followFontScale() {
 // What Dimensions reports: the app window's content size and scale, and its monitor's size (the
 // first monitor's before the window is on one; the window's own size with no monitor at all).
 ngn::WindowMetrics windowMetrics(int width, int height) {
-  double scale = gtk_widget_get_scale_factor(gHost.appWindow);
+  double scale = ngn::gtk::windowScale(gHost.appWindow);
   double screenWidth = width, screenHeight = height;
   GdkDisplay *display = gtk_widget_get_display(gHost.appWindow);
   GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(gHost.appWindow));
@@ -206,6 +239,58 @@ void watchFirstFrame(GtkWidget *window, GtkWidget *surface) {
   }), surface);
 }
 
+// A launch running an update counts once its first frame has been up kLaunchSuccessSeconds
+// (launch-frame.h); until then a crash rolls the update back at the next launch.
+void markLaunchSucceededLater(uint64_t generation) {
+  if (!gHost.updates || !gHost.updates->running()) {
+    return;
+  }
+  // For this launch only: a reload since begins another, with a timer of its own.
+  ngn::gtk::runAfter(ngn::kLaunchSuccessSeconds, [generation] { gHost.updates->markLaunchSucceeded(generation); });
+}
+
+// `window` shows `surface`'s content: the launch's first, mounted by its own JavaScript instance
+// while it is still the launch running, starts the launch's success timer. UI thread.
+void launchFrameShown(SurfaceId surface, GtkWidget *window) {
+  const auto *root = gHost.mounting->tree().find(surface);
+  if (!gHost.updates || !window || !gtk_widget_get_visible(window) || !root || root->children.empty()) {
+    return;
+  }
+  if (auto generation = gHost.launchFrame.shown(gHost.mounting->mountedBy(surface), gHost.updates->launchGeneration())) {
+    markLaunchSucceededLater(*generation);
+  }
+}
+
+// A reload's bundle (the launch `generation`) loaded into the JavaScript instance `instance`: its
+// launch counts from its first frame on screen, which may already be there or come with a later
+// mount. UI thread.
+void reloadLaunched(uint64_t generation, uint64_t instance) {
+  gHost.launchFrame.loaded(generation, instance);
+  launchFrameShown(kAppSurface, gHost.appWindowShown ? gHost.appWindow : nullptr);
+  for (SurfaceId surface : gHost.surfaces) {
+    if (surface != kAppSurface) {
+      launchFrameShown(surface, gHost.windows->window(surface));
+    }
+  }
+}
+
+// The menu's reload: the same launch, in a new instance. Its first frame, if still owed, comes from
+// that instance once the bundle loads; the instance it replaces owes nothing from now.
+void reloadSameLaunch() {
+  uint64_t generation = gHost.updates ? gHost.updates->launchGeneration() : 0;
+  gHost.launchFrame.reloadBegan();
+  gHost.launchFrame.bundleLoading();
+  gHost.runtime->reload([generation](bool loaded) {
+    gHost.launchFrame.bundleLoadEnded(loaded);
+    if (!loaded) {
+      fprintf(stderr, "ngn-linux: the reload could not load the bundle\n");
+      return;
+    }
+    uint64_t instance = gHost.mounting->instance();
+    gHost.backend->runOnUiThread([generation, instance] { reloadLaunched(generation, instance); });
+  });
+}
+
 // A surface's size and the safe area its window's chrome leaves it (chromeInsets), each time
 // either changes: as it resizes, and as the header bar or the window controls move over content
 // that runs under them.
@@ -261,7 +346,7 @@ void runMenuItem(const ngn::MenuItem &item, GtkWindow *window) {
   }
   switch (item.command) {
     case ngn::MenuCommand::Reload:
-      gHost.runtime->reload();
+      reloadSameLaunch();
       return;
     case ngn::MenuCommand::OpenDevTools:
       gHost.runtime->openDebugger();
@@ -269,6 +354,12 @@ void runMenuItem(const ngn::MenuItem &item, GtkWindow *window) {
     case ngn::MenuCommand::Quit:
       gHost.windows->beginQuit();
       return;
+    case ngn::MenuCommand::ToggleSidebar:
+      // The window's split view (split-view.h); a window without one leaves it to the app.
+      if (auto surface = window ? surfaceOfWindow(window) : std::nullopt; surface && gHost.backend->splitViews().toggle(*surface)) {
+        return;
+      }
+      break;
     case ngn::MenuCommand::CloseWindow:
       // The sheet, cover or popover in front first, as Escape asks it to close; then the window, as
       // the close button does: the app decides (close-request).
@@ -282,6 +373,10 @@ void runMenuItem(const ngn::MenuItem &item, GtkWindow *window) {
       if (window) {
         gtk_window_is_fullscreen(window) ? gtk_window_unfullscreen(window) : gtk_window_fullscreen(window);
       }
+      return;
+    case ngn::MenuCommand::KeyboardShortcuts:
+      ngn::gtk::presentKeyboardShortcuts(
+          ngn::gtk::keyboardShortcutsWindow(gHost.menus->keyboardShortcuts(gHost.gtkMenus->bar()), window), window);
       return;
     case ngn::MenuCommand::About: {
       GtkWidget *about = adw_about_window_new();
@@ -321,10 +416,15 @@ void routeWindow(GtkWidget *surfaceWidget) {
     return;
   }
   g_object_set_data(G_OBJECT(window), "ngn-keys", GINT_TO_POINTER(1));
+  ngn::gtk::trackFocus(window);
   gHost.gtkMenus->attach(surfaceWidget);
   ngn::gtk::routeKeys(window, std::make_shared<ngn::gtk::KeyRouting>(ngn::gtk::KeyRouting{
       .shortcut = [](const ngn::KeyChord &chord, bool text) { return gHost.menus->keyDown(chord, text); },
+      .focus = [](GtkWindow *window, guint keyval, GdkModifierType state) {
+        return ngn::gtk::moveFocusByKey(window, keyval, state, *gHost.backend, gHost.mounting->tree());
+      },
       .navigation = [](const ngn::KeyChord &chord) { return ngn::navigationFor(chord, gHost.os); },
+      .editingKey = [](const ngn::KeyChord &chord) { return ngn::editingChord(chord, gHost.os); },
       .navigate = navigate,
       .menuKey = [](const ngn::KeyChord &chord) { return ngn::findMenuItem(gHost.gtkMenus->bar(), chord); },
       .choose = runMenuItem,
@@ -379,7 +479,7 @@ std::string directoryOf(const std::string &path) {
 
 int main(int argc, char *argv[]) {
   gHost.launched = g_get_monotonic_time();
-  const ngn::HostOs os = ngn::linuxOs();
+  ngn::HostOs os = ngn::linuxOs();
   std::vector<std::string> args(argv + 1, argv + argc);
   // A package (bin/package-linux.mjs) puts metadata.json beside the host, which links from bin/ to
   // lib/<name>/: the folder of the executable itself, not of the link.
@@ -429,6 +529,11 @@ int main(int argc, char *argv[]) {
 
   gtk_init();
   adw_init();
+  // The desktop's accent, which libadwaita below 1.6 does not follow itself.
+  gHost.accent = std::make_unique<ngn::gtk::AccentFollower>();
+  // Back and forward swap arrows in a right-to-left locale, which GTK knows once it is initialised.
+  os = ngn::linuxOs(gtk_widget_get_default_direction() == GTK_TEXT_DIR_RTL);
+  gHost.os = os;
   // One instance of the app, as a Linux app has one: a test launch is its own, beside any other.
   gHost.application = ngn::gtk::startApplication(appId, !settings.test, settings.dbusService);
   if (g_application_get_is_remote(G_APPLICATION(gHost.application))) {
@@ -440,6 +545,8 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "[ngn] %s is already running: this launch went to it\n", appId.c_str());
     return 0;
   }
+  // GNOME's 12 or 24-hour clock, which the date pickers' time follows.
+  static ngn::gtk::ClockFormatWatcher clockFormat(ngn::gtk::useClockFormat);
   const char *desktop = getenv("XDG_CURRENT_DESKTOP");
   const auto menuPlacement = ngn::linuxMenuPlacement(desktop ? desktop : "");
 
@@ -457,6 +564,7 @@ int main(int argc, char *argv[]) {
   });
   gHost.mounting = views.mounting;
   gHost.input = std::move(views.input);
+  ngn::gtk::installWorkletHost(gHost.mounting, gHost.backend);
   gHost.backend->hooks = {
       .containerRoot =
           [](facebook::react::Tag tag, bool root) {
@@ -480,6 +588,8 @@ int main(int argc, char *argv[]) {
               gHost.input->removeContainer(static_cast<ngn::ContainerId>(tag));
             }
           },
+      .activate = [](SurfaceId surface, facebook::react::Tag tag) { return gHost.input && gHost.input->activate(surface, tag); },
+      .chooseTab = [](SurfaceId surface, facebook::react::Tag host, facebook::react::Tag screen) { gHost.mounting->chooseTab(surface, host, screen); },
   };
   gHost.backend->modals().setSheetNodes([](SurfaceId surface, facebook::react::Tag tag) -> std::optional<ngn::SheetNode> {
     return gHost.runtime ? gHost.runtime->sheetNode(surface, tag) : std::nullopt;
@@ -493,11 +603,13 @@ int main(int argc, char *argv[]) {
       showAppSurfaceIfUsed();
       if (gHost.appWindowShown) {
         watchFirstFrame(gHost.appWindow, gHost.appSurface);
+        launchFrameShown(surfaceId, gHost.appWindow);
       }
     } else {
       gHost.windows->didMount(surfaceId);
       if (GtkWidget *window = gHost.windows->window(surfaceId)) {
         watchFirstFrame(window, gHost.windows->surfaceWidget(surfaceId));
+        launchFrameShown(surfaceId, window);
       }
     }
   };
@@ -512,6 +624,11 @@ int main(int argc, char *argv[]) {
       }
     }
   };
+  // A press that became a drag out of a `[dragItem]` view: the move that crossed the threshold
+  // starts the drag, which has the pointer from there.
+  gHost.input->onDragOut = [](facebook::react::Tag tag, const ngn::PointerInput &, const ngn::DragOutItem &item) {
+    ngn::gtk::dragOutOfPointer(gHost.backend->view(tag), item);
+  };
 
   int width = static_cast<int>(ngn::kDefaultWindowWidth), height = static_cast<int>(ngn::kDefaultWindowHeight);
   gHost.appWindow = adw_application_window_new(gHost.application);
@@ -524,7 +641,7 @@ int main(int argc, char *argv[]) {
       gHost.state->metrics.set(windowMetrics(w, h));
     }
     if (gHost.runtime) {
-      gHost.runtime->updateSurface(kAppSurface, metricsFor(w, h, gtk_widget_get_scale_factor(gHost.appWindow)));
+      gHost.runtime->updateSurface(kAppSurface, metricsFor(w, h, ngn::gtk::windowScale(gHost.appWindow)));
     }
   });
   adw_application_window_set_content(ADW_APPLICATION_WINDOW(gHost.appWindow), ngn::gtk::wrapInChrome(gHost.appSurface, {.menus = menuPlacement}));
@@ -535,25 +652,39 @@ int main(int argc, char *argv[]) {
   }), nullptr);
   gtk_widget_realize(gHost.appWindow);
   ngn::gtk::afterLayout(gHost.appWindow, [] { reportContainer(kAppSurface); });
-  // A move to a monitor of another scale changes no size, so the surface would not hear of it.
-  g_signal_connect(gHost.appWindow, "notify::scale-factor", G_CALLBACK(+[](GObject *, GParamSpec *, gpointer) {
-    // One declaration each: a comma here would split G_CALLBACK's argument.
-    int w = gtk_widget_get_width(gHost.appSurface);
-    int h = gtk_widget_get_height(gHost.appSurface);
+  // A move to a monitor of another scale, or a new fractional scale, changes no size, so the
+  // surface would not hear of it: the layout rounds to the new pixels, and Dimensions and
+  // PixelRatio report them.
+  ngn::gtk::followWindowScale(gHost.appWindow, [] {
+    int w = gtk_widget_get_width(gHost.appSurface), h = gtk_widget_get_height(gHost.appSurface);
     if (gHost.state) {
       gHost.state->metrics.set(windowMetrics(w, h));
     }
     if (gHost.runtime) {
-      gHost.runtime->updateSurface(kAppSurface, metricsFor(w, h, gtk_widget_get_scale_factor(gHost.appWindow)));
+      gHost.runtime->updateSurface(kAppSurface, metricsFor(w, h, ngn::gtk::windowScale(gHost.appWindow)));
     }
-  }), nullptr);
+    gHost.backend->windowRescaled(gHost.appWindow);
+  });
 
   // The app's folders: a test launch's own, else the XDG ones named for the app.
   std::string appData = settings.test ? settings.test->applicationSupport() : joined(g_get_user_data_dir(), appId);
   std::string caches = settings.test ? settings.test->caches() : joined(g_get_user_cache_dir(), appId);
   g_mkdir_with_parents(caches.c_str(), 0700);
-  auto system = ngn::gtk::makeSystem(appId, appData);
-  gHost.state = std::make_shared<ngn::HostState>();
+  // Another app's copy reaches Clipboard's listeners once its text has been read.
+  auto system = ngn::gtk::makeSystem(appId, appData, [](int64_t count) {
+    if (gHost.state) {
+      gHost.state->clipboardChangeCount.set(count);
+    }
+  });
+  // A sidebar's collapsed state autosaves among the app's preferences, as window frames do.
+  gHost.backend->splitViews().readPreference = [system](const std::string &key) { return system->preference(key); };
+  gHost.backend->splitViews().writePreference = [system](const std::string &key, const folly::dynamic &value) {
+    system->setPreference(key, value);
+  };
+  // The state and the watcher of the desktop's accessibility settings, which only the running app has.
+  auto watched = ngn::gtk::makeWatchedHostState();
+  gHost.state = std::move(watched.state);
+  gHost.accessibility = std::move(watched.accessibility);
   gHost.state->metrics.set(windowMetrics(width, height));
   if (!settings.initialUrl.empty()) {
     gHost.state->setInitialUrl(settings.initialUrl);
@@ -562,7 +693,14 @@ int main(int argc, char *argv[]) {
   for (const auto &url : ngn::gtk::openUrls(settings.openArgs)) {
     gHost.state->receiveUrl(url, false);
   }
-  auto curl = ngn::makeCurlNetwork();
+  // Cookies last between launches, in the app's data folder, as macOS keeps them. A proxy comes
+  // from the desktop's settings unless libcurl's environment variables name one.
+  auto curl = ngn::makeCurlNetwork({
+      .cookieFile = joined(appData, "cookies.txt"),
+      .desktopProxies = [](const std::string &url) { return ngn::gtk::desktopProxies(url); },
+      .appName = settings.title,
+      .appVersion = settings.setting("CFBundleShortVersionString", "NGN_APP_VERSION"),
+  });
   ngn::NetworkClients network{curl.http, curl.webSockets};
   // Images load through the same client, and are kept in memory for the process.
   ngn::gtk::useImageLoading(network.http, std::make_shared<ngn::ImageCache>("", 64 << 20));
@@ -570,31 +708,8 @@ int main(int argc, char *argv[]) {
     gHost.mounting->tree().setScrollOffset(tag, offset);
   });
 
-  static ngn::ProcessesSetup processes;
-  for (char **e = environ; e && *e; ++e) {
-    std::string entry = *e;
-    if (auto eq = entry.find('='); eq != std::string::npos) {
-      processes.environment[entry.substr(0, eq)] = entry.substr(eq + 1);
-    }
-  }
-  processes.lookup = {
-      .isExecutable = [](const std::string &path) { return access(path.c_str(), X_OK) == 0; },
-      .searchPath = os.searchPath,
-  };
-  if (!settings.capabilitiesJson.empty()) {
-    processes.capabilities = ngn::parseCapabilities(folly::parseJson(settings.capabilitiesJson));
-  }
-  auto document = joined(appData, "Documents");
-  g_mkdir_with_parents(document.c_str(), 0700);
-  ngn::FileAccess::Folders folders{
-      .cache = caches,
-      .document = document,
-      .appData = appData,
-      .temp = settings.test ? settings.test->temp() : g_get_tmp_dir(),
-      .home = g_get_home_dir(),
-      .desktop = g_get_user_special_dir(G_USER_DIRECTORY_DESKTOP) ? g_get_user_special_dir(G_USER_DIRECTORY_DESKTOP) : "",
-      .downloads = g_get_user_special_dir(G_USER_DIRECTORY_DOWNLOAD) ? g_get_user_special_dir(G_USER_DIRECTORY_DOWNLOAD) : "",
-  };
+  static ngn::ProcessesSetup processes = ngn::gtk::processesSetup(os, settings.capabilitiesJson, ngn::gtk::insideFlatpak());
+  auto folders = ngn::gtk::fileFolders(appData, caches, settings.test ? settings.test->temp() : g_get_tmp_dir());
   if (auto path = ngn::pathOfUri(bundle)) {
     // An exported bundle on disk: its assets are beside it.
     folders.bundle = directoryOf(*path);
@@ -612,23 +727,30 @@ int main(int argc, char *argv[]) {
        .webSockets = network.webSockets,
        .files = fileAccess,
        .reactNativeVersion = NGN_REACT_NATIVE_VERSION,
-       .bundle = [bundle] { return bundle; },
+       .bundle = [] {
+         std::lock_guard lock(gBundleMutex);
+         return gBundle;
+       },
        .fakeSystemUI = settings.test && settings.test->fakeSystemUI,
        .gestures = views.gestures,
        .runOnUiThread = [](std::function<void()> task) { gHost.backend->runOnUiThread(std::move(task)); }});
 
   gHost.windows = std::make_shared<ngn::gtk::GtkWindows>(ngn::gtk::GtkWindows::Hooks{
       .addSurface = addSurface,
-      .startSurface = [](SurfaceId surface, int w, int h, int scale) { gHost.runtime->startSurface(surface, "", metricsFor(w, h, scale)); },
+      .startSurface = [](SurfaceId surface, int w, int h, double scale) { gHost.runtime->startSurface(surface, "", metricsFor(w, h, scale)); },
       .resizeSurface =
-          [](SurfaceId surface, int w, int h, int scale) {
+          [](SurfaceId surface, int w, int h, double scale) {
             reportContainer(surface);
             if (gHost.runtime) {
               gHost.runtime->updateSurface(surface, metricsFor(w, h, scale));
             }
           },
+      .rescaled = [](GtkWidget *window) { gHost.backend->windowRescaled(window); },
       .stopSurface =
           [](SurfaceId surface) {
+            if (gHost.menus) {
+              gHost.menus->forgetHistory(surface);
+            }
             gHost.runtime->stopSurface(surface);
             gHost.mounting->removeContainerInsets(surface);
             gHost.reported.erase(surface);
@@ -663,6 +785,35 @@ int main(int argc, char *argv[]) {
   auto menus = std::make_shared<ngn::MenuHost>(
       gHost.gtkMenus, ngn::DefaultMenuOptions{.appName = settings.title, .developer = ngn::DevServer::fromBundleUrl(bundle).has_value(), .os = os});
   gHost.menus = menus;
+  // File > Print with no print item of the app's: what the window shows (printing.h).
+  menus->printWindow = [](std::optional<SurfaceId> surface) {
+    GtkWidget *widget = surface ? surfaceWidgetOf(*surface) : nullptr;
+    if (!widget) {
+      auto *active = gtk_application_get_active_window(gHost.application);
+      auto found = active ? surfaceOfWindow(active) : std::nullopt;
+      widget = found ? surfaceWidgetOf(*found) : nullptr;
+    }
+    if (!widget) {
+      return;
+    }
+    ngn::gtk::printWidget(widget, false, [](const std::string &error) {
+      if (!error.empty()) {
+        fprintf(stderr, "[ngn] print: %s\n", error.c_str());
+      }
+    });
+  };
+  // Each window's history, as the app's router reports it, for its header bar's back and forward
+  // pair, which goes through it.
+  menus->historyChanged = [](SurfaceId surface) {
+    gHost.backend->runOnUiThread([surface] {
+      if (gHost.menus) {
+        gHost.backend->headers().setHistory(surface, gHost.menus->history(surface));
+      }
+    });
+  };
+  gHost.backend->headers().navigate = [](SurfaceId surface, ngn::NavigationDirection direction, int steps) {
+    gHost.menus->navigate(direction, surface, steps);
+  };
   routeWindow(gHost.appSurface);
   // A view's context menu (its `contextMenu` prop), drawn where the secondary click was.
   ngn::gtk::setContextMenuShower([](GtkWidget *widget, const ngn::PointerInput &input) {
@@ -699,11 +850,19 @@ int main(int argc, char *argv[]) {
     }));
     *host = tray;
   }
-  // The Expo Updates client, off: this backend has no crypto yet, which a fetched update needs
-  // to be checked, so it never fetches one. The bundle runs as given.
-  auto updatesConfig = ngn::updatesConfigFrom(settings, os, appData, bundle);
-  updatesConfig.off = "Updates are off: the Linux host has no update checks yet.";
-  auto updates = std::make_shared<ngn::UpdatesClient>(std::move(updatesConfig), network.http, nullptr);
+  // A bundle on disk runs the newest update the Expo Updates client keeps, in the app's data
+  // folder ($XDG_DATA_HOME/<app-id>/updates: the install tree is read-only), when the app has an
+  // updates URL; one from a dev server never does.
+  bool fromDevServer = ngn::DevServer::fromBundleUrl(bundle).has_value();
+  gHost.updates = std::make_shared<ngn::UpdatesClient>(
+      ngn::updatesConfigFrom(settings, os, appData, bundle), network.http, ngn::makeOpenSslUpdateCrypto());
+  if (!fromDevServer && gHost.updates->enabled()) {
+    bundle = gHost.updates->launch();
+    if (auto running = gHost.updates->running()) {
+      fprintf(stderr, "[ngn] running update %s\n", running->id.c_str());
+    }
+  }
+  setRunningBundle(bundle);
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
   // is left empty, and its module answers that it is unavailable.
   ngn::addDesktopModules(
@@ -721,16 +880,45 @@ int main(int argc, char *argv[]) {
        .menus = menus,
        .tray = tray,
        .processes = processes,
-       .notifications = [appId](std::shared_ptr<ngn::NotificationEvents>) { return ngn::gtk::makeLauncherBadgeNotifications(appId); },
+       .shell = ngn::gtk::makeShellOpener(),
+       .secrets = ngn::gtk::makeSecretStore(appId, ngn::gtk::insideFlatpak()),
+       .sleep = ngn::gtk::makeSleepPreventer(gHost.application),
+       .notifications =
+           [appData, appId](std::shared_ptr<ngn::NotificationEvents> events) {
+             return ngn::gtk::makeNotificationCenter(G_APPLICATION(gHost.application), appData, std::move(events), raiseApp,
+                                                     ngn::gtk::makeLauncherBadge(appId));
+           },
        .undo = gHost.undo,
+       .fileDialogs = ngn::gtk::makeFileDialogs(),
+       .fileWatcher = ngn::gtk::makeFileWatcher(),
        .pathMonitor = ngn::gtk::makePathMonitor(),
+       .printSystem = ngn::gtk::makePrintSystem(surfaceWidgetOf),
        .regionCode = [system] {
          auto locale = system->facts().locale;
          auto dash = locale.find('-');
          return dash == std::string::npos ? std::string() : locale.substr(dash + 1);
        },
-       .updates = updates,
-       .reload = [](const std::string &next, std::function<void(bool)> done) { gHost.runtime->reload(next, std::move(done)); }});
+       .updates = gHost.updates,
+       .fromDevServer = fromDevServer,
+       .reload =
+           [](const std::string &next, std::function<void(bool)> done) {
+             setRunningBundle(next);
+             // The launch the module's beginReload just began.
+             uint64_t generation = gHost.updates->launchGeneration();
+             gHost.launchFrame.bundleLoading();
+             gHost.runtime->reload(next, [next, done, generation](bool loaded) {
+               gHost.launchFrame.bundleLoadEnded(loaded);
+               // A bundle that did not load never counts as a launch that succeeded; one that did
+               // counts from the first frame its own instance mounts on screen.
+               if (loaded) {
+                 uint64_t instance = gHost.mounting->instance();
+                 gHost.backend->runOnUiThread([generation, instance] { reloadLaunched(generation, instance); });
+               } else {
+                 fprintf(stderr, "ngn-linux: the update's bundle %s did not load\n", next.c_str());
+               }
+               done(loaded);
+             });
+           }});
 
   gHost.runtime = std::make_unique<ngn::Runtime>(
       gHost.mounting,
@@ -739,6 +927,8 @@ int main(int argc, char *argv[]) {
       modules, network, bundle,
       ngn::DebuggerIdentity{.appId = appId, .deviceName = g_get_host_name(), .os = os.id});
   gHost.runtime->rightToLeft = [system] { return ngn::appRightToLeft(*system); };
+  // The first launch owes its first frame from the instance the runtime just began.
+  gHost.launchFrame.loaded(gHost.updates->launchGeneration(), gHost.mounting->instance());
 
   ngn::onLayoutAnimationsRunning([](bool running) {
     gHost.backend->runOnUiThread([running] {
@@ -766,12 +956,18 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "ngn-linux: could not load %s\n", bundle.c_str());
     return 1;
   }
-  gHost.runtime->startSurface(kAppSurface, settings.module, metricsFor(width, height, gtk_widget_get_scale_factor(gHost.appWindow)));
+  gHost.runtime->startSurface(kAppSurface, settings.module, metricsFor(width, height, ngn::gtk::windowScale(gHost.appWindow)));
 
   while (!gHost.quit) {
     g_main_context_iteration(nullptr, TRUE);
   }
+  // A clean quit is no crash: the update running is not rolled back, however soon it quit. Not so
+  // while its reload is pending or its bundle did not load: that launch never ran.
+  if (gHost.launchFrame.bundleLoaded()) {
+    gHost.updates->markLaunchSucceeded();
+  }
   gHost.runtime->shutdown();
   gHost.runtime.reset();
+  gHost.accent.reset();
   return 0;
 }

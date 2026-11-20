@@ -10,6 +10,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ngn {
 
@@ -23,6 +24,19 @@ enum class ScrollbarGutter { Auto, Stable };
 // How a ModalHostView shows (desktop-modal.h): a sheet on its window, a cover in the window, or a
 // popover at its anchor.
 enum class ModalPresentation { Sheet, Cover, Popover };
+
+// The ARIA states and counts no React Native prop carries, as the components commit them: whether a
+// field is required or invalid, an item's place in its set, and a grid's row and column counts.
+struct AriaFields {
+  bool required{false};
+  bool invalid{false};
+  std::optional<int> posInSet;
+  std::optional<int> setSize;
+  std::optional<int> rowCount;
+  std::optional<int> columnCount;
+
+  bool operator==(const AriaFields &other) const = default;
+};
 
 struct DesktopProps {
   // Unset means the toolkit's default for the component.
@@ -53,6 +67,12 @@ struct DesktopProps {
   std::string role;
   // `accessibilityLevel` (`aria-level`): a heading's level, from 1.
   std::optional<int> accessibilityLevel;
+  // `accessibilityDescribedBy` (`aria-describedby`): the nativeIDs of the views that describe this
+  // one (accessibility-relations.h). React Native's ViewProps has `accessibilityLabelledBy`.
+  std::vector<std::string> accessibilityDescribedBy;
+  // `accessibilityRequired` (`aria-required`) and the rest of the ARIA states and counts React
+  // Native's ViewProps lacks (accessibility.h AxInfo).
+  AriaFields aria;
   // ModalHostView only.
   ModalPresentation presentation{ModalPresentation::Sheet};
 
@@ -68,7 +88,7 @@ struct HasDesktopProps {
 // hit test, the cursor and Tab order all read it, and a flattened view is not mounted.
 inline bool formsStackingContext(const DesktopProps &props) {
   return props.focusable.value_or(false) || props.tabIndex.has_value() || props.cursor.has_value() ||
-      !props.role.empty() || props.onDoubleClick || props.onContextMenu || props.onWheel || props.fileDrop || !props.dragItem.isNull() ||
+      !props.role.empty() || !props.accessibilityDescribedBy.empty() || props.onDoubleClick || props.onContextMenu || props.onWheel || props.fileDrop || !props.dragItem.isNull() ||
       !props.contextMenu.isNull();
 }
 

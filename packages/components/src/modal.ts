@@ -11,7 +11,7 @@ import {
   input,
   signal,
 } from '@angular/core';
-import { Direction, OS } from '@ng-native/device';
+import { DESKTOP, Direction } from '@ng-native/device';
 import { Engine, HostEngine, type EngineNode } from '@ng-native/fabric';
 import { optionalBoolean } from './transforms.ts';
 import { View } from './view.ts';
@@ -97,15 +97,15 @@ export class Modal extends ViewBase {
   readonly hardwareAccelerated = input(undefined, { transform: optionalBoolean });
 
   /**
-   * The element the modal points at. With one, it shows as a popover at the element on macOS; on
-   * every other OS, iPadOS included, it shows as it would without one. Committed as the react tag
-   * of the element's view.
+   * The element the modal points at. With one, it shows as a popover at the element on macOS and
+   * Linux; on every other OS, iPadOS included, it shows as it would without one. Committed as the
+   * react tag of the element's view.
    */
   readonly anchor = input<ModalAnchor>();
 
   private readonly direction = inject(Direction);
-  /** Only macOS reads the anchor, so only there does the modal wait for it. */
-  private readonly readsAnchor = inject(OS) === 'macos';
+  /** Only the desktop host reads the anchor, so only there does the modal wait for it. */
+  private readonly readsAnchor = inject(DESKTOP);
   /** For the anchor view tag, which only the engine itself hands out. */
   private readonly views = inject(Engine, { optional: true });
   private readonly injector = inject(Injector);
@@ -113,8 +113,8 @@ export class Modal extends ViewBase {
   /** The anchor's view tag, committed as `anchor`, or undefined with none. */
   protected readonly anchorTag = signal<number | undefined>(undefined);
   /**
-   * Whether the anchor's view has still to commit, which gives it its tag. On macOS the modal waits:
-   * the host reads the anchor as it presents, and one presented without it stays a sheet.
+   * Whether the anchor's view has still to commit, which gives it its tag. On a desktop OS the modal
+   * waits: the host reads the anchor as it presents, and one presented without it stays a sheet.
    */
   protected readonly awaitingAnchor = signal(false);
 

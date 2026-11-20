@@ -47,22 +47,29 @@ On Linux the GTK host plays a script in a dev run and in a test launch (`NGN_TES
 screens-check's Linux mode drives an exported bundle. It plays under X11 only, Xvfb included,
 posting each step to the X server through XTest (`libXtst.so.6`), so a step reaches GTK as a
 person's input does, native controls included. The pointer steps, `key` and `type` play, with the
-command modifier as Ctrl and option as Alt, so `key left option` is the back key. A script with
-`scroll`, `magnify`, `rotate` or `choose` is refused, with the reason in the host's log. With
-`NGN_CAPTURE` set too, the GTK host takes its screenshot a second after the script has played,
-rather than a second after the first frame.
+command modifier as Ctrl and option as Alt, so `key left option` is the back key. A character is
+typed in the keyboard group that has it, the active group first, and the active group is put back
+after. A press the script has not released when it ends or its window closes is released then. A
+script with `scroll`, `magnify`, `rotate` or `choose` is refused, as is any script on an X server
+without the XTEST extension, with the reason in the host's log. With `NGN_CAPTURE` set too, the GTK
+host takes its screenshot a second after the script has played, rather than a second after the
+first frame.
 
 ## Crash reports
 
 macOS keeps a report of each crash in `~/Library/Logs/DiagnosticReports`. On Linux the GTK host
 writes its own: on a fatal signal it writes `crash.txt`, naming the signal and the native stack, to
 the test launch's state folder, or to `$XDG_STATE_HOME/<app id>/crash.txt` (`~/.local/state` when
-XDG_STATE_HOME is unset), prints the same lines to its standard error, and dies of the signal.
+XDG_STATE_HOME is unset), prints the same lines to its standard error, and dies of the signal. When
+the report takes longer than two seconds, as when another thread holds a lock the stack's unwinder
+needs, the host says so on standard error, and in the report once it is open, and dies of the
+signal with what it has written.
 
 ## Logging
 
 `NGN_LOG_COMMITS=1` in the host's environment logs each commit's time to stderr as `[ngn] commit N
-ms`, which `pnpm bench:macos` reads. It is off by default, since an animation commits every frame.
+ms`, which `pnpm bench:macos` and `pnpm bench:linux` read. It is off by default, since an
+animation commits every frame.
 `NGN_LOG_ROTORS=1` logs each VoiceOver rotor's items in the first window a second after its first
 frame, for checking them without a screen reader. Both, and `NGN_INPUT_SCRIPT`, work only in a dev
 run: a packaged app ignores them, as it ignores the rest of its environment but `NGN_NO_PROMPTS=1`,

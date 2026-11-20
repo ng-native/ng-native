@@ -26,6 +26,7 @@ option(NGN_RUNTIME "With NGN_BACKEND=none, build the runtime half over Hermes to
 set(RN_DIR "" CACHE PATH "The installed react-native package")
 set(NGN_SOURCES "" CACHE PATH "Sources fetched by scripts/fetch.sh (<cache>/src)")
 set(NGN_HERMES_BUILD "" CACHE PATH "Hermes built by scripts/build-hermes.sh")
+set(NGN_HERMES_PREBUILT "" CACHE PATH "React Native's prebuilt Hermes, from scripts/fetch-hermes.sh")
 foreach(var RN_DIR NGN_SOURCES)
   if(NOT IS_DIRECTORY "${${var}}")
     message(FATAL_ERROR "${var} is not set to a directory; build through scripts/build.sh")
@@ -79,6 +80,7 @@ endif()
 # --- core -----------------------------------------------------------------------------------------
 add_library(ngn_core STATIC
     core/src/absent-views.cpp
+    core/src/accent-colors.cpp
     core/src/accessibility.cpp
     core/src/aria-role.cpp
     core/src/animation-frames.cpp
@@ -105,8 +107,11 @@ add_library(ngn_core STATIC
     core/src/input-dispatcher.cpp
     core/src/input-script.cpp
     core/src/key-value-store.cpp
+    core/src/notification-schedule.cpp
     core/src/launch-settings.cpp
     core/src/live-regions.cpp
+    core/src/text-units.cpp
+    core/src/accessibility-relations.cpp
     core/src/library-glue.cpp
     core/src/module-registry.cpp
     core/src/mounting-manager.cpp
@@ -132,6 +137,7 @@ add_library(ngn_core STATIC
     core/src/download.cpp
     core/src/updates.cpp
     core/src/view-box.cpp
+    core/src/view-filter.cpp
     core/src/view-transform.cpp
     core/src/red-box.cpp
     core/src/expo-image.cpp
@@ -263,6 +269,9 @@ if(NGN_TESTS)
     target_link_libraries(ngn_core_tests PRIVATE "-framework Foundation" "-framework Security" "-framework IOKit" "-framework SystemConfiguration" "-framework Network" "-framework AppKit" "-framework CoreText" "-framework ImageIO" "-framework Vision" "-framework UniformTypeIdentifiers" "-framework EventKit" "-framework AVFoundation" "-framework CoreMedia" "-framework Photos" "-framework PhotosUI" "-framework AppTrackingTransparency" "-framework AdSupport" "-framework CoreLocation" "-framework MapKit" "-framework WebKit" "-framework PDFKit" "-framework CoreImage" "-framework AuthenticationServices" "-framework AVKit" "-framework UserNotifications")
   endif()
   enable_testing()
+  if(NGN_HERMES_TEST_RPATH)
+    target_link_options(ngn_core_tests PRIVATE ${NGN_HERMES_TEST_RPATH})
+  endif()
   add_test(NAME core COMMAND ngn_core_tests)
 endif()
 
@@ -288,7 +297,16 @@ if(_ngn_curl)
   add_library(ngn_curl STATIC core/src/curl-network.cpp)
   target_link_libraries(ngn_curl PUBLIC ngn_core PRIVATE ngn_libcurl)
   target_compile_options(ngn_curl PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter -Wno-missing-field-initializers)
+  # The Expo Updates client's hash and signature check over the same system OpenSSL 3, for the
+  # backend with no OS crypto of its own.
+  add_library(ngn_openssl STATIC core/src/openssl-update-crypto.cpp)
+  target_include_directories(ngn_openssl PRIVATE ${NGN_OPENSSL_INCLUDE_DIRS})
+  target_link_libraries(ngn_openssl PUBLIC ngn_core ${NGN_OPENSSL_LINK_LIBRARIES})
+  target_compile_options(ngn_openssl PRIVATE -Wall -Wextra -Werror -Wno-unused-parameter -Wno-missing-field-initializers)
   if(NGN_TESTS)
+    target_sources(ngn_core_tests PRIVATE core/tests/openssl/update-crypto.test.cpp)
+    target_link_libraries(ngn_core_tests PRIVATE ngn_openssl)
+    set_source_files_properties(core/tests/openssl/update-crypto.test.cpp PROPERTIES COMPILE_OPTIONS "${NGN_DOCTEST_SOURCE_OPTIONS}")
     # Against a local server, test-server.py, which needs python3.
     set(_curl_tests core/tests/curl/network.test.cpp)
     target_sources(ngn_core_tests PRIVATE ${_curl_tests})
@@ -334,6 +352,10 @@ if(NGN_WITH_RUNTIME)
     endif()
     if(NGN_DOCTEST_SOURCE_OPTIONS)
       set_source_files_properties(${runtime_test_SRC} PROPERTIES COMPILE_OPTIONS ${NGN_DOCTEST_SOURCE_OPTIONS})
+    endif()
+    # A prebuilt Hermes framework loads through @rpath, as for the core tests above.
+    if(NGN_HERMES_TEST_RPATH)
+      target_link_options(ngn_runtime_tests PRIVATE ${NGN_HERMES_TEST_RPATH})
     endif()
     add_test(NAME runtime COMMAND ngn_runtime_tests)
   endif()

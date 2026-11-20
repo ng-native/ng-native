@@ -140,6 +140,22 @@ NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
 - (void)controlDidEndEditing;
 @end
 
+// WebKit's AXInvalid, which AppKit has no property for, said as `invalid` is: a field whose value
+// is refused (aria-invalid).
+#define NGN_INVALID_ATTRIBUTE_METHODS(invalid)                                                             \
+  _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\"")         \
+  -(NSArray<NSAccessibilityAttributeName> *)accessibilityAttributeNames {                                   \
+    NSArray *names = [super accessibilityAttributeNames];                                                  \
+    return [names containsObject:@"AXInvalid"] ? names : [names arrayByAddingObject:@"AXInvalid"];         \
+  }                                                                                                        \
+  -(id)accessibilityAttributeValue : (NSAccessibilityAttributeName)attribute {                             \
+    if ([attribute isEqualToString:@"AXInvalid"]) {                                                        \
+      return (invalid) ? @"true" : @"false";                                                               \
+    }                                                                                                      \
+    return [super accessibilityAttributeValue:attribute];                                                  \
+  }                                                                                                        \
+  _Pragma("clang diagnostic pop")
+
 // The two controls a field swaps between. AppKit's secure field editor takes only an
 // NSSecureTextField as its delegate, so each is a subclass of its own, with the same few
 // overrides: they report focus to their box, and keep the shared field editor to its options.
@@ -165,7 +181,8 @@ NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
       : (NSRange)range options : (NSDictionary<NSTextCheckingOptionKey, id> *)options types                 \
       : (NSTextCheckingTypes *)checkingTypes {                                                             \
     return self.box ? NGNTextCheckingOptions(options, self.box.options) : options;                         \
-  }
+  }                                                                                                        \
+  NGN_INVALID_ATTRIBUTE_METHODS(self.box.invalid)
 
 #define NGN_FIELD_CELL_METHODS                                                                             \
   -(NSText *)setUpFieldEditorAttributes : (NSText *)text {                                                 \
@@ -437,6 +454,8 @@ NGN_FIELD_CELL_METHODS
   NSTextAlignment _textAlignment;
   NSWritingDirection _writingDirection;
 }
+
+NGN_INVALID_ATTRIBUTE_METHODS(self.invalid)
 
 - (instancetype)initWithFrame:(NSRect)frame textContainer:(NSTextContainer *)container {
   if ((self = [super initWithFrame:frame textContainer:container])) {
