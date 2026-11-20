@@ -6880,6 +6880,13 @@ export interface EngineOptions {
    */
   now?: () => number;
   /**
+   * `off`: every transition and `@keyframes` animation takes no time, as one of no duration does
+   * in CSS. A transition lands on its new value, a finite animation ends by the next frame (on its
+   * last frame where its fill mode keeps it), and one that repeats forever is not played. For a
+   * test that reads or captures where a change ends. Default `on`; see `setMotion`.
+   */
+  motion?: 'on' | 'off';
+  /**
    * Called when the tree goes from clean to dirty. The host uses it to schedule a commit for a
    * change that arrives outside change detection, which is where Angular's animation queue puts
    * the classes for `animate.enter` and `animate.leave`.
@@ -6912,7 +6919,7 @@ const IS_COLOR_PROP = /color(android)?$/i;
 const STATE_COLOR_PROPS = new Set(['trackColorForTrue', 'trackColorForFalse']);
 /** Answers per key name, once: the regex ran for every prop of every node in every commit. */
 const colorProps = new Map<string, boolean>();
-function isColorProp(key: string): boolean {
+export function isColorProp(key: string): boolean {
   let answer = colorProps.get(key);
   if (answer === undefined) {
     colorProps.set(
@@ -7582,6 +7589,8 @@ export class Engine implements HostEngine {
   readonly dev: boolean;
   /** The clock transitions and animations run on, which a script reads where one has got to. */
   readonly now: () => number;
+  /** See `EngineOptions.motion`. */
+  private motion: 'on' | 'off' = 'on';
   private onDirty: (() => void) | undefined;
   private onError: ((error: unknown, topLevelType: string) => void) | undefined;
   /** Nodes with at least one transition in flight, so a frame walks those and nothing else. */
@@ -7665,6 +7674,7 @@ export class Engine implements HostEngine {
         this.reportPlatformColour(name, props, on);
     }
     this.now = options.now ?? (() => globalThis.performance?.now?.() ?? Date.now());
+    this.setMotion(options.motion);
     this.onDirty = options.onDirty;
     this.onError = options.onError;
     this.registerSheet(options.globalStyles);
@@ -13744,7 +13754,7 @@ export class Engine implements HostEngine {
    * own frames, which is what lets an element animate in without differing from anything.
    */
   private animated(node: EngineNode, props: Record<string, unknown>): Record<string, unknown> {
-    const spec = animationOf(props);
+    const spec = this.timed(animationOf(props));
 
     // One played by a scroll that is no longer asked for, whatever is asked for instead.
     if (node.scrolled && !spec?.timeline) this.stopScrolled(node);
@@ -14331,9 +14341,36 @@ export class Engine implements HostEngine {
     );
   }
 
+  /**
+   * Turn motion off or back on: see `EngineOptions.motion`. It holds from the next change a node's
+   * style makes; what is already moving goes on to its end.
+   */
+  setMotion(motion: 'on' | 'off' = 'on'): void {
+    this.motion = motion;
+  }
+
+  /** A `@keyframes` animation as motion has it: as written, or taking no time. */
+  private timed(spec: AnimationSpec | undefined): AnimationSpec | undefined {
+    if (!spec || this.motion === 'on') return spec;
+    // One that repeats forever has no end to show: not played, so the resting style shows.
+    if (spec.iterations === null || spec.iterations === Infinity) return undefined;
+    return { ...spec, duration: 0, delay: 0 };
+  }
+
+  /** A node's transitions as motion has them: as written, or taking no time. */
+  private timedTransitions(
+    spec: Record<string, TransitionSpec> | undefined,
+  ): Record<string, TransitionSpec> | undefined {
+    if (!spec || this.motion === 'on') return spec;
+    const still: Record<string, TransitionSpec> = {};
+    for (const [key, timing] of Object.entries(spec))
+      still[key] = { ...timing, duration: 0, delay: 0 };
+    return still;
+  }
+
   private transitioned(node: EngineNode, props: Record<string, unknown>): Record<string, unknown> {
     this.unseenTransitions(node);
-    const spec = transitionSpec(props);
+    const spec = this.timedTransitions(transitionSpec(props));
     if (!spec && !node.transitions) return props;
     if (spec) keepForTransition(node, props, spec);
 

@@ -238,6 +238,66 @@ it('lays the row out as native does', async () => {
 `screen` has the queries of the Node `screen`, `measure` is where native laid a node out, and
 `press` sends a touch through the engine. Snapshots are kept per OS.
 
+## Checking styles, sizes and colours
+
+A screenshot compares everything at once; these check one thing, and read the same on every
+simulator and emulator:
+
+```ts
+import { render, screen } from '@ng-native/testing/device';
+import { expect, it } from 'vitest';
+
+it('draws the swatch', async () => {
+  await render(Swatch);
+  const swatch = screen.getByTestId('swatch');
+  expect(swatch).toHaveStyle({ backgroundColor: '#3366cc', borderRadius: 12 });
+  expect(swatch).toHaveSize({ width: 300, height: 100 });
+  expect(swatch).toBeWithin(screen.getByTestId('frame'));
+  await expect(swatch).toHaveColorAt({ x: 150, y: 50 }, '#3366cc');
+});
+```
+
+- `toHaveStyle` reads the props the engine committed to the node, by React Native's names. A
+  colour matches in any CSS form or as the integer native is given; a length is in points (`16`
+  or `'16px'`). A shorthand the engine commits as its parts (`borderRadius`, `borderWidth`,
+  `borderColor`, `padding`, `margin`) matches when every part does.
+- `toHaveSize` and `toBeWithin` read where native laid the node out, as `measure` does, within
+  half a point by default (`{ tolerance }`).
+- `toHaveColorAt` reads the colour native drew at a point of the node (or of a region, or
+  `screen`), in points from its top-left, within one step of 255 on each channel by default
+  (`{ tolerance }`). Await it: it captures the window, as a screenshot does. `colorsAt(target,
+points)` gives the colours themselves.
+
+## Turning animations off
+
+Animations play in a device test as they do in the app. `setAnimations(false)` turns them off
+from the next change on, so what a test reads or captures is where each change ends:
+
+```ts
+import { render, screen, setAnimations } from '@ng-native/testing/device';
+import { expect, it } from 'vitest';
+
+it('lands on the warm colour', async () => {
+  await setAnimations(false);
+  const { instance, settle } = await render(Swatch);
+  instance.warm.set(true);
+  await settle();
+  expect(screen.getByTestId('swatch')).toHaveStyle({ backgroundColor: '#cc6633' });
+});
+```
+
+What it turns off:
+
+- the engine's CSS transitions and `@keyframes` animations: a transition lands on its new value,
+  a finite animation ends by the next frame (on its last frame where its fill mode keeps it),
+  and one that repeats forever is not played;
+- UIKit's view animations on iOS;
+- every Android `Animator`, through the app's own animator duration scale. Android can refuse
+  that call, and `setAnimations` then resolves `false`: the engine's animations are still off.
+
+Animations driven from JavaScript by other means, such as Reanimated, run as before. Each test
+starts with animations on, or off for every test with `deviceTests({ animations: false })`.
+
 ## Screenshots
 
 `toMatchScreenshot` compares what the app drew with a reference image kept beside the test, on an

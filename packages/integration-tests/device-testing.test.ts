@@ -483,6 +483,40 @@ describe('the device pool', () => {
     }
   });
 
+  it("samples a capture's colours at points, at the device's pixel ratio, for the app it runs", async () => {
+    const run = await setup();
+    try {
+      const { worker } = run.worker();
+      const starting = worker.start();
+      const phone = run.app('one');
+      void phone.poll().catch(() => {});
+      await starting;
+      // 4 x 2 pixels at 2x: 2 x 1 points, the right point red.
+      const image = new PNG({ width: 4, height: 2 });
+      for (let i = 0; i < 8; i++)
+        image.data.set(i % 4 >= 2 ? [255, 0, 0, 255] : [0, 0, 255, 128], i * 4);
+      const png = PNG.sync.write(image).toString('base64');
+      const answer = await phone.post('/colors', {
+        png,
+        points: [
+          { x: 0.5, y: 0.5 },
+          { x: 1.5, y: 0.5 },
+        ],
+        scale: 2,
+      });
+      assert.deepEqual(answer.result, [
+        [0, 0, 255, 128 / 255],
+        [255, 0, 0, 1],
+      ]);
+      const outside = await phone.post('/colors', { png, points: [{ x: 2, y: 0 }], scale: 2 });
+      assert.match(outside.error, /outside the capture, 2 x 1 points/);
+      const stranger = await run.app('stranger').post('/colors', { png, points: [], scale: 2 });
+      assert.match(stranger.error, /Not an app a worker has/);
+    } finally {
+      await run.done();
+    }
+  });
+
   it('answers a request it cannot read with a 400', async () => {
     const run = await setup();
     try {

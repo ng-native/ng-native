@@ -299,6 +299,15 @@ describe('the macos Vitest project', () => {
       }
     )({ root: tmpdir(), ...user }).test;
 
+  it("hands the app's runner the project's animations setting, on unless it says off", () => {
+    const provide = (options: Parameters<typeof deviceTests>[0]) =>
+      (configOf(options) as unknown as { provide: { ngNativeAnimations: boolean } }).provide;
+    assert.deepEqual(provide({ platform: 'ios' }), { ngNativeAnimations: true });
+    assert.deepEqual(provide({ platform: 'ios', animations: false }), {
+      ngNativeAnimations: false,
+    });
+  });
+
   it('gives a test 30 seconds, for a first render on a device just booted, unless the project says', () => {
     assert.equal(configOf({ platform: 'ios' }).testTimeout, 30_000);
     assert.equal(configOf({ platform: 'ios' }, { test: { testTimeout: 5000 } }).testTimeout, 5000);

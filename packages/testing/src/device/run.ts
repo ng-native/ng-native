@@ -10,7 +10,9 @@ import type * as browserRunner from 'vitest/internal/browser';
 import { cleanup } from './index.ts';
 import { define, isolate, rerun } from './loader.ts';
 import { installMocking, prepareMocks, restoreMocks } from './mock-registry.ts';
+import { configureAnimations, resetAnimations } from './motion.ts';
 import { installScreenshotMatcher, resetScreenshotNames } from './screenshot.ts';
+import { installVisualMatchers } from './visual-matchers.ts';
 import type { FilePayload } from './pool.ts';
 import {
   DeviceSnapshotEnvironment,
@@ -82,7 +84,7 @@ export async function runFiles(
   };
   await runtime.setupCommonEnv?.(config);
   installMocking(runtime.vi);
-  installScreenshotMatcher();
+  await prepareRun(request);
 
   const projectModule = (name: string) => !name.startsWith('../') && !name.includes('node_modules');
 
@@ -143,6 +145,7 @@ export async function runFiles(
       current = undefined;
       cleanup();
       resetScreenshotNames();
+      await resetAnimations();
     }
 
     override async onAfterRunSuite(suite: unknown): Promise<void> {
@@ -197,6 +200,15 @@ export async function runFiles(
     restoreMocks();
     if (previous) utils?.setGlobalHandler(previous);
   }
+}
+
+/** The matchers, and animations as the project's config has them, before a run. */
+async function prepareRun(request: RunRequest): Promise<void> {
+  installScreenshotMatcher();
+  installVisualMatchers();
+  const provided = (request.context?.providedContext ?? {}) as { ngNativeAnimations?: boolean };
+  configureAnimations(provided.ngNativeAnimations !== false);
+  await resetAnimations();
 }
 
 type Rpc = (method: string, ...args: unknown[]) => Promise<unknown>;

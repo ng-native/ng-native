@@ -1,9 +1,9 @@
 {
   "platforms": ["ios", "android"],
   "ios": {
-    "modules": ["NgNativeScreenshotModule"]
+    "modules": ["NgNativeTestingModule"]
   },
   "android": {
-    "modules": ["dev.ngnative.testing.ScreenshotModule"]
+    "modules": ["dev.ngnative.testing.TestingModule"]
   }
 }

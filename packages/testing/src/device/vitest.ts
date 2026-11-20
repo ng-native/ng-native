@@ -38,6 +38,11 @@ export interface DeviceTestsOptions extends Omit<DevicePoolOptions, 'launch'> {
    */
   device?: string;
   /**
+   * `false`: each test starts with animations off, the engine's CSS transitions and `@keyframes`
+   * as well as native view animations, as `setAnimations(false)` turns them off. Default `true`.
+   */
+  animations?: boolean;
+  /**
    * How the app is started. Default: by the pool, for the `platform`. `false`: by hand, with Metro
    * started by hand too (`EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start`), as for a phone on a cable or
    * Expo Go.
@@ -58,6 +63,7 @@ export function deviceTests(options: DeviceTestsOptions = {}): Plugin {
     name,
     device,
     launch,
+    animations = true,
     ...rest
   } = options;
   const pool: DevicePoolOptions = {
@@ -92,6 +98,8 @@ export function deviceTests(options: DeviceTestsOptions = {}): Plugin {
           isolate: false,
           // Absolute: `**` does not match a directory whose name starts with a dot.
           forceRerunTriggers: sources.map((source) => `${path.resolve(root, source)}/**`),
+          // What the app's runner reads for each run: see `configureAnimations`.
+          provide: { ngNativeAnimations: animations },
         },
       } as never;
     },

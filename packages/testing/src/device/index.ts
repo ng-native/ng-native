@@ -123,3 +123,6 @@ export {
   type ScreenshotTarget,
   type ToMatchScreenshotOptions,
 } from './screenshot.ts';
+
+export { setAnimations } from './motion.ts';
+export { colorsAt, type SizeOptions, type ToHaveColorAtOptions } from './visual-matchers.ts';

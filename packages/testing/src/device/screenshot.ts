@@ -4,8 +4,8 @@
  *
  *     await expect(screen.getByTestId('card')).toMatchScreenshot('card');
  *
- * The capture is the app's window as the platform composited it (`NgNativeScreenshot`, this
- * package's native module), cropped to a node's frame or a region. The comparison and the
+ * The capture is the app's window as the platform composited it (`NgNativeTesting`, this
+ * package's native module, `NgNativeTesting`), cropped to a node's frame or a region. The comparison and the
  * references are the pool's, which has the disk: see `screenshot-baselines.ts`.
  */
 import { expect } from 'vitest';
@@ -35,19 +35,21 @@ export interface ToMatchScreenshotOptions extends ScreenshotCaptureOptions {
   comparatorOptions?: ScreenshotComparatorOptions;
 }
 
-interface ScreenshotModule {
+export interface TestingModule {
   /** A PNG, in base64, of the app's window, or of the region of it given in points. */
   capture(region: Frame | null): Promise<string>;
   /** A PNG, in base64, of the part of the window a view covers, found by its tag. */
   captureView(reactTag: number): Promise<string>;
+  /** Native view animations on or off: UIKit's on iOS, the animator duration scale on Android. */
+  setAnimationsEnabled?(enabled: boolean): Promise<boolean>;
 }
 
-function nativeModule(): ScreenshotModule {
+export function nativeModule(): TestingModule {
   const modules = (globalThis as { expo?: { modules?: Record<string, unknown> } }).expo?.modules;
-  const module = modules?.['NgNativeScreenshot'] as ScreenshotModule | undefined;
+  const module = modules?.['NgNativeTesting'] as TestingModule | undefined;
   if (!module?.capture) {
     throw new Error(
-      'Screenshots need the NgNativeScreenshot native module from @ng-native/testing, which this ' +
+      'This needs the NgNativeTesting native module from @ng-native/testing, which this ' +
         'build of the app does not have. Rebuild the development build after installing or ' +
         'upgrading @ng-native/testing; Expo Go does not have it. iOS and Android have it today.',
     );
@@ -59,7 +61,7 @@ function nativeModule(): ScreenshotModule {
  * One capture of a target. A node is found by native itself, which places it in the window
  * exactly; a region is in the points `measure()` gives.
  */
-function captureOnce(module: ScreenshotModule, target: ScreenshotTarget | undefined) {
+function captureOnce(module: TestingModule, target: ScreenshotTarget | undefined) {
   if (!target || target === screen) return module.capture(null);
   if ('reactTag' in target) return module.captureView(target.reactTag);
   return module.capture(target as Frame);

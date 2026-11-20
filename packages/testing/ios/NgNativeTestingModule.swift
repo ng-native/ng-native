@@ -1,14 +1,16 @@
 import ExpoModulesCore
 import UIKit
 
-/// `NgNativeScreenshot`: the app's window as a PNG, for `toMatchScreenshot()` in a device test.
+/// `NgNativeTesting`: what device tests need of native. The app's window as a PNG, for
+/// `toMatchScreenshot()` and `toHaveColorAt()`, and UIKit's animations on or off, for
+/// `setAnimations()`.
 ///
 /// The window is drawn whole, with `drawHierarchy`, into an image the size of the region asked for:
 /// drawing a single view's hierarchy leaves out Fabric's text, while the window draws it as the
 /// screen shows it. Standard range keeps the colours sRGB, as a simulator's own screenshot is.
-public class NgNativeScreenshotModule: Module {
+public class NgNativeTestingModule: Module {
   public func definition() -> ModuleDefinition {
-    Name("NgNativeScreenshot")
+    Name("NgNativeTesting")
 
     AsyncFunction("capture") { (region: [String: Double]?) throws -> String in
       let window = try appWindow()
@@ -24,6 +26,11 @@ public class NgNativeScreenshotModule: Module {
         throw ScreenshotException("No view with tag \(tag) is in a window")
       }
       return try capture(window, view.convert(view.bounds, to: window))
+    }.runOnQueue(.main)
+
+    AsyncFunction("setAnimationsEnabled") { (enabled: Bool) -> Bool in
+      UIView.setAnimationsEnabled(enabled)
+      return true
     }.runOnQueue(.main)
   }
 }

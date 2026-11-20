@@ -38,6 +38,7 @@ import { metroFor } from './metro-server.ts';
 import { DEFAULT_PORT } from './port.ts';
 import { type AppLauncher, type LaunchedApp } from './launcher.ts';
 import {
+  colorsIn,
   matchScreenshot,
   type ScreenshotOptions,
   type ScreenshotRequest,
@@ -904,6 +905,7 @@ class Bridge {
     else if (request.url === '/rpc') this.call(session, message, response);
     else if (request.url === '/files') this.files(session, message, response);
     else if (request.url === '/screenshot') this.screenshot(session, message, response);
+    else if (request.url === '/colors') this.colors(session, message, response);
     else this.poll(message as unknown as Poll, response);
   }
 
@@ -968,6 +970,28 @@ class Bridge {
         session.screenshots.comparatorOptions,
       );
       response.end(JSON.stringify({ result }));
+    } catch (error) {
+      response.end(JSON.stringify({ error: String(error) }));
+    }
+  }
+
+  /** The colours of a capture at some points, for `toHaveColorAt`: only for an app a worker has. */
+  private colors(
+    session: Session | undefined,
+    message: Record<string, unknown> | null,
+    response: ServerResponse,
+  ): void {
+    response.setHeader('content-type', 'application/json');
+    try {
+      if (!session?.claimant) throw new Error('Not an app a worker has');
+      const { png, points, scale } = (message ?? {}) as {
+        png?: string;
+        points?: { x: number; y: number }[];
+        scale?: number;
+      };
+      response.end(
+        JSON.stringify({ result: colorsIn(String(png), points ?? [], Number(scale) || 1) }),
+      );
     } catch (error) {
       response.end(JSON.stringify({ error: String(error) }));
     }

@@ -2,8 +2,8 @@ require 'json'
 
 package = JSON.parse(File.read(File.join(__dir__, '..', 'package.json')))
 
-# The native side of device tests: the `NgNativeScreenshot` module, which captures the app's window
-# for `toMatchScreenshot()`.
+# The native side of device tests: the `NgNativeTesting` module, which captures the app's window
+# for screenshots and colour checks, and turns UIKit's animations off and on.
 Pod::Spec.new do |s|
   s.name           = 'NgNativeTesting'
   s.version        = package['version']

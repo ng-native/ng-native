@@ -179,3 +179,26 @@ function withinTolerance(expected: Uint8Array, received: Uint8Array, tolerance: 
     if (close) received.set(expected.subarray(i, i + 4), i);
   }
 }
+
+/**
+ * The colour of a PNG (in base64) at each point, in points from its top-left, `scale` pixels to the
+ * point: `[r, g, b, a]`, with alpha from 0 to 1. A point outside the image is an error.
+ */
+export function colorsIn(
+  png: string,
+  at: readonly { x: number; y: number }[],
+  scale: number,
+): [number, number, number, number][] {
+  const image = PNG.sync.read(Buffer.from(png, 'base64'));
+  return at.map(({ x, y }) => {
+    const [px, py] = [Math.floor(x * scale), Math.floor(y * scale)];
+    if (px < 0 || py < 0 || px >= image.width || py >= image.height) {
+      throw new Error(
+        `(${x}, ${y}) is outside the capture, ${image.width / scale} x ${image.height / scale} points`,
+      );
+    }
+    const i = (py * image.width + px) * 4;
+    const d = image.data;
+    return [d[i]!, d[i + 1]!, d[i + 2]!, d[i + 3]! / 255];
+  });
+}

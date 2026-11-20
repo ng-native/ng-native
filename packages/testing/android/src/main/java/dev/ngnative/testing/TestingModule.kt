@@ -1,5 +1,6 @@
 package dev.ngnative.testing
 
+import android.animation.ValueAnimator
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.Rect
@@ -7,6 +8,7 @@ import android.graphics.RectF
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import android.provider.Settings
 import android.util.Base64
 import android.view.PixelCopy
 import android.view.View
@@ -19,16 +21,18 @@ import java.io.ByteArrayOutputStream
 import kotlin.math.roundToInt
 
 /**
- * `NgNativeScreenshot`: the app's window as a PNG, for `toMatchScreenshot()` in a device test.
+ * `NgNativeTesting`: what device tests need of native. The app's window as a PNG, for
+ * `toMatchScreenshot()` and `toHaveColorAt()`, and the animator duration scale, for
+ * `setAnimations()`.
  *
  * `PixelCopy` reads the window's surface as the screen shows it, so it has whatever the views drew,
  * hardware layers included. The PNG is encoded on a thread of its own, off the main thread.
  */
-class ScreenshotModule : Module() {
-  private val encoder by lazy { HandlerThread("NgNativeScreenshot").apply { start() } }
+class TestingModule : Module() {
+  private val encoder by lazy { HandlerThread("NgNativeTesting").apply { start() } }
 
   override fun definition() = ModuleDefinition {
-    Name("NgNativeScreenshot")
+    Name("NgNativeTesting")
 
     AsyncFunction("capture") { region: Map<String, Double>?, promise: Promise ->
       val activity = appContext.currentActivity
@@ -50,6 +54,29 @@ class ScreenshotModule : Module() {
       val view = appContext.findView<View>(tag)
         ?: return@AsyncFunction promise.reject(ScreenshotException("No view with tag $tag"))
       copy(activity.window, windowRect(view), activity.window.decorView, promise)
+    }.runOnQueue(Queues.MAIN)
+
+    // The scale every Animator runs at, as the developer options set it. Only a system app may
+    // change the setting, but the process's own scale is the value it reads, set by a hidden
+    // method: reached by reflection, and false where Android refuses it.
+    AsyncFunction("setAnimationsEnabled") { enabled: Boolean ->
+      val scale = if (enabled) {
+        Settings.Global.getFloat(
+          appContext.reactContext?.contentResolver,
+          Settings.Global.ANIMATOR_DURATION_SCALE,
+          1f,
+        )
+      } else {
+        0f
+      }
+      try {
+        ValueAnimator::class.java
+          .getMethod("setDurationScale", Float::class.javaPrimitiveType)
+          .invoke(null, scale)
+        true
+      } catch (error: Exception) {
+        false
+      }
     }.runOnQueue(Queues.MAIN)
 
     OnDestroy { encoder.quitSafely() }
