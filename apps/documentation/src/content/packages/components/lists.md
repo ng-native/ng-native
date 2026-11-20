@@ -27,8 +27,8 @@ by about the distance the list covers in `velocityLead` milliseconds (500 by def
 speed, in steps of a quarter viewport and up to three viewports. A fast fling then lands on rows
 that were rendered while the window change that needed them was still on its way through
 JavaScript. The reach drops back as the scroll slows, and 200ms after the last scroll event. The
-scroll event reporting where a `scrollToIndex`, `scrollToOffset` or `scrollToEnd` landed does not
-count toward the speed, while the frames of an animated scroll after it do. A `velocityLead` of 0
+first scroll event after a `scrollToIndex`, `scrollToOffset` or `scrollToEnd` call does not count
+toward the speed. Later events do, including those of an animated scroll. A `velocityLead` of 0
 turns it off. `<section-list>` takes the same input.
 
 The list reads scroll events outside Angular's listeners, so its own listener marks no view for
