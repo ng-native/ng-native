@@ -48,7 +48,7 @@ describe('the platforms line', () => {
   test('is drawn from the service row where a page has the marker', async () => {
     const html = await render('# Dock\n\n<!-- platforms: Dock -->\n\nAfter.\n');
     expect(html).toContain('<strong>Platforms.</strong> Available on macOS.');
-    expect(html).toContain('Absent on iPadOS, iPhone, Android and Web host');
+    expect(html).toContain('Absent on Linux, iPadOS, iPhone, Android and Web host');
     expect(html).not.toContain('platforms:');
     expect(html).toContain('After.');
   });
@@ -81,7 +81,7 @@ describe('the platforms line', () => {
 
   test('leaves available() out where the service has none', async () => {
     const html = await render('# Camera\n\n<!-- platforms: Camera -->\n');
-    expect(html).toContain('Absent on Web host.');
+    expect(html).toContain('Absent on Linux and Web host.');
     expect(html).not.toContain('available()');
   });
 });

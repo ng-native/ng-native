@@ -24,10 +24,10 @@ const PATHS = {
 type Call = [string, ...unknown[]];
 
 /**
- * A desktop host with `files` (uri to text) in memory, recording each call, built without the
- * methods `without` names.
+ * A desktop host of `os` with `files` (uri to text) in memory, recording each call, built without
+ * the methods `without` names.
  */
-function host(files: Record<string, string> = {}, without: readonly string[] = []) {
+function host(files: Record<string, string> = {}, without: readonly string[] = [], os = 'macos') {
   const calls: Call[] = [];
   // Files `statSync` does not see yet: another writer's, made after a check.
   const unseen = new Set<string>();
@@ -97,7 +97,7 @@ function host(files: Record<string, string> = {}, without: readonly string[] = [
   (globalThis as Record<string, unknown>)['require'] = (id: string) => {
     if (id !== 'react-native') throw new Error(`Cannot find module '${id}'`);
     return {
-      Platform: { OS: 'macos' },
+      Platform: { OS: os },
       TurboModuleRegistry: {
         get: (name: string) =>
           name === 'NgNativeFileSystem'
@@ -284,5 +284,17 @@ describe('FileSystem on macOS', () => {
       return { Platform: { OS: 'macos' }, TurboModuleRegistry: { get: () => null } };
     };
     assert.throws(() => injectService(FileSystem).document('a.txt'), /npm run macos/);
+  });
+
+  it("says to rebuild with the script of the host's OS when a picked folder cannot create a file", async () => {
+    host({}, [], 'linux');
+    const folder = await injectService(FileSystem).pickDirectory();
+    const global = globalThis as Record<string, unknown>;
+    const withModule = global['require'] as (id: string) => Record<string, unknown>;
+    global['require'] = (id: string) => ({
+      ...withModule(id),
+      TurboModuleRegistry: { get: () => null },
+    });
+    assert.throws(() => folder!.createFile('a.csv', 'text/csv'), /"npm run linux"/);
   });
 });

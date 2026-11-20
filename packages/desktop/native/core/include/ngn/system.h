@@ -20,6 +20,8 @@ struct DeviceFacts {
   std::string osVersion;
   // "macOS"
   std::string systemName;
+  // PlatformConstants' interfaceIdiom: "mac" on macOS, "desktop" on Linux.
+  std::string interfaceIdiom{"mac"};
   // A BCP 47 identifier such as "en-GB" (React Native's localeIdentifier uses an underscore).
   std::string locale;
   // The system's layout direction for the app's preferred language.
@@ -44,6 +46,18 @@ struct AlertRequest {
   AlertInput input{AlertInput::None};
   std::string defaultValue;
 };
+
+// An alert's buttons as GNOME lays them out: in reading order, Cancel first and the affirmative (the
+// request's first button) last, the rest between them as AppKit has them. Return presses the
+// affirmative unless it is destructive or the cancel button, and Escape presses Cancel. Indices are
+// the request's; -1 for no button.
+struct AlertLayout {
+  std::vector<int> order;
+  int returnIndex{-1};
+  int escapeIndex{-1};
+  bool operator==(const AlertLayout &) const = default;
+};
+AlertLayout gnomeAlertLayout(const AlertRequest &request);
 
 // How an announcement takes its turn with what a screen reader is saying: low and medium wait for
 // it, high interrupts.

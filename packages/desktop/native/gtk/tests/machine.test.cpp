@@ -2,6 +2,7 @@
 // the kernel's random bytes.
 #include "../app-info.h"
 #include "../crypto.h"
+#include "../host-sources.h"
 
 #include "ngn/host-os.h"
 
@@ -65,6 +66,34 @@ TEST_CASE("Device inside a Flatpak reads the host's os-release, and drops firmwa
   CHECK(facts.modelId.empty());
   CHECK(facts.osVersion == "44");
   CHECK(ngn::makeDeviceModule(facts, ngn::linuxOs())->property("brand") == dynamic(nullptr));
+}
+
+TEST_CASE("Platform on Linux names the distribution and its version, as its os-release does") {
+  FakeRoot root;
+  writeFile(root.path / "etc/os-release", "NAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.1 LTS\"\n");
+  auto release = ngn::gtk::distroRelease(root.path.string());
+  CHECK(release.name == "Ubuntu");
+  CHECK(release.versionId == "24.04");
+
+  // Inside a Flatpak, the host's.
+  writeFile(root.path / "run/host/os-release", "NAME=\"Fedora Linux\"\nVERSION_ID=44\n");
+  release = ngn::gtk::distroRelease(root.path.string());
+  CHECK(release.name == "Fedora Linux");
+  CHECK(release.versionId == "44");
+
+  // A rolling release has no VERSION_ID, and os-release's NAME defaults to Linux.
+  writeFile(root.path / "run/host/os-release", "ID=arch\n");
+  release = ngn::gtk::distroRelease(root.path.string());
+  CHECK(release.name == "Linux");
+  CHECK(release.versionId.empty());
+}
+
+TEST_CASE("Platform on Linux is the distribution's, with the desktop interface idiom") {
+  auto facts = ngn::gtk::makeSystem("ngn.machine.test", g_get_tmp_dir())->facts();
+  auto release = ngn::gtk::distroRelease();
+  CHECK(facts.systemName == release.name);
+  CHECK(facts.osVersion == release.versionId);
+  CHECK(facts.interfaceIdiom == "desktop");
 }
 
 TEST_CASE("Crypto on Linux digests with GLib and has no MD2 or MD4") {

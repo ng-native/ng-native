@@ -12,6 +12,7 @@
 
 #include <react/renderer/components/view/ViewProps.h>
 
+#include <optional>
 #include <string>
 
 namespace {
@@ -180,6 +181,20 @@ TEST_CASE("a hidden title bar runs the content under the bar as a transparent on
   auto insets = ngn::gtk::chromeInsets(w.surface);
   CHECK(insets.insets.top == adw_toolbar_view_get_top_bar_height(toolbar));
   CHECK(insets.titlebarLeading + insets.titlebarTrailing > 20);
+  // The window drags by its top: the flat bar over the content is a window handle, with no title
+  // in its middle, and the content below it is not one, so a secondary click there is the app's.
+  graphene_point_t middle{static_cast<float>(gtk_widget_get_width(w.chrome->headerBar)) / 2,
+                          static_cast<float>(gtk_widget_get_height(w.chrome->headerBar)) / 2};
+  graphene_point_t at{};
+  REQUIRE(gtk_widget_compute_point(w.chrome->headerBar, w.window, &middle, &at));
+  GtkWidget *top = gtk_widget_pick(w.window, at.x, at.y, GTK_PICK_DEFAULT);
+  REQUIRE(top);
+  CHECK(gtk_widget_get_ancestor(top, GTK_TYPE_WINDOW_HANDLE));
+  graphene_point_t inside{200, static_cast<float>(insets.insets.top) + 40};
+  REQUIRE(gtk_widget_compute_point(w.surface, w.window, &inside, &at));
+  GtkWidget *below = gtk_widget_pick(w.window, at.x, at.y, GTK_PICK_DEFAULT);
+  REQUIRE(below);
+  CHECK_FALSE(gtk_widget_get_ancestor(below, GTK_TYPE_WINDOW_HANDLE));
 }
 
 TEST_CASE("the menus have a hidden menu bar under the header bar on KDE, and a hidden primary menu in it elsewhere") {
@@ -240,6 +255,39 @@ TEST_CASE("a window the app opens is an AdwApplicationWindow of the app, in its 
   GtkApplication *unnamed = ngn::gtk::startApplication("My Notes");
   CHECK(g_application_get_application_id(G_APPLICATION(unnamed)) == nullptr);
   g_object_unref(unnamed);
+}
+
+TEST_CASE("a window still open when its windows go is closed, and its clock no longer calls back into them") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkApplication *app = ngn::gtk::startApplication("dev.ngnative.ChromeHandlers");
+  int laidOut = 0;
+  // In place after it goes, so a handler left behind calls into what was there instead of crashing.
+  std::optional<ngn::gtk::GtkWindows> windows;
+  windows.emplace(
+      ngn::gtk::GtkWindows::Hooks{
+          .laidOut = [&laidOut](ngn::SurfaceId) { ++laidOut; },
+          .quit = [] {},
+      },
+      app, MenuPlacement::MenuBar);
+  bool opened = false;
+  windows->openWindow(8, {.title = "Handlers"}, {.frame = {0, 0, 400, 300}}, [&opened] { opened = true; });
+  ngn::testing::runUntil([&opened] { return opened; });
+  GtkWidget *window = windows->window(8);
+  REQUIRE(window);
+  // The clock outlives the window the windows close, to show nothing is left on it.
+  GdkFrameClock *clock = GDK_FRAME_CLOCK(g_object_ref(gtk_widget_get_frame_clock(window)));
+  // How many times the laidOut hook runs as the window's clock paints once.
+  auto paint = [&laidOut, clock] {
+    int before = laidOut;
+    g_signal_emit_by_name(clock, "paint");
+    return laidOut - before;
+  };
+
+  CHECK(paint() == 1);
+  windows.reset();
+  CHECK(paint() == 0);
+  g_object_unref(clock);
+  g_object_unref(app);
 }
 
 TEST_CASE("a cover starts below the header bar, whether or not the window's content runs under it") {

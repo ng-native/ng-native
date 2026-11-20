@@ -2,6 +2,7 @@
 // NetworkManager and the Location portal over a peer-to-peer connection. What the modules make of
 // the facts is the core's.
 #include "../battery.h"
+#include "../dbus-properties.h"
 #include "../location.h"
 #include "../network-state.h"
 #include "mounted-views.h"
@@ -213,4 +214,64 @@ TEST_CASE("Location on Linux watches through a session, each update a fix, until
   portal.update(portal.sessions[0].path, {{"Latitude", 9.0}, {"Longitude", 9.0}});
   settle();
   CHECK(fixes.size() == 2);
+}
+
+TEST_CASE("Location on Linux closes a fix's session when the fix comes before Start answers") {
+  REQUIRE(ngn::testing::gtkReady());
+  ngn::testing::StandInPortal portal;
+  portal.fix = {{"Latitude", 51.5}, {"Longitude", -0.12}};
+  portal.fixBeforeResponse = true;
+  auto location = ngn::gtk::makeLocationSource();
+  std::optional<ngn::LocationSource::Fix> fix;
+  location->currentFix(100, [&](std::optional<ngn::LocationSource::Fix> got, std::string) { fix = got; });
+  ngn::testing::runUntil([&] { return fix.has_value(); });
+  REQUIRE(fix);
+  // Closed now, not left open until a timeout that never closes it.
+  ngn::testing::runUntil([&] { return !portal.closedSessions.empty(); });
+  REQUIRE(portal.sessions.size() == 1);
+  CHECK(portal.closedSessions == std::vector<std::string>{portal.sessions[0].path});
+}
+
+TEST_CASE("Location on Linux starts nothing for a watch stopped while its session is being made") {
+  REQUIRE(ngn::testing::gtkReady());
+  ngn::testing::StandInPortal portal;
+  portal.fix = {{"Latitude", 1.0}, {"Longitude", 2.0}};
+  auto location = ngn::gtk::makeLocationSource();
+  std::vector<ngn::LocationSource::Fix> fixes;
+  int handle = location->watch(10, 25, [&fixes](const ngn::LocationSource::Fix &fix) { fixes.push_back(fix); });
+  // Both on the main context, in order: the stop is before CreateSession has answered.
+  location->stopWatching(handle);
+  ngn::testing::runUntil([&] { return !portal.closedSessions.empty(); });
+  settle();
+  REQUIRE(portal.sessions.size() == 1);
+  CHECK(portal.closedSessions == std::vector<std::string>{portal.sessions[0].path});
+  // Never started, so no fix, and nothing left to hear one.
+  CHECK(fixes.empty());
+  portal.update(portal.sessions[0].path, {{"Latitude", 9.0}, {"Longitude", 9.0}});
+  settle();
+  CHECK(fixes.empty());
+}
+
+TEST_CASE("a D-Bus properties watch stopped by another listener is not called, and none is after its stop") {
+  REQUIRE(ngn::testing::gtkReady());
+  StandInServices services;
+  addUPower(services, true, 64, 2, true);
+  ngn::gtk::DBusProperties object(G_BUS_TYPE_SYSTEM, services.client, "org.freedesktop.UPower", "/org/freedesktop/UPower",
+                                  "org.freedesktop.UPower");
+  std::function<void()> stopSecond;
+  int first = 0, second = 0;
+  auto stopFirst = object.watch([&] {
+    ++first;
+    // The second was registered after: the round already copied it.
+    stopSecond();
+  });
+  stopSecond = object.watch([&] { ++second; });
+  ngn::testing::runUntil([&] { return object.ready() && first > 0; });
+  settle();
+  CHECK(first >= 1);
+  CHECK(second == 0);
+  services.set("/org/freedesktop/UPower", "OnBattery", g_variant_new_boolean(false));
+  settle();
+  CHECK(second == 0);
+  stopFirst();
 }

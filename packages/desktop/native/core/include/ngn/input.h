@@ -68,6 +68,9 @@ struct DragItems {
   std::vector<DroppedFile> files;
   std::optional<std::string> text;
   std::vector<std::string> urls;
+  // The toolkit has not read the drag's data yet (GTK's preload): the drag is hit tested but its
+  // enter is held back until the data comes, so the event carries what is dragged.
+  bool pending{false};
 };
 
 // The items of a drag's urls (`file://` ones are files, named by their last part decoded) and

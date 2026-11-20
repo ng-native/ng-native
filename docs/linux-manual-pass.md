@@ -46,14 +46,14 @@ Each row: what to do, and what passes.
 
 ### Launch and windows
 
-| Row              | Do                                                           | Passes when                                                                                                                    | Smoke     |
-| ---------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | --------- |
-| Launch           | Open the app from the grid.                                  | It opens with its icon and name in the dock and the window title; no error in `journalctl --user -b \| grep <app id>`.         | **smoke** |
-| Second launch    | Open it again from the grid while it runs.                   | The running window comes forward; no second process (`pgrep -c ngn-linux` is 1).                                               |           |
-| Deep link        | `xdg-open <scheme>://<route>` from a terminal.               | The app opens on that route, or the running app moves to it.                                                                   |           |
-| Windows          | Open a second window, resize both, close one, then the last. | Each resizes and redraws without tearing; closing the last quits the app.                                                      | **smoke** |
-| Window size kept | Resize, quit, open again.                                    | The size is kept; the position is the compositor's (Wayland gives none).                                                       |           |
-| Title bar        | Look at the header bar in each title-bar mode the app uses.  | Buttons follow the desktop's layout setting (`gtk-decoration-layout`); a transparent or hidden bar keeps the window draggable. | **smoke** |
+| Row              | Do                                                           | Passes when                                                                                                                                                                                       | Smoke     |
+| ---------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| Launch           | Open the app from the grid.                                  | It opens with its icon and name in the dock and the window title; no error in `journalctl --user -b \| grep <app id>`.                                                                            | **smoke** |
+| Second launch    | Open it again from the grid while it runs.                   | The running window comes forward; no second process (`pgrep -c -x <package name, first 15 characters>` is 1; the process is named after the `bin/<package name>` link the desktop file launches). |           |
+| Deep link        | `xdg-open <scheme>://<route>` from a terminal.               | The app opens on that route, or the running app moves to it.                                                                                                                                      |           |
+| Windows          | Open a second window, resize both, close one, then the last. | Each resizes and redraws without tearing; closing the last quits the app.                                                                                                                         | **smoke** |
+| Window size kept | Resize, quit, open again.                                    | The size is kept; the position is the compositor's (Wayland gives none).                                                                                                                          |           |
+| Title bar        | Look at the header bar in each title-bar mode the app uses.  | Buttons follow the desktop's layout setting (`gtk-decoration-layout`); a transparent or hidden bar keeps the window draggable.                                                                    | **smoke** |
 
 ### Input
 
@@ -104,5 +104,5 @@ Run the whole list again in the Plasma session, then these rows, which differ th
 ## Report
 
 For each session: the build tested, each row as passed, failed or not run, with a screenshot
-(`gnome-screenshot -w`, or Spectacle on Plasma) for each failure, and an issue for each failure that
+(on GNOME, press Print, choose Window, then capture; Spectacle on Plasma) for each failure, and an issue for each failure that
 is not a known gap above.

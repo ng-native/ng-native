@@ -72,6 +72,7 @@ struct DesktopModuleSources {
 
   std::shared_ptr<WindowHost> windows;
   std::shared_ptr<MenuHost> menus;
+  // Null leaves NgNativeTray or NgNativeDock out, so the app's Tray or Dock reads as absent.
   std::shared_ptr<TrayHost> tray;
   std::shared_ptr<DockHost> dock;
 
@@ -137,8 +138,18 @@ struct DesktopModules {
   std::shared_ptr<FontLibrary> fonts;
   std::shared_ptr<CameraViews> cameraViews;
   std::shared_ptr<MapViews> mapViews;
+  // The modules left out for want of a source, as NgNativeHost names them.
+  std::vector<std::string> absent;
 };
 
+// Registers each module whose source the backend gives (a module over the host's own objects,
+// such as Processes or Asset, always), and NgNativeHost, whose `absentModules` constant names the
+// ones left out. Store Review and Web Browser's auth session are the exceptions: a null prompt or
+// session is an answer of their own (no rating prompt outside the Mac App Store).
 DesktopModules addDesktopModules(ModuleRegistry &registry, const DesktopModuleSources &sources);
+
+// NgNativeHost: `getConstants()` answers `{absentModules}`, the desktop modules this host leaves
+// out by design, which JavaScript reads as absent rather than as a host to rebuild.
+std::shared_ptr<NativeModule> makeHostModule(std::vector<std::string> absent);
 
 } // namespace ngn

@@ -1,5 +1,6 @@
 #include "ngn/accessibility.h"
 #include "ngn/desktop-props.h"
+#include "ngn/text-input.h"
 #include "ngn/view-tree.h"
 
 #include <react/renderer/components/text/ParagraphState.h>
@@ -148,6 +149,22 @@ bool adjustableRole(const std::string &name) {
   return name == "adjustable" || name == "slider" || name == "spinbutton";
 }
 
+// The ARIA states and counts a view's or a text input's props carry; none for any other props.
+const AriaFields *ariaFields(const ViewProps &props) {
+  if (const auto *desktop = dynamic_cast<const HasDesktopProps *>(&props)) {
+    return &desktop->desktop.aria;
+  }
+  if (const auto *input = dynamic_cast<const DesktopTextInputProps *>(&props)) {
+    return &input->aria;
+  }
+  return nullptr;
+}
+
+// A count or a place in a set, from 1: anything below says nothing.
+std::optional<int> fromOne(std::optional<int> value) {
+  return value && *value >= 1 ? value : std::nullopt;
+}
+
 bool declares(const ViewProps &props, const std::string &action) {
   for (const auto &declared : props.accessibilityActions) {
     if (declared.name == action) {
@@ -211,6 +228,14 @@ AxInfo accessibilityInfo(const ViewProps &props) {
   }
   if (props.accessibilityState) {
     info.expanded = props.accessibilityState->expanded;
+  }
+  if (const auto *aria = ariaFields(props)) {
+    info.required = aria->required;
+    info.invalid = aria->invalid;
+    info.positionInSet = fromOne(aria->posInSet);
+    info.setSize = fromOne(aria->setSize);
+    info.rowCount = fromOne(aria->rowCount);
+    info.columnCount = fromOne(aria->columnCount);
   }
   for (const auto &action : props.accessibilityActions) {
     const auto &n = action.name;
@@ -369,6 +394,31 @@ AxDispatch axDispatch(const ViewProps &props, AxVerb verb) {
       return actions && declares(props, "escape") ? action("escape") : AxDispatch{};
   }
   return {};
+}
+
+bool performAxVerb(const ViewProps &props, const ViewEventEmitter *emitter, AxVerb verb, const std::function<bool()> &click) {
+  auto dispatch = axDispatch(props, verb);
+  switch (dispatch.kind) {
+    case AxDispatch::Kind::None:
+      return false;
+    case AxDispatch::Kind::Tap:
+      return emitter && (emitter->onAccessibilityTap(), true);
+    case AxDispatch::Kind::Escape:
+      return emitter && (emitter->onAccessibilityEscape(), true);
+    case AxDispatch::Kind::Action:
+      return emitter && (emitter->onAccessibilityAction(dispatch.action), true);
+    case AxDispatch::Kind::Click:
+      return click && click();
+  }
+  return false;
+}
+
+bool sendAxAction(const ViewProps &props, const ViewEventEmitter *emitter, const std::string &name) {
+  if (!props.onAccessibilityAction || !emitter) {
+    return false;
+  }
+  emitter->onAccessibilityAction(name);
+  return true;
 }
 
 } // namespace ngn

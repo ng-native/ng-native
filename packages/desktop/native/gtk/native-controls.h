@@ -23,9 +23,15 @@
 #include <gtk/gtk.h>
 
 #include <functional>
+#include <optional>
 #include <string>
 
 namespace ngn::gtk {
+
+// The desktop's clock format, as GNOME's clock-format gives it (clock-format.h): a 12-hour clock
+// or a 24-hour one, or nothing for the locale's time format to decide. Date pickers shown follow a
+// change. The UI thread.
+void useClockFormat(std::optional<bool> twelveHour);
 
 // Where the controls' events go in place of each view's emitter, for tests, which have no event
 // dispatcher to read them from; null for the emitters.

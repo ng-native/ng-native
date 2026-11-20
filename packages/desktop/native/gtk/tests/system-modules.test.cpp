@@ -140,8 +140,9 @@ TEST_CASE("The clipboard is GDK's: the app's text is there at once, and another 
     MESSAGE("skipped another app's copy: not an X11 display");
     return;
   }
-  // Another app: a second connection to the X server, which owns the clipboard as it copies.
-  GdkDisplay *other = gdk_display_open(g_getenv("DISPLAY"));
+  // Another app: a second connection to the X server the display is on (not $DISPLAY, which a test
+  // bus unsets), which owns the clipboard as it copies.
+  GdkDisplay *other = gdk_display_open(gdk_display_get_name(gdk_display_get_default()));
   REQUIRE(other);
   gdk_clipboard_set_text(gdk_display_get_clipboard(other), "from another app");
   ngn::testing::runUntil([&] { return system->clipboardText() == "from another app"; });

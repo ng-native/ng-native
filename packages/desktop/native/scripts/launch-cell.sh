@@ -9,7 +9,8 @@
 # Cells:
 #   x11      Xvfb, the renderer GTK picks (GL over Mesa's software rasteriser)
 #   wayland  headless Weston, pixman
-#   vulkan   Xvfb with GSK_RENDERER=vulkan over lavapipe, Mesa's software Vulkan
+#   vulkan   Xvfb with GSK_RENDERER=vulkan over lavapipe, Mesa's software Vulkan; fails when GTK
+#            falls back to another renderer
 #   mutter   mutter --headless on Wayland, GNOME's compositor
 #
 # Fails on a library the host needs and the distribution's packages do not give it, and on any
@@ -117,7 +118,10 @@ probe() {
 
 if has_cell x11 || has_cell vulkan; then xvfb; fi
 has_cell x11 && probe x11 DISPLAY=:99 GDK_BACKEND=x11
-has_cell vulkan && probe vulkan DISPLAY=:99 GDK_BACKEND=x11 GSK_RENDERER=vulkan
+# GSK_RENDERER=vulkan is only the first renderer GTK tries, and GTK falls back to GL or Cairo when
+# it cannot realize it, so the probe also fails unless GTK logs that it uses the Vulkan one.
+has_cell vulkan && probe vulkan DISPLAY=:99 GDK_BACKEND=x11 GSK_RENDERER=vulkan GSK_DEBUG=renderer \
+  NGN_EXPECT_RENDERER=GskVulkanRenderer
 
 if has_cell wayland; then
   # Weston 10 and later name the backend and the renderer; Weston 8 takes the module.

@@ -1,16 +1,20 @@
 #include "gtk-backend.h"
 
 #include "accessible.h"
+#include "accessible-text.h"
+#include "focus.h"
 #include "image-view.h"
 #include "native-controls.h"
 #include "scroll-view.h"
 #include "text-field.h"
 #include "view-widget.h"
+#include "window-scale.h"
 
 #include "ngn/library-components.h"
 
 #include <react/renderer/components/view/ViewProps.h>
 
+#include <algorithm>
 #include <utility>
 
 namespace ngn::gtk {
@@ -24,7 +28,8 @@ void applyViewProps(GtkWidget *widget, const ViewData &data) {
 }
 
 // The parent places the view (its frame and transform); the view lays out its own children and
-// draws itself again.
+// draws itself again. The parent's allocation draws it again too, which a child's blend mode,
+// drawn by the parent (view-widget.h), needs.
 void relayout(GtkWidget *widget) {
   if (GtkWidget *parent = gtk_widget_get_parent(widget)) {
     gtk_widget_queue_allocate(parent);
@@ -38,12 +43,17 @@ void relayout(GtkWidget *widget) {
 GtkBackend::GtkBackend()
     : uiThread_(std::this_thread::get_id()),
       headers_(std::make_unique<Headers>(*this)),
-      modals_(std::make_unique<Modals>(*this)) {}
+      modals_(std::make_unique<Modals>(*this)),
+      splitViews_(std::make_unique<SplitViews>(*this)) {}
 
 GtkBackend::~GtkBackend() {
   // Each gives back the views it hosts before the views go.
+  splitViews_.reset();
   modals_.reset();
   headers_.reset();
+  for (auto &[surfaceId, surface] : surfaces_) {
+    g_object_weak_unref(G_OBJECT(surface), surfaceGone, this);
+  }
   for (auto &[tag, entry] : searchEntries_) {
     g_object_unref(entry);
   }
@@ -63,11 +73,29 @@ GtkBackend::~GtkBackend() {
 }
 
 void GtkBackend::addSurface(SurfaceId surfaceId, GtkWidget *surface) {
+  removeSurface(surfaceId);
   surfaces_[surfaceId] = surface;
+  // A surface finalized with its window (the window closed) is forgotten then, so that nothing
+  // reads it after: a header or modal let go of later finds no window.
+  g_object_weak_ref(G_OBJECT(surface), surfaceGone, this);
 }
 
 void GtkBackend::removeSurface(SurfaceId surfaceId) {
-  surfaces_.erase(surfaceId);
+  headers_->removeSurface(surfaceId);
+  if (auto it = surfaces_.find(surfaceId); it != surfaces_.end()) {
+    g_object_weak_unref(G_OBJECT(it->second), surfaceGone, this);
+    surfaces_.erase(it);
+  }
+}
+
+void GtkBackend::surfaceGone(gpointer self, GObject *surface) {
+  auto &surfaces = static_cast<GtkBackend *>(self)->surfaces_;
+  for (auto it = surfaces.begin(); it != surfaces.end(); ++it) {
+    if (G_OBJECT(it->second) == surface) {
+      surfaces.erase(it);
+      return;
+    }
+  }
 }
 
 GtkWidget *GtkBackend::view(Tag tag) const {
@@ -93,11 +121,14 @@ void GtkBackend::hostView(Tag tag, GtkWidget *slot) {
   GtkWidget *placeholder = makeViewWidget();
   g_object_ref_sink(placeholder);
   gtk_widget_set_child_visible(placeholder, FALSE);
+  // Unparenting makes a widget visible again: a covered screen (a tab not chosen) stays hidden.
+  gboolean childVisible = gtk_widget_get_child_visible(widget);
   if (GtkWidget *parent = gtk_widget_get_parent(widget)) {
     gtk_widget_insert_after(placeholder, parent, widget);
     gtk_widget_unparent(widget);
   }
   gtk_widget_set_parent(widget, slot);
+  gtk_widget_set_child_visible(widget, childVisible);
   hosted_[tag] = {.placeholder = placeholder, .slot = slot};
   gtk_widget_queue_resize(slot);
 }
@@ -111,10 +142,12 @@ void GtkBackend::unhostView(Tag tag) {
   hosted_.erase(it);
   GtkWidget *widget = view(tag);
   if (widget && gtk_widget_get_parent(widget) == hosted.slot) {
+    gboolean childVisible = gtk_widget_get_child_visible(widget);
     gtk_widget_unparent(widget);
     if (GtkWidget *parent = gtk_widget_get_parent(hosted.placeholder)) {
       gtk_widget_insert_after(widget, parent, hosted.placeholder);
     }
+    gtk_widget_set_child_visible(widget, childVisible);
     relayout(widget);
   }
   if (gtk_widget_get_parent(hosted.placeholder)) {
@@ -127,6 +160,15 @@ bool GtkBackend::isHosted(Tag tag) const {
   auto it = hosted_.find(tag);
   GtkWidget *widget = view(tag);
   return it != hosted_.end() && widget && gtk_widget_get_parent(widget) == it->second.slot;
+}
+
+void GtkBackend::windowRescaled(GtkWidget *window) {
+  for (const auto &[tag, widget] : views_) {
+    ViewData *d = viewData(widget);
+    if (d && d->image && GTK_WIDGET(gtk_widget_get_root(widget)) == window) {
+      applyImageProps(*d, windowScale(widget));
+    }
+  }
 }
 
 GtkWidget *GtkBackend::searchEntry(Tag tag) const {
@@ -194,11 +236,7 @@ void unparentStayingHidden(GtkWidget *widget) {
 } // namespace
 
 void GtkBackend::createView(const ShadowView &view) {
-  auto accessibility = accessibilityOf(view);
-  GtkWidget *widget = makeViewWidget(accessibleRole(view));
-  if (accessibility) {
-    applyAccessibility(widget, *accessibility);
-  }
+  GtkWidget *widget = makeViewWidget(accessibleRole(view), std::string_view(view.componentName) == "Paragraph");
   g_object_ref_sink(widget);
   ViewData *d = viewData(widget);
   d->tag = view.tag;
@@ -206,6 +244,7 @@ void GtkBackend::createView(const ShadowView &view) {
   d->props = view.props;
   d->state = view.state;
   d->emitter = view.eventEmitter;
+  d->surfaceId = view.surfaceId;
   d->layout = view.layoutMetrics;
   if (d->component == "TextInput") {
     makeTextField(widget, *d);
@@ -219,6 +258,9 @@ void GtkBackend::createView(const ShadowView &view) {
     // in the content.
     gtk_widget_set_child_visible(widget, FALSE);
     hooks.containerRoot(view.tag, true);
+  } else if (d->component == SidebarSectionComponentName) {
+    // Its source list draws it, over the space it takes (split-view.h).
+    gtk_widget_set_child_visible(widget, FALSE);
   } else if (d->component == "RNSSearchBar") {
     GtkWidget *entry = makeSearchEntry(*this, view.tag);
     searchEntries_[view.tag] = GTK_WIDGET(g_object_ref_sink(entry));
@@ -228,6 +270,10 @@ void GtkBackend::createView(const ShadowView &view) {
   }
   hideSvgElement(widget);
   makeControl(widget, *d);
+  if (auto accessibility = accessibilityOf(view)) {
+    applyAccessibility(accessibleWidget(*d), *accessibility);
+    applyActions(*d, *accessibility);
+  }
   applyViewProps(widget, *d);
   views_[view.tag] = widget;
   if (view.tag == view.surfaceId) {
@@ -244,6 +290,8 @@ void GtkBackend::deleteView(SurfaceId, Tag tag) {
   }
   modals_->unmounted(tag);
   headers_->forget(tag);
+  relations_.erase(tag);
+  splitViews_->deleted(tag);
   unhostView(tag);
   if (viewData(it->second)->component == "RNSScreenStackHeaderConfig") {
     hooks.containerRoot(tag, false);
@@ -283,11 +331,12 @@ void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int ind
   hideSvgElement(c->second);
   // An Image's source was picked before it had a window, at the first monitor's scale.
   if (ViewData *d = viewData(c->second); d && d->image) {
-    applyImageProps(*d, gtk_widget_get_scale_factor(c->second));
+    applyImageProps(*d, windowScale(c->second));
   }
   if (viewData(c->second)->component == "ModalHostView") {
     modals_->mounted(surfaceId, child);
   }
+  splitViews_->inserted(parent, child);
 }
 
 void GtkBackend::removeChild(SurfaceId, Tag, Tag child, int) {
@@ -309,23 +358,32 @@ void GtkBackend::updateProps(const ShadowView &view) {
   followRole(view);
   applyViewProps(it->second, *d);
   if (auto accessibility = accessibilityOf(view)) {
-    applyAccessibility(it->second, *accessibility);
+    applyAccessibility(accessibleWidget(*d), *accessibility);
+    applyActions(*d, *accessibility);
   }
   applyTextFieldProps(*d);
   applyScrollViewProps(*d);
   applyControlProps(*d);
   if (d->image) {
-    applyImageProps(*d, gtk_widget_get_scale_factor(it->second));
+    applyImageProps(*d, windowScale(it->second));
   }
   if (GtkWidget *entry = searchEntry(view.tag); entry && view.props) {
     applySearchBar(entry, *view.props);
   }
+  splitViews_->propsChanged(view.tag);
   relayout(it->second);
 }
 
 void GtkBackend::updateState(const ShadowView &view) {
   if (auto it = views_.find(view.tag); it != views_.end()) {
     ViewData *d = viewData(it->second);
+    bool paragraph = d->component == "Paragraph";
+    std::string before = d->state && paragraph ? paragraphText(d->state) : std::string();
+    std::string after = view.state && paragraph ? paragraphText(view.state) : std::string();
+    // The old text goes before the contents change, the new one comes after.
+    if (before != after) {
+      accessibleTextRemoved(d->widget, before);
+    }
     d->state = view.state;
     forgetText(*d);
     applyScrollViewState(*d);
@@ -333,10 +391,42 @@ void GtkBackend::updateState(const ShadowView &view) {
     // or no element at all.
     followRole(view);
     if (auto accessibility = accessibilityOf(view)) {
-      applyAccessibility(it->second, *accessibility);
+      applyAccessibility(accessibleWidget(*d), *accessibility);
+    applyActions(*d, *accessibility);
     }
-    gtk_widget_queue_draw(it->second);
+    if (before != after) {
+      accessibleTextInserted(d->widget, after);
+    }
+    gtk_widget_queue_draw(d->widget);
   }
+}
+
+void GtkBackend::applyActions(ViewData &d, const AxInfo &info) {
+  // A native control and a text input's field are GTK's own widgets, with GTK's own actions.
+  if (d.field || d.control) {
+    return;
+  }
+  applyAccessibleActions(
+      d.widget, info,
+      {.perform =
+           [this](GtkWidget *widget, AxVerb verb) {
+             ViewData *v = viewData(widget);
+             auto props = v ? std::dynamic_pointer_cast<const facebook::react::ViewProps>(v->props) : nullptr;
+             auto emitter = v ? std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(v->emitter) : nullptr;
+             if (!props) {
+               return false;
+             }
+             SurfaceId surface = v->surfaceId;
+             Tag tag = v->tag;
+             return performAxVerb(*props, emitter.get(), verb, [this, surface, tag] { return hooks.activate(surface, tag); });
+           },
+       .send =
+           [](GtkWidget *widget, const std::string &name) {
+             ViewData *v = viewData(widget);
+             auto props = v ? std::dynamic_pointer_cast<const facebook::react::ViewProps>(v->props) : nullptr;
+             auto emitter = v ? std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(v->emitter) : nullptr;
+             return props && sendAxAction(*props, emitter.get(), name);
+           }});
 }
 
 void GtkBackend::followRole(const ShadowView &view) {
@@ -346,7 +436,7 @@ void GtkBackend::followRole(const ShadowView &view) {
     return;
   }
   GtkWidget *old = it->second;
-  GtkWidget *next = makeViewWidget(role);
+  GtkWidget *next = makeViewWidget(role, isTextWidget(old));
   g_object_ref_sink(next);
   // What the backend set on the old widget that the view's props and state do not set again below.
   gtk_widget_set_child_visible(next, gtk_widget_get_child_visible(old));
@@ -365,6 +455,8 @@ void GtkBackend::followRole(const ShadowView &view) {
   // The view's data (its props, state, layout and text field) goes with it; the old widget keeps
   // the new one's empty data to free.
   swapViewData(old, next);
+  // The focus moving to its replacement is no focus change for the view (focus.h).
+  g_object_set_data(G_OBJECT(old), "ngn-replaced-by", next);
   // A state update replaces a Paragraph's widget with no props update to follow.
   applyViewProps(next, *viewData(next));
   // A focused field's GtkText loses the focus as it moves and takes it back after: the app hears
@@ -391,6 +483,14 @@ void GtkBackend::followRole(const ShadowView &view) {
     makeImageView(next, *viewData(next));
   }
   it->second = next;
+  // GTK's relations point at widgets: the view's own go onto its new widget, and those of the views
+  // that name it move to it.
+  auto names = [&](const std::vector<Tag> &tags) { return std::find(tags.begin(), tags.end(), view.tag) != tags.end(); };
+  for (const auto &[source, relations] : relations_) {
+    if (source == view.tag || names(relations.labelledBy) || names(relations.describedBy)) {
+      applyRelations(source);
+    }
+  }
   if (field && GTK_IS_TEXT(focus)) {
     // Focusing a GtkText selects all of it: the caret stays where the user left it.
     gtk_text_grab_focus_without_selecting(GTK_TEXT(focus));
@@ -406,8 +506,13 @@ void GtkBackend::followRole(const ShadowView &view) {
 void GtkBackend::updateLayout(const ShadowView &view) {
   if (auto it = views_.find(view.tag); it != views_.end()) {
     ViewData *d = viewData(it->second);
+    bool resized = d->layout.frame.size != view.layoutMetrics.frame.size;
     d->layout = view.layoutMetrics;
     forgetText(*d);
+    // A slot is measured from the view it hosts, and GTK keeps a measurement until a resize.
+    if (auto hosted = hosted_.find(view.tag); resized && hosted != hosted_.end()) {
+      gtk_widget_queue_resize(hosted->second.slot);
+    }
     // A field's natural alignment follows the layout's direction, and a scroll view's scroll bars
     // the content's size against its own.
     applyTextFieldProps(*d);
@@ -438,6 +543,8 @@ void GtkBackend::setCovered(SurfaceId, Tag tag, bool covered) {
     gtk_widget_set_child_visible(it->second, !covered);
     // A child shown again has no allocation until its parent allocates it.
     relayout(it->second);
+    // A window split view in it is no longer shown, or shown again: the header bar follows.
+    splitViews_->placeHeaders();
   }
 }
 
@@ -449,8 +556,53 @@ void GtkBackend::setFrontHeader(SurfaceId surfaceId, const std::optional<ScreenS
   headers_->show(surfaceId, header);
 }
 
+void GtkBackend::setAccessibilityRelations(SurfaceId, Tag tag, const AxRelations &relations) {
+  if (relations.empty()) {
+    relations_.erase(tag);
+  } else {
+    relations_[tag] = relations;
+  }
+  applyRelations(tag);
+}
+
+void GtkBackend::applyRelations(Tag tag) {
+  GtkWidget *widget = view(tag);
+  if (!widget) {
+    return;
+  }
+  auto it = relations_.find(tag);
+  AxRelations relations = it == relations_.end() ? AxRelations{} : it->second;
+  GtkAccessible *source = GTK_ACCESSIBLE(relationWidget(*viewData(widget)));
+  auto point = [&](GtkAccessibleRelation relation, const std::vector<Tag> &tags) {
+    GList *targets = nullptr;
+    for (Tag target : tags) {
+      if (GtkWidget *w = view(target)) {
+        targets = g_list_append(targets, relationWidget(*viewData(w)));
+      }
+    }
+    if (targets) {
+      // A list of references goes in a GValue as a GList, which GTK keeps: the varargs form takes
+      // them one by one, up to a null.
+      GValue value = G_VALUE_INIT;
+      g_value_init(&value, G_TYPE_POINTER);
+      g_value_set_pointer(&value, targets);
+      // GTK compares two lists of references by membership, so one in another order is "the same"
+      // and would keep the old order: the old value goes first.
+      gtk_accessible_reset_relation(source, relation);
+      gtk_accessible_update_relation_value(source, 1, &relation, &value);
+      g_value_unset(&value);
+    } else {
+      gtk_accessible_reset_relation(source, relation);
+    }
+  };
+  point(GTK_ACCESSIBLE_RELATION_LABELLED_BY, relations.labelledBy);
+  point(GTK_ACCESSIBLE_RELATION_DESCRIBED_BY, relations.describedBy);
+}
+
 void GtkBackend::didMount(SurfaceId surfaceId) {
   modals_->settle();
+  splitViews_->layOut();
+  splitViews_->placeHeaders();
   headers_->refresh();
   if (onMount) {
     onMount(surfaceId);
@@ -461,8 +613,21 @@ void GtkBackend::updateDesktopProps(SurfaceId, Tag tag, const DesktopProps &prop
   if (auto it = views_.find(tag); it != views_.end()) {
     ViewData *d = viewData(it->second);
     d->desktop = props;
+    applyFocusable(it->second, *d);
     updateScrollers(*d);
   }
+}
+
+void GtkBackend::setSplitView(SurfaceId surfaceId, Tag split, bool window) {
+  splitViews_->place(surfaceId, split, window);
+}
+
+void GtkBackend::setSourceLists(SurfaceId, Tag parent, const std::vector<SourceList> &lists) {
+  splitViews_->setSourceLists(parent, lists);
+}
+
+void GtkBackend::announce(SurfaceId surfaceId, const Announcement &announcement) {
+  announceOn(surfaceWidget(surfaceId), announcement);
 }
 
 void GtkBackend::setSvgDrawing(SurfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) {

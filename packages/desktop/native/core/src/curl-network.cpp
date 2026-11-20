@@ -4,6 +4,7 @@
 
 #include <curl/curl.h>
 
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -12,7 +13,11 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
+#include <ctime>
 #include <deque>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <mutex>
 #include <string_view>
@@ -25,6 +30,9 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 using std::chrono::milliseconds;
+
+// How long the desktop's proxy answer for an origin is used before it is asked again.
+constexpr auto kProxyKept = std::chrono::seconds(30);
 
 // NSURLSession's request timeout on macOS (network.mm): a dev server's first bundle can take
 // minutes before its first byte.
@@ -87,6 +95,35 @@ std::string errorText(CURLcode code) {
     default:
       return "A network error occurred (libcurl error " + std::to_string(static_cast<int>(code)) + ").";
   }
+}
+
+// Whether a cookie line in libcurl's (Netscape's) format is one to keep past this launch: one with
+// an expiry still to come. A session cookie's expiry is 0. `#HttpOnly_` lines are cookies; other `#`
+// lines and blank ones are not.
+bool lastingCookie(std::string_view line, time_t now) {
+  if (line.empty() || (line[0] == '#' && line.rfind("#HttpOnly_", 0) != 0)) {
+    return false;
+  }
+  size_t at = 0;
+  for (int field = 0; field < 4; ++field) {
+    at = line.find('\t', at);
+    if (at == std::string_view::npos) {
+      return false;
+    }
+    ++at;
+  }
+  auto end = line.find('\t', at);
+  if (end == std::string_view::npos) {
+    return false;
+  }
+  long long expires = 0;
+  for (char c : line.substr(at, end - at)) {
+    if (c < '0' || c > '9') {
+      return false;
+    }
+    expires = expires * 10 + (c - '0');
+  }
+  return expires > now;
 }
 
 bool startsWithNoCase(std::string_view text, std::string_view prefix) {
@@ -328,15 +365,25 @@ struct Socket {
   std::string peerReason;
 };
 
-class Engine {
+class Engine : public std::enable_shared_from_this<Engine> {
  public:
-  Engine() {
+  explicit Engine(CurlOptions options) : options_(std::move(options)) {
     initCurl();
     multi_ = curl_multi_init();
     share_ = curl_share_init();
     // Every handle lives on the thread, so the shared cookie store needs no lock.
     curl_share_setopt(share_, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
     ca_ = findCaCertificates();
+    useDesktopProxies_ = options_.desktopProxies && !proxyEnvironmentSet([](const char *name) -> std::optional<std::string> {
+      const char *value = getenv(name);
+      return value ? std::optional<std::string>(value) : std::nullopt;
+    });
+    if (!options_.cookieFile.empty()) {
+      // A handle of its own reads and fills the shared store.
+      cookies_ = curl_easy_init();
+      useCookies(cookies_);
+      loadCookies();
+    }
   }
 
   ~Engine() {
@@ -348,6 +395,10 @@ class Engine {
     }
     transfers_.clear();
     sockets_.clear();
+    if (cookies_ != nullptr) {
+      saveCookies();
+      curl_easy_cleanup(cookies_);
+    }
     curl_multi_cleanup(multi_);
     curl_share_cleanup(share_);
   }
@@ -410,7 +461,7 @@ class Engine {
 
   // --- HTTP ---------------------------------------------------------------------------------
 
-  void start(uint64_t id, HttpRequest request, std::shared_ptr<HttpState> state) {
+  void start(uint64_t id, HttpRequest request, std::shared_ptr<HttpState> state, bool proxyKnown = false) {
     {
       std::lock_guard lock(state->mutex);
       if (state->done) {
@@ -431,14 +482,27 @@ class Engine {
       }
       return;
     }
+    bool http = startsWithNoCase(request.url, "http:") || startsWithNoCase(request.url, "https:");
+    if (http && !proxyKnown) {
+      // The desktop's answer may take seconds: the request starts when it is in, and a cancel meanwhile
+      // is seen by the check above.
+      auto url = request.url;
+      withProxy(url, [this, id, request = std::move(request), state = std::move(state)]() mutable {
+        start(id, std::move(request), std::move(state), true);
+      });
+      return;
+    }
     auto t = std::make_unique<Transfer>();
     t->state = std::move(state);
-    t->http = startsWithNoCase(request.url, "http:") || startsWithNoCase(request.url, "https:");
+    t->http = http;
     if (request.timeoutMs > 0) {
       t->idle = milliseconds(request.timeoutMs);
     }
     CURL *e = t->easy;
     common(e);
+    if (t->http) {
+      useProxy(e, request.url);
+    }
     curl_easy_setopt(e, CURLOPT_URL, request.url.c_str());
     curl_easy_setopt(e, CURLOPT_PRIVATE, t.get());
     curl_easy_setopt(e, CURLOPT_PROTOCOLS_STR, "http,https,file");
@@ -521,6 +585,8 @@ class Engine {
     curl_slist_free_all(cookies);
     curl_easy_setopt(e, CURLOPT_COOKIELIST, "ALL");
     curl_easy_cleanup(e);
+    // Cleared for the next launch too.
+    saveCookies();
     if (done) {
       done(any);
     }
@@ -541,7 +607,10 @@ class Engine {
     s->offered = protocols;
     CURL *e = s->easy;
     common(e);
-    curl_easy_setopt(e, CURLOPT_URL, webSocketUrl(url).c_str());
+    // The desktop names proxies for http and https; a WebSocket starts as one of those.
+    auto ws = webSocketUrl(url);
+    auto proxyUrl = startsWithNoCase(ws, "wss:") ? "https:" + ws.substr(4) : "http:" + ws.substr(3);
+    curl_easy_setopt(e, CURLOPT_URL, ws.c_str());
     curl_easy_setopt(e, CURLOPT_PROTOCOLS_STR, "ws,wss");
     // The handshake through the multi handle, then frames by curl_ws_send and curl_ws_recv.
     curl_easy_setopt(e, CURLOPT_CONNECT_ONLY, 2L);
@@ -565,8 +634,17 @@ class Engine {
     curl_easy_setopt(e, CURLOPT_HTTPHEADER, s->headers);
     // The handshake carries the cookie store's cookies, as NSURLSession's does.
     useCookies(e);
-    curl_multi_add_handle(multi_, e);
+    // Held, not yet running, until the desktop's proxy is known; a send meanwhile queues, and a close
+    // ends it, as for a handshake in progress.
     sockets_[id] = std::move(s);
+    withProxy(proxyUrl, [this, id, proxyUrl] {
+      auto it = sockets_.find(id);
+      if (it == sockets_.end()) {
+        return;
+      }
+      useProxy(it->second->easy, proxyUrl);
+      curl_multi_add_handle(multi_, it->second->easy);
+    });
   }
 
   void send(uint64_t id, unsigned flags, std::string bytes) {
@@ -601,9 +679,9 @@ class Engine {
     curl_easy_setopt(e, CURLOPT_NOSIGNAL, 1L);
     // A proxy's answer to CONNECT is not the response.
     curl_easy_setopt(e, CURLOPT_SUPPRESS_CONNECT_HEADERS, 1L);
-    // NSURLSession always names itself, and some servers refuse a request that does not. A
+    // NSURLSession always names the app, and some servers refuse a request that names nothing. A
     // User-Agent header of the request's own replaces it.
-    curl_easy_setopt(e, CURLOPT_USERAGENT, "ng-native libcurl/" LIBCURL_VERSION);
+    curl_easy_setopt(e, CURLOPT_USERAGENT, userAgent_.c_str());
     if (!ca_.file.empty()) {
       curl_easy_setopt(e, CURLOPT_CAINFO, ca_.file.c_str());
     }
@@ -612,10 +690,113 @@ class Engine {
     }
   }
 
+  static std::string originOf(const std::string &url) {
+    return url.substr(0, url.find('/', url.find("://") + 3));
+  }
+
+  // Runs `resume` on the thread once the desktop's proxy for `url`'s origin is known: at once when it
+  // is kept, else after a lookup on a thread of its own, since the answer may take a portal's PAC
+  // script and the network thread must go on serving every other transfer meanwhile. Asked once per
+  // origin (scheme, host and port) for kProxyKept, so a changed setting arrives within it; one lookup
+  // serves every request waiting on its origin.
+  void withProxy(const std::string &url, std::function<void()> resume) {
+    if (!useDesktopProxies_) {
+      resume();
+      return;
+    }
+    auto now = Clock::now();
+    std::erase_if(proxies_, [now](const auto &entry) { return now - entry.second.asked >= kProxyKept; });
+    auto origin = originOf(url);
+    if (proxies_.contains(origin)) {
+      resume();
+      return;
+    }
+    auto &waiting = lookups_[origin];
+    waiting.push_back(std::move(resume));
+    if (waiting.size() > 1) {
+      return;
+    }
+    // The thread holds the engine only while it posts the answer back, and a stopped engine drops it.
+    std::thread([weak = weak_from_this(), lookup = options_.desktopProxies, origin, url] {
+      auto proxy = curlProxyFor(lookup(url));
+      if (auto engine = weak.lock()) {
+        engine->post([raw = engine.get(), origin, proxy = std::move(proxy)] { raw->proxyFound(origin, proxy); });
+      }
+    }).detach();
+  }
+
+  void proxyFound(const std::string &origin, const std::optional<std::string> &proxy) {
+    proxies_[origin] = KeptProxy{Clock::now(), proxy};
+    auto waiting = std::move(lookups_[origin]);
+    lookups_.erase(origin);
+    for (auto &resume : waiting) {
+      resume();
+    }
+  }
+
+  // The kept desktop proxy for `url`, unless the environment names one (libcurl reads it itself); a
+  // redirect keeps the first url's proxy.
+  void useProxy(CURL *e, const std::string &url) {
+    auto it = proxies_.find(originOf(url));
+    if (useDesktopProxies_ && it != proxies_.end() && it->second.proxy) {
+      curl_easy_setopt(e, CURLOPT_PROXY, it->second.proxy->c_str());
+    }
+  }
+
   void useCookies(CURL *e) {
     curl_easy_setopt(e, CURLOPT_SHARE, share_);
     // An empty name turns the cookie engine on without reading a file.
     curl_easy_setopt(e, CURLOPT_COOKIEFILE, "");
+  }
+
+  // The cookie file's lasting cookies into the store.
+  void loadCookies() {
+    std::ifstream in(options_.cookieFile);
+    std::string line;
+    time_t now = time(nullptr);
+    while (std::getline(in, line)) {
+      if (lastingCookie(line, now)) {
+        curl_easy_setopt(cookies_, CURLOPT_COOKIELIST, line.c_str());
+        saved_ += line + "\n";
+      }
+    }
+  }
+
+  // The store's lasting cookies into the cookie file, when they differ from what it holds: written
+  // beside it, readable by the user alone, then moved over it, so a crash leaves one or the other.
+  void saveCookies() {
+    if (cookies_ == nullptr) {
+      return;
+    }
+    curl_slist *list = nullptr;
+    curl_easy_getinfo(cookies_, CURLINFO_COOKIELIST, &list);
+    std::string text;
+    time_t now = time(nullptr);
+    for (auto *item = list; item != nullptr; item = item->next) {
+      if (lastingCookie(item->data, now)) {
+        text += std::string(item->data) + "\n";
+      }
+    }
+    curl_slist_free_all(list);
+    if (text == saved_) {
+      return;
+    }
+    std::error_code error;
+    std::filesystem::path file(options_.cookieFile);
+    std::filesystem::create_directories(file.parent_path(), error);
+    auto partial = options_.cookieFile + ".partial";
+    int fd = open(partial.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    if (fd < 0) {
+      return;
+    }
+    std::string out = "# Netscape HTTP Cookie File\n" + text;
+    bool written = ::write(fd, out.data(), out.size()) == static_cast<ssize_t>(out.size());
+    written = ::close(fd) == 0 && written;
+    if (written && rename(partial.c_str(), options_.cookieFile.c_str()) == 0) {
+      saved_ = std::move(text);
+    } else {
+      unlink(partial.c_str());
+    }
   }
 
   // Sends a close frame after what is already queued, and waits kCloseWait for the handshake.
@@ -764,10 +945,12 @@ class Engine {
 
   void finished() {
     int left = 0;
+    bool any = false;
     while (CURLMsg *msg = curl_multi_info_read(multi_, &left)) {
       if (msg->msg != CURLMSG_DONE) {
         continue;
       }
+      any = true;
       CURL *e = msg->easy_handle;
       CURLcode result = msg->data.result;
       if (auto t = takeTransfer(e)) {
@@ -798,6 +981,10 @@ class Engine {
         }
         break;
       }
+    }
+    // A response or a handshake may have set cookies.
+    if (any) {
+      saveCookies();
     }
   }
 
@@ -1110,8 +1297,22 @@ class Engine {
     return static_cast<int>(std::max<int64_t>(wait + 1, 0));
   }
 
+  CurlOptions options_;
+  std::string userAgent_{curlUserAgent(options_.appName, options_.appVersion)};
+  bool useDesktopProxies_{false};
+  struct KeptProxy {
+    Clock::time_point asked;
+    std::optional<std::string> proxy;
+  };
+  // The desktop's answers by origin, while they are fresh.
+  std::map<std::string, KeptProxy> proxies_;
+  // The requests waiting on a lookup, by origin.
+  std::map<std::string, std::vector<std::function<void()>>> lookups_;
   CURLM *multi_;
   CURLSH *share_;
+  // Reads and fills the store for the cookie file, with what the file last held.
+  CURL *cookies_{nullptr};
+  std::string saved_;
   CaCertificates ca_;
   std::mutex mutex_;
   std::vector<std::function<void()>> queue_;
@@ -1127,7 +1328,7 @@ class Engine {
 // thread itself (a callback dropping a client) leaves it to finish on its own.
 class Client {
  public:
-  Client() : engine_(std::make_shared<Engine>()) {
+  explicit Client(CurlOptions options) : engine_(std::make_shared<Engine>(std::move(options))) {
     thread_ = std::thread([engine = engine_] { engine->run(); });
   }
 
@@ -1253,9 +1454,64 @@ class CurlWebSockets final : public WebSockets {
 
 } // namespace
 
-CurlNetwork makeCurlNetwork() {
-  auto client = std::make_shared<Client>();
+CurlNetwork makeCurlNetwork(CurlOptions options) {
+  auto client = std::make_shared<Client>(std::move(options));
   return {.http = std::make_shared<CurlHttp>(client), .webSockets = std::make_shared<CurlWebSockets>(client)};
+}
+
+// `text` as one HTTP token (RFC 9110's tchar, but `/`, which ends a product's name), with what a
+// token cannot hold percent-encoded, as CFNetwork encodes an app's name.
+static std::string tokenOf(const std::string &text) {
+  std::string out;
+  for (unsigned char c : text) {
+    if ((c < 0x80 && std::isalnum(c)) || std::string_view("!#$&'*+-.^_`|~").find(static_cast<char>(c)) != std::string_view::npos) {
+      out += static_cast<char>(c);
+    } else {
+      static const char *hex = "0123456789ABCDEF";
+      out += '%';
+      out += hex[c >> 4];
+      out += hex[c & 15];
+    }
+  }
+  return out;
+}
+
+std::string curlUserAgent(const std::string &appName, const std::string &appVersion) {
+  std::string agent = "ng-native libcurl/" LIBCURL_VERSION;
+  if (appName.empty()) {
+    return agent;
+  }
+  return tokenOf(appName) + (appVersion.empty() ? "" : "/" + tokenOf(appVersion)) + " " + agent;
+}
+
+std::optional<std::string> curlProxyFor(const std::vector<std::string> &proxies) {
+  for (const auto &proxy : proxies) {
+    if (startsWithNoCase(proxy, "direct://")) {
+      return std::string();
+    }
+    // GLib's SOCKS 5 hands the proxy the host name to resolve; libcurl's `socks5://` resolves it here,
+    // so a host only the proxy's side knows would fail.
+    for (const char *scheme : {"socks://", "socks5://"}) {
+      if (startsWithNoCase(proxy, scheme)) {
+        return "socks5h://" + proxy.substr(std::strlen(scheme));
+      }
+    }
+    for (const char *scheme : {"http://", "https://", "socks4://", "socks4a://", "socks5h://"}) {
+      if (startsWithNoCase(proxy, scheme)) {
+        return proxy;
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+bool proxyEnvironmentSet(const std::function<std::optional<std::string>(const char *name)> &env) {
+  for (const char *name : {"http_proxy", "https_proxy", "HTTPS_PROXY", "ws_proxy", "wss_proxy", "WS_PROXY", "WSS_PROXY", "all_proxy", "ALL_PROXY"}) {
+    if (auto value = env(name); value && !value->empty()) {
+      return true;
+    }
+  }
+  return false;
 }
 
 CaCertificates findCaCertificates(const CaProbe &probe) {

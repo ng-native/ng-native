@@ -19,6 +19,12 @@ const { nameFaces } = require('./css/font-names.cjs');
 const { componentDeclarations } = require('./component-declarations.cjs');
 const { hotShape } = require('./hot-shape.cjs');
 const {
+  compileWithNgp,
+  importResolverOf,
+  stampOf,
+  typeCheckWithNgp,
+} = require('./ngp-compile.cjs');
+const {
   compileForHmrSync,
   extractComponentMetadataSync,
   linkAngularPackageSync,
@@ -111,7 +117,7 @@ function takeResourcesRead(filename) {
   return files;
 }
 
-function readResources(dependencies, filename, root = process.cwd()) {
+function readResources(dependencies, filename, root = process.cwd(), resolvedPaths = {}) {
   // Metro names a file relative to the project root, which is not where Metro was started when
   // the project is named on the command line: `expo export apps/mobile`.
   const directory = path.dirname(path.resolve(root, filename));
@@ -120,7 +126,7 @@ function readResources(dependencies, filename, root = process.cwd()) {
   const read = [];
   resourcesRead.set(filename, read);
   for (const dependency of dependencies) {
-    const resolved = path.resolve(directory, dependency);
+    const resolved = resolvedPaths[dependency] ?? path.resolve(directory, dependency);
     const content = readFileSync(resolved, 'utf8');
     read.push(resolved);
     if (IS_STYLE.test(dependency)) styles[dependency] = [content];
@@ -1526,9 +1532,17 @@ function reasonOf(message) {
 }
 
 /**
+ * @param {string} src
+ * @param {string} filename
+ * @param {Record<string, any>} [options]
+ * @param {(src: string, filename: string, compilerOptions: Record<string, any>) => {
+ *   result: { code: string, map?: string },
+ *   dependencies: string[],
+ *   resources: any,
+ * }} [compile]
  * @returns {{ code: string, dependencies: string[], map?: string, mapLineOffset?: number }}
  */
-function transformAngular(src, filename, options = {}) {
+function transformAngular(src, filename, options = {}, compile = compileTwice) {
   sourceRoot = options.projectRoot;
   resourcesRead.delete(filename);
   transformRoot = projectRootOf(options);
@@ -1555,7 +1569,7 @@ function transformAngular(src, filename, options = {}) {
       ...rest,
     };
 
-    const { result, dependencies, resources } = compileTwice(src, filename, compilerOptions);
+    const { result, dependencies, resources } = compile(src, filename, compilerOptions);
     assertLowercaseElements(result.code, filename);
     // Not guarded: a failure here used to fall back to "no components", which compiled the file
     // with no stylesheet and no HMR block and said nothing. A dropped sheet is the one failure
@@ -1640,8 +1654,128 @@ function functionsBlock(src, filename, options) {
   return hot ? hmrBlock(src, filename, [], null, options) || COUNTS_ITSELF : '';
 }
 
+/**
+ * @param {{ code: string, map?: string, resources: { url: string, resolvedPath: string }[] }} result
+ * @param {string} filename
+ * @param {Record<string, any>} options
+ */
+function withResources(result, filename, options) {
+  const resolvedPaths = Object.fromEntries(
+    result.resources.map(({ url, resolvedPath }) => [url, resolvedPath]),
+  );
+  const urls = Object.keys(resolvedPaths);
+  const resources = urls.length
+    ? readResources(urls, filename, options.projectRoot, resolvedPaths)
+    : null;
+  const directory = path.dirname(path.resolve(options.projectRoot ?? process.cwd(), filename));
+  const dependencies = urls.map((url) => {
+    const relative = path.relative(directory, resolvedPaths[url]).split(path.sep).join('/');
+    return relative.startsWith('.') ? relative : `./${relative}`;
+  });
+  return { result, dependencies, resources };
+}
+
+/**
+ * @param {string} src
+ * @param {string} filename
+ * @param {Record<string, any>} [options]
+ * @returns {Promise<ReturnType<typeof transformAngular>>}
+ */
+async function transformAngularWithNgp(src, filename, options = {}) {
+  const { typeCheck, tsconfig, ...rest } = options;
+  const ngp = { projectRoot: options.projectRoot, tsconfig, typeCheck, dev: options.dev === true };
+  if (isResource(filename)) return transformAngular(src, filename, rest);
+  let transformed;
+  if (IS_SOURCE.test(filename) && HAS_ANGULAR_DECORATOR.test(src)) {
+    transformed = await compiledWithNgp(src, filename, ngp, rest);
+  } else {
+    const checked =
+      typeCheck !== false && isCheckedModule(filename) && !IS_PARTIAL_COMPILED.test(src);
+    if (!checked) return transformAngular(src, filename, rest);
+    await typeCheckWithNgp(src, filename, ngp);
+    transformed = transformAngular(src, filename, rest);
+  }
+  const file = path.resolve(options.projectRoot ?? process.cwd(), filename);
+  for (const imported of importedFiles(src, file, importResolverOf(ngp))) {
+    noteRead(filename, imported);
+  }
+  return transformed;
+}
+
+const isCheckedModule = (filename) =>
+  /(?<!\.d)\.[cm]?tsx?$/.test(filename) && !INSTALLED.test(filename);
+
+/**
+ * @param {string} src
+ * @param {string} filename
+ * @param {Record<string, any>} ngp
+ * @param {Record<string, any>} options
+ */
+async function compiledWithNgp(src, filename, ngp, options) {
+  for (let attempt = 1; ; attempt++) {
+    const result = await compileWithNgp(src, filename, ngp);
+    if (!result) return transformAngular(src, filename, options);
+    const transformed = transformAngular(src, filename, options, () =>
+      withResources(result, filename, options),
+    );
+    const current = result.resources.every(
+      ({ resolvedPath, stamp }) => stampOf(resolvedPath) === stamp,
+    );
+    if (current) return transformed;
+    if (attempt === 3) {
+      throw new Error(`${filename}: a template or stylesheet kept changing while it compiled.`);
+    }
+  }
+}
+
+const IMPORT = /(?:\bfrom|\bimport)\s*\(?\s*['"]([^'"\n]+)['"]/g;
+
+/** @typedef {(specifier: string, from: string) => string | undefined} Resolve */
+
+/** @param {string} src @param {string} file @param {Resolve} resolve */
+function directImports(src, file, resolve) {
+  const files = new Set();
+  for (const [, specifier] of src.matchAll(IMPORT)) {
+    const found = resolve(specifier, file);
+    if (found && !INSTALLED.test(found)) files.add(path.resolve(found));
+  }
+  return files;
+}
+
+/** @type {Map<string, { stamp: string | null, resolve: Resolve, imports: Set<string> }>} */
+const IMPORTS_OF = new Map();
+
+/** @param {string} file @param {Resolve} resolve */
+function importsOf(file, resolve) {
+  const stamp = stampOf(file);
+  const known = IMPORTS_OF.get(file);
+  if (known?.stamp === stamp && known.resolve === resolve) return known.imports;
+  let imports = new Set();
+  try {
+    imports = directImports(readFileSync(file, 'utf8'), file, resolve);
+  } catch {
+    // Gone since it was imported: what imports it is what fails, on its own transform.
+  }
+  IMPORTS_OF.set(file, { stamp, resolve, imports });
+  return imports;
+}
+
+/** @param {string} src @param {string} file @param {Resolve} resolve */
+function importedFiles(src, file, resolve) {
+  const files = new Set();
+  const queue = [...directImports(src, file, resolve)];
+  while (queue.length && files.size < 5000) {
+    const next = /** @type {string} */ (queue.pop());
+    if (files.has(next)) continue;
+    files.add(next);
+    queue.push(...importsOf(next, resolve));
+  }
+  return files;
+}
+
 module.exports = {
   transformAngular,
+  transformAngularWithNgp,
   takeResourcesRead,
   isResource,
 };

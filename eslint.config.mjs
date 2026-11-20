@@ -25,6 +25,7 @@ export default tseslint.config(
       // may be walking the same folder.
       '**/.tailwind-*',
       '**/.library-styles-*',
+      '**/.ngp-*',
       '**/dist/**',
       '.claude/**',
       'examples/*/.expo/**',
@@ -45,6 +46,7 @@ export default tseslint.config(
       // Web Platform Tests as `packages/web-compat/wpt/fetch.mjs` checks them out: another
       // project's files, in a cache git ignores.
       'packages/web-compat/wpt/.cache/**',
+      'packages/metro/ngp/**',
     ],
   },
   {

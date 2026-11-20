@@ -58,3 +58,10 @@ the item's service and key, and through the Secret portal inside a Flatpak. With
 running or able to start, there is no store and SecureStore is absent: secrets are never written to
 a file. `NgNativeKeepAwake` holds the session idle through the desktop's Inhibit portal, and
 `NgNativeFileSystem` watches with `GFileMonitor`.
+
+A module the GTK host has no source for, such as `NgNativeHaptics`, `NgNativeCalendar` or
+`NgNativeCamera`, is not registered, and the host's `NgNativeHost` module names it in
+`absentModules`. Its service is absent: `available()` is false and every call does nothing, rather
+than throwing a `MissingModuleError` that says to rebuild the host. `audioPlayer()` and
+`videoPlayer()` throw that the module is not available on Linux. Linux has no push service, so
+`Notifications.getDevicePushToken()` answers null.
