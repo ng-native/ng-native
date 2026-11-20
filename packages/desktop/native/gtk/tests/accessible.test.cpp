@@ -488,6 +488,13 @@ TEST_CASE("a view's declared actions are accessible actions named for them, whic
   // No longer an element: no actions.
   views.update(row, desktopViewProps(dynamic::object("accessibilityElementsHidden", true)("accessibilityActions", actions)));
   CHECK_FALSE(gtk_widget_activate_action(views.view(2), "custom.mark-read", nullptr));
+  // Disabled: GTK checks the widget's sensitivity, not that state, so the actions go as the press does,
+  // and come back when it is enabled.
+  views.update(row, desktopViewProps(dynamic::object("accessible", true)("accessibilityLabel", "Ada, Lunch")("accessibilityActions", actions)(
+                        "onAccessibilityAction", true)("accessibilityState", dynamic::object("disabled", true))));
+  CHECK_FALSE(gtk_widget_activate_action(views.view(2), "custom.mark-read", nullptr));
+  views.update(row, props(true));
+  CHECK(gtk_widget_activate_action(views.view(2), "custom.mark-read", nullptr));
 }
 
 TEST_CASE("a declared action reaches its sink by the name the app gave it, however GTK had to name it") {
