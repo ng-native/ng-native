@@ -82,7 +82,9 @@ export interface DevicePoolOptions {
   /**
    * The port of a Metro already serving the project with `EXPO_PUBLIC_DEVICE_TESTS=1`, for a launched
    * app to load from. Default: the pool starts its own, on a free port, and stops it as Vitest
-   * closes.
+   * closes. The app learns the pool's `port` from the Metro the pool starts; a Metro of your own
+   * tells it only when started with `NG_NATIVE_DEVICE_TESTS_POOL_PORT` set to `port`, and without
+   * that the app polls 51730.
    */
   metroPort?: number;
   /** What `toMatchScreenshot()` does unless a call says otherwise: see `ScreenshotOptions`. */
@@ -266,7 +268,10 @@ class DeviceWorker implements PoolWorker {
     const reply = message as { type?: string; error?: unknown };
     if (this.startAnswered && reply.type === 'started') {
       this.startAnswered = false;
-      if (!reply.error) return;
+      // Vitest has its `started` already: a loss of the app before it answered relaunches it, and
+      // the request Vitest is waiting on, if any, is answered as lost on its own.
+      if (reply.error instanceof AppLost && this.options.launch) this.relaunch();
+      return;
     }
     const error = (message as { error?: unknown }).error;
     const launch = this.options.launch;
@@ -817,11 +822,22 @@ class Bridge {
     this.unwatch(session);
     if (session.owed.size === 0) return;
     session.owed.clear();
-    session.claimant?.({
+    const claimant = session.claimant;
+    claimant?.({
       __vitest_worker_response__: true,
       type: session.lastType === 'start' ? 'started' : 'testfileFinished',
       error: new AppLost(reason),
     });
+    // A run Vitest sent while the app still owed an earlier request, never sent it: Vitest waits
+    // for its end all the same. A plain error, as the loss above is what relaunches the app.
+    for (const queued of session.queue.splice(0)) {
+      if (queued.type !== 'run' && queued.type !== 'collect') continue;
+      claimant?.({
+        __vitest_worker_response__: true,
+        type: 'testfileFinished',
+        error: new Error(`Not run: ${reason}`),
+      });
+    }
   }
 
   /** Vitest's answer to one of an app's calls: `{ t: 's', i, r }` or `{ t: 's', i, e }`. */

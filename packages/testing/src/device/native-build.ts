@@ -80,6 +80,11 @@ export async function nativeBuild(
           log,
           signal,
         });
+      } catch (error) {
+        // Half of a folder the run was generating is not one the project keeps: gone, so the next
+        // run generates it again rather than building what is there.
+        rmSync(native, { recursive: true, force: true });
+        throw error;
       } finally {
         restore();
       }

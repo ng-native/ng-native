@@ -55,8 +55,10 @@ jobs:
             device-tests-ios-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}-
             device-tests-ios-
 
-      - name: Note the builds already there
-        run: mkdir -p examples/canary/node_modules/.cache/ng-native-device-tests && ls examples/canary/node_modules/.cache/ng-native-device-tests | sort > "$RUNNER_TEMP/builds-before"
+      - name: Note the finished builds already there
+        run: |
+          mkdir -p examples/canary/node_modules/.cache/ng-native-device-tests
+          find examples/canary/node_modules/.cache/ng-native-device-tests -maxdepth 2 \( -name '*.app' -o -name '*.apk' \) | sort > "$RUNNER_TEMP/builds-before"
 
       - uses: hendrikmuhs/ccache-action@dbeefd73e8e2ffc1bbc412570072735eb4db3607 # v1.2.25
         with:
@@ -76,9 +78,11 @@ jobs:
       - id: built
         if: always()
         run: |
-          for build in $(comm -13 "$RUNNER_TEMP/builds-before" <(ls examples/canary/node_modules/.cache/ng-native-device-tests | sort)); do
-            if ls examples/canary/node_modules/.cache/ng-native-device-tests/"$build" | grep -qE '\.(app|apk)$'; then echo "new=true" >> "$GITHUB_OUTPUT"; fi
-          done
+          # A finished build that was not there before, in a folder of its own or one restored.
+          find examples/canary/node_modules/.cache/ng-native-device-tests -maxdepth 2 \( -name '*.app' -o -name '*.apk' \) | sort > "$RUNNER_TEMP/builds-after"
+          if [ -n "$(comm -13 "$RUNNER_TEMP/builds-before" "$RUNNER_TEMP/builds-after")" ]; then
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - if: always() && steps.built.outputs.new == 'true'
         uses: actions/cache/save@v6
@@ -126,8 +130,10 @@ jobs:
             device-tests-android-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}-
             device-tests-android-
 
-      - name: Note the builds already there
-        run: mkdir -p examples/canary/node_modules/.cache/ng-native-device-tests && ls examples/canary/node_modules/.cache/ng-native-device-tests | sort > "$RUNNER_TEMP/builds-before"
+      - name: Note the finished builds already there
+        run: |
+          mkdir -p examples/canary/node_modules/.cache/ng-native-device-tests
+          find examples/canary/node_modules/.cache/ng-native-device-tests -maxdepth 2 \( -name '*.app' -o -name '*.apk' \) | sort > "$RUNNER_TEMP/builds-before"
 
       # Hardware acceleration: without KVM the emulator is software-emulated and takes minutes to
       # boot.
@@ -155,9 +161,11 @@ jobs:
       - id: built
         if: always()
         run: |
-          for build in $(comm -13 "$RUNNER_TEMP/builds-before" <(ls examples/canary/node_modules/.cache/ng-native-device-tests | sort)); do
-            if ls examples/canary/node_modules/.cache/ng-native-device-tests/"$build" | grep -qE '\.(app|apk)$'; then echo "new=true" >> "$GITHUB_OUTPUT"; fi
-          done
+          # A finished build that was not there before, in a folder of its own or one restored.
+          find examples/canary/node_modules/.cache/ng-native-device-tests -maxdepth 2 \( -name '*.app' -o -name '*.apk' \) | sort > "$RUNNER_TEMP/builds-after"
+          if [ -n "$(comm -13 "$RUNNER_TEMP/builds-before" "$RUNNER_TEMP/builds-after")" ]; then
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - if: always() && steps.built.outputs.new == 'true'
         uses: actions/cache/save@v6

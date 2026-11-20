@@ -95,6 +95,9 @@ EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start
 npx vitest --project ios
 ```
 
+With a Metro of your own for a launched app (`metroPort`) and a pool `port` other than 51730, start
+that Metro with `NG_NATIVE_DEVICE_TESTS_POOL_PORT` set to the port, which the app asks it for.
+
 The run waits for the app to connect. A simulator reaches the pool at `127.0.0.1:51730` and an
 emulator at `10.0.2.2:51730`; a phone on a cable needs an address it can reach, given to
 `startDeviceTests({ url })`, such as `http://127.0.0.1:51730` on Android after

@@ -34,28 +34,37 @@ export function androidEmulatorLauncher(options: AndroidEmulatorOptions = {}): A
         runningEmulator(sdk, options.device, request.signal),
         nativeBuild(request.projectRoot, 'android', { abi: HOST_ABI, signal: request.signal }),
       ]);
-      const adb = async (...args: string[]) =>
-        (await runCommand(path.join(sdk, 'platform-tools/adb'), ['-s', serial, ...args])).output;
+      const run =
+        (signal: AbortSignal | undefined) =>
+        async (...args: string[]) =>
+          (
+            await runCommand(path.join(sdk, 'platform-tools/adb'), ['-s', serial, ...args], {
+              signal,
+            })
+          ).output;
+      // Starting stops as the run does; stopping the app and reading its crash log never do.
+      const starting = run(request.signal);
+      const adb = run(undefined);
       last = { adb, since: Date.now() };
       progress('android', `${serial} booted and the build ready`, started);
-      request.signal?.throwIfAborted();
-      await adb('install', '-r', build.path);
-      const pkg = await packageName(sdk, build.path);
-      await adb('shell', 'pm', 'clear', pkg);
+      await starting('install', '-r', build.path);
+      const pkg = await packageName(sdk, build.path, request.signal);
+      await starting('shell', 'pm', 'clear', pkg);
       // Where a debug build loads its bundle from: the run's Metro, through the emulator's alias
       // for the machine it runs on.
       const prefs = `<?xml version="1.0" encoding="utf-8" standalone="yes" ?><map><string name="debug_http_host">10.0.2.2:${request.metroPort}</string></map>`;
-      await adb(
+      await starting(
         'shell',
         `run-as ${pkg} sh -c 'mkdir -p shared_prefs && echo "${prefs.replace(/"/g, '\\"')}" > shared_prefs/${pkg}_preferences.xml'`,
       );
-      const activity = (await adb('shell', 'cmd', 'package', 'resolve-activity', '--brief', pkg))
+      const activity = (
+        await starting('shell', 'cmd', 'package', 'resolve-activity', '--brief', pkg)
+      )
         .trim()
         .split('\n')
         .pop()!;
       progress('android', 'installed; launching, and waiting for Metro to bundle the app', started);
-      request.signal?.throwIfAborted();
-      await adb('shell', 'am', 'start', '-W', '-n', activity);
+      await starting('shell', 'am', 'start', '-W', '-n', activity);
       let stopped = false;
       const exited = (async () => {
         // The app is gone when its process is, after it has been seen; one never seen in the
@@ -98,13 +107,15 @@ async function runningEmulator(
   signal: AbortSignal | undefined,
 ): Promise<string> {
   const adb = path.join(sdk, 'platform-tools/adb');
-  const running = await emulators(adb);
+  const running = await emulators(adb, signal);
   const found = name ? running.find((emulator) => emulator.avd === name) : running[0];
   // One that adb lists can still be booting: its package service is not up yet.
   if (found) return waitForBoot(adb, found.avd, signal);
 
   const emulator = path.join(sdk, 'emulator/emulator');
-  const avds = (await runCommand(emulator, ['-list-avds'])).output.split('\n').filter(Boolean);
+  const avds = (await runCommand(emulator, ['-list-avds'], { signal })).output
+    .split('\n')
+    .filter(Boolean);
   const avd = name ?? avds[0];
   if (!avd || !avds.includes(avd)) {
     throw new Error(
@@ -125,26 +136,27 @@ async function waitForBoot(adb: string, avd: string, signal: AbortSignal | undef
   const deadline = Date.now() + 300_000;
   while (Date.now() < deadline) {
     signal?.throwIfAborted();
-    const serial = (await emulators(adb)).find((each) => each.avd === avd)?.serial;
-    if (serial && (await booted(adb, serial))) return serial;
+    const serial = (await emulators(adb, signal)).find((each) => each.avd === avd)?.serial;
+    if (serial && (await booted(adb, serial, signal))) return serial;
     await sleep(2000);
   }
   throw new Error(`The emulator ${avd} did not boot within five minutes.`);
 }
 
-async function booted(adb: string, serial: string): Promise<boolean> {
+async function booted(adb: string, serial: string, signal?: AbortSignal): Promise<boolean> {
   const { output } = await runCommand(
     adb,
     ['-s', serial, 'shell', 'getprop', 'sys.boot_completed'],
-    {
-      allowFailure: true,
-    },
+    { allowFailure: true, signal },
   );
   return output.trim() === '1';
 }
 
-async function emulators(adb: string): Promise<{ serial: string; avd: string }[]> {
-  const { output } = await runCommand(adb, ['devices'], { allowFailure: true });
+async function emulators(
+  adb: string,
+  signal?: AbortSignal,
+): Promise<{ serial: string; avd: string }[]> {
+  const { output } = await runCommand(adb, ['devices'], { allowFailure: true, signal });
   const serials = output
     .split('\n')
     .map((line) => line.split('\t'))
@@ -154,6 +166,7 @@ async function emulators(adb: string): Promise<{ serial: string; avd: string }[]
     serials.map(async (serial) => {
       const name = await runCommand(adb, ['-s', serial, 'emu', 'avd', 'name'], {
         allowFailure: true,
+        signal,
       });
       return { serial, avd: name.output.split('\n')[0]!.trim() };
     }),
@@ -161,14 +174,14 @@ async function emulators(adb: string): Promise<{ serial: string; avd: string }[]
 }
 
 /** The APK's package name, from the newest build tools' `aapt2`. */
-async function packageName(sdk: string, apk: string): Promise<string> {
+async function packageName(sdk: string, apk: string, signal?: AbortSignal): Promise<string> {
   const tools = readdirSync(path.join(sdk, 'build-tools')).sort(compareVersions).pop();
   if (!tools) throw new Error(`No Android build tools in ${sdk}`);
-  const { output } = await runCommand(path.join(sdk, 'build-tools', tools, 'aapt2'), [
-    'dump',
-    'packagename',
-    apk,
-  ]);
+  const { output } = await runCommand(
+    path.join(sdk, 'build-tools', tools, 'aapt2'),
+    ['dump', 'packagename', apk],
+    { signal },
+  );
   return output.trim();
 }
 

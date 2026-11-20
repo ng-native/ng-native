@@ -85,10 +85,12 @@ describe('the development build a device run uses', () => {
         `const fs = require('fs');
          fs.writeFileSync('package.json', '{"scripts":{"ios":"expo run:ios"}}');
          fs.writeFileSync('app.json', '{"expo":{"ios":{"bundleIdentifier":"com.someone.app"}}}');
+         fs.mkdirSync('ios');
          process.exit(1);`,
       );
       await assert.rejects(nativeBuild(root, 'ios'), /build for device tests failed/);
       assert.equal(readFileSync(pkg, 'utf8'), '{"scripts":{"ios":"expo start --ios"}}');
+      assert.equal(existsSync(path.join(root, 'ios')), false, 'the half-made ios folder is gone');
       assert.equal(existsSync(path.join(root, 'app.json')), false, 'one it made is removed');
     } finally {
       done();

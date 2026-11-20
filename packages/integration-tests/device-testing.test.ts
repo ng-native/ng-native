@@ -727,19 +727,32 @@ describe('the device pool', () => {
     }
   });
 
-  it('relaunches an app lost after it was sent start, rather than taking its loss for a repeat', async () => {
+  it('relaunches an app lost after it was sent start, and answers the run that waited behind it', async () => {
     const { launch, launches } = fakeLauncher();
     const run = await setup({ launch, appTimeout: 300 });
     try {
-      const { worker } = run.worker();
+      const { worker, messages } = run.worker();
       const starting = worker.start();
       worker.send(request('start', { config: { root: run.root } }) as never);
       const asked = await run.app('one').poll();
       await starting;
       assert.equal(asked?.type, 'start');
-      // The app goes quiet with start owed, as one that crashed would.
+      // A run Vitest sends meanwhile waits behind start; then the app goes quiet, as a crash would.
+      worker.send(
+        request('run', { files: [{ filepath: join(run.root, 'src/a.device.ts') }] }) as never,
+      );
       await wait(900);
-      assert.equal(launches.length, 2, 'a new app is launched for the files that remain');
+      assert.equal(launches.length, 2, 'one new app, for the files that remain');
+      const types = messages.map((message) => (message as { type?: string }).type);
+      assert.deepEqual(
+        types.filter((type) => type === 'started'),
+        ['started'],
+        'Vitest hears started once',
+      );
+      const finished = messages.find(
+        (message) => (message as { type?: string }).type === 'testfileFinished',
+      ) as { error?: Error } | undefined;
+      assert.match(String(finished?.error?.message), /^Not run: The app stopped answering/);
     } finally {
       await run.done();
     }

@@ -34,7 +34,7 @@ export function iosSimulatorLauncher(options: IosSimulatorOptions = {}): AppLaun
     async start(request): Promise<LaunchedApp> {
       const started = Date.now();
       const [simulator, build] = await Promise.all([
-        bootedSimulator(options.device),
+        bootedSimulator(options.device, request.signal),
         nativeBuild(request.projectRoot, 'ios', { signal: request.signal }),
       ]);
       const plist = path.join(build.path, 'Info.plist');
@@ -42,12 +42,16 @@ export function iosSimulatorLauncher(options: IosSimulatorOptions = {}): AppLaun
         (await runCommand('plutil', ['-extract', key, 'raw', plist])).output.trim();
       const bundle = await read('CFBundleIdentifier');
       executable = await read('CFBundleExecutable');
+      // Starting stops as the run does; stopping the app never does.
+      const signal = request.signal;
       await runCommand('xcrun', ['simctl', 'uninstall', simulator.udid, bundle], {
         allowFailure: true,
+        signal,
       });
       progress('ios', `${simulator.name} booted and the build ready`, started);
-      await runCommand('xcrun', ['simctl', 'install', simulator.udid, build.path]);
+      await runCommand('xcrun', ['simctl', 'install', simulator.udid, build.path], { signal });
       progress('ios', 'installed; launching, and waiting for Metro to bundle the app', started);
+      signal?.throwIfAborted();
       // Attached to the app's console, the command lasts as long as the app does.
       const child = spawn(
         'xcrun',
@@ -99,17 +103,22 @@ export function iosSimulatorLauncher(options: IosSimulatorOptions = {}): AppLaun
 }
 
 /** The simulator to run on, booted. */
-async function bootedSimulator(name: string | undefined): Promise<Simulator> {
-  const simulator = pick(await simulators(), name);
+async function bootedSimulator(
+  name: string | undefined,
+  signal: AbortSignal | undefined,
+): Promise<Simulator> {
+  const simulator = pick(await simulators(signal), name);
   if (simulator.state !== 'Booted') {
-    await runCommand('xcrun', ['simctl', 'boot', simulator.udid], { allowFailure: true });
+    await runCommand('xcrun', ['simctl', 'boot', simulator.udid], { allowFailure: true, signal });
   }
-  await runCommand('xcrun', ['simctl', 'bootstatus', simulator.udid, '-b']);
+  await runCommand('xcrun', ['simctl', 'bootstatus', simulator.udid, '-b'], { signal });
   return simulator;
 }
 
-async function simulators(): Promise<Simulator[]> {
-  const { output } = await runCommand('xcrun', ['simctl', 'list', 'devices', 'available', '-j']);
+async function simulators(signal?: AbortSignal): Promise<Simulator[]> {
+  const { output } = await runCommand('xcrun', ['simctl', 'list', 'devices', 'available', '-j'], {
+    signal,
+  });
   const { devices } = JSON.parse(output) as {
     devices: Record<string, Omit<Simulator, 'runtime'>[]>;
   };
