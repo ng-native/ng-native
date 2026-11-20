@@ -5,6 +5,7 @@
 #include "focus.h"
 #include "image-view.h"
 #if NGN_GSTREAMER
+#include "camera.h"
 #include "video.h"
 #endif
 #include "native-controls.h"
@@ -271,6 +272,19 @@ void GtkBackend::createView(const ShadowView &view) {
     if (auto video = std::dynamic_pointer_cast<const VideoViewProps>(view.props)) {
       applyVideoSurface(*d->video, videoViewModel(video->values));
     }
+  } else if (d->component == CameraComponentName) {
+    d->camera = makeCameraSurface(widget, view.tag, [this, tag = view.tag](const std::string &name, folly::dynamic payload) {
+      auto found = views_.find(tag);
+      ViewData *data = found != views_.end() ? viewData(found->second) : nullptr;
+      if (data && data->emitter) {
+        if (auto emitter = std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(data->emitter)) {
+          emitter->dispatchEvent(name, std::move(payload), facebook::react::RawEvent::Category::Discrete);
+        }
+      }
+    });
+    if (auto camera = std::dynamic_pointer_cast<const CameraProps>(view.props)) {
+      applyCameraSurface(*d->camera, *camera);
+    }
 #endif
   } else if (d->component == "RNSScreenStackHeaderConfig") {
     // What of a header shows is in the window's header bar: its subtree is neither drawn nor hit
@@ -389,6 +403,9 @@ void GtkBackend::updateProps(const ShadowView &view) {
 #if NGN_GSTREAMER
   if (auto video = std::dynamic_pointer_cast<const VideoViewProps>(view.props); d->video && video) {
     applyVideoSurface(*d->video, videoViewModel(video->values));
+  }
+  if (auto camera = std::dynamic_pointer_cast<const CameraProps>(view.props); d->camera && camera) {
+    applyCameraSurface(*d->camera, *camera);
   }
 #endif
   if (GtkWidget *entry = searchEntry(view.tag); entry && view.props) {

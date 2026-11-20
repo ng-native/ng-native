@@ -557,7 +557,8 @@ describe('the package formats', () => {
       control,
       /^Depends: libc6 \(>= 2\.34\), libgtk-4-1 \(>= 4\.10\), libadwaita-1-0 \(>= 1\.4\), libsecret-1-0, glib-networking, libgstreamer1\.0-0 \(>= 1\.22\), libgstreamer-plugins-base1\.0-0 \(>= 1\.22\), gstreamer1\.0-plugins-base, gstreamer1\.0-plugins-good, gstreamer1\.0-pulseaudio, libssl3t64, libnghttp2-14, zlib1g, libsqlite3-0, libatomic1, libstdc\+\+6$/m,
     );
-    assert.match(control, /^Recommends: gstreamer1\.0-plugins-bad$/m);
+    assert.match(control, /^Recommends: gstreamer1\.0-plugins-bad, gstreamer1\.0-pipewire$/m);
+    assert.equal(control.match(/^Recommends:/gm)?.length, 1);
     assert.match(control, /^Homepage: https:\/\/example\.com\/notes$/m);
     assert.match(
       control,
@@ -580,6 +581,7 @@ describe('the package formats', () => {
     assert.match(spec, /^Requires: gstreamer1-plugins-base >= 1\.22$/m);
     assert.match(spec, /^Requires: gstreamer1-plugins-good$/m);
     assert.match(spec, /^Recommends: gstreamer1-plugins-bad-free$/m);
+    assert.match(spec, /^Recommends: pipewire-gstreamer$/m);
     assert.doesNotMatch(spec, /openh264|libav|-devel/);
     assert.match(spec, /^%global __os_install_post %\{nil\}$/m);
     assert.match(spec, /^100%% notes$/m);

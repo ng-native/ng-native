@@ -91,7 +91,7 @@ std::string cameraMountError(CameraMount mount) {
     case CameraMount::NotPermitted:
       return "Camera permissions not granted - component could not be rendered.";
     case CameraMount::NoCamera:
-      return "Camera could not be started - this Mac has no camera.";
+      return "Camera could not be started - this computer has no camera.";
     default:
       return "";
   }
@@ -254,7 +254,7 @@ void launchPickerCamera(const PickerCamera &camera, bool noPrompts, const folly:
     return;
   }
   if (!camera.hardware->hasCamera()) {
-    promise.reject("ImagePicker: this Mac has no camera");
+    promise.reject("ImagePicker: this computer has no camera");
     return;
   }
   auto kinds = mediaKindsOf(options);

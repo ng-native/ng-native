@@ -159,6 +159,48 @@ TEST_CASE("addDesktopModules leaves out the tray and the Dock without a source f
   CHECK(std::count(names.begin(), names.end(), "NgNativeDock") == 0);
 }
 
+TEST_CASE("makeDesktopImagePicker gives a picker with no photo library the camera, where the backend has one, as addDesktopModules registers it") {
+  struct Picker final : ngn::PhotoPicker {
+    void pick(const folly::dynamic &, std::function<void(std::optional<std::vector<Picked>>)> done) override {
+      done(std::nullopt);
+    }
+  };
+  struct Hardware final : ngn::CameraHardware {
+    Access access() override { return Access::Granted; }
+    void requestAccess(std::function<void(Access)> done) override { done(Access::Granted); }
+    bool hasCamera() override { return true; }
+    bool microphoneAllowed() override { return false; }
+  };
+  struct Sheet final : ngn::CameraSheet {
+    void shoot(const ngn::CameraSheetRequest &, std::function<void(ngn::CameraTake, const std::string &)> done) override { done({}, ""); }
+  };
+  struct Microphone final : ngn::AudioInput {
+    Access access() override { return Access::Granted; }
+    void requestAccess(std::function<void(Access)> done) override { done(Access::Granted); }
+    bool hasMicrophone() override { return true; }
+    std::unique_ptr<ngn::AudioRecording> prepare(const std::string &, const ngn::RecordingSettings &, std::string &) override { return nullptr; }
+  };
+  auto permission = [](const ngn::DesktopModuleSources &given) {
+    ngn::ModuleRegistry registry;
+    ngn::addDesktopModules(registry, given);
+    CHECK(registry.module("NgNativeImagePicker", nullptr));
+    auto picker = ngn::makeDesktopImagePicker(given);
+    REQUIRE(picker);
+    std::optional<folly::dynamic> answer;
+    picker->callWithPromise("getCameraPermissionsAsync", folly::dynamic::array(),
+                          {.resolve = [&](folly::dynamic v) { answer = v; }, .reject = [](const std::string &) {}});
+    REQUIRE(answer);
+    return (*answer)["status"];
+  };
+  auto given = sources();
+  given.photoPicker = std::make_shared<Picker>();
+  CHECK(permission(given) == "denied");
+  given.cameraHardware = std::make_shared<Hardware>();
+  given.cameraSheet = std::make_shared<Sheet>();
+  given.audioInput = std::make_shared<Microphone>();
+  CHECK(permission(given) == "granted");
+}
+
 TEST_CASE("addDesktopModules makes the notification centre and push tokens over one set of events, and gives them back") {
   auto given = sources();
   std::shared_ptr<ngn::NotificationEvents> heard;

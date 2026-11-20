@@ -290,7 +290,7 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   ]),
   expoRow('ImagePicker', 'NgNativeImagePicker', [
     'yes',
-    'the library through the file chooser; no camera',
+    'the library through the file chooser, the camera in a window of its own',
     'yes',
     'yes',
     'yes',
@@ -351,7 +351,17 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
     'absent',
   ]),
   expoRow('Biometrics', 'NgNativeLocalAuthentication', NOT_ON_LINUX),
-  { ...expoRow('Camera', 'NgNativeCamera', NOT_ON_LINUX), withoutAvailable: true },
+  {
+    ...expoRow('Camera', 'NgNativeCamera', [
+      'yes',
+      'through the Camera portal and PipeWire',
+      'yes',
+      'yes',
+      'yes',
+      'absent',
+    ]),
+    withoutAvailable: true,
+  },
   {
     ...expoRow('MapView', 'NgNativeMaps', [
       'yes',

@@ -563,8 +563,9 @@ export function debControl(app, { arch, installedKiB }) {
     `Maintainer: ${app.maintainer}`,
     `Installed-Size: ${installedKiB}`,
     `Depends: ${DEB_DEPENDS.join(', ')}`,
-    // AAC and HLS, which most MP4 audio and streams need; never a patented decoder such as H.264's.
-    'Recommends: gstreamer1.0-plugins-bad',
+    // AAC and HLS, which most MP4 audio and streams need (never a patented decoder such as H.264's),
+    // and pipewiresrc, the camera's stream from the Camera portal. A field is written once.
+    'Recommends: gstreamer1.0-plugins-bad, gstreamer1.0-pipewire',
     'Section: misc',
     'Priority: optional',
     ...(app.homepage ? [`Homepage: ${app.homepage}`] : []),
@@ -605,6 +606,8 @@ export function rpmSpec(app, { tree }) {
     'Requires: gstreamer1-plugins-good',
     // AAC and HLS, which most MP4 audio and streams need; never a patented decoder such as H.264's.
     'Recommends: gstreamer1-plugins-bad-free',
+    // pipewiresrc, the camera's stream from the Camera portal.
+    'Recommends: pipewire-gstreamer',
     // The host is stripped when it is built; rpm's own steps would strip it or look for debug info.
     '%global debug_package %{nil}',
     '%global __os_install_post %{nil}',

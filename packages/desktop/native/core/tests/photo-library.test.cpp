@@ -547,7 +547,7 @@ TEST_CASE("NgNativeImagePicker shows no camera without the permission, with no p
   CHECK(camera->asked == 0);
   camera->state = FakeCamera::Access::Granted;
   camera->camera = false;
-  CHECK(ask(*module, "launchCameraAsync", dynamic::array(dynamic::object())).failure == "ImagePicker: this Mac has no camera");
+  CHECK(ask(*module, "launchCameraAsync", dynamic::array(dynamic::object())).failure == "ImagePicker: this computer has no camera");
   camera->camera = true;
   auto quiet = ngn::makeImagePickerModule(library, library, true, picker);
   CHECK(ask(*quiet, "launchCameraAsync", dynamic::array(dynamic::object())).value->at("canceled") == dynamic(true));
