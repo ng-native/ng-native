@@ -199,8 +199,7 @@ class PixbufCodec final : public ImageCodec {
       auto level = std::to_string(static_cast<int>(std::lround(std::clamp(quality, 0.0, 1.0) * 100)));
       saved = gdk_pixbuf_save_to_buffer(result, &buffer, &length, "webp", &error, "quality", level.c_str(), nullptr);
     } else {
-      // JPEG has no alpha, so it is given the colour channels only: gdk-pixbuf 2.44 and later
-      // write JPEG through glycin, whose encoder refuses an image with alpha.
+      // JPEG has no alpha, so it is given the colour channels only (see withoutAlpha).
       auto level = std::to_string(static_cast<int>(std::lround(std::clamp(quality, 0.0, 1.0) * 100)));
       GdkPixbuf *opaque = withoutAlpha(result);
       saved = opaque && gdk_pixbuf_save_to_buffer(opaque, &buffer, &length, "jpeg", &error, "quality", level.c_str(), nullptr);

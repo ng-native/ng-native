@@ -23,7 +23,8 @@ std::optional<std::pair<double, double>> imagePixelSize(const std::string &path)
 
 // `pixbuf`'s colour channels in a new pixbuf without alpha, a new reference to it where it has
 // none, or null where the new pixbuf cannot be allocated. JPEG is saved from one: gdk-pixbuf 2.44
-// and later write JPEG through glycin, whose encoder refuses an image with alpha.
+// and later, built with its glycin backend (as Fedora's is), write JPEG through glycin, whose
+// encoder refuses an image with alpha.
 GdkPixbuf *withoutAlpha(GdkPixbuf *pixbuf);
 
 } // namespace ngn::gtk
