@@ -28,7 +28,14 @@ if (process.env.EXPO_PUBLIC_DEVICE_TESTS) {
   // Metro was started for `vitest --project ios` or `android`: the test host, not the app.
   const { startDeviceTests } =
     require('@ng-native/testing/device/host') as typeof import('@ng-native/testing/device/host');
-  startDeviceTests({ mount: mountOptions() });
+  startDeviceTests({
+    mount: mountOptions(),
+    // The host follows rotation, the theme and reduced motion as the app does.
+    onMount: (app) => {
+      const stopWatching = watchConditions(app.engine);
+      app.applicationRef.onDestroy(stopWatching);
+    },
+  });
 } else {
   AppRegistry.registerRunnable('main', ({ rootTag }) => {
     const app = mount(Number(rootTag), App, getFabricUIManager(), mountOptions());

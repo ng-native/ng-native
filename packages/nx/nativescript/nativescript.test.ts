@@ -88,6 +88,30 @@ describe('the nativescript generator', () => {
     );
   });
 
+  it('finds providers past a comment with a bracket of its own, or one in a string', async () => {
+    const tree = await app();
+    tree.write(
+      'apps/mobile/src/main.ts',
+      [
+        "import { mount } from '@ng-native/platform';",
+        '',
+        "AppRegistry.registerRunnable('main', ({ rootTag }) => {",
+        '  mount(Number(rootTag), App, getFabricUIManager(), {',
+        '    // 1) Convert native colours.',
+        "    title: 'a ) in a string',",
+        '    processColor,',
+        '    providers: [provideRouter([])],',
+        '  });',
+        '});',
+        '',
+      ].join('\n'),
+    );
+    await run(tree);
+    const main = tree.read('apps/mobile/src/main.ts', 'utf-8')!;
+    assert.match(main, /providers: \[provideNativeScript\(\), provideRouter\(\[\]\)\]/);
+    assert.equal(main.match(/providers:/g)!.length, 1, 'one providers list, not a second');
+  });
+
   it('adds to providers the app already passes', async () => {
     const tree = await app();
     const main = tree.read('apps/mobile/src/main.ts', 'utf-8')!;

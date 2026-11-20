@@ -88,7 +88,10 @@ describe('ng add', () => {
     // Without withDeviceTests a dev bundle follows main.ts's dead branch into the test host, and
     // Vitest behind it.
     assert.match(read('metro.config.js'), /withDeviceTests\(withAngularNative\(/);
-    assert.match(read('src/main.ts'), /startDeviceTests\(\{ mount: mountOptions\(\) \}\)/);
+    assert.match(
+      read('src/main.ts'),
+      /startDeviceTests\(\{\s*mount: mountOptions\(\),\s*\/\/[^\n]*\n\s*onMount: \(app\) => \{\s*const stopWatching = watchConditions\(app\.engine\);\s*app\.applicationRef\.onDestroy\(stopWatching\);/,
+    );
     const config = read('vitest.config.mts');
     assert.match(config, /ngNative\(\)\], test: \{ name: 'node' \}/);
     assert.match(config, /deviceTests\(\{ platform: 'ios' \}\)/);

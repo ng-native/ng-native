@@ -49,14 +49,40 @@ function addPlugin(tree, root) {
   tree.write(file, `${JSON.stringify(config, null, 2)}\n`);
 }
 
-/** Where the bracket at `open` closes, counting brackets; -1 if it never does. */
+/**
+ * Where the bracket at `open` closes, counting brackets outside comments and strings, so a comment
+ * such as `// 1) Convert native colours` does not end the scan; -1 if it never closes.
+ */
 function closing(source, open) {
   let depth = 0;
   for (let at = open; at < source.length; at++) {
-    if ('([{'.includes(source[at])) depth++;
+    const past = skipped(source, at);
+    if (past !== at) at = past;
+    else if ('([{'.includes(source[at])) depth++;
     else if (')]}'.includes(source[at]) && --depth === 0) return at;
   }
   return -1;
+}
+
+/** Where a comment or string starting at `at` ends, or `at` itself where none starts there. */
+function skipped(source, at) {
+  const [char, next] = [source[at], source[at + 1]];
+  if (char === '/' && next === '/') {
+    const end = source.indexOf('\n', at);
+    return end < 0 ? source.length : end;
+  }
+  if (char === '/' && next === '*') return source.indexOf('*/', at + 2) + 1 || source.length;
+  if (char === "'" || char === '"' || char === '`') return stringEnd(source, at);
+  return at;
+}
+
+/** Where the string starting at `open` ends, past its escapes. */
+function stringEnd(source, open) {
+  for (let at = open + 1; at < source.length; at++) {
+    if (source[at] === '\\') at++;
+    else if (source[at] === source[open]) return at;
+  }
+  return source.length;
 }
 
 const IMPORTED =

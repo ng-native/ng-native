@@ -17,7 +17,10 @@ describe("the template's in-app tests", () => {
     assert.match(template('metro.config.js'), /withDeviceTests\(withAngularNative\(/);
     const main = template('src/main.ts');
     assert.match(main, /if \(process\.env\.EXPO_PUBLIC_DEVICE_TESTS\) \{/);
-    assert.match(main, /startDeviceTests\(\{ mount: mountOptions\(\) \}\)/);
+    assert.match(
+      main,
+      /startDeviceTests\(\{\s*mount: mountOptions\(\),\s*\/\/[^\n]*\n\s*onMount: \(app\) => \{\s*const stopWatching = watchConditions\(app\.engine\);\s*app\.applicationRef\.onDestroy\(stopWatching\);/,
+    );
     // The app mounts with the same options its tests do.
     assert.match(main, /mount\(Number\(rootTag\), App, getFabricUIManager\(\), mountOptions\(\)\)/);
   });
