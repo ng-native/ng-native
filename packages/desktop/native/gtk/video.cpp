@@ -63,13 +63,9 @@ class GstVideoPlayer final : public VideoPlayback {
     if (!uri) {
       return;
     }
-    playback_ = std::make_unique<Playback>(
-        *uri, Playback::Options{.audioSink = audioSink_, .videoSink = makeFrameSink(link_->frames, true), .preservePitch = pitch_, .interval = interval_},
-        [changed = std::move(changed)](Playback::Change change) {
-          changed(change == Playback::Change::Ended ? Change::Ended : change == Playback::Change::Time ? Change::Time : Change::State);
-        });
-    playback_->setVolume(volume_);
-    playback_->setMuted(muted_);
+    uri_ = *uri;
+    changed_ = std::move(changed);
+    open();
   }
 
   VideoState state() override {
@@ -150,10 +146,23 @@ class GstVideoPlayer final : public VideoPlayback {
     }
   }
 
-  // Applies to the next source: playbin3 takes its audio filter as it is made.
+  // playbin3 takes its audio filter only as it is made: a source playing is opened again with the
+  // new one, at its place and playing as it was.
   void setPreservesPitch(bool preserves) override {
     std::lock_guard lock(mutex_);
+    if (pitch_ == preserves) {
+      return;
+    }
     pitch_ = preserves;
+    if (!playback_) {
+      return;
+    }
+    auto was = playback_->state();
+    open();
+    playback_->seek(was.currentTime, nullptr);
+    if (was.playing) {
+      playback_->play(rate_);
+    }
   }
 
   void setTimeUpdates(double interval) override {
@@ -167,6 +176,23 @@ class GstVideoPlayer final : public VideoPlayback {
   std::shared_ptr<PlayerLink> link() const { return link_; }
 
  private:
+  // A new pipeline for the source, with the settings as they are. Under `mutex_`.
+  void open() {
+    playback_.reset();
+    auto changed = changed_;
+    playback_ = std::make_unique<Playback>(
+        uri_,
+        Playback::Options{.audioSink = audioSink_, .videoSink = makeFrameSink(link_->frames, true), .video = true, .preservePitch = pitch_,
+                          .interval = interval_},
+        [changed](Playback::Change change) {
+          changed(change == Playback::Change::Ended ? Change::Ended : change == Playback::Change::Time ? Change::Time : Change::State);
+        });
+    playback_->setVolume(volume_);
+    playback_->setMuted(muted_);
+  }
+
+  std::string uri_;
+  std::function<void(Change)> changed_;
   int id_;
   std::string audioSink_;
   std::shared_ptr<PlayerLink> link_ = std::make_shared<PlayerLink>();

@@ -4,6 +4,7 @@
 #include <gst/video/video.h>
 
 #include <utility>
+#include <vector>
 
 namespace ngn::gtk {
 
@@ -22,7 +23,8 @@ void Frames::post(const std::shared_ptr<Frames> &frames, GdkTexture *texture) {
     g_object_unref(frames->pending_);
   }
   frames->pending_ = texture;
-  frames->clear_ = texture == nullptr;
+  // A clear stays for the watchers to hear first, even when a frame of the next source follows it.
+  frames->clear_ = frames->clear_ || texture == nullptr;
   if (frames->scheduled_) {
     return;
   }
@@ -37,20 +39,33 @@ void Frames::post(const std::shared_ptr<Frames> &frames, GdkTexture *texture) {
       clear = std::exchange(frames->clear_, false);
       frames->scheduled_ = false;
     }
-    if (!texture && !clear) {
-      return G_SOURCE_REMOVE;
+    if (clear) {
+      frames->show(nullptr);
     }
-    if (frames->shown_) {
-      g_object_unref(frames->shown_);
-    }
-    frames->shown_ = texture;
-    // A watcher may stop watching as it is called.
-    auto watchers = frames->watchers_;
-    for (auto &[id, fn] : watchers) {
-      fn(texture);
+    if (texture) {
+      frames->show(texture);
     }
     return G_SOURCE_REMOVE;
   }, new std::shared_ptr<Frames>(frames), [](gpointer data) { delete static_cast<std::shared_ptr<Frames> *>(data); });
+}
+
+void Frames::show(GdkTexture *texture) {
+  if (shown_) {
+    g_object_unref(shown_);
+  }
+  shown_ = texture;
+  // A watcher may stop watching, itself or another, as it is called: each is looked up again.
+  std::vector<int> ids;
+  for (auto &[id, fn] : watchers_) {
+    ids.push_back(id);
+  }
+  for (int id : ids) {
+    auto found = watchers_.find(id);
+    if (found != watchers_.end()) {
+      auto fn = found->second;
+      fn(texture);
+    }
+  }
 }
 
 int Frames::watch(std::function<void(GdkTexture *)> fn) {
@@ -116,7 +131,12 @@ GdkTexture *textureOfSample(GstSample *sample) {
 
 GstElement *makeFrameSink(const std::shared_ptr<Frames> &frames, bool sync) {
   GstElement *sink = gst_element_factory_make("appsink", nullptr);
-  GstCaps *caps = gst_caps_from_string("video/x-raw,format=RGBA");
+  if (!sink) {
+    return nullptr;
+  }
+  // A player's frames in square pixels, which its video chain scales an anamorphic source to, so
+  // the texture's size is the picture's shape.
+  GstCaps *caps = gst_caps_from_string(sync ? "video/x-raw,format=RGBA,pixel-aspect-ratio=1/1" : "video/x-raw,format=RGBA");
   g_object_set(sink, "caps", caps, "sync", sync ? TRUE : FALSE, "max-buffers", 2, "drop", TRUE, nullptr);
   gst_caps_unref(caps);
   GstAppSinkCallbacks callbacks{};

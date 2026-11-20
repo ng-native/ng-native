@@ -85,7 +85,13 @@ struct SentEvents {
   std::shared_ptr<facebook::react::EventDispatcher> dispatcher;
   std::vector<std::string> types;
 
-  explicit SentEvents(gtk::ViewData &view) {
+  std::shared_ptr<Emitter> emitter;
+
+  // On the view's data, in place of its own emitter.
+  explicit SentEvents(gtk::ViewData &view) : SentEvents() { view.emitter = emitter; }
+
+  // For a view not made yet: its shadow's eventEmitter.
+  SentEvents() {
     using namespace facebook::react;
     EventQueueProcessor processor([](auto &&...) {}, [](auto &&...) {}, [](auto &&...) {}, {});
     dispatcher = std::make_shared<EventDispatcher>(
@@ -95,7 +101,7 @@ struct SentEvents {
       types.push_back(event.type);
       return true;
     }));
-    view.emitter = std::make_shared<Emitter>(nullptr, dispatcher);
+    emitter = std::make_shared<Emitter>(nullptr, dispatcher);
   }
 
   long count(const std::string &type) const {

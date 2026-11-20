@@ -3,6 +3,7 @@
 // full screen. VP9 in WebM, which el9's own plugins decode, with sound into a fake sink.
 #if NGN_GSTREAMER
 #include "../gst-playback.h"
+#include "../gst-frames.h"
 #include "../video.h"
 #include "helpers.h"
 #include "mounted-views.h"
@@ -34,11 +35,12 @@ struct Folder {
 
 // A WebM of `frames` frames at 30 a second, 64 by 48, all of `pattern` (videotestsrc's: 4 red,
 // 5 green, 6 blue), with a tone under it.
-std::string videoFile(const Folder &folder, const char *name, int frames, int pattern) {
+std::string videoFile(const Folder &folder, const char *name, int frames, int pattern, const char *aspect = "1/1") {
   auto path = (folder.path / name).string();
   std::string line = "webmmux name=mux ! filesink name=file videotestsrc num-buffers=" + std::to_string(frames) +
                      " pattern=" + std::to_string(pattern) +
-                     " ! video/x-raw,width=64,height=48,framerate=30/1 ! vp9enc deadline=1 ! mux. audiotestsrc num-buffers=" +
+                     " ! video/x-raw,width=64,height=48,framerate=30/1,pixel-aspect-ratio=" + aspect +
+                     " ! vp9enc deadline=1 ! mux. audiotestsrc num-buffers=" +
                      std::to_string(frames * 48000 / 30 / 1024) + " ! audio/x-raw,rate=48000,channels=1 ! opusenc ! mux.";
   REQUIRE(ngn::gtk::gstreamerHas({}));
   GError *error = nullptr;
@@ -196,6 +198,7 @@ TEST_CASE("Video on Linux goes full screen in a window of its own, sends both ev
   auto id = players.call("createPlayer", dynamic::array(red));
   MountedViews views;
   views.add(videoShadow(dynamic::object("player", id), 160, 120));
+  ngn::testing::SentEvents<facebook::react::ViewEventEmitter> sent(*videoView(views));
   auto &video = *videoView(views)->video;
   ngn::gtk::setVideoFullscreen(video, true);
   GtkWindow *window = ngn::gtk::videoFullscreenWindow(video);
@@ -207,6 +210,8 @@ TEST_CASE("Video on Linux goes full screen in a window of its own, sends both ev
   // Closing it leaves, as Escape does.
   gtk_window_close(window);
   CHECK(ngn::gtk::videoFullscreenWindow(video) == nullptr);
+  CHECK(sent.count("topFullscreenEnter") == 1);
+  CHECK(sent.count("topFullscreenExit") == 1);
 
   ngn::gtk::setVideoFullscreen(video, true);
   REQUIRE(ngn::gtk::videoFullscreenWindow(video));
@@ -226,5 +231,85 @@ TEST_CASE("Video on Linux goes full screen in a window of its own, sends both ev
     }
     return true;
   });
+}
+TEST_CASE("Video on Linux sends a view mounted over a paused player's frame its first frame, through the view") {
+  REQUIRE(ngn::testing::gtkReady());
+  Folder folder;
+  auto red = videoFile(folder, "red.webm", 15, 4);
+  Players players;
+  auto id = players.call("createPlayer", dynamic::array(red));
+  MountedViews views;
+  views.add(videoShadow(dynamic::object("player", id), 160, 120));
+  GtkPicture *first = ngn::gtk::videoPicture(*videoView(views)->video);
+  ngn::testing::runUntil([&] { return shownPixel(first).has_value(); });
+  // A second view of the same player, its emitter there as it is made.
+  ngn::testing::SentEvents<facebook::react::ViewEventEmitter> sent;
+  auto shadow = MountedViews::shadow(kVideo + 1, ngn::VideoViewComponentName, videoProps(dynamic::object("player", id)), {{0, 0}, {80, 60}});
+  shadow.eventEmitter = sent.emitter;
+  views.add(shadow);
+  CHECK(sent.count("topFirstFrameRender") == 1);
+}
+
+TEST_CASE("Video on Linux shows an anamorphic source in square pixels") {
+  REQUIRE(ngn::testing::gtkReady());
+  Folder folder;
+  auto wide = videoFile(folder, "wide.webm", 15, 4, "2/1");
+  Players players;
+  auto id = players.call("createPlayer", dynamic::array(wide));
+  MountedViews views;
+  views.add(videoShadow(dynamic::object("player", id), 160, 120));
+  GtkPicture *picture = ngn::gtk::videoPicture(*videoView(views)->video);
+  ngn::testing::runUntil([&] { return shownPixel(picture).has_value(); });
+  auto *texture = GDK_TEXTURE(gtk_picture_get_paintable(picture));
+  CHECK(gdk_texture_get_width(texture) == 2 * gdk_texture_get_height(texture) * 64 / 48);
+}
+
+TEST_CASE("Video on Linux keeps a playing source's place when pitch preservation changes") {
+  REQUIRE(ngn::testing::gtkReady());
+  Folder folder;
+  auto red = videoFile(folder, "red.webm", 90, 4);
+  Players players;
+  auto id = players.call("createPlayer", dynamic::array(red));
+  ngn::testing::runUntil([&] { return players.state(id)["status"] == "readyToPlay"; });
+  players.call("play", dynamic::array(id));
+  ngn::testing::runUntil([&] { return players.state(id)["currentTime"].asDouble() > 0.5; });
+  players.call("setPreservesPitch", dynamic::array(id, false));
+  ngn::testing::runUntil([&] { return players.state(id)["status"] == "readyToPlay" && players.state(id)["currentTime"].asDouble() > 0.4; });
+  CHECK(players.state(id)["playing"] == true);
+}
+
+TEST_CASE("Video on Linux's player fails a source with no video sink, rather than playing its sound alone") {
+  REQUIRE(ngn::gtk::gstreamerHas({}));
+  Folder folder;
+  auto red = videoFile(folder, "red.webm", 15, 4);
+  ngn::gtk::Playback playback(red, {.audioSink = "fakesink", .videoSink = nullptr, .video = true}, [](ngn::gtk::Playback::Change) {});
+  auto state = playback.state();
+  CHECK(state.load == ngn::gtk::PlaybackState::Load::Failed);
+  CHECK(state.error.find("appsink") != std::string::npos);
+}
+
+TEST_CASE("Video on Linux's frames tell the watchers of a clear before the next source's frame, and skip one unwatched") {
+  REQUIRE(ngn::testing::gtkReady());
+  auto frames = std::make_shared<ngn::gtk::Frames>();
+  std::vector<std::string> heard;
+  int second = -1;
+  frames->watch([&](GdkTexture *texture) {
+    heard.push_back(texture ? "frame" : "clear");
+    frames->unwatch(second);
+  });
+  second = frames->watch([&](GdkTexture *) { heard.push_back("second"); });
+  auto texture = [] {
+    guchar pixel[4] = {255, 0, 0, 255};
+    GBytes *bytes = g_bytes_new(pixel, 4);
+    GdkTexture *made = gdk_memory_texture_new(1, 1, GDK_MEMORY_R8G8B8A8, bytes, 4);
+    g_bytes_unref(bytes);
+    return made;
+  };
+  // A source ends and the next one's first frame comes before the main loop runs.
+  ngn::gtk::Frames::post(frames, nullptr);
+  ngn::gtk::Frames::post(frames, texture());
+  ngn::testing::runUntil([&] { return heard.size() >= 2; });
+  CHECK(heard == std::vector<std::string>{"clear", "frame"});
+  CHECK(frames->shown() != nullptr);
 }
 #endif

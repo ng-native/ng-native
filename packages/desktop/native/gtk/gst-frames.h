@@ -26,6 +26,8 @@ class Frames {
   void unwatch(int id);
 
  private:
+  void show(GdkTexture *texture);
+
   std::mutex mutex_;
   GdkTexture *pending_{nullptr};
   bool clear_{false};
@@ -35,7 +37,8 @@ class Frames {
   int next_{0};
 };
 
-// An appsink, floating, whose frames go to `frames`. `sync` renders each on the pipeline's clock.
+// An appsink, floating, whose frames go to `frames`, or null where appsink is not installed. `sync`
+// renders each on the pipeline's clock, in square pixels, as a player's are.
 GstElement *makeFrameSink(const std::shared_ptr<Frames> &frames, bool sync);
 
 // A texture of `sample`'s RGBA frame over its buffer, with no copy; null for one that is not.
