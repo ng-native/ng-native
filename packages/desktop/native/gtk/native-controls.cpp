@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <optional>
 #include <set>
 
@@ -42,6 +43,9 @@ struct Control {
   // A countdown's duration, which has no AM and PM, and the minutes the time steps by.
   bool countdown{false};
   int minuteStep{1};
+  // What the user last chose, until the props that follow it arrive: the base of the next edit, so a
+  // day and then an hour chosen before they do land on the new day.
+  std::optional<double> chosen;
   ~Control();
 };
 
@@ -243,20 +247,66 @@ bool picksTime(const NativeControlProps &p) {
   return p.mode == "time" || p.mode == "datetime" || p.mode == "countdown";
 }
 
-GDateTime *pickerDate(const NativeControlProps &p) {
-  return g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(p.date.value_or(0) / 1000)));
+// The date the edit in hand starts from: the user's last choice, else the picker's date prop.
+GDateTime *pickerDate(const Control *c, const NativeControlProps &p) {
+  return g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(c->chosen.value_or(p.date.value_or(0)) / 1000)));
 }
 
-// Sends `at`, kept within the picker's bounds, and answers the milliseconds sent.
+// The minute of `ms` in the local time zone.
+int localMinute(double ms) {
+  GDateTime *at = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(ms / 1000)));
+  int minute = g_date_time_get_minute(at);
+  g_date_time_unref(at);
+  return minute;
+}
+
+// `ms` on the minute step and within the bounds together: a bound off the step moves to the next
+// step inside it (a minimum of 10:37 on 15 minutes is 10:45, a maximum of 10:37 is 10:30), and the
+// bound itself stays where no step fits between the bounds.
+double onStepWithinBounds(const NativeControlProps &p, double ms, int step) {
+  constexpr double kMinute = 60000;
+  auto floorStep = [&](double at) {
+    double whole = std::floor(at / kMinute) * kMinute;
+    return whole - (localMinute(whole) % step) * kMinute;
+  };
+  auto ceilStep = [&](double at) {
+    double whole = std::ceil(at / kMinute) * kMinute;
+    return whole + ((step - localMinute(whole) % step) % step) * kMinute;
+  };
+  double low = p.minimumDate.value_or(-std::numeric_limits<double>::infinity());
+  double high = p.maximumDate.value_or(std::numeric_limits<double>::infinity());
+  double out = floorStep(ms);
+  if (out < low) {
+    out = ceilStep(low);
+    if (out > high) {
+      out = low;
+    }
+  }
+  if (out > high) {
+    out = floorStep(high);
+    if (out < low) {
+      out = high;
+    }
+  }
+  return out;
+}
+
+// Sends `at`, on the minute step and within the picker's bounds, and answers the milliseconds sent.
 double sendDate(Control *c, const NativeControlProps &p, GDateTime *at) {
-  double ms = static_cast<double>(g_date_time_to_unix(at)) * 1000;
-  ms = std::max(ms, p.minimumDate.value_or(ms));
-  ms = std::min(ms, p.maximumDate.value_or(ms));
+  double ms = onStepWithinBounds(p, static_cast<double>(g_date_time_to_unix(at)) * 1000, c->minuteStep);
+  c->chosen = ms;
   GDateTime *sent = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(ms / 1000)));
   double offset = static_cast<double>(g_date_time_get_utc_offset(sent)) / G_TIME_SPAN_MINUTE;
   g_date_time_unref(sent);
   send(c, "change", folly::dynamic::object("timestamp", ms)("utcOffset", offset));
   return ms;
+}
+
+// The locale's AM or PM, or "AM" or "PM" where it has none (de_DE writes neither), so a 12-hour
+// clock's toggle always names its half of the day.
+std::string meridiemLabel(bool afterNoon) {
+  const char *label = nl_langinfo(afterNoon ? PM_STR : AM_STR);
+  return label && *label ? label : afterNoon ? "PM" : "AM";
 }
 
 // The time of `ms` in the spin buttons, sending nothing.
@@ -271,7 +321,7 @@ void showTime(Control *c, double ms) {
   c->afterNoon = hour >= 12;
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(c->hours), c->twelveHour ? clockHour(hour) : hour);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(c->minutes), minuteOnInterval(g_date_time_get_minute(at), c->minuteStep));
-  gtk_button_set_label(GTK_BUTTON(c->meridiem), nl_langinfo(c->afterNoon ? PM_STR : AM_STR));
+  gtk_button_set_label(GTK_BUTTON(c->meridiem), meridiemLabel(c->afterNoon).c_str());
   c->applying = was;
   g_date_time_unref(at);
 }
@@ -282,12 +332,12 @@ void dayChosen(Control *c) {
   if (!p || c->applying) {
     return;
   }
-  GDateTime *was = pickerDate(*p);
+  GDateTime *was = pickerDate(c, *p);
   GDateTime *day = gtk_calendar_get_date(GTK_CALENDAR(c->calendar));
   GDateTime *at = g_date_time_new_local(
       g_date_time_get_year(day), g_date_time_get_month(day), g_date_time_get_day_of_month(day), g_date_time_get_hour(was),
       g_date_time_get_minute(was), g_date_time_get_seconds(was));
-  sendDate(c, *p, at);
+  showTime(c, sendDate(c, *p, at));
   g_date_time_unref(was);
   g_date_time_unref(day);
   g_date_time_unref(at);
@@ -308,7 +358,7 @@ void timeChosen(Control *c) {
   if (c->twelveHour) {
     hour = dayHour(hour, c->afterNoon);
   }
-  GDateTime *was = pickerDate(*p);
+  GDateTime *was = pickerDate(c, *p);
   GDateTime *at = g_date_time_new_local(
       g_date_time_get_year(was), g_date_time_get_month(was), g_date_time_get_day_of_month(was), hour,
       gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(c->minutes)), 0);
@@ -352,7 +402,7 @@ void configureClock(Control *c) {
   gtk_spin_button_set_snap_to_ticks(GTK_SPIN_BUTTON(c->minutes), c->minuteStep > 1);
   gtk_widget_set_visible(c->meridiem, c->twelveHour);
   c->applying = was;
-  showTime(c, p ? p->date.value_or(0) : 0);
+  showTime(c, c->chosen.value_or(p ? p->date.value_or(0) : 0));
   if (p) {
     gtk_menu_button_set_label(GTK_MENU_BUTTON(c->widget), dateLabel(*p).c_str());
   }
@@ -378,7 +428,7 @@ GtkWidget *makeTimeRow(Control *c) {
   c->minutes = spin(0, 59, "Minute");
   g_signal_connect(c->minutes, "output", G_CALLBACK(twoDigits), nullptr);
   g_signal_connect(c->hours, "output", G_CALLBACK(hourText), c);
-  c->meridiem = gtk_button_new_with_label(nl_langinfo(AM_STR));
+  c->meridiem = gtk_button_new_with_label(meridiemLabel(false).c_str());
   gtk_widget_set_valign(c->meridiem, GTK_ALIGN_CENTER);
   gtk_widget_set_visible(c->meridiem, false);
   g_signal_connect(c->meridiem, "clicked", G_CALLBACK(+[](GtkButton *, gpointer data) {
@@ -634,6 +684,8 @@ void applyControlProps(ViewData &view) {
       selectSegment(w, p->selectedIndex);
       break;
     case ControlKind::DatePicker: {
+      // The props are what JavaScript made of the user's choice, or of something else since.
+      c->chosen.reset();
       if (p->date) {
         GDateTime *at = g_date_time_new_from_unix_local(static_cast<gint64>(std::floor(*p->date / 1000)));
         if (at) {

@@ -222,3 +222,28 @@ TEST_CASE("a blending child after another keeps both blends, and a later sibling
   CHECK(bluish(views.pixel(75, 30)));
   CHECK(greenish(views.pixel(110, 30)));
 }
+
+TEST_CASE("a dashed border with no colour set is black, as a solid one is") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto view = MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("borderWidth", 4)("borderStyle", "dashed")), {{20, 20}, {100, 40}});
+  views.add(view);
+  auto dash = views.pixel(28, 22);
+  CHECK(dash.a > 230);
+  CHECK(dash.r + dash.g + dash.b < 30);
+  views.update(view, desktopViewProps(dynamic::object("borderWidth", 4)("borderStyle", "dotted")));
+  auto dot = views.pixel(24, 22);
+  CHECK(dot.a > 230);
+  CHECK(dot.r + dot.g + dot.b < 30);
+}
+
+TEST_CASE("each filter colour step keeps its own clamp: brightness 2 then 0.5 of 0.75 is 0.5") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  auto filter = dynamic::array(dynamic::object("brightness", 2), dynamic::object("brightness", 0.5));
+  // 0.75 doubled clamps to 1, which halved is 0.5; one merged step would leave 0.75.
+  views.add(MountedViews::shadow(2, "View", desktopViewProps(dynamic::object("backgroundColor", 0xffbfbfbf)("filter", filter)), {{20, 20}, {60, 60}}));
+  auto pixel = views.pixel(50, 50);
+  CHECK(pixel.r == doctest::Approx(128).epsilon(0.05));
+  CHECK(pixel.g == doctest::Approx(128).epsilon(0.05));
+}

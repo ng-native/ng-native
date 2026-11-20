@@ -207,25 +207,31 @@ import { page } from '../screen-styles.ts';
       border-bottom-color: var(--line);
     }
 
+    /* The filter rules are scoped: iOS and macOS draw only brightness() and opacity(), and refuse the rest. */
     .fx {
       width: 56px;
       height: 56px;
       border-radius: 8px;
       background-color: rgb(59, 110, 245);
     }
-    .fx-gray {
+    .platform-linux .fx-gray,
+    .platform-android .fx-gray {
       filter: grayscale(1);
     }
-    .fx-sepia {
+    .platform-linux .fx-sepia,
+    .platform-android .fx-sepia {
       filter: sepia(1);
     }
-    .fx-hue {
+    .platform-linux .fx-hue,
+    .platform-android .fx-hue {
       filter: hue-rotate(90deg);
     }
-    .fx-blur {
+    .platform-linux .fx-blur,
+    .platform-android .fx-blur {
       filter: blur(4px);
     }
-    .fx-shadow {
+    .platform-linux .fx-shadow,
+    .platform-android .fx-shadow {
       filter: drop-shadow(6px 6px 3px rgb(200, 60, 160));
     }
 

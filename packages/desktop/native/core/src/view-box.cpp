@@ -720,10 +720,10 @@ BoxDescription describeBox(const ViewProps &props, const LayoutMetrics &layout) 
 ViewBox viewBox(const ViewProps &props, const LayoutMetrics &layout) {
   ViewBox box;
   auto metrics = props.resolveBorderMetrics(layout);
-  auto described = describeBox(props, layout);
-  const auto &radii = described.radii;
-  const auto &widths = described.borderWidths;
-  bool clips = described.clips;
+  // Not describeBox: its background layers build every tile, which drawViewBox builds once for itself.
+  auto radii = cornerRadiiOf(metrics.borderRadii);
+  auto widths = widthsOf(metrics.borderWidths);
+  bool clips = props.yogaStyle.overflow() != facebook::yoga::Overflow::Visible;
   auto borderColor = argbOf(metrics.borderColors.left);
   bool circular = radii.circular();
   // RCTViewComponentView's useCoreAnimationBorderRendering.

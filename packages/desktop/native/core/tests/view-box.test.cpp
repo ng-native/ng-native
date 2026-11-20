@@ -5,6 +5,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <chrono>
 
 using namespace facebook::react;
 using folly::dynamic;
@@ -607,4 +608,24 @@ TEST_CASE("drawBorder draws a described box's border as drawViewBox does, dashed
   ngn::drawBorder(ngn::describeBox(solid.view(), solid.layout), canvas);
   REQUIRE_FALSE(fills(canvas.calls).empty());
   CHECK(fills(canvas.calls) == fills(solid.drawn()));
+}
+
+TEST_CASE("viewBox does not build the background's tiles, which a draw builds once for itself") {
+  auto stops = dynamic::array(dynamic(dynamic::object("color", kRed)("position", nullptr)), dynamic(dynamic::object("color", kBlue)("position", nullptr)));
+  dynamic image = dynamic::object("type", "linear-gradient")("direction", dynamic::object("type", "angle")("value", 90))("colorStops", stops);
+  // 65536 one-point tiles, the most a layer keeps.
+  Box b(dynamic::object("experimental_backgroundImage", dynamic::array(image))("experimental_backgroundSize", dynamic::array(dynamic(dynamic::object("x", 1)("y", 1)))), 256, 256);
+  auto fastest = [&](auto &&run) {
+    std::chrono::nanoseconds best = std::chrono::nanoseconds::max();
+    for (int i = 0; i < 5; i++) {
+      auto start = std::chrono::steady_clock::now();
+      run();
+      best = std::min(best, std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start));
+    }
+    return best;
+  };
+  auto described = fastest([&] { ngn::describeBox(b.view(), b.layout); });
+  auto shaped = fastest([&] { b.box(); });
+  // Building the tiles is most of describeBox; shaping a box for Core Animation needs none of it.
+  CHECK(shaped * 4 < described);
 }

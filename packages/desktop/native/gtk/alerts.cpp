@@ -187,7 +187,6 @@ void showAlert(const AlertRequest &request, std::function<void(int, std::string,
     }
     gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
   }
-  stackResponses(dialog, extra, layout.order.size());
   g_object_set_data_full(G_OBJECT(dialog), "ngn-alert", pending, [](gpointer p) { delete static_cast<Pending *>(p); });
   g_signal_connect(dialog, "response", G_CALLBACK(+[](GtkWidget *d, const char *response, gpointer) { answer(d, response); }), nullptr);
   // The answer arrives however it goes, even closed with no response.
@@ -203,6 +202,9 @@ void showAlert(const AlertRequest &request, std::function<void(int, std::string,
   } else {
     gtk_window_present(GTK_WINDOW(dialog));
   }
+  // After presenting: an AdwDialog keeps its content unparented until then (libadwaita 1.5), so its
+  // buttons are not reachable from the dialog before.
+  stackResponses(dialog, extra, layout.order.size());
   if (pending->field) {
     gtk_widget_grab_focus(pending->field);
   }

@@ -169,3 +169,18 @@ TEST_CASE("a choice of more than three buttons stacks them, and two sit side by 
     CHECK(std::get<0>(*answer) == 1);
   }
 }
+
+// With a window, the dialog is an AdwAlertDialog on libadwaita 1.5 and later, whose buttons are
+// reachable only once it is presented.
+TEST_CASE("a choice of four buttons over a window stacks them") {
+  REQUIRE(ngn::testing::gtkReady());
+  adw_init();
+  ngn::testing::MountedViews views(true, 400, 300);
+  std::optional<Answer> answer;
+  ngn::gtk::showAlert(choice(4), [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, GTK_WINDOW(views.window));
+  GtkWidget *alert = ngn::gtk::shownAlert();
+  REQUIRE(alert);
+  CHECK(stacked(alert, 4));
+  ngn::gtk::respondToAlert(alert, "b1");
+  REQUIRE(answer);
+}

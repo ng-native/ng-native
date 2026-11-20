@@ -164,7 +164,18 @@ void snapshotSvg(GtkWidget *widget, ViewData *d, GtkSnapshot *snapshot) {
 // first innermost so that it applies first. How many it pushed, which the caller pops.
 int pushFilter(GtkSnapshot *snapshot, const ViewProps &props) {
   auto steps = ngn::filterSteps(props.filter);
+  bool afterMatrix = false;
   for (auto it = steps.rbegin(); it != steps.rend(); ++it) {
+    if (it->type == ngn::FilterStep::Type::ColorMatrix && afterMatrix) {
+      // GTK multiplies a colour matrix over a colour matrix into one node, which loses the clamp
+      // to 0..1 between them (brightness(2) then brightness(0.5) of 0.75 is 0.5, not 0.75). A clear
+      // dot beside the inner one makes the outer's child two nodes, so there is nothing to merge.
+      GdkRGBA none{0, 0, 0, 0};
+      graphene_rect_t dot;
+      graphene_rect_init(&dot, 0, 0, 1, 1);
+      gtk_snapshot_append_color(snapshot, &none, &dot);
+    }
+    afterMatrix = it->type == ngn::FilterStep::Type::ColorMatrix;
     // GSK blurs by a radius twice the Gaussian's standard deviation.
     float radius = static_cast<float>(2 * it->standardDeviation);
     switch (it->type) {

@@ -221,7 +221,15 @@ void appendBox(GtkSnapshot *snapshot, const BoxDescription &box, const std::func
     graphene_rect_t bounds = grapheneRect(box.bounds);
     cairo_t *cr = gtk_snapshot_append_cairo(snapshot, &bounds);
     auto canvas = makeCairoCanvas(cr, box.bounds.width, box.bounds.height, 1);
-    drawBorder(box, *canvas);
+    // React Native's default border colour is black, as in the solid case below.
+    BoxDescription painted{
+        .bounds = box.bounds, .radii = box.radii, .borderWidths = box.borderWidths, .borderColors = box.borderColors, .borderStyle = box.borderStyle};
+    for (auto *side : {&painted.borderColors.top, &painted.borderColors.right, &painted.borderColors.bottom, &painted.borderColors.left}) {
+      if (!*side) {
+        *side = 0xff000000;
+      }
+    }
+    drawBorder(painted, *canvas);
     canvas.reset();
     cairo_destroy(cr);
   } else if (w.top > 0 || w.right > 0 || w.bottom > 0 || w.left > 0) {

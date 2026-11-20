@@ -39,9 +39,15 @@ ClockFormatWatcher::ClockFormatWatcher(std::function<void(std::optional<bool>)> 
   g_bus_get(
       G_BUS_TYPE_SESSION, cancellable_,
       +[](GObject *, GAsyncResult *result, gpointer data) {
-        GDBusConnection *bus = g_bus_get_finish(result, nullptr);
+        GError *error = nullptr;
+        GDBusConnection *bus = g_bus_get_finish(result, &error);
         if (!bus) {
-          // Cancelled, or no session bus at all.
+          bool cancelled = g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
+          g_error_free(error);
+          // Cancelled: the watcher is gone. With no session bus, GSettings may still have the setting.
+          if (!cancelled) {
+            static_cast<ClockFormatWatcher *>(data)->readGSettings();
+          }
           return;
         }
         static_cast<ClockFormatWatcher *>(data)->start(bus);

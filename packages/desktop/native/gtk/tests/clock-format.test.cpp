@@ -168,3 +168,24 @@ TEST_CASE("with no clock-format in the portal, GSettings' gives the clock format
   g_object_unref(settings);
   g_unsetenv("GSETTINGS_BACKEND");
 }
+
+TEST_CASE("with no session bus at all, GSettings' clock format is still looked up") {
+  REQUIRE(ngn::testing::gtkReady());
+  const char *had = g_getenv("DBUS_SESSION_BUS_ADDRESS");
+  std::string saved = had ? had : "";
+  g_setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/ngn-no-bus", TRUE);
+  g_setenv("GSETTINGS_BACKEND", "memory", TRUE);
+  std::vector<std::optional<bool>> heard;
+  {
+    ngn::gtk::ClockFormatWatcher watcher([&heard](std::optional<bool> twelve) { heard.push_back(twelve); });
+    // Heard whether or not the schema is installed: no clock format, or the schema's default.
+    ngn::testing::runUntil([&] { return !heard.empty(); });
+    CHECK(heard.size() == 1);
+  }
+  g_unsetenv("GSETTINGS_BACKEND");
+  if (had) {
+    g_setenv("DBUS_SESSION_BUS_ADDRESS", saved.c_str(), TRUE);
+  } else {
+    g_unsetenv("DBUS_SESSION_BUS_ADDRESS");
+  }
+}
