@@ -344,8 +344,8 @@ export class VirtualList<T> extends ScrollViewProps {
    * up to `windowSize - 1` more around it. While the JS thread is
    * idle the window grows a viewport at a time, ahead of the scroll direction first, so a fling
    * lands on rows already drawn. About two-thirds of the extra viewports go ahead of the scroll and
-   * the rest behind. `1` renders the visible rows and the overscan only, with `velocityLead` set
-   * to `0`; otherwise a fast scroll adds the rows ahead of it.
+   * the rest behind. `1` fills no extra viewports, though a fast scroll still renders ahead of
+   * itself unless `velocityLead` is `0`.
    */
   readonly windowSize = input(5, { transform: numberOr(5) });
   /**
