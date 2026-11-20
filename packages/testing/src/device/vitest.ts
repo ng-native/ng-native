@@ -38,7 +38,6 @@ export function deviceTests(options: DeviceTestsOptions = {}): Plugin {
   const { include = ['src/**/*.device.ts'], sources = ['src'], name, ...pool } = options;
   // A desktop app is a process the pool can open; a simulator is one a person has open.
   if (pool.platform === 'macos' && pool.launch === undefined) pool.launch = macosLauncher();
-  if (pool.platform === 'linux' && pool.launch === undefined) pool.launch = linuxLauncher();
   return {
     name: 'ng-native:device-tests',
     config(config) {
