@@ -1,8 +1,11 @@
 #include "view-widget.h"
 
+#include "accessible-text.h"
+
 #include "box-paint.h"
 #include "cairo-canvas.h"
 #include "image-view.h"
+#include "focus.h"
 #include "scroll-view.h"
 #include "text-field.h"
 
@@ -46,6 +49,16 @@ GskTransform *childTransform(const ViewData &child) {
   GskTransform *transform = gsk_transform_translate(nullptr, &point);
   if (auto props = std::dynamic_pointer_cast<const ViewProps>(child.props)) {
     if (auto layer = ngn::layerTransform(*props, child.layout)) {
+      // In 2D steps where it has no perspective: GSK's cairo renderer, which a machine with no GL
+      // and the host's screenshots draw with, draws a 3D matrix as a pink box.
+      if (auto steps = ngn::planeSteps(*layer)) {
+        graphene_point_t by;
+        graphene_point_init(&by, static_cast<float>(steps->translateX), static_cast<float>(steps->translateY));
+        transform = gsk_transform_translate(transform, &by);
+        transform = gsk_transform_rotate(transform, static_cast<float>(steps->rotate));
+        transform = gsk_transform_skew(transform, static_cast<float>(steps->skewX), 0);
+        return gsk_transform_scale(transform, static_cast<float>(steps->scaleX), static_cast<float>(steps->scaleY));
+      }
       float values[16];
       for (int i = 0; i < 16; ++i) {
         values[i] = static_cast<float>(layer->matrix[i]);
@@ -101,14 +114,7 @@ void viewSizeAllocate(GtkWidget *widget, int width, int height, int) {
 }
 
 void snapshotText(ViewData *d, GtkSnapshot *snapshot) {
-  if (!d->text) {
-    auto state = std::static_pointer_cast<const ConcreteState<ParagraphState>>(d->state);
-    const auto &data = state->getData();
-    const auto &insets = d->layout.contentInsets;
-    Float width = d->layout.frame.size.width - insets.left - insets.right;
-    // A hair of slack, so the width Yoga rounded to the pixel lays out the lines measure did.
-    d->text = ngn::gtk::layoutText(data.attributedString, data.paragraphAttributes, width + 0.5f);
-  }
+  ngn::gtk::paragraphLayout(*d);
   const auto &insets = d->layout.contentInsets;
   gtk_snapshot_save(snapshot);
   graphene_point_t at;
@@ -211,6 +217,17 @@ static void ngn_view_class_init(NgnViewClass *klass) {
   G_OBJECT_CLASS(klass)->finalize = viewFinalize;
 }
 
+// A Paragraph's widget: an NgnView that GTK 4.14 and later reads as text (accessible-text.h).
+static GType ngn_text_view_get_type() {
+  static GType type = [] {
+    GType text = g_type_register_static_simple(
+        NGN_TYPE_VIEW, "NgnTextView", sizeof(NgnViewClass), nullptr, sizeof(NgnView), nullptr, GTypeFlags(0));
+    ngn::gtk::implementAccessibleText(text);
+    return text;
+  }();
+  return type;
+}
+
 static void ngn_view_init(NgnView *self) {
   self->data = new ViewData();
   self->data->widget = GTK_WIDGET(self);
@@ -218,8 +235,11 @@ static void ngn_view_init(NgnView *self) {
 
 namespace ngn::gtk {
 
-GtkWidget *makeViewWidget(GtkAccessibleRole role) {
-  return GTK_WIDGET(g_object_new(NGN_TYPE_VIEW, "accessible-role", role, nullptr));
+GtkWidget *makeViewWidget(GtkAccessibleRole role, bool text) {
+  GtkWidget *widget = GTK_WIDGET(g_object_new(text ? ngn_text_view_get_type() : NGN_TYPE_VIEW, "accessible-role", role, nullptr));
+  // A view's own focus, the same for one made as the view mounts and one replacing it.
+  watchFocus(widget);
+  return widget;
 }
 
 GtkWidget *makeSurfaceWidget(SurfaceId surfaceId, std::function<void(int, int)> resized) {
@@ -232,6 +252,25 @@ GtkWidget *makeSurfaceWidget(SurfaceId surfaceId, std::function<void(int, int)> 
   gtk_widget_set_vexpand(widget, TRUE);
   gtk_widget_set_overflow(widget, GTK_OVERFLOW_HIDDEN);
   return widget;
+}
+
+bool isTextWidget(GtkWidget *widget) {
+  return widget && G_TYPE_CHECK_INSTANCE_TYPE(widget, ngn_text_view_get_type());
+}
+
+PangoLayout *paragraphLayout(ViewData &d) {
+  if (d.component != "Paragraph" || !d.state) {
+    return nullptr;
+  }
+  if (!d.text) {
+    auto state = std::static_pointer_cast<const ConcreteState<ParagraphState>>(d.state);
+    const auto &data = state->getData();
+    const auto &insets = d.layout.contentInsets;
+    Float width = d.layout.frame.size.width - insets.left - insets.right;
+    // A hair of slack, so the width Yoga rounded to the pixel lays out the lines measure did.
+    d.text = layoutText(data.attributedString, data.paragraphAttributes, width + 0.5f);
+  }
+  return d.text->layout;
 }
 
 ViewData *viewData(GtkWidget *widget) {

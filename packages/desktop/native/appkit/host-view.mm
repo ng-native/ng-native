@@ -1,5 +1,6 @@
 #import "host-view.h"
 
+#include "ngn/focus-order.h"
 #include "ngn/view-transform.h"
 
 #import <QuartzCore/QuartzCore.h>
@@ -202,6 +203,12 @@ static ngn::InputDispatcher *gViewInput;
 @end
 
 @implementation NGNView {
+  NSPointerArray *_labelledBy;
+  NSPointerArray *_describedBy;
+  // The views that name this one, which hear when its text changes.
+  NSHashTable<NGNView *> *_namedBy;
+  // Whether the relations' text is on the accessibilityControl, to be cleared once they go.
+  BOOL _controlRelated;
   Props::Shared _props;
   LayoutMetrics _layout;
   State::Shared _state;
@@ -279,7 +286,7 @@ static ngn::InputDispatcher *gViewInput;
 // Any tabIndex takes the focus, -1 too, as on the web: out of Tab order, but where a click or the
 // arrow keys in a composite widget move it (focus-order.h).
 - (BOOL)acceptsFirstResponder {
-  return _desktop.focusable.value_or(false) || _desktop.tabIndex.has_value();
+  return ngn::viewTakesFocus(_desktop);
 }
 
 
@@ -392,7 +399,84 @@ static BOOL focusFromKeyboard() {
   return NSAccessibilityRoleDescription(nsRole(info.role), nsSubrole(info.subrole));
 }
 
+- (void)setLabelledBy:(NSArray<NGNView *> *)labelledBy describedBy:(NSArray<NGNView *> *)describedBy {
+  auto weakly = [](NSArray<NGNView *> *views) {
+    NSPointerArray *array = [NSPointerArray weakObjectsPointerArray];
+    for (NGNView *view in views) {
+      [array addPointer:(__bridge void *)view];
+    }
+    return views.count > 0 ? array : nil;
+  };
+  for (NGNView *old in [_labelledBy.allObjects arrayByAddingObjectsFromArray:_describedBy.allObjects]) {
+    [old->_namedBy removeObject:self];
+  }
+  _labelledBy = weakly(labelledBy);
+  _describedBy = weakly(describedBy);
+  for (NGNView *named in [labelledBy arrayByAddingObjectsFromArray:describedBy]) {
+    if (!named->_namedBy) {
+      named->_namedBy = [NSHashTable weakObjectsHashTable];
+    }
+    [named->_namedBy addObject:self];
+  }
+  [self refreshControlRelations];
+}
+
+- (NSView *)accessibilityControl {
+  return nil;
+}
+
+- (void)refreshControlRelations {
+  NSView *control = [self accessibilityControl];
+  if (!control) {
+    return;
+  }
+  BOOL related = _labelledBy != nil || _describedBy != nil;
+  if (!related && !_controlRelated) {
+    return;
+  }
+  // The element AppKit reads is the control: the view named is its title element, and the text
+  // of the views named its label and help. With the relations gone, the control reads its own.
+  control.accessibilityTitleUIElement = _labelledBy.allObjects.firstObject;
+  control.accessibilityLabel = [self textOfRelation:_labelledBy];
+  control.accessibilityHelp = [self textOfRelation:_describedBy];
+  _controlRelated = related;
+}
+
+// This view's text changed, or the text of a view inside it: the views that name it, or one above
+// it, read it again.
+- (void)relatedTextChanged {
+  for (NSView *view = self; view; view = view.superview) {
+    if ([view isKindOfClass:NGNView.class]) {
+      for (NGNView *namer in ((NGNView *)view)->_namedBy.allObjects) {
+        [namer refreshControlRelations];
+      }
+    }
+  }
+}
+
+// The text of the views a relation names, in order: each one's label, or the text inside it, as
+// aria-labelledby reads them.
+- (NSString *)textOfRelation:(NSPointerArray *)views {
+  NSMutableArray<NSString *> *texts = [NSMutableArray array];
+  for (NGNView *view in views.allObjects) {
+    NSString *label = view.accessibilityLabel;
+    if (label.length > 0) {
+      [texts addObject:label];
+    } else {
+      [view collectTextInto:texts];
+    }
+  }
+  return texts.count > 0 ? [texts componentsJoinedByString:@" "] : nil;
+}
+
+- (id)accessibilityTitleUIElement {
+  return _labelledBy.allObjects.firstObject;
+}
+
 - (NSString *)accessibilityLabel {
+  if (NSString *named = [self textOfRelation:_labelledBy]) {
+    return named;
+  }
   auto info = [self axInfo];
   if (info.label.empty() && info.hidesChildren && ![_componentName isEqualToString:@"Paragraph"]) {
     // Read as one element with no label of its own: named by the text inside it, as iOS does.
@@ -432,6 +516,9 @@ static BOOL focusFromKeyboard() {
 }
 
 - (NSString *)accessibilityHelp {
+  if (NSString *described = [self textOfRelation:_describedBy]) {
+    return described;
+  }
   auto info = [self axInfo];
   return info.hint.empty() ? nil : nsString(info.hint);
 }
@@ -444,26 +531,57 @@ static BOOL focusFromKeyboard() {
   return info.value.empty() ? nil : nsString(info.value);
 }
 
-// The heading level, which AppKit names from macOS 26 and has no property for.
+// The attributes AppKit has no property for, under the names WebKit gives them for the same ARIA:
+// the heading level (AppKit's from macOS 26), whether the value is refused, an item's place in its
+// set, and a table's row and column counts. Each only while the props say it.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+- (NSDictionary<NSString *, id> *)extraAttributes {
+  auto info = [self axInfo];
+  NSMutableDictionary<NSString *, id> *extra = [NSMutableDictionary dictionary];
+  if (info.level && nativeRole(info.role) && info.role == ngn::AxRole::Heading) {
+    extra[@"AXHeadingLevel"] = @(*info.level);
+  }
+  if (info.invalid) {
+    extra[@"AXInvalid"] = @"true";
+  }
+  if (info.positionInSet) {
+    extra[@"AXARIAPosInSet"] = @(*info.positionInSet);
+  }
+  if (info.setSize) {
+    extra[@"AXARIASetSize"] = @(*info.setSize);
+  }
+  if (info.rowCount) {
+    extra[NSAccessibilityRowCountAttribute] = @(*info.rowCount);
+  }
+  if (info.columnCount) {
+    extra[NSAccessibilityColumnCountAttribute] = @(*info.columnCount);
+  }
+  return extra;
+}
+
 - (NSArray<NSAccessibilityAttributeName> *)accessibilityAttributeNames {
   NSArray *names = [super accessibilityAttributeNames];
-  auto info = [self axInfo];
-  if (info.level && nativeRole(info.role) && info.role == ngn::AxRole::Heading) {
-    return [names arrayByAddingObject:@"AXHeadingLevel"];
+  NSMutableArray *added = [NSMutableArray array];
+  for (NSString *name in [self extraAttributes]) {
+    if (![names containsObject:name]) {
+      [added addObject:name];
+    }
   }
-  return names;
+  return added.count > 0 ? [names arrayByAddingObjectsFromArray:added] : names;
 }
 
 - (id)accessibilityAttributeValue:(NSAccessibilityAttributeName)attribute {
-  if ([attribute isEqualToString:@"AXHeadingLevel"]) {
-    auto level = [self axInfo].level;
-    return level ? @(*level) : nil;
+  if (id value = [self extraAttributes][attribute]) {
+    return value;
   }
   return [super accessibilityAttributeValue:attribute];
 }
 #pragma clang diagnostic pop
+
+- (BOOL)isAccessibilityRequired {
+  return [self axInfo].required;
+}
 
 - (BOOL)isAccessibilityEnabled {
   return ![self axInfo].disabled;
@@ -512,23 +630,11 @@ static BOOL focusFromKeyboard() {
   if (!viewProps || !emitter) {
     return NO;
   }
-  auto dispatch = ngn::axDispatch(*viewProps, verb);
-  switch (dispatch.kind) {
-    case ngn::AxDispatch::Kind::None:
-      return NO;
-    case ngn::AxDispatch::Kind::Tap:
-      emitter->onAccessibilityTap();
-      return YES;
-    case ngn::AxDispatch::Kind::Escape:
-      emitter->onAccessibilityEscape();
-      return YES;
-    case ngn::AxDispatch::Kind::Action:
-      emitter->onAccessibilityAction(dispatch.action);
-      return YES;
-    case ngn::AxDispatch::Kind::Click:
-      return gViewInput != nullptr && gViewInput->activate(static_cast<SurfaceId>(_surfaceId), static_cast<Tag>(_reactTag));
-  }
-  return NO;
+  SurfaceId surface = static_cast<SurfaceId>(_surfaceId);
+  Tag tag = static_cast<Tag>(_reactTag);
+  return ngn::performAxVerb(*viewProps, emitter.get(), verb, [surface, tag] {
+    return gViewInput != nullptr && gViewInput->activate(surface, tag);
+  });
 }
 
 - (BOOL)accessibilityPerformPress {
@@ -586,6 +692,7 @@ static BOOL focusFromKeyboard() {
   if ([_componentName isEqualToString:@"Paragraph"]) {
     [self setNeedsDisplay:YES];
   }
+  [self relatedTextChanged];
 }
 
 - (void)updateLayout:(const LayoutMetrics &)metrics {
@@ -624,6 +731,7 @@ static BOOL focusFromKeyboard() {
 - (void)updateState:(const State::Shared &)state {
   _state = state;
   [self setNeedsDisplay:YES];
+  [self relatedTextChanged];
 }
 
 - (void)updateEventEmitter:(const EventEmitter::Shared &)emitter {
@@ -828,6 +936,10 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
   alignInput(_box, *p, self.layoutMetrics.layoutDirection);
   field.editable = p->editable && !p->readOnly;
   [_box applyOptions:ngn::textInputOptions(*p)];
+  // Required and refused on the control VoiceOver reads as the field, the one in the box now.
+  auto info = [self axInfo];
+  field.accessibilityRequired = info.required;
+  _box.invalid = info.invalid;
   // The text prop wins only when it is not older than what the field has sent (React Native iOS's
   // rule), and never while an input method is composing.
   if (ngn::controlledTextIsCurrent(p->mostRecentEventCount, _eventCount, [self composing]) && !p->text.empty()) {
@@ -1015,6 +1127,9 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
   alignInput(_text, *p, self.layoutMetrics.layoutDirection);
   _text.editable = p->editable && !p->readOnly;
   [_text applyOptions:ngn::textInputOptions(*p)];
+  auto info = [self axInfo];
+  _text.accessibilityRequired = info.required;
+  _text.invalid = info.invalid;
   if (ngn::controlledTextIsCurrent(p->mostRecentEventCount, _eventCount, _text.hasMarkedText) && !p->text.empty()) {
     NSString *text = nsString(p->text);
     if (![_text.string isEqualToString:text]) {

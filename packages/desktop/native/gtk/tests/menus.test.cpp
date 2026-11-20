@@ -236,7 +236,7 @@ TEST_CASE("a bar set just before its menus go is never drawn into them") {
   next->~GtkMenus();
 }
 
-TEST_CASE("a window's keys: the app's shortcuts first, then a menu item's key, then Return and Escape on its buttons") {
+TEST_CASE("a window's keys: the app's shortcuts first, then the focus keys, then a menu item's key, then Return and Escape on its buttons") {
   REQUIRE(ngn::testing::gtkReady());
   if (!onX11()) {
     MESSAGE("not X11: no keys can be played into GTK here");
@@ -268,6 +268,13 @@ TEST_CASE("a window's keys: the app's shortcuts first, then a menu item's key, t
         }
         return false;
       },
+      .focus = [&log](GtkWindow *, guint keyval, GdkModifierType) {
+        if (keyval == GDK_KEY_Tab || keyval == GDK_KEY_k) {
+          log.push_back("focus");
+          return true;
+        }
+        return false;
+      },
       .navigation = [](const ngn::KeyChord &chord) { return ngn::navigationFor(chord, ngn::linuxOs()); },
       .editingKey = [](const ngn::KeyChord &chord) { return ngn::editingChord(chord, ngn::linuxOs()); },
       .navigate = [&log](ngn::NavigationDirection d, GtkWindow *) { log.push_back(d == ngn::NavigationDirection::Back ? "back" : "forward"); },
@@ -287,8 +294,9 @@ TEST_CASE("a window's keys: the app's shortcuts first, then a menu item's key, t
     settle();
     settle();
   };
-  play("key k cmd\nkey q cmd\nkey c cmd\nkey return\nkey escape\n");
-  CHECK(log == std::vector<std::string>{"shortcut", "Quit", "Copy"});
+  play("key k cmd\nkey q cmd\nkey c cmd\nkey return\nkey escape\nkey tab\n");
+  // Ctrl+K is the app's before the focus sees it; Tab is the focus's.
+  CHECK(log == std::vector<std::string>{"shortcut", "Quit", "Copy", "focus"});
   // GTK shows a button pressed for a moment before it clicks.
   ngn::testing::runUntil([&saves, &cancels] { return saves == 1 && cancels == 1; });
 
@@ -380,6 +388,88 @@ TEST_CASE("the app's undo history runs its actions on the UI thread, whichever t
   undo->redo();
   settle();
   CHECK(ran.size() == 1);
+}
+
+namespace {
+
+void collectShortcuts(GtkWidget *widget, std::vector<std::pair<std::string, std::string>> &out) {
+  for (GtkWidget *c = gtk_widget_get_first_child(widget); c; c = gtk_widget_get_next_sibling(c)) {
+    if (std::string(G_OBJECT_TYPE_NAME(c)) == "GtkShortcutsShortcut") {
+      gchar *title = nullptr;
+      gchar *accelerator = nullptr;
+      g_object_get(c, "title", &title, "accelerator", &accelerator, nullptr);
+      out.emplace_back(title ? title : "", accelerator ? accelerator : "");
+      g_free(title);
+      g_free(accelerator);
+    }
+    collectShortcuts(c, out);
+  }
+}
+
+} // namespace
+
+TEST_CASE("Keyboard Shortcuts is a window over the app's, listing each group's keys as GTK writes them") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkWidget *parent = gtk_window_new();
+  std::vector<ngn::ShortcutGroup> groups{
+      {.title = "File & Edit", .entries = {{.title = "Save <now>", .chord = {.key = "s", .modifiers = ngn::Control}},
+                                           {.title = "Redo", .chord = {.key = "z", .modifiers = ngn::Control | ngn::Shift}}}},
+      {.title = "Notes", .entries = {{.title = "Keyboard Shortcuts", .chord = {.key = "?", .modifiers = ngn::Control | ngn::Shift}}}},
+  };
+  GtkWidget *window = ngn::gtk::keyboardShortcutsWindow(groups, GTK_WINDOW(parent));
+  REQUIRE(window);
+  CHECK(std::string(G_OBJECT_TYPE_NAME(window)) == "GtkShortcutsWindow");
+  CHECK(gtk_window_get_transient_for(GTK_WINDOW(window)) == GTK_WINDOW(parent));
+  std::vector<std::pair<std::string, std::string>> shown;
+  collectShortcuts(window, shown);
+  // The section first; the window's search page lists them again after it.
+  REQUIRE(shown.size() >= 3);
+  shown.resize(3);
+  CHECK(shown == std::vector<std::pair<std::string, std::string>>{
+                     {"Save <now>", "<Control>s"}, {"Redo", "<Shift><Control>z"}, {"Keyboard Shortcuts", "<Shift><Control>question"}});
+  gtk_window_destroy(GTK_WINDOW(window));
+  gtk_window_destroy(GTK_WINDOW(parent));
+}
+
+TEST_CASE("the keypad's navigation keys reach the focus callback as the plain ones do, and no binding of the plain key hears them") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkWidget *window = gtk_window_new();
+  std::vector<guint> focused;
+  std::vector<std::string> bound;
+  ngn::gtk::routeKeys(GTK_WINDOW(window), std::make_shared<ngn::gtk::KeyRouting>(ngn::gtk::KeyRouting{
+      .shortcut = [&bound](const ngn::KeyChord &chord, bool) {
+        bound.push_back(chord.key);
+        return false;
+      },
+      .focus = [&focused](GtkWindow *, guint keyval, GdkModifierType) {
+        focused.push_back(keyval);
+        return true;
+      },
+  }));
+  // The window's capture-phase key controller, as GTK would hand it the press.
+  GtkEventController *routing = nullptr;
+  GListModel *controllers = gtk_widget_observe_controllers(window);
+  for (guint i = 0; i < g_list_model_get_n_items(controllers) && !routing; i++) {
+    auto *c = static_cast<GtkEventController *>(g_list_model_get_item(controllers, i));
+    if (GTK_IS_EVENT_CONTROLLER_KEY(c) && gtk_event_controller_get_propagation_phase(c) == GTK_PHASE_CAPTURE) {
+      routing = c;
+    }
+    g_object_unref(c);
+  }
+  g_object_unref(controllers);
+  REQUIRE(routing);
+  auto press = [routing](guint keyval) {
+    gboolean used = FALSE;
+    g_signal_emit_by_name(routing, "key-pressed", keyval, 0u, GdkModifierType(0), &used);
+    return used;
+  };
+  for (guint keyval : {GDK_KEY_Home, GDK_KEY_KP_Home, GDK_KEY_KP_Left, GDK_KEY_KP_Up, GDK_KEY_KP_End, GDK_KEY_KP_Down}) {
+    CHECK(press(keyval));
+  }
+  CHECK(focused == std::vector<guint>{GDK_KEY_Home, GDK_KEY_KP_Home, GDK_KEY_KP_Left, GDK_KEY_KP_Up, GDK_KEY_KP_End, GDK_KEY_KP_Down});
+  // The shortcut lookup saw the plain Home only.
+  CHECK(bound == std::vector<std::string>{"Home"});
+  gtk_window_destroy(GTK_WINDOW(window));
 }
 
 TEST_CASE("an undo's own registration is the redo, so Redo is there after one Undo") {

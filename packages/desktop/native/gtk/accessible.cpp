@@ -1,8 +1,15 @@
 #include "accessible.h"
 
+#include "text-field.h"
+#include "view-widget.h"
+
 #include "ngn/native-controls.h"
 
 #include <react/renderer/components/view/ViewProps.h>
+
+#include <dlfcn.h>
+
+#include <string_view>
 
 namespace ngn::gtk {
 
@@ -21,8 +28,9 @@ GtkAccessibleRole accessibleRole(const facebook::react::ShadowView &view) {
   auto props = std::dynamic_pointer_cast<const facebook::react::ViewProps>(view.props);
   auto info = accessibilityOf(view);
   // A native control's GTK widget is the accessible element, with its own role and state, as
-  // AppKit's control is on macOS: the view holding it is not one too.
-  if (!props || !info || controlKind(view.componentName)) {
+  // AppKit's control is on macOS: the view holding it is not one too. So is a text input's field,
+  // a text box with the label.
+  if (!props || !info || controlKind(view.componentName) || std::string_view(view.componentName) == "TextInput") {
     return GTK_ACCESSIBLE_ROLE_GENERIC;
   }
   return gtkRole(ariaRole(roleName(*props), *info));
@@ -99,6 +107,81 @@ GtkAccessibleRole gtkRole(AriaRole role) {
   return GTK_ACCESSIBLE_ROLE_GENERIC;
 }
 
+GtkWidget *accessibleWidget(const ViewData &view) {
+  // The editor, not a multiline field's scrolled window: that one is only a group.
+  return view.field ? view.field->text : view.widget;
+}
+
+GtkWidget *relationWidget(const ViewData &view) {
+  return view.control ? view.control : accessibleWidget(view);
+}
+
+namespace {
+
+struct AxActions {
+  GSimpleActionGroup *group{nullptr};
+  std::function<bool(GtkWidget *, AxVerb)> perform;
+};
+
+constexpr std::pair<const char *, AxVerb> kVerbs[] = {
+    {"press", AxVerb::Press}, {"increment", AxVerb::Increment}, {"decrement", AxVerb::Decrement}, {"cancel", AxVerb::Cancel}};
+
+} // namespace
+
+void applyAccessibleActions(GtkWidget *widget, const AxInfo &info, std::function<bool(GtkWidget *, AxVerb)> perform) {
+  auto *actions = static_cast<AxActions *>(g_object_get_data(G_OBJECT(widget), "ngn-ax-actions"));
+  bool offers = info.element && !info.disabled && (info.offersPress || info.offersIncrement || info.offersCancel);
+  if (!actions && !offers) {
+    return;
+  }
+  if (!actions) {
+    actions = new AxActions{g_simple_action_group_new(), std::move(perform)};
+    for (const auto &[name, verb] : kVerbs) {
+      GSimpleAction *action = g_simple_action_new(name, nullptr);
+      g_signal_connect(action, "activate", G_CALLBACK(+[](GSimpleAction *self, GVariant *, gpointer data) {
+        auto *widget = static_cast<GtkWidget *>(data);
+        auto *actions = static_cast<AxActions *>(g_object_get_data(G_OBJECT(widget), "ngn-ax-actions"));
+        const char *name = g_action_get_name(G_ACTION(self));
+        for (const auto &[verbName, verb] : kVerbs) {
+          if (actions && std::string_view(name) == verbName) {
+            actions->perform(widget, verb);
+          }
+        }
+      }), widget);
+      g_action_map_add_action(G_ACTION_MAP(actions->group), G_ACTION(action));
+      g_object_unref(action);
+    }
+    gtk_widget_insert_action_group(widget, "accessibility", G_ACTION_GROUP(actions->group));
+    g_object_set_data_full(G_OBJECT(widget), "ngn-ax-actions", actions, +[](gpointer data) {
+      auto *a = static_cast<AxActions *>(data);
+      g_object_unref(a->group);
+      delete a;
+    });
+  }
+  auto enable = [actions](const char *name, bool on) {
+    g_simple_action_set_enabled(G_SIMPLE_ACTION(g_action_map_lookup_action(G_ACTION_MAP(actions->group), name)), on);
+  };
+  // GTK checks the widget's sensitivity, not the accessible disabled state, so a disabled view
+  // offers no action of its own accord.
+  bool live = info.element && !info.disabled;
+  enable("press", live && info.offersPress);
+  enable("increment", live && info.offersIncrement);
+  enable("decrement", live && info.offersIncrement);
+  enable("cancel", live && info.offersCancel);
+}
+
+bool announceOn(GtkWidget *widget, const Announcement &announcement) {
+  using Announce = void (*)(GtkAccessible *, const char *, int);
+  static auto announce = reinterpret_cast<Announce>(dlsym(RTLD_DEFAULT, "gtk_accessible_announce"));
+  if (!announce || !widget || announcement.text.empty()) {
+    return false;
+  }
+  // GtkAccessibleAnnouncementPriority: LOW, MEDIUM, HIGH, one to one.
+  int priority = announcement.priority == AnnouncementPriority::Low ? 0 : announcement.priority == AnnouncementPriority::Medium ? 1 : 2;
+  announce(GTK_ACCESSIBLE(widget), announcement.text.c_str(), priority);
+  return true;
+}
+
 void applyAccessibility(GtkWidget *widget, const AxInfo &info) {
   GtkAccessible *accessible = GTK_ACCESSIBLE(widget);
   auto text = [accessible](GtkAccessibleProperty property, const std::string &value) {
@@ -132,6 +215,28 @@ void applyAccessibility(GtkWidget *widget, const AxInfo &info) {
   } else {
     gtk_accessible_reset_state(accessible, GTK_ACCESSIBLE_STATE_EXPANDED);
   }
+  if (info.required) {
+    gtk_accessible_update_property(accessible, GTK_ACCESSIBLE_PROPERTY_REQUIRED, TRUE, -1);
+  } else {
+    gtk_accessible_reset_property(accessible, GTK_ACCESSIBLE_PROPERTY_REQUIRED);
+  }
+  if (info.invalid) {
+    gtk_accessible_update_state(accessible, GTK_ACCESSIBLE_STATE_INVALID, GTK_ACCESSIBLE_INVALID_TRUE, -1);
+  } else {
+    gtk_accessible_reset_state(accessible, GTK_ACCESSIBLE_STATE_INVALID);
+  }
+  // GTK has an item's place in its set and a grid's counts as integer relations.
+  auto count = [accessible](GtkAccessibleRelation relation, std::optional<int> value) {
+    if (value) {
+      gtk_accessible_update_relation(accessible, relation, *value, -1);
+    } else {
+      gtk_accessible_reset_relation(accessible, relation);
+    }
+  };
+  count(GTK_ACCESSIBLE_RELATION_POS_IN_SET, info.positionInSet);
+  count(GTK_ACCESSIBLE_RELATION_SET_SIZE, info.setSize);
+  count(GTK_ACCESSIBLE_RELATION_ROW_COUNT, info.rowCount);
+  count(GTK_ACCESSIBLE_RELATION_COL_COUNT, info.columnCount);
 }
 
 } // namespace ngn::gtk

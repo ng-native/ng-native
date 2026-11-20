@@ -1,7 +1,11 @@
 // `<split-view>` and its sidebar on GTK, over the core's split views and source lists
 // (split-view.h): the same for the window's split view and a plain one in the content.
 //
-// A placed split view holds an AdwNavigationSplitView in an AdwBreakpointBin, filling its view. Each
+// A placed split view holds an AdwNavigationSplitView in an AdwBreakpointBin, filling its view. The
+// window's own runs the full height of the window, as a libadwaita window lays one out: each pane is
+// under a header bar of its own in an AdwToolbarView, the window's header bar (its title, history
+// pair, sidebar button and header items) moves over the content pane, and it moves back as the split
+// view goes. A window whose content already runs under its header bar keeps it there. Each
 // pane moves into a slot of its own in a page of the split view, a container of its own for input,
 // and its size goes back to its shadow node as state, coalesced to once a frame (FrameSizes). The
 // core owns collapse (FoldingSplit): the bin's one AdwBreakpoint, whose condition is the core's
@@ -22,9 +26,11 @@
 
 #include <gtk/gtk.h>
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace ngn::gtk {
@@ -48,9 +54,22 @@ class SplitViews {
   void setSourceLists(Tag parent, const std::vector<SourceList> &lists);
   // After a transaction: each source list over its sections' frames.
   void layOut();
+  // The window's header bar over the content of the window split view that is shown, else over the
+  // whole window: a split view whose screen is covered, or that has left the window, is not shown.
+  // Called as a screen is covered or uncovered, and after a transaction.
+  void placeHeaders();
+
+  // The app's preferences, where a sidebar with an autosaveName keeps whether it is collapsed
+  // (sidebarCollapsedKey): set once by the host. Without them nothing is kept.
+  std::function<std::optional<folly::dynamic>(const std::string &key)> readPreference;
+  std::function<void(const std::string &key, const folly::dynamic &value)> writePreference;
 
   // The window split view of `surfaceId`'s window, if it has one.
   std::optional<Tag> windowSplit(SurfaceId surfaceId) const;
+  // The full-height sidebar's own header bar while the sidebar shows beside the content, where the
+  // sidebar button goes, as macOS puts it over the sidebar; null otherwise, when the button stays
+  // in the window's header bar.
+  GtkWidget *sidebarHeaderShown(SurfaceId surfaceId) const;
   // Show Sidebar (F9, the header bar's sidebar button) for the window's split view. Whether there
   // was one.
   bool toggle(SurfaceId surfaceId);
@@ -58,6 +77,9 @@ class SplitViews {
   // For tests: the AdwNavigationSplitView and its breakpoint, the window crossing the compact
   // width as the breakpoint says, and a source list's GtkListBox.
   GtkWidget *splitWidget(Tag split) const;
+  // The window split view's button in the sidebar's header bar that brings the content back, shown
+  // while a compact window shows the sidebar alone.
+  GtkWidget *contentButton(Tag split) const;
   AdwBreakpoint *breakpoint(Tag split) const;
   void setCompact(Tag split, bool compact);
   std::vector<GtkWidget *> lists(Tag parent) const;
@@ -80,9 +102,18 @@ class SplitViews {
     AdwBreakpoint *breakpoint{nullptr};
     GtkWidget *sidebarSlot{nullptr};
     GtkWidget *contentSlot{nullptr};
+    // A window's split view, full height: the sidebar's own header bar, and the toolbar view over
+    // the content that holds the window's header bar while the split view is there.
+    GtkWidget *sidebarHeader{nullptr};
+    GtkWidget *contentButton{nullptr};
+    GtkWidget *contentToolbar{nullptr};
     Tag sidebar{-1};
     Tag content{-1};
     SidebarCollapse collapse;
+    // The collapsed input as last applied, so an update that leaves it alone does not reapply it.
+    std::optional<bool> collapsedProp;
+    // Where the sidebar button was last laid out: over the sidebar, or in the window's header bar.
+    bool buttonOverSidebar{false};
     FoldingSplit folding;
     SidebarWidths widths;
   };
@@ -98,10 +129,18 @@ class SplitViews {
     bool syncing{false};
   };
   void host(Split &s, Tag pane);
+  // A sidebar first hosted, by placing the split or inserting the sidebar: its widths, the app's
+  // collapsed prop, then the saved preference over it.
+  void applySidebar(Split &s);
+  // Moves the window's header bar over the content pane, or back over the whole window.
+  void moveHeaderBar(Split &s, bool overContent);
+  void placeHeader(SurfaceId surfaceId);
   void tearDown(Split &s);
   void refill(Tag parent);
   void applyWidths(Split &s);
   void show(Split &s);
+  // Saves the collapsed state under the sidebar's autosaveName.
+  void autosave(const Split &s);
   void fill(Tag parent, Lists &l, size_t index);
   void flushSizes();
   std::optional<Tag> splitOf(Tag pane) const;

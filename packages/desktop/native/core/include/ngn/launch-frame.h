@@ -7,10 +7,15 @@
 // Toolkit-free.
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <optional>
 
 namespace ngn {
+
+// How long a launch's first frame stays on screen before the launch counts as a success: an update
+// that crashes before then is rolled back at the next launch.
+constexpr double kLaunchSuccessSeconds = 10;
 
 class LaunchFrame {
  public:
@@ -23,6 +28,21 @@ class LaunchFrame {
   // A reload began, of this launch or a new one: the instance it replaces owes nothing now.
   void reloadBegan() {
     owed_.reset();
+  }
+
+  // A reload's bundle is loading, and then whether it loaded. Any thread, unlike the rest. A clean
+  // quit marks the launch a success only while its bundle is loaded: a reload still under way, or
+  // one whose bundle did not load, leaves the launch mark for the next launch to roll back.
+  void bundleLoading() {
+    bundleLoaded_ = false;
+  }
+
+  void bundleLoadEnded(bool loaded) {
+    bundleLoaded_ = loaded;
+  }
+
+  bool bundleLoaded() const {
+    return bundleLoaded_;
   }
 
   // A window shows content the instance `instance` mounted while `current` is the launch running:
@@ -42,6 +62,7 @@ class LaunchFrame {
     uint64_t instance;
   };
   std::optional<Owed> owed_;
+  std::atomic<bool> bundleLoaded_{true};
 };
 
 } // namespace ngn

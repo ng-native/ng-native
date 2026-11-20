@@ -87,12 +87,17 @@ class FrameLoop : public std::enable_shared_from_this<FrameLoop> {
 reanimated::PlatformDepMethodsHolder platformMethods(const std::shared_ptr<FrameLoop> &loop) {
   return reanimated::PlatformDepMethodsHolder{
       .requestRender = [loop](std::function<void(const double)> onRender) { loop->request(std::move(onRender)); },
-      // react-native-screens' snapshots, which the desktop's screens do not take.
+#ifdef __APPLE__
+      // Reanimated has these two on Apple only. react-native-screens' snapshots, which the
+      // desktop's screens do not take, and the props a view is mounted with, which Reanimated reads
+      // only while its synchronous updates are on (IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS, off): GTK
+      // takes the same path as AppKit with the flags as they ship.
       .forceScreenSnapshotFunction = [](Tag) { return false; },
       .readMountedViewPropsFunction = [](Tag tag) -> Props::Shared {
         auto read = workletHost().readMountedProps;
         return read ? read(tag) : nullptr;
       },
+#endif
       .synchronouslyUpdateUIPropsFunction =
           [](const int tag, const folly::dynamic &props) {
             if (auto update = workletHost().synchronouslyUpdateView) {

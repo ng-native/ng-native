@@ -4,9 +4,11 @@
 // maps the role and subrole to its own (NSAccessibility on macOS).
 #pragma once
 
+#include <react/renderer/components/view/ViewEventEmitter.h>
 #include <react/renderer/components/view/ViewProps.h>
 #include <react/renderer/mounting/ShadowView.h>
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -79,6 +81,16 @@ struct AxInfo {
   std::optional<int> checked;
   // Nothing for a view that neither expands nor collapses.
   std::optional<bool> expanded;
+  // `aria-required` and `aria-invalid`: a field that must be filled in, or whose value is refused.
+  bool required{false};
+  bool invalid{false};
+  // `aria-posinset` and `aria-setsize`: an item's place in its set, from 1, and how many the set
+  // has, for a set not all in the tree. Nothing where unset or below 1.
+  std::optional<int> positionInSet;
+  std::optional<int> setSize;
+  // `aria-rowcount` and `aria-colcount`: how many rows and columns a grid or table has.
+  std::optional<int> rowCount;
+  std::optional<int> columnCount;
   // The declared actions AppKit has no verb of its own for, in their order.
   std::vector<AxAction> customActions;
   // Whether the view offers AppKit's press (VoiceOver's VO-Space), increment and decrement, and
@@ -136,5 +148,14 @@ struct AxDispatch {
 };
 
 AxDispatch axDispatch(const facebook::react::ViewProps &props, AxVerb verb);
+
+// Sends what `verb` reaches on a view through its emitter, as axDispatch decides; a click goes to
+// `click`, which the host sends as a press, and needs no emitter. Whether anything was sent: what
+// AppKit's perform methods and GTK's accessible actions answer.
+bool performAxVerb(
+    const facebook::react::ViewProps &props,
+    const facebook::react::ViewEventEmitter *emitter,
+    AxVerb verb,
+    const std::function<bool()> &click);
 
 } // namespace ngn

@@ -19,7 +19,10 @@
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
+#include <filesystem>
 #include <fstream>
+#include <future>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -592,6 +595,244 @@ TEST_CASE("requests over libcurl with credentials share cookies until they are c
   // A response's cookies are not kept for a request without credentials.
   get("/set-cookie", false);
   CHECK(echoedHeader(echoed(*get("/echo", true)), "cookie") == "<none>");
+}
+
+TEST_CASE("cookies over libcurl outlive the process in the cookie file, all but session ones, until they are cleared") {
+  TestServer server;
+  auto file = std::filesystem::temp_directory_path() / ("ngn-cookies-" + std::to_string(getpid())) / "cookies.txt";
+  struct Remove {
+    std::filesystem::path dir;
+    ~Remove() {
+      std::filesystem::remove_all(dir);
+    }
+  } remove{file.parent_path()};
+  auto get = [&](ngn::CurlNetwork &network, const std::string &path) {
+    auto r = std::make_shared<Recorder>();
+    network.http->send({.url = server.url(path), .withCredentials = true}, Recorder::owned(r));
+    REQUIRE(r->waitForComplete());
+    return r;
+  };
+  auto cookies = [&](ngn::CurlNetwork &network) { return echoedHeader(echoed(*get(network, "/echo")), "cookie"); };
+  {
+    auto first = ngn::makeCurlNetwork({.cookieFile = file.string()});
+    get(first, "/set-cookies");
+    CHECK(cookies(first) == "flavour=lemon; visit=1; token=abc");
+  }
+  // Saved as each request finishes, readable by the user alone.
+  REQUIRE(std::filesystem::exists(file));
+  using std::filesystem::perms;
+  CHECK((std::filesystem::status(file).permissions() & perms::all) == (perms::owner_read | perms::owner_write));
+  {
+    // The next launch has the lasting cookies, HttpOnly included, and not the session's.
+    auto next = ngn::makeCurlNetwork({.cookieFile = file.string()});
+    CHECK(cookies(next) == "flavour=lemon; token=abc");
+    std::promise<bool> cleared;
+    next.http->clearCookies([&](bool any) { cleared.set_value(any); });
+    CHECK(cleared.get_future().get());
+    // Cleared in the file at once, not only when the client goes: a crash then keeps none.
+    std::ifstream in(file);
+    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    CHECK(text.find("flavour") == std::string::npos);
+  }
+  {
+    auto afterClear = ngn::makeCurlNetwork({.cookieFile = file.string()});
+    CHECK(cookies(afterClear) == "<none>");
+  }
+  // A cookie that has expired since it was saved is not sent.
+  {
+    std::ofstream out(file, std::ios::trunc);
+    out << "127.0.0.1\tFALSE\t/\tFALSE\t1000\told\tgone\n127.0.0.1\tFALSE\t/\tFALSE\t" << (time(nullptr) + 3600) << "\tfresh\tyes\n";
+  }
+  auto later = ngn::makeCurlNetwork({.cookieFile = file.string()});
+  CHECK(cookies(later) == "fresh=yes");
+}
+
+TEST_CASE("the desktop's proxy answer becomes libcurl's: the first usable, GNOME's socks as SOCKS 5, direct as none") {
+  CHECK(ngn::curlProxyFor({"http://proxy.example:3128", "direct://"}) == "http://proxy.example:3128");
+  CHECK(ngn::curlProxyFor({"direct://"}) == "");
+  // The proxy resolves the host, as GLib's SOCKS 5 does: a host only its side knows still connects.
+  CHECK(ngn::curlProxyFor({"socks://proxy.example:1080"}) == "socks5h://proxy.example:1080");
+  CHECK(ngn::curlProxyFor({"SOCKS5://proxy.example:1080"}) == "socks5h://proxy.example:1080");
+  CHECK(ngn::curlProxyFor({"socks5h://proxy.example:1080"}) == "socks5h://proxy.example:1080");
+  CHECK(ngn::curlProxyFor({"socks4a://proxy.example:1080"}) == "socks4a://proxy.example:1080");
+  CHECK(ngn::curlProxyFor({"HTTPS://proxy.example"}) == "HTTPS://proxy.example");
+  CHECK(ngn::curlProxyFor({"pac+http://wpad/wpad.dat", "http://proxy.example:3128"}) == "http://proxy.example:3128");
+  CHECK(ngn::curlProxyFor({"pac+http://wpad/wpad.dat"}) == std::nullopt);
+  CHECK(ngn::curlProxyFor({}) == std::nullopt);
+}
+
+TEST_CASE("a libcurl proxy variable set, not empty, is the environment's proxy; NO_PROXY alone is not") {
+  auto env = [](std::map<std::string, std::string> values) {
+    return [values](const char *name) -> std::optional<std::string> {
+      auto it = values.find(name);
+      return it == values.end() ? std::nullopt : std::optional<std::string>(it->second);
+    };
+  };
+  CHECK_FALSE(ngn::proxyEnvironmentSet(env({})));
+  CHECK_FALSE(ngn::proxyEnvironmentSet(env({{"NO_PROXY", "localhost"}, {"no_proxy", "localhost"}})));
+  CHECK_FALSE(ngn::proxyEnvironmentSet(env({{"https_proxy", ""}})));
+  for (const char *name : {"http_proxy", "https_proxy", "HTTPS_PROXY", "ws_proxy", "wss_proxy", "WS_PROXY", "WSS_PROXY", "all_proxy", "ALL_PROXY"}) {
+    CHECK(ngn::proxyEnvironmentSet(env({{name, "http://proxy.example:3128"}})));
+  }
+  // curl reads only the lower-case http_proxy, so HTTP_PROXY names no proxy.
+  CHECK_FALSE(ngn::proxyEnvironmentSet(env({{"HTTP_PROXY", "http://proxy.example:3128"}})));
+}
+
+namespace {
+
+// Sets an environment variable for a scope, and puts back what was there.
+struct ScopedEnv {
+  std::string name;
+  std::optional<std::string> was;
+  ScopedEnv(std::string n, const std::string &value) : name(std::move(n)) {
+    if (const char *v = getenv(name.c_str())) {
+      was = v;
+    }
+    setenv(name.c_str(), value.c_str(), 1);
+  }
+  ~ScopedEnv() {
+    if (was) {
+      setenv(name.c_str(), was->c_str(), 1);
+    } else {
+      unsetenv(name.c_str());
+    }
+  }
+};
+
+} // namespace
+
+TEST_CASE("a request over libcurl goes through the desktop's proxy for its url, unless the environment names one") {
+  TestServer server;
+  auto proxy = server.url("");
+  std::mutex mutex;
+  std::vector<std::string> asked;
+  auto desktop = [&](std::vector<std::string> answer) {
+    return [&, answer](const std::string &url) {
+      std::lock_guard lock(mutex);
+      asked.push_back(url);
+      return answer;
+    };
+  };
+  auto host = [](ngn::CurlNetwork &network, const std::string &url) {
+    auto r = std::make_shared<Recorder>();
+    network.http->send({.url = url}, Recorder::owned(r));
+    REQUIRE(r->waitForComplete());
+    return echoedHeader(echoed(*r), "host");
+  };
+  // Clear any proxy the machine running the tests sets.
+  std::vector<std::unique_ptr<ScopedEnv>> cleared;
+  for (const char *name : {"http_proxy", "https_proxy", "HTTPS_PROXY", "ws_proxy", "wss_proxy", "WS_PROXY", "WSS_PROXY", "all_proxy", "ALL_PROXY"}) {
+    cleared.push_back(std::make_unique<ScopedEnv>(name, ""));
+  }
+  {
+    // A host that does not resolve answers only through the proxy, which the test server plays.
+    auto network = ngn::makeCurlNetwork({.desktopProxies = desktop({"pac+http://wpad/wpad.dat", proxy})});
+    CHECK(host(network, "http://proxied.invalid/echo") == "proxied.invalid");
+    // Asked once for an origin, not for each request to it: a portal answer can take a PAC script.
+    CHECK(host(network, "http://proxied.invalid/echo?again") == "proxied.invalid");
+    std::lock_guard lock(mutex);
+    CHECK(asked == std::vector<std::string>{"http://proxied.invalid/echo"});
+  }
+  {
+    // A WebSocket asks with its http url.
+    SocketRecorder socket;
+    auto network = ngn::makeCurlNetwork({.desktopProxies = desktop({"direct://"})});
+    auto ws = network.webSockets->connect(server.ws("/ws"), {}, {}, socket.callbacks());
+    REQUIRE(ws);
+    ws->sendText("hi");
+    REQUIRE(socket.waitFor(2));
+    std::lock_guard lock(mutex);
+    CHECK(asked.back() == server.url("/ws"));
+  }
+  {
+    // The environment's proxy wins, and the desktop is not asked.
+    ScopedEnv env("http_proxy", proxy);
+    asked.clear();
+    auto network = ngn::makeCurlNetwork({.desktopProxies = desktop({"direct://"})});
+    CHECK(host(network, "http://proxied.invalid/echo") == "proxied.invalid");
+    std::lock_guard lock(mutex);
+    CHECK(asked.empty());
+  }
+}
+
+TEST_CASE("a slow desktop proxy lookup for one origin holds up no other transfer, and a WebSocket proxy variable stops the lookup") {
+  TestServer server;
+  auto proxy = server.url("");
+  std::promise<void> release;
+  auto released = release.get_future().share();
+  std::mutex mutex;
+  std::vector<std::string> asked;
+  auto desktop = [&](const std::string &url) -> std::vector<std::string> {
+    {
+      std::lock_guard lock(mutex);
+      asked.push_back(url);
+    }
+    if (url.find("slow.invalid") != std::string::npos) {
+      released.wait();
+      return {proxy};
+    }
+    return {"direct://"};
+  };
+  std::vector<std::unique_ptr<ScopedEnv>> cleared;
+  for (const char *name : {"http_proxy", "https_proxy", "HTTPS_PROXY", "ws_proxy", "wss_proxy", "WS_PROXY", "WSS_PROXY", "all_proxy", "ALL_PROXY"}) {
+    cleared.push_back(std::make_unique<ScopedEnv>(name, ""));
+  }
+  {
+    auto network = ngn::makeCurlNetwork({.desktopProxies = desktop});
+    auto slow = std::make_shared<Recorder>();
+    network.http->send({.url = "http://slow.invalid/echo"}, Recorder::owned(slow));
+    // The lookup for the slow origin is under way, and the network thread answers another request.
+    auto fast = std::make_shared<Recorder>();
+    network.http->send({.url = server.url("/echo")}, Recorder::owned(fast));
+    CHECK(fast->waitForComplete(5s));
+    CHECK(fast->error.empty());
+    {
+      std::lock_guard lock(slow->mutex);
+      CHECK_FALSE(slow->complete);
+    }
+    release.set_value();
+    CHECK(slow->waitForComplete());
+    CHECK(slow->error.empty());
+  }
+  {
+    // libcurl's own variable for a WebSocket's proxy is the environment's proxy: the desktop is not asked.
+    ScopedEnv env("wss_proxy", proxy);
+    {
+      std::lock_guard lock(mutex);
+      asked.clear();
+    }
+    auto network = ngn::makeCurlNetwork({.desktopProxies = desktop});
+    auto r = std::make_shared<Recorder>();
+    network.http->send({.url = server.url("/echo")}, Recorder::owned(r));
+    CHECK(r->waitForComplete());
+    std::lock_guard lock(mutex);
+    CHECK(asked.empty());
+  }
+}
+
+TEST_CASE("the User-Agent over libcurl names the app and its version first, as CFNetwork's does on macOS") {
+  CHECK(ngn::curlUserAgent("Notes", "1.2.0").starts_with("Notes/1.2.0 ng-native libcurl/"));
+  // A name is one HTTP token: what a token cannot hold is percent-encoded, as CFNetwork does.
+  CHECK(ngn::curlUserAgent("My Notes (beta)", "2").starts_with("My%20Notes%20%28beta%29/2 ng-native libcurl/"));
+  CHECK(ngn::curlUserAgent("Café", "1").starts_with("Caf%C3%A9/1 "));
+  CHECK(ngn::curlUserAgent("Notes", "").starts_with("Notes ng-native libcurl/"));
+  // So is the version, which a dev run takes from the environment: no header can be broken into.
+  CHECK(ngn::curlUserAgent("Notes", "1.0 beta\r\nX-Evil: 1").starts_with("Notes/1.0%20beta%0D%0AX-Evil%3A%201 ng-native"));
+  CHECK(ngn::curlUserAgent("", "1.0").starts_with("ng-native libcurl/"));
+
+  TestServer server;
+  auto agent = [&](ngn::CurlNetwork &network, ngn::Headers headers) {
+    auto r = std::make_shared<Recorder>();
+    network.http->send({.url = server.url("/echo"), .headers = std::move(headers)}, Recorder::owned(r));
+    REQUIRE(r->waitForComplete());
+    return echoedHeader(echoed(*r), "user-agent");
+  };
+  auto named = ngn::makeCurlNetwork({.appName = "Notes", .appVersion = "1.2.0"});
+  CHECK(agent(named, {}) == ngn::curlUserAgent("Notes", "1.2.0"));
+  // A request's own User-Agent replaces it.
+  CHECK(agent(named, {{"User-Agent", "custom/1"}}) == "custom/1");
+  auto unnamed = ngn::makeCurlNetwork();
+  CHECK(agent(unnamed, {}) == ngn::curlUserAgent("", ""));
 }
 
 TEST_CASE("a compressed body over libcurl arrives decoded") {

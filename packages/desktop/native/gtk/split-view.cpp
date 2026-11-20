@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <string>
 
 using facebook::react::ConcreteState;
@@ -139,7 +140,87 @@ SplitViews::~SplitViews() {
   }
 }
 
+void SplitViews::moveHeaderBar(Split &s, bool overContent) {
+  const WindowChrome *chrome = chromeOf(backend_.surfaceWidget(s.surfaceId));
+  if (!chrome || !s.contentToolbar) {
+    return;
+  }
+  GtkWidget *header = chrome->headerBar;
+  bool overIt = gtk_widget_is_ancestor(header, s.contentToolbar);
+  if (overIt == overContent) {
+    return;
+  }
+  g_object_ref(header);
+  if (overContent) {
+    adw_toolbar_view_remove(ADW_TOOLBAR_VIEW(chrome->toolbarView), header);
+    adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(s.contentToolbar), header);
+  } else {
+    adw_toolbar_view_remove(ADW_TOOLBAR_VIEW(s.contentToolbar), header);
+    // First again, above a menu bar.
+    GtkWidget *menuBar = chrome->menuBar;
+    if (menuBar) {
+      g_object_ref(menuBar);
+      adw_toolbar_view_remove(ADW_TOOLBAR_VIEW(chrome->toolbarView), menuBar);
+    }
+    adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(chrome->toolbarView), header);
+    if (menuBar) {
+      adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(chrome->toolbarView), menuBar);
+      g_object_unref(menuBar);
+    }
+  }
+  g_object_unref(header);
+}
+
+namespace {
+
+// Whether `widget` is in a window and shown there: no ancestor is hidden, or a covered child.
+bool shownInWindow(GtkWidget *widget) {
+  if (!widget || !gtk_widget_get_root(widget)) {
+    return false;
+  }
+  for (GtkWidget *w = widget; w; w = gtk_widget_get_parent(w)) {
+    if (!gtk_widget_get_visible(w) || !gtk_widget_get_child_visible(w)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+} // namespace
+
+void SplitViews::placeHeader(SurfaceId surfaceId) {
+  Split *shown = nullptr;
+  for (auto &[tag, s] : splits_) {
+    if (s.surfaceId == surfaceId && s.window && s.contentToolbar && shownInWindow(backend_.view(tag))) {
+      shown = &s;
+      break;
+    }
+  }
+  // Back over the window first, from a split view that is not the one it goes to.
+  for (auto &[tag, s] : splits_) {
+    if (s.surfaceId == surfaceId && &s != shown) {
+      moveHeaderBar(s, false);
+    }
+  }
+  if (shown) {
+    moveHeaderBar(*shown, true);
+  }
+}
+
+void SplitViews::placeHeaders() {
+  std::set<SurfaceId> surfaces;
+  for (const auto &[tag, s] : splits_) {
+    if (s.window && s.contentToolbar) {
+      surfaces.insert(s.surfaceId);
+    }
+  }
+  for (SurfaceId surfaceId : surfaces) {
+    placeHeader(surfaceId);
+  }
+}
+
 void SplitViews::tearDown(Split &s) {
+  moveHeaderBar(s, false);
   for (Tag pane : {s.sidebar, s.content}) {
     if (pane >= 0) {
       backend_.unhostView(pane);
@@ -168,8 +249,34 @@ void SplitViews::place(SurfaceId surfaceId, Tag split, bool window) {
     NGN_PANE_SLOT(out)->splits = this;
     return out;
   };
-  AdwNavigationPage *sidebar = adw_navigation_page_new(slot(s.sidebarSlot), "Sidebar");
-  AdwNavigationPage *content = adw_navigation_page_new(slot(s.contentSlot), "Content");
+  GtkWidget *sidebarChild = slot(s.sidebarSlot);
+  GtkWidget *contentChild = slot(s.contentSlot);
+  const WindowChrome *chrome = window ? chromeOf(backend_.surfaceWidget(surfaceId)) : nullptr;
+  bool fullHeight = chrome && !runsUnderHeaderBar(*chrome);
+  if (fullHeight) {
+    sidebarChild = adw_toolbar_view_new();
+    s.sidebarHeader = adw_header_bar_new();
+    adw_header_bar_set_show_title(ADW_HEADER_BAR(s.sidebarHeader), FALSE);
+    adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(sidebarChild), s.sidebarHeader);
+    // A compact window shows the sidebar alone while the window's header bar, with the sidebar
+    // button, is on the hidden content: this brings the content back.
+    s.contentButton = gtk_button_new_from_icon_name("go-next-symbolic");
+    gtk_widget_set_tooltip_text(s.contentButton, "Show Content");
+    gtk_accessible_update_property(GTK_ACCESSIBLE(s.contentButton), GTK_ACCESSIBLE_PROPERTY_LABEL, "Show Content", -1);
+    gtk_widget_set_visible(s.contentButton, FALSE);
+    g_signal_connect_data(s.contentButton, "clicked", G_CALLBACK(+[](GtkButton *, gpointer data) {
+      auto *t = static_cast<RowTarget *>(data);
+      if (auto it = t->splits->splits_.find(t->parent); it != t->splits->splits_.end()) {
+        t->splits->toggle(it->second.surfaceId);
+      }
+    }), new RowTarget{this, split}, [](gpointer data, GClosure *) { delete static_cast<RowTarget *>(data); }, GConnectFlags(0));
+    adw_header_bar_pack_start(ADW_HEADER_BAR(s.sidebarHeader), s.contentButton);
+    adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(sidebarChild), s.sidebarSlot);
+    contentChild = s.contentToolbar = adw_toolbar_view_new();
+    adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(contentChild), s.contentSlot);
+  }
+  AdwNavigationPage *sidebar = adw_navigation_page_new(sidebarChild, "Sidebar");
+  AdwNavigationPage *content = adw_navigation_page_new(contentChild, "Content");
   // The router's back and forward are the only history: the stack's own pop is off.
   adw_navigation_page_set_can_pop(content, FALSE);
   adw_navigation_split_view_set_sidebar(ADW_NAVIGATION_SPLIT_VIEW(s.view), sidebar);
@@ -201,16 +308,51 @@ void SplitViews::place(SurfaceId surfaceId, Tag split, bool window) {
   for (Tag pane : panes) {
     host(s, pane);
   }
-  applyWidths(s);
-  if (const auto *p = paneProps(backend_.data(s.sidebar))) {
-    if (auto collapsed = s.collapse.propChanged(p->collapsed)) {
-      s.folding.setCollapsed(*collapsed);
-    }
-  }
+  applySidebar(s);
   show(s);
   gtk_widget_queue_allocate(widget);
+  if (fullHeight) {
+    placeHeader(surfaceId);
+    // A header bar in a page shows the page's title when it has no title widget of its own: the
+    // window's, as it showed over the whole window.
+    // libadwaita asks every page for a title, so an untitled window leaves the page's.
+    if (GtkRoot *root = gtk_widget_get_root(widget); root && GTK_IS_WINDOW(root)) {
+      g_object_bind_property_full(
+          root, "title", content, "title", G_BINDING_SYNC_CREATE,
+          +[](GBinding *, const GValue *from, GValue *to, gpointer) -> gboolean {
+            const char *title = g_value_get_string(from);
+            if (!title || !*title) {
+              return FALSE;
+            }
+            g_value_set_string(to, title);
+            return TRUE;
+          },
+          nullptr, nullptr, nullptr);
+    }
+  }
   if (window) {
     backend_.headers().refreshChrome(surfaceId);
+  }
+}
+
+void SplitViews::applySidebar(Split &s) {
+  applyWidths(s);
+  const auto *p = paneProps(backend_.data(s.sidebar));
+  if (!p) {
+    return;
+  }
+  s.collapsedProp = p->collapsed;
+  if (auto collapsed = s.collapse.propChanged(p->collapsed)) {
+    s.folding.setCollapsed(*collapsed);
+  }
+  // What the user left it as last time wins over the app's prop, which hears of it, as an
+  // NSSplitView's autosave restores its divider on macOS.
+  auto key = sidebarCollapsedKey(p->autosaveName);
+  if (auto saved = key && readPreference ? savedSidebarCollapsed(readPreference(*key)) : std::nullopt) {
+    if (s.collapse.toolkitChanged(*saved)) {
+      send(backend_.data(s.sidebar), "sidebarCollapse", folly::dynamic::object("collapsed", *saved));
+    }
+    s.folding.setCollapsed(*saved);
   }
 }
 
@@ -236,7 +378,8 @@ void SplitViews::inserted(Tag parent, Tag child) {
   }
   host(it->second, child);
   if (d->component == SidebarComponentName) {
-    propsChanged(child);
+    applySidebar(it->second);
+    show(it->second);
   }
 }
 
@@ -271,6 +414,16 @@ void SplitViews::show(Split &s) {
   if (adw_navigation_split_view_get_show_content(view) != showing.content) {
     adw_navigation_split_view_set_show_content(view, showing.content);
   }
+  if (s.contentButton) {
+    gtk_widget_set_visible(s.contentButton, showing.stacked && !showing.content);
+  }
+  // The sidebar button moves with the sidebar: over it beside the content, else to the window's
+  // header bar.
+  bool overSidebar = s.window && s.sidebarHeader && !showing.stacked;
+  if (overSidebar != s.buttonOverSidebar) {
+    s.buttonOverSidebar = overSidebar;
+    backend_.headers().refreshChrome(s.surfaceId);
+  }
 }
 
 void SplitViews::propsChanged(Tag tag) {
@@ -283,12 +436,33 @@ void SplitViews::propsChanged(Tag tag) {
     return;
   }
   applyWidths(s);
-  if (const auto *p = paneProps(backend_.data(tag))) {
+  // Only a change of the collapsed input reaches the toolkit: an unrelated update (a width) leaves
+  // the state the user or a saved preference set.
+  if (const auto *p = paneProps(backend_.data(tag)); p && s.collapsedProp != p->collapsed) {
+    s.collapsedProp = p->collapsed;
     if (auto collapsed = s.collapse.propChanged(p->collapsed)) {
       s.folding.setCollapsed(*collapsed);
       show(s);
+      autosave(s);
     }
   }
+}
+
+void SplitViews::autosave(const Split &s) {
+  const auto *p = paneProps(backend_.data(s.sidebar));
+  auto key = p ? sidebarCollapsedKey(p->autosaveName) : std::nullopt;
+  if (key && writePreference) {
+    writePreference(*key, folly::dynamic(s.collapse.collapsed()));
+  }
+}
+
+GtkWidget *SplitViews::sidebarHeaderShown(SurfaceId surfaceId) const {
+  for (const auto &[tag, s] : splits_) {
+    if (s.surfaceId == surfaceId && s.window && s.sidebarHeader && !s.folding.showing().stacked) {
+      return s.sidebarHeader;
+    }
+  }
+  return nullptr;
 }
 
 void SplitViews::setCompact(Tag split, bool compact) {
@@ -315,10 +489,14 @@ bool SplitViews::toggle(SurfaceId surfaceId) {
     return false;
   }
   auto &s = splits_[*split];
-  if (auto collapsed = s.folding.toggle(); collapsed && s.collapse.toolkitChanged(*collapsed)) {
+  auto collapsed = s.folding.toggle();
+  if (collapsed && s.collapse.toolkitChanged(*collapsed)) {
     send(backend_.data(s.sidebar), "sidebarCollapse", folly::dynamic::object("collapsed", *collapsed));
   }
   show(s);
+  if (collapsed) {
+    autosave(s);
+  }
   return true;
 }
 
@@ -333,6 +511,7 @@ void SplitViews::deleted(Tag tag) {
     tearDown(it->second);
     splits_.erase(it);
     if (window) {
+      placeHeader(surfaceId);
       backend_.headers().refreshChrome(surfaceId);
     }
   }
@@ -577,6 +756,11 @@ void SplitViews::refill(Tag parent) {
 GtkWidget *SplitViews::splitWidget(Tag split) const {
   auto it = splits_.find(split);
   return it == splits_.end() ? nullptr : it->second.view;
+}
+
+GtkWidget *SplitViews::contentButton(Tag split) const {
+  auto it = splits_.find(split);
+  return it == splits_.end() ? nullptr : it->second.contentButton;
 }
 
 AdwBreakpoint *SplitViews::breakpoint(Tag split) const {

@@ -15,9 +15,12 @@ namespace facebook::react::HostPlatformViewTraitsInitializer {
 
 inline bool formsStackingContext(const ViewProps &props) {
   // A live region reads its text from the views under it (ngn/live-regions.h), and an
-  // accessibility element is read with the text inside it (ngn/accessibility.h).
+  // accessibility element is read with the text inside it (ngn/accessibility.h). A view that names
+  // others as its label is the end of a relation (ngn/accessibility-relations.h), as one with a
+  // nativeID another names already is in React Native.
   if (props.accessibilityLiveRegion != AccessibilityLiveRegion::None || props.role != Role::None ||
-      !props.accessibilityRole.empty() || !props.accessibilityLabel.empty()) {
+      !props.accessibilityRole.empty() || !props.accessibilityLabel.empty() ||
+      !props.accessibilityLabelledBy.value.empty()) {
     return true;
   }
   const auto *desktop = dynamic_cast<const ngn::HasDesktopProps *>(&props);
