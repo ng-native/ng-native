@@ -125,6 +125,24 @@ describe("an app's engine, once the app is destroyed", () => {
     assert.equal(fabric.calls.completeRoot, commits);
   });
 
+  it('stops on native the animations it was playing, which never end of themselves', async () => {
+    const rec = recorder();
+    const app = mount(1, Counter, createFakeFabric(), {
+      globalStyles: compileCss(
+        '@keyframes spin { to { transform: rotate(360deg) } } view { animation: spin 1s linear infinite }',
+      ) as StyleSheet,
+      nativeAnimated: rec.native,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const started = rec.named('start').map(([, id]) => id);
+    assert.ok(started.length > 0, 'native was playing nothing');
+    app.applicationRef.destroy();
+    assert.deepEqual(
+      rec.named('stop').map(([, id]) => id),
+      started,
+    );
+  });
+
   it('can be collected', async () => {
     // Two facades over one runtime's Fabric, as `getFabricUIManager` makes: the stopped surface's
     // goes, as a device's Fabric lets go of a stopped surface's tree, and the dispatcher stays.
@@ -204,7 +222,9 @@ describe('a disposed engine', () => {
         engine.setProp(view, 'style', { transform: [{ translateX: x }] });
         engine.commit();
       }
+      const dropped = rec.named('drop').length;
       engine.dispose();
+      assert.ok(rec.named('drop').length > dropped, 'native still paints the view');
       // Not even after a commit it is still asked for, of a transform native paints.
       now += 50;
       engine.advanceAnimations();
@@ -216,5 +236,59 @@ describe('a disposed engine', () => {
     } finally {
       mock.timers.reset();
     }
+  });
+
+  it('stops on native the transitions it was easing', () => {
+    const rec = recorder();
+    const engine = new Engine(createFakeFabric(), 1, {
+      globalStyles: compileCss(
+        '.a { opacity: 1; transition: opacity 200ms linear } .a.gone { opacity: 0 }',
+      ) as StyleSheet,
+      nativeAnimated: rec.native,
+      now: () => 0,
+    });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 'a');
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    engine.advanceAnimations();
+    engine.setClasses(view, 'a gone');
+    engine.commit();
+    const started = rec.named('start').map(([, id]) => id);
+    assert.ok(started.length > 0, 'native was easing nothing');
+    engine.dispose();
+    assert.deepEqual(
+      rec.named('stop').map(([, id]) => id),
+      started,
+    );
+  });
+
+  it('says nothing, and commits nothing, when a move native was laying out is up', async () => {
+    const fabric = createFakeFabric();
+    Object.assign(fabric, { configureNextLayoutAnimation: () => {} });
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(
+        '.a { width: 10px; transition: width 20ms linear } .a.on { width: 30px }',
+      ) as StyleSheet,
+      now: () => 0,
+    });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 'a');
+    engine.appendChild(engine.root, view);
+    const ended: string[] = [];
+    engine.setEventListener(view, 'topTransitionend', () => {
+      ended.push('end');
+      // What a listener does is committed, as `endLaid` does for a live engine.
+      engine.setClasses(view, 'a');
+    });
+    engine.commit();
+    engine.advanceAnimations();
+    engine.setClasses(view, 'a on');
+    engine.commit();
+    const commits = fabric.calls.completeRoot;
+    engine.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.deepEqual(ended, []);
+    assert.equal(fabric.calls.completeRoot, commits);
   });
 });

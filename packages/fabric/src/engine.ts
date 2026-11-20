@@ -14553,11 +14553,22 @@ export class Engine implements HostEngine {
       nothing,
     );
     for (const { node, key, eased } of laying) {
-      if (eased.laid) setTimeout(() => this.endLaid(node, key, eased), duration);
+      if (eased.laid) this.whenLaid(() => this.endLaid(node, key, eased), duration);
     }
     for (const { node, running } of played) {
-      if (running.laid) setTimeout(() => this.endLaidPlayed(node, running), duration);
+      if (running.laid) this.whenLaid(() => this.endLaidPlayed(node, running), duration);
     }
+  }
+
+  /** The end of each move native is laying out, which `dispose` calls off. */
+  private readonly laidTimers = new Set<ReturnType<typeof setTimeout>>();
+
+  private whenLaid(end: () => void, duration: number): void {
+    const timer = setTimeout(() => {
+      this.laidTimers.delete(timer);
+      end();
+    }, duration);
+    this.laidTimers.add(timer);
   }
 
   /** A transition native laid out has had its time: it is where it ends, and says so. */
@@ -17078,6 +17089,13 @@ export class Engine implements HostEngine {
     this.leaveEvents();
     if (this.quietTimer !== null) clearTimeout(this.quietTimer);
     this.quietTimer = null;
+    for (const timer of this.laidTimers) clearTimeout(timer);
+    this.laidTimers.clear();
+    // Native keeps what it calls as each animation it plays ends, and that reaches the engine: an
+    // infinite one never ends, and destroying the views does not stop it.
+    for (const node of [...this.playedNatively]) this.stopNative(node, node.playing!);
+    for (const node of [...this.easedNatively]) this.stopEased(node);
+    for (const node of [...this.paintedNodes]) this.stopPainting(node);
   }
 
   /**
