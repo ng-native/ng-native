@@ -287,6 +287,7 @@ interface Span {
     '[scrollEventThrottle]': 'scrollEventThrottle()',
     '(scroll)': 'onScroll($event)',
     '(scrollBeginDrag)': 'onDragBegin()',
+    '(momentumScrollEnd)': 'onScrollEnd()',
     '(layout)': 'onLayout($event)',
     '(contentSizeChange)': 'onContentSize($event)',
   },
@@ -1049,6 +1050,8 @@ export class VirtualList<T> extends ScrollViewProps {
   private reported: number | undefined;
   /** Where native's latest event of all said it was, header and all. */
   private nativeAt = 0;
+  /** Jumps on their way that will each end with a scroll end event, as iOS sends one. */
+  private ends = 0;
 
   /** Which recycling slot each rendered item holds, by key: its type, and the row it last drew. */
   private readonly recycled = new Map<
@@ -1123,7 +1126,6 @@ export class VirtualList<T> extends ScrollViewProps {
     const sticky = this.nextSticky().has(index);
     const held = this.recycled.get(key);
     if (held && this.stickyTypes.has(held.type) === sticky) return held.slot;
-    this.recycled.delete(key);
     const kind = this.itemType()?.(item, index);
     const type = sticky ? this.stickyType(kind) : kind;
     const slot = this.unpark(key, type) ?? this.parked.get(type)?.pop()?.slot ?? this.nextSlot++;
@@ -1557,6 +1559,8 @@ export class VirtualList<T> extends ScrollViewProps {
     // To where native last said it was, with no earlier jump on its way: it moves nothing and
     // reports nothing. With one, native moves and comes back, and reports that.
     const pending = this.jumped && !this.landed;
+    if (!pending) this.ends = 0;
+    if (Math.abs(to - (pending ? this.jumpedTo : this.nativeAt)) > 1) this.ends++;
     this.jumped = pending || Math.abs(to - this.nativeAt) > 1;
     this.landed = false;
     this.jumpedTo = to;
@@ -1569,7 +1573,19 @@ export class VirtualList<T> extends ScrollViewProps {
     this.jumped = this.landed = false;
   }
 
-  /** How far toward `offset` native can scroll: it stops at its end, and says nothing of it. */
+  /**
+   * A scroll came to rest. The last of the jumps on their way has landed, wherever it did: iOS
+   * does not stop a scroll at the end of the content, so it can rest past where `reachable` said,
+   * and what moves it next (a tap on the status bar) is not a drag.
+   */
+  protected onScrollEnd(): void {
+    if (this.jumped && --this.ends <= 0) this.landed = true;
+  }
+
+  /**
+   * How far toward `offset` the content lets native scroll. Android stops a scroll at its end and
+   * says nothing of it; iOS goes past, and its scroll end event says where it came to rest.
+   */
   private reachable(offset: number): number {
     const viewport = this.viewport();
     const total = this.contentExtent();

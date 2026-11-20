@@ -943,6 +943,34 @@ describe('windowed list options', () => {
       }
       assert.deepEqual(sets().slice(before), []);
     });
+
+    it('lets native s offset go once a jump that landed somewhere else comes to rest', async () => {
+      // iOS does not stop a scroll at the end of the content, and what moves it next, a tap on
+      // the status bar, is not a drag: the offset here trails native's while it moves.
+      const { list, sets } = await jumpable([0, 30, 60]);
+      list.scrollToOffset({ offset: 50 * ITEM_HEIGHT, animated: false });
+      await fireEvent.scroll(host, { contentOffset: { y: 50 * ITEM_HEIGHT + 34 } });
+      await fireEvent(host, 'momentumScrollEnd', {});
+      await settle();
+      const before = sets().length;
+      for (const y of [45, 35, 25, 15, 5]) {
+        await fireEvent.scroll(host, { contentOffset: { y: y * ITEM_HEIGHT } });
+        await settle();
+      }
+      assert.deepEqual(sets().slice(before), []);
+    });
+
+    it('keeps telling native of a later jump after an earlier one comes to rest', async () => {
+      const { list, sets } = await jumpable([0]);
+      list.scrollToOffset({ offset: 100 * ITEM_HEIGHT, animated: false });
+      list.scrollToOffset({ offset: 300 * ITEM_HEIGHT, animated: false });
+      await fireEvent.scroll(host, { contentOffset: { y: 100 * ITEM_HEIGHT } });
+      await fireEvent(host, 'momentumScrollEnd', {});
+      await settle();
+      await fireEvent.scroll(host, { contentOffset: { y: 300 * ITEM_HEIGHT } });
+      await settle();
+      assert.equal(sets().at(-1), 300 * ITEM_HEIGHT);
+    });
   });
 
   it('leaves native s offset to native while the user scrolls', async () => {
