@@ -251,10 +251,14 @@ class NoMenus final : public MenuBackend {
 class GtkUndo final : public UndoManager {
  public:
   void registerAction(const std::string &label, std::function<void()> action) override {
-    // Inline on the UI thread: an undo registers its redo while it runs.
-    onMainContext([stacks = stacks_, label, action = std::move(action)]() mutable {
-      stacks->registerAction(label, std::move(action));
-    });
+    auto record = [stacks = stacks_, label, action = std::move(action)]() mutable { stacks->registerAction(label, std::move(action)); };
+    // Inline on the UI thread (the loop's dispatch owns the main context there): an undo registers
+    // its redo while it runs, and a queued registration would find undoing() false by then.
+    if (g_main_context_is_owner(g_main_context_default())) {
+      record();
+      return;
+    }
+    onMainContext(std::move(record));
   }
   bool undoing() const override {
     return stacks_->undoing();

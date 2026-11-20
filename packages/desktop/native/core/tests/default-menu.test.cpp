@@ -168,6 +168,18 @@ TEST_CASE("the Keyboard Shortcuts window lists each menu's keys, through submenu
                              });
 }
 
+TEST_CASE("the Keyboard Shortcuts window leaves out a disabled menu, whose keys select nothing") {
+  ngn::MenuItem save{.title = "Save", .key = "s", .modifiers = ngn::Control};
+  std::vector<ngn::MenuItem> bar{
+      ngn::MenuItem{.title = "File", .items = {save}, .disabled = true},
+      ngn::MenuItem{.title = "Edit", .items = {ngn::MenuItem{.title = "Undo", .key = "z", .modifiers = ngn::Control}}},
+  };
+  CHECK(ngn::findMenuItem(bar, ngn::KeyChord{.key = "s", .modifiers = ngn::Control}) == nullptr);
+  auto groups = ngn::menuShortcuts(bar);
+  REQUIRE(groups.size() == 1);
+  CHECK(groups[0].title == "Edit");
+}
+
 TEST_CASE("Linux's Developer menu reloads on Ctrl+R") {
   CHECK_FALSE(ngn::findMenuItem(ngn::defaultMenuBar({.appName = "Notes", .os = ngn::linuxOs()}), MenuCommand::Reload));
   auto bar = ngn::defaultMenuBar({.appName = "Notes", .developer = true, .os = ngn::linuxOs()});

@@ -39,7 +39,9 @@ GtkAccessibleRole gtkRole(AriaRole role);
 // Sets what the widget says beyond its role, and resets what `info` no longer has.
 void applyAccessibility(GtkWidget *widget, const AxInfo &info);
 
-// The widget that is the view's accessible element: a text input's field, else the view's own.
+// The widget that carries the view's label, description and states: a text input's editor (the
+// GtkText, or a multiline field's GtkTextView, which is a text box where its scrolled window is a
+// group), else the view's own.
 GtkWidget *accessibleWidget(const ViewData &view);
 
 // Where a view's accessible actions go: `perform` sends a press, increment, decrement or cancel,
@@ -61,6 +63,10 @@ void applyAccessibleActions(GtkWidget *widget, const AxInfo &info, AccessibleAct
 // letters, digits, '-' and '.', so each other character becomes '-', and a name already taken gets
 // a number ("delete-2").
 std::vector<std::pair<std::string, std::string>> customActionNames(const std::vector<AxAction> &declared);
+
+// The widget that is the view's end of a relation, labelled-by and described-by: the native
+// control that fills it, which assistive technology operates, else accessibleWidget.
+GtkWidget *relationWidget(const ViewData &view);
 
 // Says `announcement` through `widget`'s window, at its priority, with gtk_accessible_announce,
 // found at run time: GTK 4.14 and later. Below it nothing is said. Whether it was.

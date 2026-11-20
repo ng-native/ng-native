@@ -112,7 +112,12 @@ GtkAccessibleRole gtkRole(AriaRole role) {
 }
 
 GtkWidget *accessibleWidget(const ViewData &view) {
-  return view.field ? fieldWidget(*view.field) : view.widget;
+  // The editor, not a multiline field's scrolled window: that one is only a group.
+  return view.field ? view.field->text : view.widget;
+}
+
+GtkWidget *relationWidget(const ViewData &view) {
+  return view.control ? view.control : accessibleWidget(view);
 }
 
 namespace {
@@ -180,7 +185,8 @@ std::vector<std::pair<std::string, std::string>> customActionNames(const std::ve
 
 void applyAccessibleActions(GtkWidget *widget, const AxInfo &info, AccessibleActionSinks sinks) {
   AxActions *actions = actionsOf(widget);
-  bool offers = info.element && (info.offersPress || info.offersIncrement || info.offersCancel || !info.customActions.empty());
+  bool offers = info.element && !info.disabled &&
+      (info.offersPress || info.offersIncrement || info.offersCancel || !info.customActions.empty());
   if (!actions && !offers) {
     return;
   }
@@ -204,13 +210,16 @@ void applyAccessibleActions(GtkWidget *widget, const AxInfo &info, AccessibleAct
   auto enable = [actions](const char *name, bool on) {
     g_simple_action_set_enabled(G_SIMPLE_ACTION(g_action_map_lookup_action(G_ACTION_MAP(actions->group), name)), on);
   };
-  enable("press", info.element && info.offersPress);
-  enable("increment", info.element && info.offersIncrement);
-  enable("decrement", info.element && info.offersIncrement);
-  enable("cancel", info.element && info.offersCancel);
+  // GTK checks the widget's sensitivity, not the accessible disabled state, so a disabled view
+  // offers no action of its own accord.
+  bool live = info.element && !info.disabled;
+  enable("press", live && info.offersPress);
+  enable("increment", live && info.offersIncrement);
+  enable("decrement", live && info.offersIncrement);
+  enable("cancel", live && info.offersCancel);
   // The declared actions as they are now, those gone removed, as AppKit asks for its custom actions
   // afresh each time.
-  auto names = info.element ? customActionNames(info.customActions) : std::vector<std::pair<std::string, std::string>>{};
+  auto names = live ? customActionNames(info.customActions) : std::vector<std::pair<std::string, std::string>>{};
   if (names != actions->customNames) {
     for (const auto &[name, declared] : actions->customNames) {
       g_action_map_remove_action(G_ACTION_MAP(actions->custom), name.c_str());

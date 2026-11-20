@@ -376,7 +376,13 @@ void GtkBackend::updateProps(const ShadowView &view) {
 void GtkBackend::updateState(const ShadowView &view) {
   if (auto it = views_.find(view.tag); it != views_.end()) {
     ViewData *d = viewData(it->second);
-    std::string before = d->state && d->component == "Paragraph" ? paragraphText(d->state) : std::string();
+    bool paragraph = d->component == "Paragraph";
+    std::string before = d->state && paragraph ? paragraphText(d->state) : std::string();
+    std::string after = view.state && paragraph ? paragraphText(view.state) : std::string();
+    // The old text goes before the contents change, the new one comes after.
+    if (before != after) {
+      accessibleTextRemoved(d->widget, before);
+    }
     d->state = view.state;
     forgetText(*d);
     applyScrollViewState(*d);
@@ -387,8 +393,8 @@ void GtkBackend::updateState(const ShadowView &view) {
       applyAccessibility(accessibleWidget(*d), *accessibility);
     applyActions(*d, *accessibility);
     }
-    if (d->component == "Paragraph" && d->state) {
-      accessibleTextChanged(d->widget, before, paragraphText(d->state));
+    if (before != after) {
+      accessibleTextInserted(d->widget, after);
     }
     gtk_widget_queue_draw(d->widget);
   }
@@ -536,6 +542,8 @@ void GtkBackend::setCovered(SurfaceId, Tag tag, bool covered) {
     gtk_widget_set_child_visible(it->second, !covered);
     // A child shown again has no allocation until its parent allocates it.
     relayout(it->second);
+    // A window split view in it is no longer shown, or shown again: the header bar follows.
+    splitViews_->placeHeaders();
   }
 }
 
@@ -563,12 +571,12 @@ void GtkBackend::applyRelations(Tag tag) {
   }
   auto it = relations_.find(tag);
   AxRelations relations = it == relations_.end() ? AxRelations{} : it->second;
-  GtkAccessible *source = GTK_ACCESSIBLE(accessibleWidget(*viewData(widget)));
+  GtkAccessible *source = GTK_ACCESSIBLE(relationWidget(*viewData(widget)));
   auto point = [&](GtkAccessibleRelation relation, const std::vector<Tag> &tags) {
     GList *targets = nullptr;
     for (Tag target : tags) {
       if (GtkWidget *w = view(target)) {
-        targets = g_list_append(targets, accessibleWidget(*viewData(w)));
+        targets = g_list_append(targets, relationWidget(*viewData(w)));
       }
     }
     if (targets) {
@@ -577,6 +585,9 @@ void GtkBackend::applyRelations(Tag tag) {
       GValue value = G_VALUE_INIT;
       g_value_init(&value, G_TYPE_POINTER);
       g_value_set_pointer(&value, targets);
+      // GTK compares two lists of references by membership, so one in another order is "the same"
+      // and would keep the old order: the old value goes first.
+      gtk_accessible_reset_relation(source, relation);
       gtk_accessible_update_relation_value(source, 1, &relation, &value);
       g_value_unset(&value);
     } else {
@@ -590,6 +601,7 @@ void GtkBackend::applyRelations(Tag tag) {
 void GtkBackend::didMount(SurfaceId surfaceId) {
   modals_->settle();
   splitViews_->layOut();
+  splitViews_->placeHeaders();
   headers_->refresh();
   if (onMount) {
     onMount(surfaceId);

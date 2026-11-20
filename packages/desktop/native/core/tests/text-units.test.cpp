@@ -49,6 +49,23 @@ TEST_CASE("a paragraph ends after its line break, in characters, not bytes") {
   CHECK(textUnitAt(text, {}, 11, TextUnit::Paragraph) == TextSpan{10, 13});
 }
 
+TEST_CASE("a paragraph also ends after a carriage return, a CRLF pair and a paragraph separator") {
+  // U+2029 is three bytes and one character.
+  std::string separator = "A\xE2\x80\xA9" "B";
+  CHECK(textUnitAt(separator, {}, 2, TextUnit::Paragraph) == TextSpan{2, 3});
+  CHECK(textUnitAt(separator, {}, 0, TextUnit::Paragraph) == TextSpan{0, 2});
+  std::string cr = "A\rB";
+  CHECK(textUnitAt(cr, {}, 2, TextUnit::Paragraph) == TextSpan{2, 3});
+  CHECK(textUnitAt(cr, {}, 0, TextUnit::Paragraph) == TextSpan{0, 2});
+  // CRLF is one delimiter: no empty paragraph between the two.
+  std::string crlf = "A\r\nB";
+  CHECK(textUnitAt(crlf, {}, 1, TextUnit::Paragraph) == TextSpan{0, 3});
+  CHECK(textUnitAt(crlf, {}, 3, TextUnit::Paragraph) == TextSpan{3, 4});
+  // A trailing delimiter leaves no unit to read, as with LF.
+  std::string trailing = "A\xE2\x80\xA9";
+  CHECK(textUnitAt(trailing, {}, 1, TextUnit::Paragraph) == TextSpan{0, 2});
+}
+
 TEST_CASE("no breaks known is one unit, and empty text is the empty span") {
   CHECK(textUnitAt(kText, {}, 7, TextUnit::Line) == TextSpan{0, 20});
   CHECK(textUnitAt("", kBreaks, 3, TextUnit::Word) == TextSpan{0, 0});

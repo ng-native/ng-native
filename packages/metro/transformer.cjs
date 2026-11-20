@@ -9,7 +9,7 @@ const { readFileSync, readdirSync } = require('node:fs');
 const path = require('node:path');
 const upstream = expoTransformer();
 const { TraceMap, originalPositionFor } = require('@jridgewell/trace-mapping');
-const { transformAngular } = require('./angular-transform.cjs');
+const { transformAngular, transformAngularWithNgp } = require('./angular-transform.cjs');
 const { isAngularDomComponent, domComponentReference } = require('./dom-component.cjs');
 const { markdownModule, markdownVersions } = require('./markdown-module.cjs');
 const { withMacosPlugins } = require('./macos.cjs');
@@ -113,7 +113,7 @@ function originalLoc(loc, tracer, lineOffset) {
     line: loc.start.line - lineOffset,
     column: loc.start.column,
   });
-  if (start.line == null) return null;
+  if (start.line == null || start.source !== tracer.resolvedSources[0]) return null;
   const end = originalPositionFor(tracer, {
     line: loc.end.line - lineOffset,
     column: loc.end.column,
@@ -121,7 +121,7 @@ function originalLoc(loc, tracer, lineOffset) {
   return {
     start: { line: start.line, column: start.column },
     end:
-      end.line == null
+      end.line == null || end.source !== start.source
         ? { line: start.line, column: start.column }
         : { line: end.line, column: end.column },
     filename: loc.filename,
@@ -215,15 +215,8 @@ function installed(name, root) {
 }
 
 function angularOrSyntaxError(params) {
-  try {
-    return transformAngular(params.src, params.filename, {
-      dev: params.options?.dev === true,
-      platform: params.options?.platform,
-      // From the preset's `libraryStyles`, by way of the transform worker: see `transform-worker.cjs`.
-      libraryStyles: libraryStylesOf(params),
-      projectRoot: params.options?.projectRoot,
-    });
-  } catch (error) {
+  /** @param {unknown} error */
+  const syntaxErrorOr = (error) => {
     if (!SCRIPT.test(params.filename)) throw error;
     try {
       upstream.transform(params);
@@ -231,7 +224,44 @@ function angularOrSyntaxError(params) {
       if (/** @type {any} */ (syntaxError)?.loc) throw syntaxError;
     }
     throw error;
+  };
+  const options = {
+    dev: params.options?.dev === true,
+    platform: params.options?.platform,
+    // From the preset's `libraryStyles`, by way of the transform worker: see `transform-worker.cjs`.
+    libraryStyles: libraryStylesOf(params),
+    projectRoot: params.options?.projectRoot,
+  };
+  const ngp = compilationOf(params);
+  if (ngp) {
+    return transformAngularWithNgp(params.src, params.filename, { ...options, ...ngp }).catch(
+      syntaxErrorOr,
+    );
   }
+  try {
+    return transformAngular(params.src, params.filename, options);
+  } catch (error) {
+    return syntaxErrorOr(error);
+  }
+}
+
+/** @param {any} params */
+function compilationOf(params) {
+  const custom = params.options?.customTransformOptions;
+  if (custom?.angularNativeCompilation !== 'ngp') return null;
+  return {
+    typeCheck: custom.angularNativeTypeCheck !== false,
+    tsconfig: custom.angularNativeTsconfig,
+  };
+}
+
+/** @param {any} params @param {{ code: string, map?: string, mapLineOffset?: number }} angular */
+function finish(params, { code, map, mapLineOffset }) {
+  const result = upstream.transform({ ...params, src: code });
+  if (map && result.ast) {
+    remapPositions(result.ast, new TraceMap(JSON.parse(map)), mapLineOffset ?? 0);
+  }
+  return result;
 }
 
 module.exports = {
@@ -259,11 +289,9 @@ module.exports = {
       ...params,
       src: inlineWidgetLayouts(inlineIcons(params.src, params.filename), params.filename),
     };
-    const { code, map, mapLineOffset } = angularOrSyntaxError(params);
-    const result = upstream.transform({ ...params, src: code });
-    if (map && result.ast) {
-      remapPositions(result.ast, new TraceMap(JSON.parse(map)), mapLineOffset ?? 0);
-    }
-    return result;
+    const angular = angularOrSyntaxError(params);
+    return angular instanceof Promise
+      ? angular.then((compiled) => finish(params, compiled))
+      : finish(params, angular);
   },
 };

@@ -26,16 +26,20 @@ int characters(const std::string &text) {
   return static_cast<int>(std::count_if(text.begin(), text.end(), [](char c) { return !continuation(c); }));
 }
 
-// Where each paragraph starts: 0, and after each line break.
+// Where each paragraph starts: 0, and after each delimiter Pango's paragraph boundary knows: LF, CR
+// (CRLF is one), and U+2029 (E2 80 A9).
 std::vector<int> paragraphStarts(const std::string &text) {
   std::vector<int> starts{0};
   int index = 0;
-  for (char c : text) {
+  for (size_t i = 0; i < text.size(); i++) {
+    char c = text[i];
     if (continuation(c)) {
       continue;
     }
     index++;
-    if (c == '\n') {
+    bool separator = text.compare(i, 3, "\xE2\x80\xA9") == 0;
+    bool crlf = c == '\r' && i + 1 < text.size() && text[i + 1] == '\n';
+    if ((c == '\n' || c == '\r' || separator) && !crlf) {
       starts.push_back(index);
     }
   }

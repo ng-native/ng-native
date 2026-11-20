@@ -214,3 +214,40 @@ TEST_CASE("a view is labelled and described by the views its props name, ahead o
   CHECK([view.accessibilityLabel isEqualToString:@"Own"]);
   CHECK((view.accessibilityTitleUIElement == nil));
 }
+
+TEST_CASE("a native control is labelled and described by the views its props name, on the control that is the element") {
+  MountedViews m;
+  auto name = MountedViews::shadow(2, "View", viewProps(folly::dynamic::object("nativeID", "name")("accessibilityLabel", "Notifications")));
+  m.add(name);
+  m.add(MountedViews::shadow(3, "View", viewProps(folly::dynamic::object("nativeID", "hint")("accessibilityLabel", "Sent by email"))));
+  auto props = [](bool related) {
+    folly::dynamic raw = folly::dynamic::object("title", "Go");
+    if (related) {
+      raw["accessibilityLabelledBy"] = folly::dynamic::array("name");
+      raw["accessibilityDescribedBy"] = folly::dynamic::array("hint");
+    }
+    return ngn::testing::nativeButtonProps(std::move(raw));
+  };
+  auto button = MountedViews::shadow(4, "NgNativeButton", props(true));
+  m.add(button);
+  NGNView *view = m.view(4);
+  NSView *control = [view accessibilityControl];
+  REQUIRE((control != nil));
+  CHECK_FALSE(view.isAccessibilityElement);
+  CHECK([control.accessibilityLabel isEqualToString:@"Notifications"]);
+  CHECK([control.accessibilityHelp isEqualToString:@"Sent by email"]);
+  CHECK((control.accessibilityTitleUIElement == m.view(2)));
+
+  // The text of the view named changes: the control reads the new one.
+  m.update(name, viewProps(folly::dynamic::object("nativeID", "name")("accessibilityLabel", "Alerts")));
+  CHECK([control.accessibilityLabel isEqualToString:@"Alerts"]);
+  // The control's own props applied again keep what the relations say.
+  m.update(button, props(true));
+  CHECK([control.accessibilityLabel isEqualToString:@"Alerts"]);
+
+  // The props stop naming them: the label and help they gave go.
+  m.update(button, props(false));
+  CHECK_FALSE([control.accessibilityLabel isEqualToString:@"Alerts"]);
+  CHECK((control.accessibilityHelp == nil));
+  CHECK((control.accessibilityTitleUIElement == nil));
+}

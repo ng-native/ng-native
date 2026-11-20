@@ -72,13 +72,52 @@ GBytes *getContentsAt(GtkAccessible *self, unsigned int offset, int granularity,
   return bytesOf(textBetween(text, span.start, span.end));
 }
 
+// GTK 4.14's default callbacks leave the name and value arrays NULL, which its AT-SPI handler then
+// indexes, so a screen reader asking for attributes would crash the host. A Paragraph has none:
+// empty, NULL-terminated arrays.
+gboolean getAttributes(GtkAccessible *, unsigned int, gsize *n_ranges, gpointer *ranges, char ***names, char ***values) {
+  *n_ranges = 0;
+  *ranges = nullptr;
+  *names = g_new0(char *, 1);
+  *values = g_new0(char *, 1);
+  return FALSE;
+}
+
+void getDefaultAttributes(GtkAccessible *, char ***names, char ***values) {
+  *names = g_new0(char *, 1);
+  *values = g_new0(char *, 1);
+}
+
 void interfaceInit(gpointer vtable, gpointer) {
-  auto *iface = static_cast<AccessibleTextInterface *>(vtable);
-  iface->get_contents = getContents;
-  iface->get_contents_at = getContentsAt;
+  fillAccessibleTextInterface(static_cast<AccessibleTextInterface *>(vtable));
+}
+
+AccessibleTextUpdate &testUpdate() {
+  static AccessibleTextUpdate update = nullptr;
+  return update;
+}
+
+// The change to tell, or nothing when there is no one to tell.
+void tellChange(GtkWidget *widget, int change, const std::string &text) {
+  using Update = void (*)(GtkAccessible *, int, unsigned int, unsigned int);
+  static auto gtkUpdate = reinterpret_cast<Update>(dlsym(RTLD_DEFAULT, "gtk_accessible_text_update_contents"));
+  Update update = testUpdate() ? testUpdate() : gtkUpdate;
+  GType type = accessibleTextType();
+  bool has = testUpdate() || (type && widget && G_TYPE_CHECK_INSTANCE_TYPE(widget, type));
+  if (!update || !has || !widget || text.empty()) {
+    return;
+  }
+  update(GTK_ACCESSIBLE(widget), change, 0, static_cast<unsigned int>(g_utf8_strlen(text.c_str(), -1)));
 }
 
 } // namespace
+
+void fillAccessibleTextInterface(AccessibleTextInterface *iface) {
+  iface->get_contents = getContents;
+  iface->get_contents_at = getContentsAt;
+  iface->get_attributes = getAttributes;
+  iface->get_default_attributes = getDefaultAttributes;
+}
 
 GType accessibleTextType() {
   static GType type = [] {
@@ -96,23 +135,17 @@ void implementAccessibleText(GType type) {
   }
 }
 
-void accessibleTextChanged(GtkWidget *widget, const std::string &before, const std::string &after) {
-  using Update = void (*)(GtkAccessible *, int, unsigned int, unsigned int);
-  static auto update = reinterpret_cast<Update>(dlsym(RTLD_DEFAULT, "gtk_accessible_text_update_contents"));
-  GType text = accessibleTextType();
-  if (!update || !text || !widget || !G_TYPE_CHECK_INSTANCE_TYPE(widget, text) || before == after) {
-    return;
-  }
-  // GtkAccessibleTextContentChange: INSERT, then REMOVE. The old text goes and the new one comes,
-  // as GtkLabel reports a text set on it.
-  constexpr int insert = 0, remove = 1;
-  auto length = [](const std::string &s) { return static_cast<unsigned int>(g_utf8_strlen(s.c_str(), -1)); };
-  if (!before.empty()) {
-    update(GTK_ACCESSIBLE(widget), remove, 0, length(before));
-  }
-  if (!after.empty()) {
-    update(GTK_ACCESSIBLE(widget), insert, 0, length(after));
-  }
+// GtkAccessibleTextContentChange.
+void accessibleTextRemoved(GtkWidget *widget, const std::string &text) {
+  tellChange(widget, 1, text);
+}
+
+void accessibleTextInserted(GtkWidget *widget, const std::string &text) {
+  tellChange(widget, 0, text);
+}
+
+void setAccessibleTextUpdate(AccessibleTextUpdate update) {
+  testUpdate() = update;
 }
 
 } // namespace ngn::gtk

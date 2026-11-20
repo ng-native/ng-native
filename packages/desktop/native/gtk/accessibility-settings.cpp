@@ -6,6 +6,7 @@
 #include <gtk/gtk.h>
 
 #include <cstring>
+#include <memory>
 
 namespace ngn::gtk {
 
@@ -37,7 +38,13 @@ guint32 portalNumber(GVariant *value) {
 
 } // namespace
 
-AccessibilitySettingsWatcher::AccessibilitySettingsWatcher(std::function<void(const AccessibilitySettings &)> changed)
+bool gtkWantsMoreContrast(int interfaceContrast) {
+  // GtkInterfaceContrast: 0 unsupported, 1 no preference, 2 more, 3 less. The property reads 0 on
+  // a GTK without it, and 1 where nothing is asked for.
+  return interfaceContrast == 2;
+}
+
+AccessibilitySettingsWatcher::AccessibilitySettingsWatcher(std::function<void(const AccessibilitySettings &)> changed, GDBusConnection *connection)
     : changed_(std::move(changed)), cancellable_(g_cancellable_new()) {
   GtkSettings *settings = gtk_settings_get_default();
   for (const char *name : {"notify::gtk-enable-animations", "notify::gtk-interface-reduced-motion", "notify::gtk-interface-contrast"}) {
@@ -55,15 +62,25 @@ AccessibilitySettingsWatcher::AccessibilitySettingsWatcher(std::function<void(co
   readGtk();
   report();
 
-  // The settings portal's reduced-motion and contrast.
+  // The settings portal's reduced-motion and contrast, on the session bus or the test's connection.
   portal_ = std::make_unique<SettingsPortal>(
-      std::vector<std::string>{"reduced-motion", "contrast"}, [this](const std::string &key, GVariant *value) { readPortal(key, value); });
+      std::vector<std::string>{"reduced-motion", "contrast"}, [this](const std::string &key, GVariant *value) { readPortal(key, value); },
+      connection);
 
-  // AT-SPI's own status, which says whether a screen reader runs.
-  g_dbus_proxy_new_for_bus(
-      G_BUS_TYPE_SESSION, G_DBUS_PROXY_FLAGS_NONE, nullptr, "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Status", cancellable_,
+  // AT-SPI's own status, which says whether a screen reader runs: on the session bus, or the test's
+  // connection.
+  auto proxyOn = [connection](GDBusProxyFlags flags, const char *name, const char *path, const char *interface, GCancellable *cancellable,
+                              GAsyncReadyCallback ready, gpointer data) {
+    if (connection) {
+      g_dbus_proxy_new(connection, flags, nullptr, name, path, interface, cancellable, ready, data);
+    } else {
+      g_dbus_proxy_new_for_bus(G_BUS_TYPE_SESSION, flags, nullptr, name, path, interface, cancellable, ready, data);
+    }
+  };
+  proxyOn(
+      G_DBUS_PROXY_FLAGS_NONE, "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Status", cancellable_,
       +[](GObject *, GAsyncResult *result, gpointer data) {
-        GDBusProxy *proxy = g_dbus_proxy_new_for_bus_finish(result, nullptr);
+        GDBusProxy *proxy = g_dbus_proxy_new_finish(result, nullptr);
         if (!proxy) {
           return;
         }
@@ -100,7 +117,7 @@ void AccessibilitySettingsWatcher::readGtk() {
     // GtkReducedMotion: 0 no preference, 1 reduce. GtkInterfaceContrast: 0 no preference, 1 more.
     sources_.gtkReducedMotion = settingOr(settings, "gtk-interface-reduced-motion", 0) == 1;
   }
-  bool gtkContrast = settings && settingOr(settings, "gtk-interface-contrast", 0) == 1;
+  bool gtkContrast = settings && gtkWantsMoreContrast(settingOr(settings, "gtk-interface-contrast", 0));
   sources_.highContrast = adw_style_manager_get_high_contrast(adw_style_manager_get_default()) || gtkContrast;
 }
 

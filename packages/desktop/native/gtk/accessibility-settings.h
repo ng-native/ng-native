@@ -18,10 +18,15 @@ namespace ngn::gtk {
 
 class SettingsPortal;
 
+// Whether a gtk-interface-contrast value asks for more contrast. GtkInterfaceContrast is 0
+// unsupported, 1 no preference, 2 more, 3 less: only 2 does.
+bool gtkWantsMoreContrast(int interfaceContrast);
+
 class AccessibilitySettingsWatcher {
  public:
-  // `changed` hears the settings at start and on each change, on the GTK thread.
-  explicit AccessibilitySettingsWatcher(std::function<void(const AccessibilitySettings &)> changed);
+  // `changed` hears the settings at start and on each change, on the GTK thread. The portal and
+  // AT-SPI are reached through the session bus, or through `connection` where a test gives one.
+  explicit AccessibilitySettingsWatcher(std::function<void(const AccessibilitySettings &)> changed, GDBusConnection *connection = nullptr);
   ~AccessibilitySettingsWatcher();
   AccessibilitySettingsWatcher(const AccessibilitySettingsWatcher &) = delete;
   AccessibilitySettingsWatcher &operator=(const AccessibilitySettingsWatcher &) = delete;

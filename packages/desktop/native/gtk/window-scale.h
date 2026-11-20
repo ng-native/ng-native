@@ -10,6 +10,7 @@
 #include <gtk/gtk.h>
 
 #include <functional>
+#include <vector>
 
 namespace ngn::gtk {
 
@@ -17,8 +18,18 @@ namespace ngn::gtk {
 // none yet), and 1 with no monitor at all.
 double windowScale(GtkWidget *widget);
 
-// Calls `changed` on each change of the realized `window`'s scale, a fractional one included, for
-// as long as its surface lives.
-void followWindowScale(GtkWidget *window, std::function<void()> changed);
+// The handlers followWindowScale made, on the surface they were made on, which is held until they
+// are stopped.
+struct ScaleFollow {
+  GdkSurface *surface{nullptr};
+  std::vector<gulong> handlers;
+};
+
+// Calls `changed` on each change of the realized `window`'s scale, a fractional one included, until
+// stopScaleFollow, or the window's surface goes. Empty when the window has no surface.
+ScaleFollow followWindowScale(GtkWidget *window, std::function<void()> changed);
+
+// Stops the handlers, for whoever must do so before `changed`'s captures go. Safe on an empty one.
+void stopScaleFollow(ScaleFollow &follow);
 
 } // namespace ngn::gtk

@@ -54,18 +54,20 @@ double windowScale(GtkWidget *widget) {
   return surface ? gdk_surface_get_scale_factor(surface) : 1;
 }
 
-void followWindowScale(GtkWidget *window, std::function<void()> changed) {
+ScaleFollow followWindowScale(GtkWidget *window, std::function<void()> changed) {
   GdkSurface *surface = surfaceOf(window);
+  ScaleFollow follow;
   if (!surface) {
-    return;
+    return follow;
   }
+  follow.surface = GDK_SURFACE(g_object_ref(surface));
   // `scale` from GTK 4.12: it changes with every step `scale-factor` takes, and with fractional ones.
   bool fractional = g_object_class_find_property(G_OBJECT_GET_CLASS(surface), "scale") != nullptr;
-  auto connect = [surface](const char *signal, std::function<void()> callback) {
-    g_signal_connect_data(
+  auto connect = [surface, &follow](const char *signal, std::function<void()> callback) {
+    follow.handlers.push_back(g_signal_connect_data(
         surface, signal, G_CALLBACK(+[](GdkSurface *, GParamSpec *, gpointer data) { (*static_cast<std::function<void()> *>(data))(); }),
         new std::function<void()>(std::move(callback)), [](gpointer data, GClosure *) { delete static_cast<std::function<void()> *>(data); },
-        GConnectFlags(0));
+        GConnectFlags(0)));
   };
   connect(fractional ? "notify::scale" : "notify::scale-factor", changed);
   // Showing is a change too: before it windowScale answers with the monitor's scale, and the
@@ -76,6 +78,18 @@ void followWindowScale(GtkWidget *window, std::function<void()> changed) {
       changed();
     }
   });
+  return follow;
+}
+
+void stopScaleFollow(ScaleFollow &follow) {
+  if (!follow.surface) {
+    return;
+  }
+  for (gulong &id : follow.handlers) {
+    g_clear_signal_handler(&id, follow.surface);
+  }
+  follow.handlers.clear();
+  g_clear_object(&follow.surface);
 }
 
 } // namespace ngn::gtk
