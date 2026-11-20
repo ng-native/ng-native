@@ -15,6 +15,8 @@
 #include "app-windows.h"
 #include "capture.h"
 #include "clock-format.h"
+#include "file-dialogs.h"
+#include "file-system.h"
 #include "focus.h"
 #include "gtk-backend.h"
 #include "host-sources.h"
@@ -23,11 +25,15 @@
 #include "launcher-badge.h"
 #include "menus.h"
 #include "native-controls.h"
+#include "notifications.h"
 #include "pango-text.h"
+#include "printing.h"
 #include "proxy-resolver.h"
 #include "scroll-view.h"
+#include "secret-store.h"
 #include "status-notifier.h"
 #include "surface-input.h"
+#include "system-access.h"
 #include "view-widget.h"
 #include "window-scale.h"
 
@@ -618,6 +624,11 @@ int main(int argc, char *argv[]) {
       }
     }
   };
+  // A press that became a drag out of a `[dragItem]` view: the move that crossed the threshold
+  // starts the drag, which has the pointer from there.
+  gHost.input->onDragOut = [](facebook::react::Tag tag, const ngn::PointerInput &, const ngn::DragOutItem &item) {
+    ngn::gtk::dragOutOfPointer(gHost.backend->view(tag), item);
+  };
 
   int width = static_cast<int>(ngn::kDefaultWindowWidth), height = static_cast<int>(ngn::kDefaultWindowHeight);
   gHost.appWindow = adw_application_window_new(gHost.application);
@@ -659,7 +670,12 @@ int main(int argc, char *argv[]) {
   std::string appData = settings.test ? settings.test->applicationSupport() : joined(g_get_user_data_dir(), appId);
   std::string caches = settings.test ? settings.test->caches() : joined(g_get_user_cache_dir(), appId);
   g_mkdir_with_parents(caches.c_str(), 0700);
-  auto system = ngn::gtk::makeSystem(appId, appData);
+  // Another app's copy reaches Clipboard's listeners once its text has been read.
+  auto system = ngn::gtk::makeSystem(appId, appData, [](int64_t count) {
+    if (gHost.state) {
+      gHost.state->clipboardChangeCount.set(count);
+    }
+  });
   // A sidebar's collapsed state autosaves among the app's preferences, as window frames do.
   gHost.backend->splitViews().readPreference = [system](const std::string &key) { return system->preference(key); };
   gHost.backend->splitViews().writePreference = [system](const std::string &key, const folly::dynamic &value) {
@@ -692,31 +708,8 @@ int main(int argc, char *argv[]) {
     gHost.mounting->tree().setScrollOffset(tag, offset);
   });
 
-  static ngn::ProcessesSetup processes;
-  for (char **e = environ; e && *e; ++e) {
-    std::string entry = *e;
-    if (auto eq = entry.find('='); eq != std::string::npos) {
-      processes.environment[entry.substr(0, eq)] = entry.substr(eq + 1);
-    }
-  }
-  processes.lookup = {
-      .isExecutable = [](const std::string &path) { return access(path.c_str(), X_OK) == 0; },
-      .searchPath = os.searchPath,
-  };
-  if (!settings.capabilitiesJson.empty()) {
-    processes.capabilities = ngn::parseCapabilities(folly::parseJson(settings.capabilitiesJson));
-  }
-  auto document = joined(appData, "Documents");
-  g_mkdir_with_parents(document.c_str(), 0700);
-  ngn::FileAccess::Folders folders{
-      .cache = caches,
-      .document = document,
-      .appData = appData,
-      .temp = settings.test ? settings.test->temp() : g_get_tmp_dir(),
-      .home = g_get_home_dir(),
-      .desktop = g_get_user_special_dir(G_USER_DIRECTORY_DESKTOP) ? g_get_user_special_dir(G_USER_DIRECTORY_DESKTOP) : "",
-      .downloads = g_get_user_special_dir(G_USER_DIRECTORY_DOWNLOAD) ? g_get_user_special_dir(G_USER_DIRECTORY_DOWNLOAD) : "",
-  };
+  static ngn::ProcessesSetup processes = ngn::gtk::processesSetup(os, settings.capabilitiesJson, ngn::gtk::insideFlatpak());
+  auto folders = ngn::gtk::fileFolders(appData, caches, settings.test ? settings.test->temp() : g_get_tmp_dir());
   if (auto path = ngn::pathOfUri(bundle)) {
     // An exported bundle on disk: its assets are beside it.
     folders.bundle = directoryOf(*path);
@@ -792,6 +785,23 @@ int main(int argc, char *argv[]) {
   auto menus = std::make_shared<ngn::MenuHost>(
       gHost.gtkMenus, ngn::DefaultMenuOptions{.appName = settings.title, .developer = ngn::DevServer::fromBundleUrl(bundle).has_value(), .os = os});
   gHost.menus = menus;
+  // File > Print with no print item of the app's: what the window shows (printing.h).
+  menus->printWindow = [](std::optional<SurfaceId> surface) {
+    GtkWidget *widget = surface ? surfaceWidgetOf(*surface) : nullptr;
+    if (!widget) {
+      auto *active = gtk_application_get_active_window(gHost.application);
+      auto found = active ? surfaceOfWindow(active) : std::nullopt;
+      widget = found ? surfaceWidgetOf(*found) : nullptr;
+    }
+    if (!widget) {
+      return;
+    }
+    ngn::gtk::printWidget(widget, false, [](const std::string &error) {
+      if (!error.empty()) {
+        fprintf(stderr, "[ngn] print: %s\n", error.c_str());
+      }
+    });
+  };
   // Each window's history, as the app's router reports it, for its header bar's back and forward
   // pair, which goes through it.
   menus->historyChanged = [](SurfaceId surface) {
@@ -870,9 +880,19 @@ int main(int argc, char *argv[]) {
        .menus = menus,
        .tray = tray,
        .processes = processes,
-       .notifications = [appId](std::shared_ptr<ngn::NotificationEvents>) { return ngn::gtk::makeLauncherBadgeNotifications(appId); },
+       .shell = ngn::gtk::makeShellOpener(),
+       .secrets = ngn::gtk::makeSecretStore(appId, ngn::gtk::insideFlatpak()),
+       .sleep = ngn::gtk::makeSleepPreventer(gHost.application),
+       .notifications =
+           [appData, appId](std::shared_ptr<ngn::NotificationEvents> events) {
+             return ngn::gtk::makeNotificationCenter(G_APPLICATION(gHost.application), appData, std::move(events), raiseApp,
+                                                     ngn::gtk::makeLauncherBadge(appId));
+           },
        .undo = gHost.undo,
+       .fileDialogs = ngn::gtk::makeFileDialogs(),
+       .fileWatcher = ngn::gtk::makeFileWatcher(),
        .pathMonitor = ngn::gtk::makePathMonitor(),
+       .printSystem = ngn::gtk::makePrintSystem(surfaceWidgetOf),
        .regionCode = [system] {
          auto locale = system->facts().locale;
          auto dash = locale.find('-');

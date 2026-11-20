@@ -434,14 +434,11 @@ TEST_CASE("the badge count goes out as the launcher entry's count for the app's 
       },
       &heard, nullptr);
 
-  auto center = ngn::gtk::makeLauncherBadgeNotifications("dev.ngnative.Badge");
-  CHECK_FALSE(center->canPost());
-  center->setBadge(3);
-  CHECK(center->badge() == 3);
-  center->setBadge(0);
+  auto showBadge = ngn::gtk::makeLauncherBadge("dev.ngnative.Badge");
+  showBadge(3);
+  showBadge(0);
   CHECK(spinUntil([&] { return heard.size() == 2; }));
   CHECK(heard == std::vector<std::string>{"application://dev.ngnative.Badge.desktop 3 shown", "application://dev.ngnative.Badge.desktop 0 hidden"});
-  CHECK(center->badge() == 0);
   g_dbus_connection_signal_unsubscribe(bus, watch);
   g_object_unref(bus);
 }
