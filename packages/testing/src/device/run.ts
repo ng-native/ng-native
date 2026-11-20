@@ -10,6 +10,7 @@ import type * as browserRunner from 'vitest/internal/browser';
 import { cleanup } from './index.ts';
 import { define, isolate, rerun } from './loader.ts';
 import { installMocking, prepareMocks, restoreMocks } from './mock-registry.ts';
+import { teardownThen } from './after-task.ts';
 import { configureAnimations, resetAnimations } from './motion.ts';
 import { installScreenshotMatcher, resetScreenshotNames } from './screenshot.ts';
 import { installVisualMatchers } from './visual-matchers.ts';
@@ -141,23 +142,12 @@ export async function runFiles(
     }
 
     override async onAfterRunTask(test: unknown): Promise<void> {
-      // Animations go back to the project's setting however the rest of teardown goes, and the
-      // first error, the teardown's own, is the one reported.
-      let failure: { error: unknown } | undefined;
-      try {
+      await teardownThen(async () => {
         await super.onAfterRunTask?.(test);
         current = undefined;
         cleanup();
         resetScreenshotNames();
-      } catch (error) {
-        failure = { error };
-      }
-      try {
-        await resetAnimations();
-      } catch (error) {
-        failure ??= { error };
-      }
-      if (failure) throw failure.error;
+      }, resetAnimations);
     }
 
     override async onAfterRunSuite(suite: unknown): Promise<void> {
