@@ -12,19 +12,27 @@
 // played.
 #include "accessibility-settings.h"
 #include "animation-frames.h"
+#include "app-info.h"
 #include "app-windows.h"
+#include "battery.h"
 #include "capture.h"
 #include "clock-format.h"
+#include "crypto.h"
 #include "file-dialogs.h"
 #include "file-system.h"
 #include "focus.h"
+#include "fonts.h"
 #include "gtk-backend.h"
 #include "host-sources.h"
+#include "image-manipulator.h"
 #include "image-view.h"
 #include "input-replay.h"
 #include "launcher-badge.h"
+#include "locales.h"
+#include "location.h"
 #include "menus.h"
 #include "native-controls.h"
+#include "network-state.h"
 #include "notifications.h"
 #include "pango-text.h"
 #include "printing.h"
@@ -864,8 +872,8 @@ int main(int argc, char *argv[]) {
   }
   setRunningBundle(bundle);
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
-  // is left empty, and its module answers that it is unavailable.
-  ngn::addDesktopModules(
+  // is left empty, and its module is not registered: JavaScript reads it as absent (NgNativeHost).
+  auto desktopModules = ngn::addDesktopModules(
       *modules,
       {.os = os,
        .system = system,
@@ -891,13 +899,17 @@ int main(int argc, char *argv[]) {
        .undo = gHost.undo,
        .fileDialogs = ngn::gtk::makeFileDialogs(),
        .fileWatcher = ngn::gtk::makeFileWatcher(),
+       .location = ngn::gtk::makeLocationSource(),
+       .bundle = ngn::bundleFactsOf(settings.plist),
+       .machine = ngn::gtk::machineFacts(),
        .pathMonitor = ngn::gtk::makePathMonitor(),
+       .power = ngn::gtk::makePowerSource(),
+       .fontRegistrar = ngn::gtk::makeFontRegistrar(),
+       .imageCodec = ngn::gtk::makeImageCodec(),
        .printSystem = ngn::gtk::makePrintSystem(surfaceWidgetOf),
-       .regionCode = [system] {
-         auto locale = system->facts().locale;
-         auto dash = locale.find('-');
-         return dash == std::string::npos ? std::string() : locale.substr(dash + 1);
-       },
+       .crypto = ngn::gtk::makeCryptoSource(),
+       .locales = ngn::gtk::makeLocaleSource(),
+       .regionCode = ngn::gtk::systemRegionCode,
        .updates = gHost.updates,
        .fromDevServer = fromDevServer,
        .reload =
@@ -919,6 +931,8 @@ int main(int argc, char *argv[]) {
                done(loaded);
              });
            }});
+  // The names fonts are loaded under, which text resolves (fonts.h).
+  ngn::gtk::useFontLibrary(desktopModules.fonts);
 
   gHost.runtime = std::make_unique<ngn::Runtime>(
       gHost.mounting,

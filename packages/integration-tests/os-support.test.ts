@@ -140,7 +140,7 @@ describe('the OS support table', () => {
 });
 
 /** A device on `os` whose host has every module a service asks for, or none. */
-function on(os: 'ios' | 'macos' | 'android' | 'web', modules: boolean): () => void {
+function on(os: 'ios' | 'macos' | 'linux' | 'android' | 'web', modules: boolean): () => void {
   const host = globalThis as Record<string, unknown>;
   const fabric = Object.getOwnPropertyDescriptor(host, 'nativeFabricUIManager');
   // React Native is reached for only where Fabric is there, as on a device.
@@ -164,8 +164,9 @@ function on(os: 'ios' | 'macos' | 'android' | 'web', modules: boolean): () => vo
 /** Modules the JavaScript side has a contract for and the desktop host does not register yet. */
 const HOST_OWES = new Set(['NgNativeUndo']);
 
-const PLATFORM: Readonly<Record<SupportOs, 'ios' | 'macos' | 'android' | 'web'>> = {
+const PLATFORM: Readonly<Record<SupportOs, 'ios' | 'macos' | 'linux' | 'android' | 'web'>> = {
   macos: 'macos',
+  linux: 'linux',
   ipados: 'ios',
   iphone: 'ios',
   android: 'android',
@@ -200,10 +201,10 @@ describe('each service the table lists', () => {
   }
 
   it('matches the desktop host: a service is on macOS exactly where the host has its module', () => {
-    // The desktop modules are registered for every backend by the core (desktop-modules.cpp).
+    // The desktop modules the core registers (desktop-modules.cpp): each one AppKit gives a source.
     const host = read('packages/desktop/native/core/src/modules/desktop-modules.cpp');
     const registered = new Set(
-      [...host.matchAll(/addModule\(registry, "(\w+)"/g)].map((m) => m[1]),
+      [...host.matchAll(/(?:addModule\(registry,|addSourced\([^,]+,) "(\w+)"/g)].map((m) => m[1]),
     );
     assert.ok(registered.size > 5, `read ${registered.size} modules from the host`);
     const disagree: string[] = [];

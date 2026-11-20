@@ -17,7 +17,8 @@ FROM almalinux:9
 # drivers, D-Bus and the fonts are for launching the GTK host headless, under X11 and Wayland, and
 # pyatspi reads its accessibility tree over AT-SPI as a screen reader would (atspi-check.py).
 # libsecret is SecureStore's. The English locales are for the GTK tests of a 12-hour clock (en_US)
-# beside a 24-hour one, and the German for a locale that writes neither AM nor PM (de_DE).
+# beside a 24-hour one, and the German for a locale that writes neither AM nor PM (de_DE); both are
+# for the Localization tests too.
 RUN dnf -y install dnf-plugins-core epel-release \
  && dnf config-manager --set-enabled crb \
  && dnf -y module enable nodejs:24 \

@@ -27,7 +27,8 @@ using Answer = std::function<void(Outcome outcome, GVariant *results)>;
 // null) for its `h` arguments. Answers once the portal's Request has its Response. A portal with no
 // Request (a method that returns at once, `returnsRequest` false) answers Done with null results.
 // `started`, when given, hears the Request's object path once the portal returns it: a request
-// that lasts until closed (Inhibit's) is ended with close(path).
+// that lasts until closed (Inhibit's) is ended with close(path). For a method with no Request it
+// hears the object path the method returns, if any (CreateSession's session), before the answer.
 void request(const char *interface, const char *method, GVariant *leading, GVariantBuilder *options, GUnixFDList *fds,
              Answer answer, bool returnsRequest = true, std::function<void(const std::string &path)> started = {});
 
@@ -38,6 +39,10 @@ std::function<void()> subscribe(const char *interface, const char *signal, std::
 
 // Ends the Request at `path` (org.freedesktop.portal.Request.Close), which then never answers.
 void close(const std::string &path);
+
+// Ends the Session at `path` (org.freedesktop.portal.Session.Close): a Location session's updates
+// stop.
+void closeSession(const std::string &path);
 
 // The requests still waiting for a Response: none once each has answered or been closed.
 size_t requestsInFlight();

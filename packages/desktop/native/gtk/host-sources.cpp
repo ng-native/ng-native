@@ -2,10 +2,14 @@
 
 #include "accessible.h"
 #include "alerts.h"
+#include "app-info.h"
 #include "app-windows.h"
+#include "locales.h"
 #include "native-controls.h"
 #include "portal.h"
 #include "system-access.h"
+
+#include "ngn/posix-locale.h"
 
 #include <adwaita.h>
 #if __has_include(<gio/gdesktopappinfo.h>)
@@ -13,8 +17,6 @@
 #define NGN_DESKTOP_APP_INFO 1
 #endif
 #include <gtk/gtk.h>
-
-#include <sys/utsname.h>
 
 #include <atomic>
 #include <memory>
@@ -133,19 +135,17 @@ class GtkSystem final : public System {
   }
 
   DeviceFacts facts() override {
-    struct utsname name {};
-    uname(&name);
-    const char *const *languages = g_get_language_names();
-    std::string locale = languages && languages[0] ? languages[0] : "en";
-    // "en_GB.UTF-8" to "en-GB".
-    locale = locale.substr(0, locale.find_first_of(".@"));
-    for (auto &c : locale) {
-      c = c == '_' ? '-' : c;
-    }
-    if (locale == "C" || locale == "POSIX") {
-      locale = "en";
-    }
-    return {.osVersion = name.release, .systemName = "Linux", .locale = locale, .rightToLeft = gtk_widget_get_default_direction() == GTK_TEXT_DIR_RTL};
+    // The distribution's name and version, not the kernel's: Platform.Version is "24.04" on
+    // Ubuntu 24.04, as OS_VERSION reads it.
+    auto release = distroRelease();
+    // The most preferred language, as Localization's first locale.
+    auto languages = preferredLanguageTags(getenv("LANGUAGE") ? getenv("LANGUAGE") : "", localeOf("LC_MESSAGES"));
+    std::string locale = languages.empty() ? "en" : languages.front();
+    return {.osVersion = release.versionId,
+            .systemName = release.name,
+            .interfaceIdiom = "desktop",
+            .locale = locale,
+            .rightToLeft = gtk_widget_get_default_direction() == GTK_TEXT_DIR_RTL};
   }
   void openUrl(const std::string &url, std::function<void(bool)> done) override {
     openUri(url, std::move(done));
@@ -308,28 +308,6 @@ class GtkUndo final : public UndoManager {
   std::shared_ptr<UndoStacks> stacks_ = std::make_shared<UndoStacks>();
 };
 
-// GLib's network monitor: whether a route exists, its interface types unknown (`other`).
-class GioPathMonitor final : public PathMonitor {
- public:
-  std::function<void()> watch(std::function<void(const NetworkPath &)> changed) override {
-    auto *heap = new std::function<void(const NetworkPath &)>(std::move(changed));
-    GNetworkMonitor *monitor = g_network_monitor_get_default();
-    (*heap)(pathOf(g_network_monitor_get_network_available(monitor)));
-    gulong handler = g_signal_connect_data(
-        monitor, "network-changed", G_CALLBACK(networkChanged), heap,
-        [](gpointer data, GClosure *) { delete static_cast<std::function<void(const NetworkPath &)> *>(data); }, GConnectFlags(0));
-    return [monitor, handler] { g_signal_handler_disconnect(monitor, handler); };
-  }
-
- private:
-  static NetworkPath pathOf(bool available) {
-    return {.satisfied = available, .other = available};
-  }
-  static void networkChanged(GNetworkMonitor *, gboolean available, gpointer data) {
-    (*static_cast<std::function<void(const NetworkPath &)> *>(data))(pathOf(available));
-  }
-};
-
 } // namespace
 
 bool canOpenUri(const std::string &uri, bool sandboxed, const std::function<bool(const std::string &scheme)> &hasHandler) {
@@ -356,10 +334,6 @@ std::shared_ptr<MenuBackend> makeNoMenus() {
 
 std::shared_ptr<UndoManager> makeUndoManager() {
   return std::make_shared<GtkUndo>();
-}
-
-std::shared_ptr<PathMonitor> makePathMonitor() {
-  return std::make_shared<GioPathMonitor>();
 }
 
 std::shared_ptr<ControlMeasurer> makeControlMeasurer() {

@@ -350,7 +350,7 @@ TEST_CASE("the device token is asked for once however many wait, in hex, and its
   CHECK(registrar->registers == 2);
 }
 
-TEST_CASE("a host without the entitlement rejects the token with what to do, and one without push rejects") {
+TEST_CASE("a host without the entitlement rejects the token with what to do, and one without push has no push methods") {
   auto registrar = std::make_shared<FakeRegistrar>();
   auto events = std::make_shared<ngn::NotificationEvents>("macos");
   auto push = std::make_shared<ngn::PushTokens>(registrar, events);
@@ -368,9 +368,10 @@ TEST_CASE("a host without the entitlement rejects the token with what to do, and
   CHECK(registrar->registers == 2);
   push->failed("The Internet connection appears to be offline.");
 
+  // A host with no push service has neither push method, so JavaScript reads them as absent.
   auto without = ngn::makeNotificationsModule(std::make_shared<FakeCenter>(), events);
-  CHECK(ask(*without, "getDevicePushTokenAsync")->error.value_or("").find("not available") != std::string::npos);
-  CHECK(ask(*without, "unregisterForNotificationsAsync")->value == dynamic(nullptr));
+  CHECK_FALSE(without->methods().contains("getDevicePushTokenAsync"));
+  CHECK_FALSE(without->methods().contains("unregisterForNotificationsAsync"));
 }
 
 TEST_CASE("dropping a notification listener waits for a call to it already running on another thread") {

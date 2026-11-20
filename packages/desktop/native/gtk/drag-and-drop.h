@@ -1,6 +1,6 @@
 // Drag and drop on GTK, as the core's input dispatcher decides it (input-dispatcher.h): a
-// GtkDropTarget on each surface hands a drag's files, text and urls to the dispatcher, which
-// picks the `fileDrop` view under it; and a press the dispatcher turns into a drag out of a
+// GtkDropTargetAsync on each surface reads a drag's file list and its text, both, and hands its
+// files, urls and text to the dispatcher, which picks the `fileDrop` view under it; and a press the dispatcher turns into a drag out of a
 // `[dragItem]` view starts a GDK drag with that item. Inside a Flatpak, GTK reads a dropped file
 // through the document portal, so the path the app gets is one it can open.
 #pragma once

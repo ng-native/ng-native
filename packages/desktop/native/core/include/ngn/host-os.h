@@ -25,6 +25,9 @@ struct HostOs {
   std::string id;
   // What Device's `osName` reports ("macOS").
   std::string name;
+  // Device's brand and manufacturer where the OS's maker makes the machines it runs on ("Apple");
+  // empty where the machine's own maker is (MachineFacts::manufacturer).
+  std::string deviceMaker;
   // The host binary's name, for its usage line.
   std::string program;
   // The modifier an app's shortcuts and the OS's own commands use (MenuModifier): the one a

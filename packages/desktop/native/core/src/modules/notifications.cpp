@@ -512,25 +512,21 @@ struct Notifications : NativeModule {
       center->setBadge(static_cast<int>(args[0].asDouble()));
       promise.resolve(true);
     });
-    promise("getDevicePushTokenAsync", [push, os = events->os()](const folly::dynamic &, JsPromise promise) {
-      if (!push) {
-        promise.reject("Remote notifications are not available in this build of the desktop host.");
-        return;
-      }
-      push->request([promise, os](std::optional<std::string> token, std::string error) {
-        if (token) {
-          promise.resolve(folly::dynamic::object("type", os)("data", *token));
-        } else {
-          promise.reject(error);
-        }
+    if (push) {
+      promise("getDevicePushTokenAsync", [push, os = events->os()](const folly::dynamic &, JsPromise promise) {
+        push->request([promise, os](std::optional<std::string> token, std::string error) {
+          if (token) {
+            promise.resolve(folly::dynamic::object("type", os)("data", *token));
+          } else {
+            promise.reject(error);
+          }
+        });
       });
-    });
-    promise("unregisterForNotificationsAsync", [push](const folly::dynamic &, JsPromise promise) {
-      if (push) {
+      promise("unregisterForNotificationsAsync", [push](const folly::dynamic &, JsPromise promise) {
         push->unregister();
-      }
-      promise.resolve(nullptr);
-    });
+        promise.resolve(nullptr);
+      });
+    }
     listeners();
     subscription_ = events->listen([this](const folly::dynamic &event) { emit("ngNativeNotifications", event); });
   }

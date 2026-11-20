@@ -182,7 +182,8 @@ class NotificationEvents {
   Listeners<folly::dynamic> listeners_;
 };
 
-// `push` absent (a host that cannot register) rejects getDevicePushTokenAsync.
+// `push` absent (a host with no push service, such as Linux's) leaves out getDevicePushTokenAsync
+// and unregisterForNotificationsAsync, which JavaScript then reads as absent.
 std::shared_ptr<NativeModule> makeNotificationsModule(
     std::shared_ptr<NotificationCenter> center,
     std::shared_ptr<NotificationEvents> events,
