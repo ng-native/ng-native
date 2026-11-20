@@ -754,7 +754,7 @@ TEST_CASE("a date picker sends the offset of the day it sends, when a bound move
   double min = static_cast<double>(g_date_time_to_unix(summer)) * 1000;
   auto view = control(7, "RNDateTimePicker", controlProps<Descriptor>(folly::dynamic::object("date", static_cast<double>(g_date_time_to_unix(winter)) * 1000)("minimumDate", min)("mode", "date")));
   views.add(view);
-  GtkWidget *calendar = gtk_popover_get_child(gtk_menu_button_get_popover(GTK_MENU_BUTTON(controlOf(views, 7))));
+  GtkWidget *calendar = pickerPart(controlOf(views, 7), GTK_TYPE_CALENDAR);
   GDateTime *before = g_date_time_new_local(2026, 3, 20, 0, 0, 0);
   gtk_calendar_select_day(GTK_CALENDAR(calendar), before);
   REQUIRE(events.sent.size() == 1);
@@ -774,7 +774,7 @@ TEST_CASE("a date picker keeps the month the user browses to through an update t
   g_date_time_unref(noon);
   auto view = control(7, "RNDateTimePicker", controlProps<Descriptor>(folly::dynamic::object("date", ms)("mode", "date")));
   views.add(view);
-  GtkWidget *calendar = gtk_popover_get_child(gtk_menu_button_get_popover(GTK_MENU_BUTTON(controlOf(views, 7))));
+  GtkWidget *calendar = pickerPart(controlOf(views, 7), GTK_TYPE_CALENDAR);
   REQUIRE(GTK_IS_CALENDAR(calendar));
   auto month = [calendar] {
     GDateTime *at = gtk_calendar_get_date(GTK_CALENDAR(calendar));
@@ -828,7 +828,7 @@ TEST_CASE("a date picker shows the bound it sends for a day picked past it, when
   auto props = [ms] { return controlProps<Descriptor>(folly::dynamic::object("date", ms)("maximumDate", ms)("mode", "date")); };
   auto view = control(7, "RNDateTimePicker", props());
   views.add(view);
-  GtkWidget *calendar = gtk_popover_get_child(gtk_menu_button_get_popover(GTK_MENU_BUTTON(controlOf(views, 7))));
+  GtkWidget *calendar = pickerPart(controlOf(views, 7), GTK_TYPE_CALENDAR);
   REQUIRE(GTK_IS_CALENDAR(calendar));
   auto shown = [calendar] {
     GDateTime *at = gtk_calendar_get_date(GTK_CALENDAR(calendar));
@@ -854,7 +854,7 @@ TEST_CASE("a date picker holding a date GLib cannot represent sends a picked day
   MountedViews views(false, 300, 100);
   // In the year 33658, past GLib's 9999.
   views.add(control(7, "RNDateTimePicker", controlProps<Descriptor>(folly::dynamic::object("date", 1e15)("mode", "date"))));
-  GtkWidget *calendar = gtk_popover_get_child(gtk_menu_button_get_popover(GTK_MENU_BUTTON(controlOf(views, 7))));
+  GtkWidget *calendar = pickerPart(controlOf(views, 7), GTK_TYPE_CALENDAR);
   int criticals = 0;
   // Removed on every exit path: the handler holds &criticals.
   struct Handler {
