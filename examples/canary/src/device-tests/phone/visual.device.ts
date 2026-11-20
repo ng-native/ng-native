@@ -54,3 +54,11 @@ it('lands a transition at once with animations off', async () => {
   expect(swatch).toHaveStyle({ backgroundColor: '#cc6633' });
   await expect(swatch).toHaveColorAt({ x: 150, y: 50 }, '#cc6633');
 });
+
+it('starts the next test with animations back on', async () => {
+  // The test before turned them off; the runner puts them back after each test.
+  const { instance, settle } = await render(Swatch);
+  instance.warm.set(true);
+  await settle();
+  expect(screen.getByTestId('swatch')).not.toHaveStyle({ backgroundColor: '#cc6633' });
+});
