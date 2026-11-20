@@ -86,10 +86,21 @@ struct EdgeColors {
   bool operator==(const EdgeColors &) const = default;
 };
 
+// One background image: its gradient filling a tile whose top left is at (0, 0), and where its
+// tiles go in the view's coordinates (backgroundTiles), all of one size.
+struct BackgroundLayer {
+  SvgGradient gradient;
+  std::vector<SvgRect> tiles;
+  bool operator==(const BackgroundLayer &) const = default;
+};
+
 struct BoxDescription {
   // The border box, from (0, 0).
   SvgRect bounds;
   std::optional<uint32_t> background;
+  // Over the background colour, cut to the border box's shape: the last listed first, at the
+  // bottom. An image with nothing to draw is left out.
+  std::vector<BackgroundLayer> backgroundImages;
   CornerRadii radii;
   EdgeWidths borderWidths;
   EdgeColors borderColors;
@@ -102,6 +113,11 @@ struct BoxDescription {
 };
 
 BoxDescription describeBox(const facebook::react::ViewProps &props, const facebook::react::LayoutMetrics &layout);
+
+// Draws a described box's border as drawViewBox does: a solid one as its ring, or each side in its
+// own colour, and a dashed or dotted one as a dashed stroke along the middle of its widest side.
+// For a toolkit that draws only some borders itself (GSK draws no dashes below GTK 4.14).
+void drawBorder(const BoxDescription &box, SvgCanvas &canvas);
 
 // A box shadow as a layer the size of the view, which Core Animation blurs.
 struct BoxShadowLayer {

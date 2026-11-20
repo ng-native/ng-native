@@ -276,6 +276,17 @@ class CairoCanvas final : public SvgCanvas {
   // its luminance times its alpha, as SVG masks by; an alpha mask's alpha as it is.
   void beginMask(bool alpha) override {
     cairo_surface_t *surface = viewSurface();
+    if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+      // No bitmap (a view past cairo's limit): the mask's own drawing goes to a scratch bitmap and
+      // is dropped, and the masked content then draws unmasked, as a filter's source does.
+      cairo_surface_destroy(surface);
+      cairo_surface_t *scratch = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
+      cairo_t *mask = drawingInto(scratch);
+      cairo_surface_destroy(scratch);
+      masks_.push_back({.parent = cr_, .mask = mask, .surface = nullptr, .saved = saved_, .alpha = alpha});
+      cr_ = mask;
+      return;
+    }
     cairo_t *mask = drawingInto(surface);
     masks_.push_back({.parent = cr_, .mask = mask, .surface = surface, .saved = saved_, .alpha = alpha});
     cr_ = mask;
@@ -290,6 +301,9 @@ class CairoCanvas final : public SvgCanvas {
     saved_ = frame.saved;
     cairo_destroy(frame.mask);
     frame.mask = nullptr;
+    if (!frame.surface) {
+      return;
+    }
     if (!frame.alpha) {
       toLuminance(frame.surface);
     }
@@ -304,6 +318,9 @@ class CairoCanvas final : public SvgCanvas {
     }
     Mask frame = masks_.back();
     masks_.pop_back();
+    if (!frame.surface) {
+      return;
+    }
     cairo_pop_group_to_source(cr_);
     cairo_set_matrix(cr_, &base_);
     cairo_mask_surface(cr_, frame.surface, 0, 0);

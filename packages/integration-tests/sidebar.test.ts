@@ -29,7 +29,7 @@ import {
   registerViewName,
   registeredViewName,
 } from '@ng-native/fabric';
-import { HardwareBack, Screen, type ScreenSource } from '@ng-native/device';
+import { HardwareBack, Screen, nativeSplitViews, type ScreenSource } from '@ng-native/device';
 import { cleanup, fireEvent, render, settle, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
@@ -157,6 +157,28 @@ describe('on macOS', () => {
     fabric.emit(getByTestId('search'), 'topSidebarCollapse', { collapsed: true });
     await settle();
     assert.equal(instance.collapsed(), false);
+  });
+});
+
+describe('on Linux', () => {
+  before(() => registerPlatformComponents('linux'));
+  after(() => registerPlatformComponents('ios'));
+
+  it('commits sections and items as the source list the GTK host draws, with no drawn rows', async () => {
+    const { getByTestId } = await render(Fixture);
+    assert.equal(getByTestId('split').viewName, 'NgNativeSplitView');
+    const mail = getByTestId('mail');
+    assert.equal(mail.viewName, 'NgNativeSidebarSection');
+    assert.equal(mail.props['title'], 'Mailboxes');
+    assert.equal(mail.props['collapsible'], true);
+    const inbox = getByTestId('inbox');
+    assert.equal(inbox.viewName, 'NgNativeSidebarItem');
+    assert.equal(inbox.props['label'], 'Inbox');
+    assert.equal(inbox.props['badge'], '3');
+    assert.equal(inbox.props['selected'], true);
+    assert.equal(inbox.children.length, 0, 'a default row is drawn by the host');
+    assert.equal(getByTestId('sent').props['selected'], false);
+    assert.equal(mail.children.length, 2, 'no drawn title row');
   });
 });
 
@@ -340,6 +362,31 @@ describe('on iPadOS', () => {
     } finally {
       registerPlatformComponents('ios');
     }
+  });
+
+  it('never asks for the module off iOS, where it is missing and the asking is logged', () => {
+    const asked: string[] = [];
+    const host = globalThis as Record<string, unknown>;
+    host['require'] = (id: string) =>
+      id === 'react-native'
+        ? {
+            Platform: { OS: 'macos' },
+            TurboModuleRegistry: {
+              get: (name: string) => {
+                asked.push(name);
+                return null;
+              },
+            },
+          }
+        : undefined;
+    host['nativeFabricUIManager'] = {};
+    try {
+      assert.equal(nativeSplitViews(), false);
+    } finally {
+      delete host['require'];
+      delete host['nativeFabricUIManager'];
+    }
+    assert.deepEqual(asked, []);
   });
 
   /** Render as the iPad does: the names its module gives, for the length of one test. */

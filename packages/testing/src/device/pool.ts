@@ -45,11 +45,12 @@ export interface DevicePoolOptions {
    * Run only on apps on this platform: a project per platform runs every file on each. Default:
    * any app.
    */
-  platform?: 'ios' | 'android' | 'macos';
+  platform?: 'ios' | 'android' | 'macos' | 'linux';
   /**
    * Starts the app for each worker that finds none connected, and again after the app is lost: a
    * dropped session fails the file that was running, relaunches the app with fresh state, and the
-   * run goes on with the files that remain. See `AppLauncher`, and `macosLauncher()` for a Mac.
+   * run goes on with the files that remain. See `AppLauncher`, `macosLauncher()` for a Mac and
+   * `linuxLauncher()` for Linux.
    * Without one the app is opened by hand, as on a simulator, and a lost app ends the run.
    */
   launch?: AppLauncher;

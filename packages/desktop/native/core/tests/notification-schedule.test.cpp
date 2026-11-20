@@ -148,7 +148,12 @@ TEST_CASE("A calendar trigger's next match: smaller units start at their first, 
   CHECK(ngn::nextCalendarMatch({{"month", 2}, {"day", 29}}, after) == utc(2028, 2, 29));
   // Strictly after.
   CHECK(ngn::nextCalendarMatch({{"hour", 10}, {"minute", 30}, {"second", 15}}, after) == utc(2026, 11, 20, 10, 30, 15));
+  // A year more than eight years on, and a 29th of February that falls on a Thursday: the next is 2052.
+  CHECK(ngn::nextCalendarMatch({{"year", 2040}}, after) == utc(2040, 1, 1));
+  CHECK(ngn::nextCalendarMatch({{"year", 2040}, {"month", 6}, {"day", 15}, {"hour", 9}}, after) == utc(2040, 6, 15, 9));
+  CHECK(ngn::nextCalendarMatch({{"month", 2}, {"day", 29}, {"weekday", 5}}, utc(2024, 2, 29, 12)) == utc(2052, 2, 29));
   // Never.
+  CHECK_FALSE(ngn::nextCalendarMatch({{"year", 2040}, {"month", 2}, {"day", 30}}, after));
   CHECK_FALSE(ngn::nextCalendarMatch({{"year", 2020}}, after));
   CHECK_FALSE(ngn::nextCalendarMatch({{"month", 2}, {"day", 30}}, after));
 }
@@ -317,4 +322,37 @@ TEST_CASE("A schedule file that does not read is an empty schedule") {
   schedule.start();
   CHECK(schedule.pending().empty());
   CHECK(schedule.delivered().empty());
+}
+
+TEST_CASE("A schedule that cannot be written refuses the request and keeps the one it had") {
+  TimeZone zone("UTC");
+  Folder folder;
+  FakeClock clock;
+  std::vector<std::string> shown;
+  ngn::NotificationSchedule schedule(folder.file(), clock.clock(), [&](const ngn::NotificationRequest &r) { shown.push_back(r.identifier); });
+  schedule.start();
+  CHECK(schedule.add(request("a", {.kind = ngn::NotificationTrigger::Kind::Interval, .seconds = 10})));
+
+  // The folder is gone: the temporary file cannot be opened.
+  std::filesystem::remove_all(folder.path);
+  CHECK_FALSE(schedule.add(request("b", {.kind = ngn::NotificationTrigger::Kind::Interval, .seconds = 5})));
+  CHECK_FALSE(schedule.add(request("a", {.kind = ngn::NotificationTrigger::Kind::Interval, .seconds = 99})));
+  auto pending = schedule.pending();
+  REQUIRE(pending.size() == 1);
+  CHECK(pending[0].identifier == "a");
+  CHECK(pending[0].trigger.seconds == 10);
+  clock.advance(10'000);
+  CHECK(shown == std::vector<std::string>{"a"});
+}
+
+TEST_CASE("A schedule whose file cannot be replaced refuses the request and leaves no temporary file") {
+  Folder folder;
+  // A directory where the file belongs: the rename onto it fails.
+  std::filesystem::create_directory(folder.file());
+  FakeClock clock;
+  ngn::NotificationSchedule schedule(folder.file(), clock.clock(), [](const ngn::NotificationRequest &) {});
+  schedule.start();
+  CHECK_FALSE(schedule.add(request("a", {.kind = ngn::NotificationTrigger::Kind::Interval, .seconds = 10})));
+  CHECK(schedule.pending().empty());
+  CHECK_FALSE(std::filesystem::exists(folder.file() + ".tmp"));
 }

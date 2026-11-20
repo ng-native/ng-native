@@ -12,9 +12,9 @@
 //   magnify <x> <y> <amount> began|changed|ended
 //   rotate <x> <y> <degrees> began|changed|ended     anticlockwise
 //   key <key> [cmd] [shift] [option] [ctrl]          to the key window, whichever it is (the
-//                         script's own when none is): a character, escape, return, space, tab or
-//                         delete; a character (or a space) with no command or control modifier is
-//                         typed into a focused field
+//                         script's own when none is): a character, escape, return, space, tab,
+//                         delete, or an arrow (left, right, up, down); a character (or a space) with
+//                         no command or control modifier is typed into a focused field
 //   type <text>           the rest of the line, inner spaces and all, typed a character at a time
 //                         into the focused field, as the keyboard would (no `#`, which starts a
 //                         comment)

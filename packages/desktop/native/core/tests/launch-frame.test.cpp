@@ -78,6 +78,20 @@ TEST_CASE("a launch loaded after another reload began owes nothing for the newer
   CHECK_FALSE(frame.shown(2, 3));
 }
 
+TEST_CASE("a clean quit marks the launch a success only while its bundle is loaded") {
+  ngn::LaunchFrame frame;
+  CHECK(frame.bundleLoaded());
+  // A reload under way: its launch never ran.
+  frame.bundleLoading();
+  CHECK_FALSE(frame.bundleLoaded());
+  // Its bundle did not load.
+  frame.bundleLoadEnded(false);
+  CHECK_FALSE(frame.bundleLoaded());
+  frame.bundleLoading();
+  frame.bundleLoadEnded(true);
+  CHECK(frame.bundleLoaded());
+}
+
 TEST_CASE("a reload of the same launch drops the frame owed by the instance it replaces") {
   ngn::LaunchFrame frame;
   frame.loaded(1, 1);

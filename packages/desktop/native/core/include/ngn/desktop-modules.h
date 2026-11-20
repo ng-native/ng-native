@@ -72,6 +72,7 @@ struct DesktopModuleSources {
 
   std::shared_ptr<WindowHost> windows;
   std::shared_ptr<MenuHost> menus;
+  // Null leaves NgNativeTray or NgNativeDock out, so the app's Tray or Dock reads as absent.
   std::shared_ptr<TrayHost> tray;
   std::shared_ptr<DockHost> dock;
 

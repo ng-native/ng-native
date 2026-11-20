@@ -11,6 +11,7 @@
 #   /empty-location 302 with an empty Location and a body; /multiple-choices 300 to /text
 #   /moved          301 to /echo; /found 302 to /echo
 #   /set-cookie     sets flavour=lemon
+#   /set-cookies    sets flavour=lemon and an HttpOnly token=abc for an hour, and a session visit=1
 #   /gzip           a gzip-encoded body
 #   /ws             a WebSocket that echoes, picks the subprotocol "chat", refuses "refuse", picks
 #                   "other" when offered "pick-other", and answers the texts "pings" (pings seen),
@@ -116,6 +117,10 @@ class Handler(socketserver.BaseRequestHandler):
                 self.respond(200, [('Content-Type', 'application/json')], json.dumps(LOG).encode())
         elif path == '/set-cookie':
             self.respond(200, [('Set-Cookie', 'flavour=lemon; Path=/')])
+        elif path == '/set-cookies':
+            self.respond(200, [('Set-Cookie', 'flavour=lemon; Path=/; Max-Age=3600'),
+                               ('Set-Cookie', 'token=abc; Path=/; Max-Age=3600; HttpOnly'),
+                               ('Set-Cookie', 'visit=1; Path=/')])
         elif path == '/gzip':
             self.respond(200, [('Content-Encoding', 'gzip')], gzip.compress(b'zipped'))
         else:

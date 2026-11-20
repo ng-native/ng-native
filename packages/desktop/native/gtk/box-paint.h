@@ -1,9 +1,10 @@
 // A view's box (describeBox, view-box.h) as GSK render nodes, in the order CSS paints it: the outer
-// shadows, the last listed lowest; the background in the border box's shape; the inset shadows in
-// the padding box; the border.
+// shadows, the last listed lowest; the background colour and then the background images in the
+// border box's shape, each image's first tile under a repeat node; the inset shadows in the padding
+// box; the border.
 //
-// A dashed or dotted border is drawn solid: GSK strokes paths only from GTK 4.14, and the cairo
-// fallback below it comes with the rest of the toolkit look.
+// A dashed or dotted border is a cairo node stroked by the core's drawBorder, as on macOS: GSK
+// strokes paths only from GTK 4.14, and the host builds against el9's 4.12.
 #pragma once
 
 #include "ngn/view-box.h"

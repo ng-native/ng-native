@@ -1,14 +1,13 @@
 // What the GTK host passes the core for the OS, as far as this backend reaches it yet: the System
-// over GLib and libadwaita, and stand-ins for what later steps add (menus, the tray and native
-// controls), each of which refuses or does nothing rather than pretend. Networking is the core's
-// libcurl client (curl-network.h).
+// over GLib and libadwaita, and stand-ins for what later steps add, each of which refuses or does
+// nothing rather than pretend. Networking is the core's libcurl client (curl-network.h).
 #pragma once
 
 #include "ngn/app-menus.h"
 #include "ngn/app-windows.h"
 #include "ngn/native-controls.h"
 #include "ngn/system.h"
-#include "ngn/tray-and-dock.h"
+#include "ngn/undo.h"
 
 #include <functional>
 #include <memory>
@@ -32,8 +31,10 @@ bool canOpenUri(const std::string &uri, bool sandboxed, const std::function<bool
 std::shared_ptr<StringStore> makeKeyFileStore(const std::string &path);
 
 std::shared_ptr<MenuBackend> makeNoMenus();
-std::shared_ptr<TrayBackend> makeNoTray();
-std::shared_ptr<DockBackend> makeNoDock();
+
+// The app's undo history (`UndoStack`): the core's UndoStacks, which GTK has no manager of its own
+// for, kept on the UI thread whichever thread asks, as AppKit's NSUndoManager is.
+std::shared_ptr<UndoManager> makeUndoManager();
 
 // How big GTK draws each native control (native-controls.h).
 std::shared_ptr<ControlMeasurer> makeControlMeasurer();

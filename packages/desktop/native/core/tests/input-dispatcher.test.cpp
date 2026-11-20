@@ -3,6 +3,7 @@
 #include "ngn/input-dispatcher.h"
 
 #include <doctest/doctest.h>
+#include <chrono>
 #include <folly/json.h>
 
 using namespace facebook::react;
@@ -411,6 +412,17 @@ TEST_CASE("a drag's urls split into files, named by their last part, and other u
   CHECK(ngn::dragItems({"https://a.example/"}, std::string("https://a.example/\nRead this")).text == "https://a.example/\nRead this");
   CHECK(ngn::dragItems({}, std::string("")).text == "");
 
+  // A drag of thousands of files is matched in linear time: every path a line, none dragged text.
+  std::vector<std::string> many;
+  std::string paths;
+  for (int i = 0; i < 20000; ++i) {
+    many.push_back("file:///tmp/dir%20x/file-" + std::to_string(i) + ".txt");
+    paths += "/tmp/dir x/file-" + std::to_string(i) + ".txt\n";
+  }
+  auto started = std::chrono::steady_clock::now();
+  CHECK_FALSE(ngn::dragItems(many, paths).text);
+  CHECK(std::chrono::steady_clock::now() - started < std::chrono::seconds(3));
+
   folly::json::serialization_opts opts;
   opts.sort_keys = true;
   CHECK(
@@ -451,6 +463,23 @@ TEST_CASE("a drag goes to the nearest view under it that takes drops, entering a
   CHECK(f.input.events == Events{enter2, "dropLeave 2 {}"});
   f.input.dragExit(0);
   CHECK(f.input.events.size() == 2);
+}
+
+TEST_CASE("a drag whose data has not come is hit tested, and enters with the data once it has") {
+  Fixture f;
+  setProps(f.tree, 2, desktopView(folly::dynamic::object("fileDrop", true)));
+  const std::string enter2 =
+      R"(dropEnter 2 {"files":[{"name":"notes.md","uri":"file:///Users/me/notes.md"}],"text":null,"urls":[]})";
+
+  ngn::DragItems waiting;
+  waiting.pending = true;
+  CHECK(f.input.dragOver(Fixture::at({35, 35}), waiting));
+  CHECK_FALSE(f.input.dragOver(Fixture::at({390, 290}), waiting));
+  CHECK(f.input.events.empty());
+  // The data came while the pointer stayed over the view.
+  CHECK(f.input.dragOver(Fixture::at({35, 35}), waiting));
+  CHECK(f.input.dragOver(Fixture::at({35, 35}), notes()));
+  CHECK(f.input.events == Events{enter2});
 }
 
 TEST_CASE("a drop goes to the view the drag is over, with no leave, and ends the drag") {

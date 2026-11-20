@@ -33,6 +33,7 @@ function startOfDay(ms: number): number {
       class="flex-row items-start gap-3 border-b-hairline border-zinc-200 px-5 py-4 active:bg-zinc-100 dark:border-zinc-800 dark:active:bg-zinc-900 macos:px-4 macos:py-2"
       accessibilityRole="button"
       [accessibilityLabel]="note().title || 'Untitled note'"
+      [accessibilityDescribedBy]="preview() ? previewId() : undefined"
       [contextMenu]="rowMenu"
       [dragItem]="dragged()"
       (press)="open.emit()"
@@ -53,6 +54,7 @@ function startOfDay(ms: number): number {
         @if (preview()) {
           <text
             class="mt-1 text-sm text-zinc-500 macos:mt-0.5 macos:text-[11px]"
+            [nativeID]="previewId()"
             [numberOfLines]="2"
             >{{ preview() }}</text
           >
@@ -72,6 +74,8 @@ export class NoteRow {
   readonly pin = output<void>();
 
   protected readonly preview = computed(() => excerpt(this.note().body, 120));
+  /** The preview's id, which the row is described by: a screen reader says it after the title. */
+  protected readonly previewId = computed(() => `preview-${this.note().id}`);
   protected readonly updated = computed(() => formatUpdated(this.note().updatedAt));
   /** Dragged out of the list on macOS and iPadOS, the note goes as its text. */
   protected readonly dragged = computed(() => ({

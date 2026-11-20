@@ -45,10 +45,25 @@ struct Pending {
   bool returnsRequest{true};
   std::function<void(const std::string &)> started;
   bool answered{false};
+  // Watches for the portal that took the request going away: its bus name vanishing, or a
+  // peer-to-peer connection closing. Either way no Response is coming.
+  guint ownerWatch{0};
+  gulong closedHandler{0};
 
   ~Pending() {
+    unwatchOwner();
     unsubscribe();
     g_clear_object(&connection);
+  }
+  void unwatchOwner() {
+    if (ownerWatch != 0) {
+      g_bus_unwatch_name(ownerWatch);
+      ownerWatch = 0;
+    }
+    if (closedHandler != 0) {
+      g_signal_handler_disconnect(connection, closedHandler);
+      closedHandler = 0;
+    }
   }
   void unsubscribe() {
     if (subscription != 0) {
@@ -61,6 +76,7 @@ struct Pending {
       return;
     }
     answered = true;
+    unwatchOwner();
     unsubscribe();
     answer(outcome, results);
   }
@@ -102,6 +118,30 @@ void subscribe(Pending &request, guint id) {
   request.subscription = g_dbus_connection_signal_subscribe(
       request.connection, gInjected ? nullptr : kBusName, "org.freedesktop.portal.Request", "Response",
       request.path.empty() ? nullptr : request.path.c_str(), nullptr, G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE, responded, GUINT_TO_POINTER(id), nullptr);
+}
+
+// The portal that took the request is gone before its Response: the request fails, as a portal's
+// Response of 2 does. A request that has not been answered by then is not timed out.
+void ownerGone(guint id) {
+  finish(id, Outcome::Failed, nullptr);
+}
+
+// Called once the portal has taken the request (its reply is in), so the bus name has an owner
+// to lose.
+void watchOwner(Pending &request, guint id) {
+  if (request.ownerWatch != 0 || request.closedHandler != 0) {
+    return;
+  }
+  if (gInjected) {
+    request.closedHandler = g_signal_connect_data(
+        request.connection, "closed",
+        G_CALLBACK(+[](GDBusConnection *, gboolean, GError *, gpointer data) { ownerGone(GPOINTER_TO_UINT(data)); }),
+        GUINT_TO_POINTER(id), nullptr, GConnectFlags(0));
+    return;
+  }
+  request.ownerWatch = g_bus_watch_name_on_connection(
+      request.connection, kBusName, G_BUS_NAME_WATCHER_FLAGS_NONE, nullptr,
+      [](GDBusConnection *, const gchar *, gpointer data) { ownerGone(GPOINTER_TO_UINT(data)); }, GUINT_TO_POINTER(id), nullptr);
 }
 
 // The path a Request for `token` has, from the connection's unique name (":1.42" makes
@@ -171,6 +211,7 @@ void replied(GObject *source, GAsyncResult *result, gpointer data) {
     }
   }
   g_variant_unref(reply);
+  watchOwner(request, id);
   if (request.started) {
     auto started = std::move(request.started);
     started(request.path);

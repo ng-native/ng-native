@@ -85,7 +85,7 @@ void DBusProperties::made(GObject *, GAsyncResult *result, gpointer data) {
 }
 
 void DBusProperties::notify() {
-  std::vector<std::shared_ptr<std::function<void()>>> listeners;
+  std::vector<std::shared_ptr<Listener>> listeners;
   {
     std::lock_guard lock(mutex_);
     for (const auto &[id, listener] : listeners_) {
@@ -93,7 +93,11 @@ void DBusProperties::notify() {
     }
   }
   for (const auto &listener : listeners) {
-    (*listener)();
+    // A listener stopped by an earlier one in this round, or from another thread, is not called.
+    std::lock_guard calling(listener->calling);
+    if (listener->active) {
+      listener->changed();
+    }
   }
 }
 
@@ -110,10 +114,17 @@ bool DBusProperties::ready() const {
 std::function<void()> DBusProperties::watch(std::function<void()> changed) {
   std::lock_guard lock(mutex_);
   int id = ++next_;
-  listeners_[id] = std::make_shared<std::function<void()>>(std::move(changed));
-  return [this, id] {
-    std::lock_guard lock(mutex_);
-    listeners_.erase(id);
+  auto listener = std::make_shared<Listener>();
+  listener->changed = std::move(changed);
+  listeners_[id] = listener;
+  return [this, id, listener] {
+    {
+      std::lock_guard lock(mutex_);
+      listeners_.erase(id);
+    }
+    // Waits for a call in flight on another thread; the listener stopping itself is that call.
+    std::lock_guard calling(listener->calling);
+    listener->active = false;
   };
 }
 

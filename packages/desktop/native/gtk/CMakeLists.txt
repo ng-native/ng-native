@@ -26,14 +26,21 @@ pkg_check_modules(NGN_FONTCONFIG REQUIRED IMPORTED_TARGET fontconfig pangoft2)
 pkg_check_modules(NGN_UNIX_PRINT IMPORTED_TARGET gtk4-unix-print)
 
 add_library(ngn_gtk OBJECT
+    accent-colour.cpp
+    accessibility-settings.cpp
     accessible.cpp
     app-info.cpp
+    accessible-text.cpp
+    alerts.cpp
+    animation-frames.cpp
     app-windows.cpp
     auth-session.cpp
     battery.cpp
     box-paint.cpp
     cairo-canvas.cpp
+    focus.cpp
     capture.cpp
+    clock-format.cpp
     crypto.cpp
     dbus-properties.cpp
     drag-and-drop.cpp
@@ -47,6 +54,7 @@ add_library(ngn_gtk OBJECT
     input-replay.cpp
     locales.cpp
     location.cpp
+    launcher-badge.cpp
     menus.cpp
     native-controls.cpp
     network-state.cpp
@@ -54,14 +62,19 @@ add_library(ngn_gtk OBJECT
     pango-text.cpp
     portal.cpp
     printing.cpp
+    proxy-resolver.cpp
     screens.cpp
     secret-store.cpp
     scroll-view.cpp
+    settings-portal.cpp
+    split-view.cpp
+    status-notifier.cpp
     surface-input.cpp
     system-access.cpp
     text-field.cpp
-    view-widget.cpp)
-target_link_libraries(ngn_gtk PUBLIC ngn_core_runtime ngn_curl ngn_libraries PkgConfig::NGN_GTK PkgConfig::NGN_FONTCONFIG)
+    view-widget.cpp
+    window-scale.cpp)
+target_link_libraries(ngn_gtk PUBLIC ngn_core_runtime ngn_curl ngn_openssl ngn_libraries PkgConfig::NGN_GTK PkgConfig::NGN_FONTCONFIG)
 if(NOT APPLE)
   target_link_libraries(ngn_gtk PUBLIC PkgConfig::NGN_X11)
 endif()
@@ -87,14 +100,14 @@ string(JSON _rn_version GET "${_rn_package}" version)
 target_compile_definitions(ngn-linux PRIVATE NGN_REACT_NATIVE_VERSION="${_rn_version}")
 # The hermesc built with the Hermes the binary links, beside it, as ngn-macos has it.
 add_custom_command(TARGET ngn-linux POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${NGN_HERMES_BUILD}/bin/hermesc $<TARGET_FILE_DIR:ngn-linux>/hermesc
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${NGN_HERMESC} $<TARGET_FILE_DIR:ngn-linux>/hermesc
     VERBATIM)
 
 # The GTK view tests: views mounted from Fabric mutations into a window GTK draws, through the
 # backend the binary uses. Built with the core tests, and run beside them.
 if(NGN_TESTS)
-  set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accessible.test.cpp tests/app-windows.test.cpp tests/chrome.test.cpp tests/controls.test.cpp tests/drag-and-drop.test.cpp tests/fonts.test.cpp tests/image-manipulator.test.cpp tests/image-view.test.cpp tests/input.test.cpp tests/input-replay.test.cpp tests/linking.test.cpp tests/locales.test.cpp tests/machine.test.cpp tests/menus.test.cpp tests/notifications.test.cpp tests/system-modules.test.cpp tests/system-services.test.cpp
-      tests/screens.test.cpp tests/scroll-view.test.cpp tests/secret-store.test.cpp tests/svg.test.cpp tests/system-access.test.cpp tests/text.test.cpp tests/views.test.cpp)
+  set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accent-colour.test.cpp tests/accessibility-settings.test.cpp tests/accessible.test.cpp tests/alerts.test.cpp tests/animation-frames.test.cpp tests/app-windows.test.cpp tests/chrome.test.cpp tests/clock-format.test.cpp tests/controls.test.cpp tests/drag-and-drop.test.cpp tests/focus.test.cpp tests/fonts.test.cpp tests/image-manipulator.test.cpp tests/image-view.test.cpp tests/input-replay.test.cpp tests/input.test.cpp tests/linking.test.cpp tests/locales.test.cpp tests/machine.test.cpp tests/menus.test.cpp tests/notifications.test.cpp tests/paint.test.cpp tests/proxy-resolver.test.cpp
+      tests/screens.test.cpp tests/scroll-view.test.cpp tests/secret-store.test.cpp tests/split-view.test.cpp tests/status-notifier.test.cpp tests/svg.test.cpp tests/system-access.test.cpp tests/system-modules.test.cpp tests/system-services.test.cpp tests/text.test.cpp tests/views.test.cpp)
   add_executable(ngn_gtk_tests ${ngn_gtk_test_SRC} ../core/testing/fake-network.cpp ../core/testing/fake-system.cpp)
   target_include_directories(ngn_gtk_tests PRIVATE ../core/tests ../core/testing)
   target_link_libraries(ngn_gtk_tests PRIVATE ngn_gtk doctest)
