@@ -47,5 +47,8 @@ struct RecordingElements {
   std::string error;
 };
 RecordingElements recordingElementsOf(const RecordingSettings &settings);
+// The sample rate a recording is made at: the one asked for, or for Opus, which takes only 8, 12,
+// 16, 24 and 48 kHz, the lowest of those that keeps it.
+int recordingRateOf(const RecordingSettings &settings, const RecordingElements &elements);
 
 } // namespace ngn::gtk

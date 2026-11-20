@@ -118,7 +118,9 @@ from EPEL's `epel-cisco-openh264` repository there and from `fedora-cisco-openh2
 recording is AAC in `.m4a` or `.mp4` where an AAC encoder is installed, linear PCM in `.wav`, or
 Opus in `.ogg`.
 Linux has no microphone permission, so `recordingPermission()` reads as granted, and preparing a
-recording with no microphone present rejects, since PipeWire would record silence.
+recording with no microphone present rejects, since PipeWire would record silence. A Flatpak
+reaches the sound server, to play as well as to record, only when the app has a microphone usage
+string (`NSMicrophoneUsageDescription`); without one, a Flatpak plays no sound.
 
 ## `audioRecorder(options, { statusInterval? })`
 
