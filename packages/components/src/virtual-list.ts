@@ -1006,11 +1006,17 @@ export class VirtualList<T> extends ScrollViewProps {
     const live = new Set<HostNode>();
     // After the list scrolled itself, where native is: it draws a graph when its offset changes,
     // and after a jump the offset of a drive just made may not. What native last reported, or
-    // before it has, the target of a jump that is not animated: an animated one is still at its
-    // start. Only then, since mid-fling the offset here trails native's and would set it back.
+    // before it has, the target of a jump that is not animated. An animated one only once it has
+    // landed: on the way native's offset changes every frame, so it draws a new graph anyway, and
+    // the offset here trails native's and would set every pinned row back a frame. The same holds
+    // mid-fling, which is why nothing is told outside a jump.
     const from = !this.jumped
       ? undefined
-      : (this.reported ?? (this.jumpAnimated ? undefined : this.jumpedTo));
+      : this.jumpAnimated
+        ? this.landed
+          ? this.reported
+          : undefined
+        : (this.reported ?? this.jumpedTo);
     this.window().forEach((row, at) => {
       const view = views[at];
       const next = this.stickyDrive(row);

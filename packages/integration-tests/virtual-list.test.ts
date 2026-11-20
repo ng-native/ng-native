@@ -944,6 +944,21 @@ describe('windowed list options', () => {
       assert.deepEqual(sets().slice(before), []);
     });
 
+    it('tells native nothing while an animated jump is on its way, and where it landed once it has', async () => {
+      // On the way native's offset changes every frame, so the last one reported trails it.
+      const { list, sets } = await jumpable([0, 100, 200]);
+      const before = sets().length;
+      list.scrollToOffset({ offset: 250 * ITEM_HEIGHT });
+      for (const y of [60, 120, 190, 240]) {
+        await fireEvent.scroll(host, { contentOffset: { y: y * ITEM_HEIGHT } });
+        await settle();
+      }
+      assert.deepEqual(sets().slice(before), []);
+      await fireEvent.scroll(host, { contentOffset: { y: 250 * ITEM_HEIGHT } });
+      await settle();
+      assert.deepEqual(sets().slice(before), [250 * ITEM_HEIGHT]);
+    });
+
     it('lets native s offset go once a jump that landed somewhere else comes to rest', async () => {
       // iOS does not stop a scroll at the end of the content, and what moves it next, a tap on
       // the status bar, is not a drag: the offset here trails native's while it moves.
