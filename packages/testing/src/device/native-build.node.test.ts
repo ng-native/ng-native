@@ -104,13 +104,13 @@ describe('the development build a device run uses', () => {
       const original = '{"scripts":{"ios":"expo start --ios"}}';
       writeFileSync(pkg, original);
       mkdirSync(path.join(root, 'node_modules/expo/bin'), { recursive: true });
-      // Says it started, rewrites package.json, then holds until the test releases it.
+      // Rewrites package.json, says it started, then holds until the test releases it.
       writeFileSync(
         path.join(root, 'node_modules/expo/bin/cli.js'),
         `const fs = require('fs');
          const os = process.argv[process.argv.indexOf('-p') + 1];
-         fs.writeFileSync('started-' + os, '');
          fs.writeFileSync('package.json', '{"scripts":{"ios":"expo run:ios"}}');
+         fs.writeFileSync('started-' + os, '');
          const wait = setInterval(() => {
            if (fs.existsSync('release-' + os)) { clearInterval(wait); process.exit(1); }
          }, 10);`,
@@ -123,7 +123,6 @@ describe('the development build a device run uses', () => {
       };
       const ios = nativeBuild(root, 'ios');
       assert.ok(await seen(path.join(root, 'started-ios'), 5000), "iOS's prebuild started");
-      await seen(path.join(root, 'never'), 50);
       assert.notEqual(readFileSync(pkg, 'utf8'), original, 'iOS has rewritten package.json');
       const android = nativeBuild(root, 'android', { abi: 'x86_64' });
       // Without the lock Android's prebuild starts now, its snapshot already taken of the rewrite;
