@@ -238,7 +238,9 @@ describe('each service the table lists', () => {
 
     // Registered on every desktop host, yet there only where a source answers for it: a store
     // review is available over a review prompt.
-    const answered: Readonly<Record<string, boolean>> = { NgNativeStoreReview: given.has('reviewPrompt') };
+    const answered: Readonly<Record<string, boolean>> = {
+      NgNativeStoreReview: given.has('reviewPrompt'),
+    };
     const onGtk = (module: string) =>
       answered[module] ??
       (always.has(module) ||
