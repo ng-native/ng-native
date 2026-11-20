@@ -9979,7 +9979,9 @@ export class Engine implements HostEngine {
    */
   commit(): boolean {
     try {
-      return this.commitChanges();
+      const committed = this.commitChanges();
+      this.setEndedOwned();
+      return committed;
     } finally {
       // A commit on a disposed engine, or one a listener disposed it during, can have handed
       // native an animation, a transition or a move to lay out: each is taken back at once.
@@ -13976,11 +13978,28 @@ export class Engine implements HostEngine {
     const end = running.start + spec.duration * (spec.iterations ?? 1);
     native.stop();
     this.advancePlayer(node, Math.max(this.now(), end));
-    this.commit();
-    // The commit sets only what it changed, and the style the view rests at can be the frame it
-    // was committed with as it played: native has drawn it elsewhere since.
-    const committed = node.committed;
-    if (node.owned && committed) this.setOwned(node, RESET_OWNED, committed.props);
+    this.endedSinceCommit.add(node);
+    // A host commits what is marked once a frame, so animations that end together share a
+    // commit. Without one, nothing else would commit it.
+    if (!this.onDirty) this.commit();
+  }
+
+  /** Each node whose native animation has ended since the last commit. */
+  private readonly endedSinceCommit = new Set<EngineNode>();
+
+  /**
+   * The commit sets only what it changed, and the style a view rests at can be the frame it was
+   * committed with as its animation played: native has drawn it elsewhere since.
+   */
+  private setEndedOwned(): void {
+    if (!this.endedSinceCommit.size) return;
+    const ended = [...this.endedSinceCommit];
+    this.endedSinceCommit.clear();
+    for (const node of ended) {
+      // Not one whose view has gone since, which native set nothing on.
+      const committed = node.committed;
+      if (node.owned && committed) this.setOwned(node, RESET_OWNED, committed.props);
+    }
   }
 
   /** Take an animation back from native, which stops it there. The caller plays it on, or not. */
