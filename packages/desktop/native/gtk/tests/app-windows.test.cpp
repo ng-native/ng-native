@@ -280,9 +280,18 @@ TEST_CASE("windows the splash screen holds show in the order they were ready, ea
   auto splash = std::make_shared<ngn::SplashGate>();
   REQUIRE(splash->hold());
   std::vector<SurfaceId> presented;
-  auto windows = std::make_shared<ngn::gtk::GtkWindows>(
+  // Whether the window is already on screen when the hook hears of it: the launch's first frame
+  // (Expo Updates) counts only for a visible window, and it is counted from this hook once the
+  // splash lets the window show, which can be after its last mount.
+  std::vector<bool> visibleWhenPresented;
+  std::shared_ptr<ngn::gtk::GtkWindows> windows;
+  windows = std::make_shared<ngn::gtk::GtkWindows>(
       ngn::gtk::GtkWindows::Hooks{.whenShown = [&splash](std::function<void()> show) { splash->show([show = std::move(show)] { ngn::gtk::onMainContext(show); }); },
-                                  .presented = [&presented](SurfaceId surface) { presented.push_back(surface); }},
+                                  .presented =
+                                      [&](SurfaceId surface) {
+                                        presented.push_back(surface);
+                                        visibleWhenPresented.push_back(gtk_widget_get_visible(windows->window(surface)));
+                                      }},
       app, ngn::MenuPlacement::PrimaryMenu);
   auto host = std::make_shared<WindowHost>(windows, system);
   windows->setHost(host);
@@ -311,6 +320,7 @@ TEST_CASE("windows the splash screen holds show in the order they were ready, ea
   ngn::testing::runUntil([&] { return appShown; });
   CHECK(firstMappedWhenAppShown);
   CHECK(presented == std::vector<SurfaceId>{first});
+  CHECK(visibleWhenPresented == std::vector<bool>{true});
   windows.reset();
   host.reset();
   g_object_unref(app);
