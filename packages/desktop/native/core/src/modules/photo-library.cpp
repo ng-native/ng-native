@@ -1,7 +1,10 @@
 #include "ngn/photo-library.h"
 
+#include "ngn/bytes.h"
 #include "ngn/camera.h"
 
+#include <fstream>
+#include <iterator>
 #include <mutex>
 #include <set>
 #include <stdexcept>
@@ -329,16 +332,25 @@ std::shared_ptr<NativeModule> makeMediaLibraryModule(std::shared_ptr<PhotoLibrar
   return std::make_shared<MediaLibrary>(std::move(library), noPrompts, std::move(files));
 }
 
-std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoLibrary> library, bool noPrompts, std::optional<PickerCamera> camera) {
+std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoPicker> picker, std::shared_ptr<PhotoLibrary> library, bool noPrompts,
+                                                    std::optional<PickerCamera> camera) {
   struct ImagePicker : NativeModule {
-    ImagePicker(std::shared_ptr<PhotoLibrary> photos, bool noPrompts, std::optional<PickerCamera> camera) : NativeModule("NgNativeImagePicker") {
-      Permissions permissions{photos, noPrompts};
-      promise("getMediaLibraryPermissionsAsync", [permissions](const folly::dynamic &args, JsPromise promise) {
-        permissions.get(flagArg(args, 0), std::move(promise));
-      });
-      promise("requestMediaLibraryPermissionsAsync", [permissions](const folly::dynamic &args, JsPromise promise) {
-        permissions.request(flagArg(args, 0), std::move(promise));
-      });
+    ImagePicker(std::shared_ptr<PhotoPicker> photos, std::shared_ptr<PhotoLibrary> library, bool noPrompts, std::optional<PickerCamera> camera)
+        : NativeModule("NgNativeImagePicker") {
+      if (library) {
+        Permissions permissions{library, noPrompts};
+        promise("getMediaLibraryPermissionsAsync", [permissions](const folly::dynamic &args, JsPromise promise) {
+          permissions.get(flagArg(args, 0), std::move(promise));
+        });
+        promise("requestMediaLibraryPermissionsAsync", [permissions](const folly::dynamic &args, JsPromise promise) {
+          permissions.request(flagArg(args, 0), std::move(promise));
+        });
+      } else {
+        // An open panel over the user's files, which asks nothing first.
+        auto granted = [](const folly::dynamic &, JsPromise promise) { promise.resolve(permissionOf(Access::Granted)); };
+        promise("getMediaLibraryPermissionsAsync", granted);
+        promise("requestMediaLibraryPermissionsAsync", granted);
+      }
       folly::dynamic canceled = folly::dynamic::object("canceled", true)("assets", nullptr);
       if (camera) {
         promise("getCameraPermissionsAsync", [hardware = camera->hardware](const folly::dynamic &, JsPromise promise) {
@@ -363,23 +375,40 @@ std::shared_ptr<NativeModule> makeImagePickerModule(std::shared_ptr<PhotoLibrary
           return;
         }
         auto options = args.empty() || !args[0].isObject() ? folly::dynamic::object() : args[0];
-        photos->pick(options, [promise, canceled](std::optional<std::vector<PhotoLibrary::Picked>> picked) {
+        bool base64 = options.getDefault("base64", false) == true;
+        bool exif = options.getDefault("exif", false) == true;
+        photos->pick(options, [promise, canceled, base64, exif](std::optional<std::vector<PhotoPicker::Picked>> picked) {
           if (!picked || picked->empty()) {
             promise.resolve(canceled);
             return;
           }
           folly::dynamic assets = folly::dynamic::array();
           for (const auto &asset : *picked) {
-            assets.push_back(folly::dynamic::object("uri", asset.uri)("assetId", asset.assetId ? folly::dynamic(*asset.assetId) : folly::dynamic(nullptr))(
+            folly::dynamic item = folly::dynamic::object("uri", asset.uri)("assetId", asset.assetId ? folly::dynamic(*asset.assetId) : folly::dynamic(nullptr))(
                 "width", asset.width)("height", asset.height)("type", asset.type)("fileName", asset.fileName)("fileSize", asset.fileSize)(
-                "mimeType", asset.mimeType)("duration", orNull(asset.duration))("exif", nullptr)("base64", nullptr));
+                "mimeType", asset.mimeType)("duration", orNull(asset.duration))("exif", nullptr)("base64", nullptr);
+            // As a camera shot is answered: a video has neither, whatever was asked.
+            auto path = asset.type == "image" && (base64 || exif) ? pathOfUri(asset.uri) : std::nullopt;
+            if (path) {
+              std::ifstream in(*path, std::ios::binary);
+              // A file that has gone since it was picked is no empty one: base64 stays null.
+              const bool readable = static_cast<bool>(in);
+              std::string bytes = readable ? std::string{std::istreambuf_iterator<char>(in), {}} : std::string();
+              if (base64 && readable) {
+                item["base64"] = base64Encode(bytes);
+              }
+              if (exif) {
+                item["exif"] = asset.exif.isNull() ? jpegExif(bytes) : asset.exif;
+              }
+            }
+            assets.push_back(std::move(item));
           }
           promise.resolve(folly::dynamic::object("canceled", false)("assets", std::move(assets)));
         });
       });
     }
   };
-  return std::make_shared<ImagePicker>(std::move(library), noPrompts, std::move(camera));
+  return std::make_shared<ImagePicker>(std::move(picker), std::move(library), noPrompts, std::move(camera));
 }
 
 } // namespace ngn

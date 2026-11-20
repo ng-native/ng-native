@@ -14,6 +14,7 @@
 #include "animation-frames.h"
 #include "app-info.h"
 #include "app-windows.h"
+#include "auth-session.h"
 #include "battery.h"
 #include "capture.h"
 #include "clock-format.h"
@@ -103,6 +104,8 @@ struct Host {
   // The app's own surface and the window it gets once the app renders into it.
   GtkWidget *appWindow{nullptr};
   GtkWidget *appSurface{nullptr};
+  // Its window once the app renders into it, and once that window is shown, past the splash.
+  bool appWindowAsked{false};
   bool appWindowShown{false};
   std::set<SurfaceId> surfaces;
   // What each surface last reported of its size and its chrome's insets.
@@ -116,6 +119,19 @@ struct Host {
   std::shared_ptr<ngn::UpdatesClient> updates;
   ngn::LaunchFrame launchFrame;
 } gHost;
+
+// The splash screen (NgNativeSplashScreen): the first windows wait for the app to hide it. The gate
+// is the process's, so a reload, which lets it go, never leaves it behind a window it shows.
+std::shared_ptr<ngn::SplashGate> gSplash = std::make_shared<ngn::SplashGate>();
+
+// WebBrowser's sign-in (auth-session.h): the link back to the app ends it, and only it hears that.
+std::shared_ptr<ngn::LinkAuthSession> gAuthSession = ngn::gtk::makeAuthSession();
+
+// Runs a window's first show once the splash lets it, on the UI thread: the gate lets go on the
+// JavaScript thread, or on the one a reload ends the module on.
+void showPastSplash(std::function<void()> show) {
+  gSplash->show([show = std::move(show)] { ngn::gtk::onMainContext(show); });
+}
 
 // The bundle the runtime runs now, for SourceCode's scriptURL: set at launch and before a reload
 // into an update, read on the JavaScript thread.
@@ -452,11 +468,17 @@ void addSurface(SurfaceId surface, GtkWidget *widget) {
 // The app's own surface gets its window once the app renders into it.
 void showAppSurfaceIfUsed() {
   const auto *root = gHost.mounting->tree().find(kAppSurface);
-  if (gHost.appWindowShown || !root || root->children.empty()) {
+  if (gHost.appWindowAsked || !root || root->children.empty()) {
     return;
   }
-  gHost.appWindowShown = true;
-  gtk_window_present(GTK_WINDOW(gHost.appWindow));
+  gHost.appWindowAsked = true;
+  showPastSplash([] {
+    gHost.appWindowShown = true;
+    gtk_window_present(GTK_WINDOW(gHost.appWindow));
+    watchFirstFrame(gHost.appWindow, gHost.appSurface);
+    // Past the splash, which may be after the app's last mount: its launch's first frame is up now.
+    launchFrameShown(kAppSurface, gHost.appWindow);
+  });
 }
 
 // A second launch or the bus asks for the app: the window the app draws into without AppWindows,
@@ -464,6 +486,8 @@ void showAppSurfaceIfUsed() {
 void raiseApp() {
   if (gHost.appWindowShown) {
     gtk_window_present(GTK_WINDOW(gHost.appWindow));
+  } else if (gHost.appWindowAsked) {
+    // Held by the splash screen: it shows, in front, once the app hides that.
   } else {
     gHost.windows->raise();
   }
@@ -609,14 +633,10 @@ int main(int argc, char *argv[]) {
     gHost.input->didMount(surfaceId);
     if (surfaceId == kAppSurface) {
       showAppSurfaceIfUsed();
-      if (gHost.appWindowShown) {
-        watchFirstFrame(gHost.appWindow, gHost.appSurface);
-        launchFrameShown(surfaceId, gHost.appWindow);
-      }
+      launchFrameShown(surfaceId, gHost.appWindowShown ? gHost.appWindow : nullptr);
     } else {
       gHost.windows->didMount(surfaceId);
       if (GtkWidget *window = gHost.windows->window(surfaceId)) {
-        watchFirstFrame(window, gHost.windows->surfaceWidget(surfaceId));
         launchFrameShown(surfaceId, window);
       }
     }
@@ -768,11 +788,23 @@ int main(int argc, char *argv[]) {
           },
       .laidOut = reportContainer,
       .quit = [] { gHost.quit = true; },
-      // The app's own window, once shown, keeps the app running; closing it quits.
+      // The app's own window, once the app draws into it (shown, or held by the splash), keeps the app
+      // running; closing it quits.
       .lastWindowClosed =
           [] {
-            if (!gHost.appWindowShown) {
+            if (!gHost.appWindowAsked) {
               gHost.quit = true;
+            }
+          },
+      .whenShown = showPastSplash,
+      // A window just shown, at its mount or once the splash let it. The first frame is the first
+      // window that draws, which a splash screen or a close can keep from being the first one
+      // mounted; and a launch's first frame counts from here, which may be after its last mount.
+      .presented =
+          [](SurfaceId surface) {
+            if (GtkWidget *window = gHost.windows->window(surface)) {
+              watchFirstFrame(window, gHost.windows->surfaceWidget(surface));
+              launchFrameShown(surface, window);
             }
           },
   }, gHost.application, menuPlacement);
@@ -784,7 +816,9 @@ int main(int argc, char *argv[]) {
   g_signal_connect(gHost.application, "open", G_CALLBACK(+[](GApplication *, GFile **files, gint count, const gchar *, gpointer) {
     for (gint i = 0; i < count; ++i) {
       gchar *uri = g_file_get_uri(files[i]);
-      gHost.state->receiveUrl(uri, gHost.firstFrame);
+      if (!gAuthSession->receive(uri)) {
+        gHost.state->receiveUrl(uri, gHost.firstFrame);
+      }
       g_free(uri);
     }
     raiseApp();
@@ -871,6 +905,7 @@ int main(int argc, char *argv[]) {
     }
   }
   setRunningBundle(bundle);
+  auto fileDialogs = ngn::gtk::makeFileDialogs();
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
   // is left empty, and its module is not registered: JavaScript reads it as absent (NgNativeHost).
   auto desktopModules = ngn::addDesktopModules(
@@ -897,7 +932,7 @@ int main(int argc, char *argv[]) {
                                                      ngn::gtk::makeLauncherBadge(appId));
            },
        .undo = gHost.undo,
-       .fileDialogs = ngn::gtk::makeFileDialogs(),
+       .fileDialogs = fileDialogs,
        .fileWatcher = ngn::gtk::makeFileWatcher(),
        .location = ngn::gtk::makeLocationSource(),
        .bundle = ngn::bundleFactsOf(settings.plist),
@@ -905,6 +940,10 @@ int main(int argc, char *argv[]) {
        .pathMonitor = ngn::gtk::makePathMonitor(),
        .power = ngn::gtk::makePowerSource(),
        .fontRegistrar = ngn::gtk::makeFontRegistrar(),
+       .authSession = gAuthSession,
+       .splash = gSplash,
+       // ImagePicker's library half: the FileChooser portal over the user's files. No camera yet.
+       .photoPicker = ngn::makeFilePhotoPicker(fileDialogs, caches + "/ImagePicker", ngn::gtk::imagePixelSize),
        .imageCodec = ngn::gtk::makeImageCodec(),
        .printSystem = ngn::gtk::makePrintSystem(surfaceWidgetOf),
        .crypto = ngn::gtk::makeCryptoSource(),

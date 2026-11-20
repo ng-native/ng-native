@@ -101,6 +101,7 @@ add_library(ngn_core STATIC
     core/src/glass.cpp
     core/src/header-bar.cpp
     core/src/host-os.cpp
+    core/src/host-reload.cpp
     core/src/host-state.cpp
     core/src/host-views.cpp
     core/src/image-source.cpp
@@ -162,6 +163,7 @@ add_library(ngn_core STATIC
     core/src/modules/crypto.cpp
     core/src/modules/desktop-expo.cpp
     core/src/modules/desktop-modules.cpp
+    core/src/modules/file-photo-picker.cpp
     core/src/modules/file-system.cpp
     core/src/modules/fonts.cpp
     core/src/modules/image-loader.cpp

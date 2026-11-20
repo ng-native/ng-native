@@ -105,6 +105,9 @@ struct DesktopModuleSources {
   std::shared_ptr<CaptureShield> captureShield;
   std::shared_ptr<SplashGate> splash;
   std::shared_ptr<PhotoLibrary> photos;
+  // A picker with no photo library behind it (makeFilePhotoPicker), for ImagePicker's library half
+  // where there is no `photos`.
+  std::shared_ptr<PhotoPicker> photoPicker;
   std::shared_ptr<CameraHardware> cameraHardware;
   std::shared_ptr<CameraSheet> cameraSheet;
   std::shared_ptr<TrackingAuthority> tracking;
