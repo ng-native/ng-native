@@ -97,11 +97,12 @@ TEST_CASE("addDesktopModules leaves out each module the backend gives no source 
   // What the core makes over the host's own objects, the two whose null source is an answer, and the
   // tray and Dock, which sources() gives.
   std::vector<std::string> registered{
-      "NgNativeApplication", "NgNativeAsset", "NgNativeClipboard", "NgNativeDevice", "NgNativeDock", "NgNativeHost", "NgNativeMaps",
+      "NgNativeApplication", "NgNativeAsset", "NgNativeClipboard", "NgNativeDevice", "NgNativeDock", "NgNativeHost",
       "NgNativeProcesses", "NgNativeTray", "NgNativeSqlite", "NgNativeStoreReview", "NgNativeWebBrowser", "RNCWebViewModule",
   };
   std::sort(registered.begin(), registered.end());
   CHECK(registry.names() == registered);
+  CHECK(std::find(made.absent.begin(), made.absent.end(), "NgNativeMaps") != made.absent.end());
   // The modules Linux crashed in, among the rest.
   for (const char *name : {"NgNativeBattery", "NgNativeAppleAuthentication", "NgNativeHaptics", "NgNativeSplashScreen",
                            "NgNativeCalendar", "NgNativeCamera", "NgNativeImagePicker", "NgNativeMediaLibrary",

@@ -139,7 +139,7 @@ DesktopModules addDesktopModules(ModuleRegistry &registry, const DesktopModuleSo
   addSourced(s.cameraHardware, "NgNativeCamera", [hardware = s.cameraHardware, views = made.cameraViews, caches = s.caches, noPrompts = s.noPrompts] {
     return makeCameraModule(hardware, views, caches + "/Camera", noPrompts);
   });
-  addModule(registry, "NgNativeMaps", [views = made.mapViews] { return makeMapsModule(views); });
+  addSourced(s.mapViews, "NgNativeMaps", [views = made.mapViews] { return makeMapsModule(views); });
   addSourced(s.appleId, "NgNativeAppleAuthentication", [provider = s.appleId, noPrompts = s.noPrompts] {
     return makeAppleAuthenticationModule(provider, noPrompts);
   });
