@@ -143,6 +143,8 @@ TEST_CASE("a segmented control and a date picker parse what their elements commi
   CHECK(d->mode == "time");
   CHECK(d->display == "compact");
   CHECK_FALSE(d->minimumDate.has_value());
+  CHECK(d->minuteInterval == 1);
+  CHECK(picker.props(folly::dynamic::object("mode", "countdown")("minuteInterval", 15))->minuteInterval == 15);
 }
 
 TEST_CASE("a control measures as the toolkit draws it at its control size") {
@@ -434,4 +436,47 @@ TEST_CASE("a button's kind is empty until the element sets one") {
   Control<ngn::NativeButtonComponentDescriptor> c;
   CHECK(c.props(folly::dynamic::object("title", "Save"))->kind.empty());
   CHECK(c.props(folly::dynamic::object("kind", "default"))->kind == "default");
+}
+
+TEST_CASE("a time format writes a 12-hour clock when it has the hour of 12 or the AM and PM") {
+  CHECK(ngn::twelveHourClock("%r"));
+  CHECK(ngn::twelveHourClock("%I:%M:%S %p"));
+  CHECK(ngn::twelveHourClock("%l:%M %P"));
+  CHECK_FALSE(ngn::twelveHourClock("%T"));
+  CHECK_FALSE(ngn::twelveHourClock("%H:%M:%S"));
+  CHECK_FALSE(ngn::twelveHourClock(""));
+  // A literal percent sign is not a conversion.
+  CHECK_FALSE(ngn::twelveHourClock("%H%%p"));
+}
+
+TEST_CASE("an hour on a 12-hour clock and its half of the day give the hour of the day, and back") {
+  CHECK(ngn::dayHour(12, false) == 0);
+  CHECK(ngn::dayHour(1, false) == 1);
+  CHECK(ngn::dayHour(11, false) == 11);
+  CHECK(ngn::dayHour(12, true) == 12);
+  CHECK(ngn::dayHour(1, true) == 13);
+  CHECK(ngn::dayHour(11, true) == 23);
+  CHECK(ngn::clockHour(0) == 12);
+  CHECK(ngn::clockHour(13) == 1);
+  CHECK(ngn::clockHour(12) == 12);
+}
+
+TEST_CASE("GNOME's clock-format names a 12 or 24-hour clock, and anything else leaves it to the locale") {
+  CHECK(ngn::clockFormatTwelveHour("12h") == std::optional<bool>(true));
+  CHECK(ngn::clockFormatTwelveHour("24h") == std::optional<bool>(false));
+  CHECK_FALSE(ngn::clockFormatTwelveHour(""));
+  CHECK_FALSE(ngn::clockFormatTwelveHour("12H"));
+}
+
+TEST_CASE("a minuteInterval is one UIDatePicker takes, and a minute is shown at the step before it") {
+  for (int interval : {1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30}) {
+    CHECK(ngn::pickerMinuteInterval(interval) == interval);
+  }
+  for (int interval : {0, -5, 7, 25, 45, 60}) {
+    CHECK(ngn::pickerMinuteInterval(interval) == 1);
+  }
+  CHECK(ngn::minuteOnInterval(37, 15) == 30);
+  CHECK(ngn::minuteOnInterval(45, 15) == 45);
+  CHECK(ngn::minuteOnInterval(59, 30) == 30);
+  CHECK(ngn::minuteOnInterval(37, 7) == 37);
 }

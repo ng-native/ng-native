@@ -3178,11 +3178,11 @@ const NATIVE = ['ios', 'android'];
 const BUILDS = [...NATIVE, 'macos', 'linux'];
 
 /**
- * The platforms refused a filter iOS does not draw: iOS, and the desktop OSes, whose host draws no
- * more of them than iOS does. The desktop host hands the toolkit the whole transform matrix, skews
- * included, so a skew is refused on Android alone.
+ * The platforms refused a filter iOS does not draw: iOS, and macOS, whose host draws no more of
+ * them than iOS does. The GTK host on Linux draws every function. The desktop host hands the
+ * toolkit the whole transform matrix, skews included, so a skew is refused on Android alone.
  */
-const IOS_FILTERS = new Set(['ios', 'macos', 'linux']);
+const IOS_FILTERS = new Set(['ios', 'macos']);
 const drawsIosFilters = (platforms) => platforms.some((platform) => IOS_FILTERS.has(platform));
 
 /** The class `mount` puts on the root for each platform, which is how a rule is scoped to one. */
