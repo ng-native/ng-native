@@ -1056,7 +1056,10 @@ export class VirtualList<T> extends ScrollViewProps {
   private reported: number | undefined;
   /** Where native's latest event of all said it was, header and all. */
   private nativeAt = 0;
-  /** Jumps on their way that will each end with a scroll end event, as iOS sends one. */
+  /**
+   * Scroll end events still to come, one for each jump that moved native, as iOS sends one. Kept
+   * across jumps: one that landed has its end still to come, and must not be taken for the next's.
+   */
   private ends = 0;
 
   /** Which recycling slot each rendered item holds, by key: its type, and the row it last drew. */
@@ -1565,7 +1568,6 @@ export class VirtualList<T> extends ScrollViewProps {
     // To where native last said it was, with no earlier jump on its way: it moves nothing and
     // reports nothing. With one, native moves and comes back, and reports that.
     const pending = this.jumped && !this.landed;
-    if (!pending) this.ends = 0;
     if (Math.abs(to - (pending ? this.jumpedTo : this.nativeAt)) > 1) this.ends++;
     this.jumped = pending || Math.abs(to - this.nativeAt) > 1;
     this.landed = false;
@@ -1577,6 +1579,8 @@ export class VirtualList<T> extends ScrollViewProps {
   /** The user took the scroll over: native's own events move the rows from here. */
   protected onDragBegin(): void {
     this.jumped = this.landed = false;
+    // Android sends no end for a jump that is not animated, so none is waited for past a drag.
+    this.ends = 0;
   }
 
   /**
@@ -1585,7 +1589,8 @@ export class VirtualList<T> extends ScrollViewProps {
    * and what moves it next (a tap on the status bar) is not a drag.
    */
   protected onScrollEnd(): void {
-    if (this.jumped && --this.ends <= 0) this.landed = true;
+    if (this.ends > 0) this.ends--;
+    if (this.jumped && this.ends === 0) this.landed = true;
   }
 
   /**

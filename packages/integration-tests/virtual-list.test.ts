@@ -959,6 +959,43 @@ describe('windowed list options', () => {
       assert.deepEqual(sets().slice(before), [250 * ITEM_HEIGHT]);
     });
 
+    it('does not take a landed jump s scroll end for the next jump s', async () => {
+      // iOS sends a jump's last scroll event before its scroll end, so a jump started from that
+      // event (a viewableItemsChanged handler) begins before the earlier one's end arrives.
+      const { list, sets } = await jumpable([0, 100, 200]);
+      list.scrollToOffset({ offset: 50 * ITEM_HEIGHT, animated: false });
+      await fireEvent.scroll(host, { contentOffset: { y: 50 * ITEM_HEIGHT } });
+      list.scrollToOffset({ offset: 250 * ITEM_HEIGHT });
+      await fireEvent(host, 'momentumScrollEnd', {});
+      await settle();
+      for (const y of [120, 190, 250]) {
+        await fireEvent.scroll(host, { contentOffset: { y: y * ITEM_HEIGHT } });
+        await settle();
+      }
+      assert.equal(sets().at(-1), 250 * ITEM_HEIGHT);
+    });
+
+    it('waits for no scroll end past a drag, for a jump that sent none', async () => {
+      // Android sends no scroll end for a jump that is not animated.
+      const { list, sets } = await jumpable([0, 30, 60]);
+      list.scrollToOffset({ offset: 20 * ITEM_HEIGHT, animated: false });
+      await fireEvent.scroll(host, { contentOffset: { y: 20 * ITEM_HEIGHT } });
+      await settle();
+      await fireEvent(host, 'scrollBeginDrag', {});
+      await fireEvent.scroll(host, { contentOffset: { y: 22 * ITEM_HEIGHT } });
+      await settle();
+      list.scrollToOffset({ offset: 50 * ITEM_HEIGHT, animated: false });
+      await fireEvent.scroll(host, { contentOffset: { y: 50 * ITEM_HEIGHT + 34 } });
+      await fireEvent(host, 'momentumScrollEnd', {});
+      await settle();
+      const before = sets().length;
+      for (const y of [45, 35, 25]) {
+        await fireEvent.scroll(host, { contentOffset: { y: y * ITEM_HEIGHT } });
+        await settle();
+      }
+      assert.deepEqual(sets().slice(before), []);
+    });
+
     it('lets native s offset go once a jump that landed somewhere else comes to rest', async () => {
       // iOS does not stop a scroll at the end of the content, and what moves it next, a tap on
       // the status bar, is not a drag: the offset here trails native's while it moves.
