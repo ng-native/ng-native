@@ -34,15 +34,19 @@ describe('a command the pool runs', () => {
   it('rejects a stop only once the command has exited', async () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'ng-native-command-'));
     try {
-      const done = path.join(dir, 'done');
+      const [ready, done] = [path.join(dir, 'ready'), path.join(dir, 'done')];
       // Outlives the stop by a moment, as a tool finishing a write does.
       const script =
-        "process.on('SIGTERM', () => setTimeout(() => " +
-        `{ require('fs').writeFileSync(${JSON.stringify(done)}, ''); process.exit(1); }, 200)); ` +
-        "setTimeout(() => {}, 30000); console.log('ready')";
+        "const fs = require('fs'); process.on('SIGTERM', () => setTimeout(() => " +
+        `{ fs.writeFileSync(${JSON.stringify(done)}, ''); process.exit(1); }, 200)); ` +
+        `fs.writeFileSync(${JSON.stringify(ready)}, ''); setTimeout(() => {}, 30000);`;
       const stop = new AbortController();
       const running = runCommand(process.execPath, ['-e', script], { signal: stop.signal });
-      setTimeout(() => stop.abort(), 300);
+      for (let waited = 0; waited < 10_000 && !existsSync(ready); waited += 10) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.equal(existsSync(ready), true, 'the command is handling SIGTERM');
+      stop.abort();
       await assert.rejects(running, /was stopped: the run ended/);
       assert.equal(existsSync(done), true, 'the command had exited');
     } finally {
