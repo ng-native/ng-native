@@ -28,6 +28,12 @@ DesktopProps parseDesktopProps(
     const DesktopProps &source,
     const facebook::react::RawProps &rawProps);
 
+// The ARIA states and counts an update sets, on top of `source`'s: a view's and a text input's.
+AriaFields parseAriaFields(
+    const facebook::react::PropsParserContext &context,
+    const AriaFields &source,
+    const facebook::react::RawProps &rawProps);
+
 class DesktopViewProps final : public facebook::react::ViewProps, public HasDesktopProps {
  public:
   DesktopViewProps() = default;

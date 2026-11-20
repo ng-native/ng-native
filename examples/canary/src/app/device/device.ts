@@ -41,7 +41,7 @@ import { page } from '../screen-styles.ts';
           theme, or turn on Reduce Motion and they follow.
         </text>
 
-        <text class="heading">Screen</text>
+        <text class="heading" role="heading" aria-level="2">Screen</text>
         <text class="body">
           {{ screen.window().width }} x {{ screen.window().height }},
           {{ screen.orientation() }}
@@ -52,7 +52,7 @@ import { page } from '../screen-styles.ts';
           reduce) reads it too.
         </text>
 
-        <text class="heading">Safe area</text>
+        <text class="heading" role="heading" aria-level="2">Safe area</text>
         <text class="body">
           top {{ insets().top }}, bottom {{ insets().bottom }}, left {{ insets().left }}, right
           {{ insets().right }}
@@ -62,19 +62,19 @@ import { page } from '../screen-styles.ts';
           &lt;safe-area-view&gt; instead, which applies it natively.
         </text>
 
-        <text class="heading">Appearance and state</text>
+        <text class="heading" role="heading" aria-level="2">Appearance and state</text>
         <text class="body">{{ colors.current() }} theme, app is {{ app.current() }}</text>
 
-        <text class="heading">Accessibility</text>
+        <text class="heading" role="heading" aria-level="2">Accessibility</text>
         <text class="body">
           screen reader {{ on(accessibility.screenReader()) }}, reduce motion
           {{ on(accessibility.reduceMotion()) }}, bold text {{ on(accessibility.boldText()) }}
         </text>
-        <pressable class="card" (press)="announce()">
+        <pressable class="card" role="button" (press)="announce()">
           <text class="button-label">Announce to a screen reader</text>
         </pressable>
 
-        <text class="heading">Keyboard</text>
+        <text class="heading" role="heading" aria-level="2">Keyboard</text>
         <text class="body">
           {{ keyboard.visible() ? keyboard.height() + 'pt tall' : 'hidden' }}
         </text>
@@ -83,12 +83,12 @@ import { page } from '../screen-styles.ts';
           placeholder="Tap here to raise the keyboard"
           placeholderTextColor="#6c6c78"
         />
-        <pressable class="card" (press)="keyboard.dismiss()">
+        <pressable class="card" role="button" (press)="keyboard.dismiss()">
           <text class="button-label">Dismiss it</text>
         </pressable>
 
-        <text class="heading">Links</text>
-        <pressable class="card" (press)="openSite()">
+        <text class="heading" role="heading" aria-level="2">Links</text>
+        <pressable class="card" role="button" (press)="openSite()">
           <text class="button-label">Open angular.dev</text>
         </pressable>
         <text class="hint">

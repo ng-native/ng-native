@@ -531,26 +531,57 @@ static BOOL focusFromKeyboard() {
   return info.value.empty() ? nil : nsString(info.value);
 }
 
-// The heading level, which AppKit names from macOS 26 and has no property for.
+// The attributes AppKit has no property for, under the names WebKit gives them for the same ARIA:
+// the heading level (AppKit's from macOS 26), whether the value is refused, an item's place in its
+// set, and a table's row and column counts. Each only while the props say it.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+- (NSDictionary<NSString *, id> *)extraAttributes {
+  auto info = [self axInfo];
+  NSMutableDictionary<NSString *, id> *extra = [NSMutableDictionary dictionary];
+  if (info.level && nativeRole(info.role) && info.role == ngn::AxRole::Heading) {
+    extra[@"AXHeadingLevel"] = @(*info.level);
+  }
+  if (info.invalid) {
+    extra[@"AXInvalid"] = @"true";
+  }
+  if (info.positionInSet) {
+    extra[@"AXARIAPosInSet"] = @(*info.positionInSet);
+  }
+  if (info.setSize) {
+    extra[@"AXARIASetSize"] = @(*info.setSize);
+  }
+  if (info.rowCount) {
+    extra[NSAccessibilityRowCountAttribute] = @(*info.rowCount);
+  }
+  if (info.columnCount) {
+    extra[NSAccessibilityColumnCountAttribute] = @(*info.columnCount);
+  }
+  return extra;
+}
+
 - (NSArray<NSAccessibilityAttributeName> *)accessibilityAttributeNames {
   NSArray *names = [super accessibilityAttributeNames];
-  auto info = [self axInfo];
-  if (info.level && nativeRole(info.role) && info.role == ngn::AxRole::Heading) {
-    return [names arrayByAddingObject:@"AXHeadingLevel"];
+  NSMutableArray *added = [NSMutableArray array];
+  for (NSString *name in [self extraAttributes]) {
+    if (![names containsObject:name]) {
+      [added addObject:name];
+    }
   }
-  return names;
+  return added.count > 0 ? [names arrayByAddingObjectsFromArray:added] : names;
 }
 
 - (id)accessibilityAttributeValue:(NSAccessibilityAttributeName)attribute {
-  if ([attribute isEqualToString:@"AXHeadingLevel"]) {
-    auto level = [self axInfo].level;
-    return level ? @(*level) : nil;
+  if (id value = [self extraAttributes][attribute]) {
+    return value;
   }
   return [super accessibilityAttributeValue:attribute];
 }
 #pragma clang diagnostic pop
+
+- (BOOL)isAccessibilityRequired {
+  return [self axInfo].required;
+}
 
 - (BOOL)isAccessibilityEnabled {
   return ![self axInfo].disabled;
@@ -599,23 +630,11 @@ static BOOL focusFromKeyboard() {
   if (!viewProps || !emitter) {
     return NO;
   }
-  auto dispatch = ngn::axDispatch(*viewProps, verb);
-  switch (dispatch.kind) {
-    case ngn::AxDispatch::Kind::None:
-      return NO;
-    case ngn::AxDispatch::Kind::Tap:
-      emitter->onAccessibilityTap();
-      return YES;
-    case ngn::AxDispatch::Kind::Escape:
-      emitter->onAccessibilityEscape();
-      return YES;
-    case ngn::AxDispatch::Kind::Action:
-      emitter->onAccessibilityAction(dispatch.action);
-      return YES;
-    case ngn::AxDispatch::Kind::Click:
-      return gViewInput != nullptr && gViewInput->activate(static_cast<SurfaceId>(_surfaceId), static_cast<Tag>(_reactTag));
-  }
-  return NO;
+  SurfaceId surface = static_cast<SurfaceId>(_surfaceId);
+  Tag tag = static_cast<Tag>(_reactTag);
+  return ngn::performAxVerb(*viewProps, emitter.get(), verb, [surface, tag] {
+    return gViewInput != nullptr && gViewInput->activate(surface, tag);
+  });
 }
 
 - (BOOL)accessibilityPerformPress {
@@ -917,6 +936,10 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
   alignInput(_box, *p, self.layoutMetrics.layoutDirection);
   field.editable = p->editable && !p->readOnly;
   [_box applyOptions:ngn::textInputOptions(*p)];
+  // Required and refused on the control VoiceOver reads as the field, the one in the box now.
+  auto info = [self axInfo];
+  field.accessibilityRequired = info.required;
+  _box.invalid = info.invalid;
   // The text prop wins only when it is not older than what the field has sent (React Native iOS's
   // rule), and never while an input method is composing.
   if (ngn::controlledTextIsCurrent(p->mostRecentEventCount, _eventCount, [self composing]) && !p->text.empty()) {
@@ -1104,6 +1127,9 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
   alignInput(_text, *p, self.layoutMetrics.layoutDirection);
   _text.editable = p->editable && !p->readOnly;
   [_text applyOptions:ngn::textInputOptions(*p)];
+  auto info = [self axInfo];
+  _text.accessibilityRequired = info.required;
+  _text.invalid = info.invalid;
   if (ngn::controlledTextIsCurrent(p->mostRecentEventCount, _eventCount, _text.hasMarkedText) && !p->text.empty()) {
     NSString *text = nsString(p->text);
     if (![_text.string isEqualToString:text]) {

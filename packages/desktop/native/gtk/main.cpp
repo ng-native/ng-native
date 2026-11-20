@@ -569,6 +569,7 @@ int main(int argc, char *argv[]) {
               gHost.input->removeContainer(static_cast<ngn::ContainerId>(tag));
             }
           },
+      .activate = [](SurfaceId surface, facebook::react::Tag tag) { return gHost.input && gHost.input->activate(surface, tag); },
   };
   gHost.backend->modals().setSheetNodes([](SurfaceId surface, facebook::react::Tag tag) -> std::optional<ngn::SheetNode> {
     return gHost.runtime ? gHost.runtime->sheetNode(surface, tag) : std::nullopt;

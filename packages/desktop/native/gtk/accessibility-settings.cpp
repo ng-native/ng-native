@@ -10,6 +10,9 @@ namespace ngn::gtk {
 
 namespace {
 
+// The org.freedesktop.appearance keys read from the settings portal.
+constexpr const char *kPortalKeys[] = {"reduced-motion", "contrast"};
+
 // An int or enum GtkSettings property newer than the floor, or `fallback` where GTK lacks it.
 int settingOr(GtkSettings *settings, const char *name, int fallback) {
   GParamSpec *spec = g_object_class_find_property(G_OBJECT_GET_CLASS(settings), name);
@@ -73,7 +76,8 @@ AccessibilitySettingsWatcher::AccessibilitySettingsWatcher(std::function<void(co
     }
   };
 
-  // The settings portal's reduced-motion, read once it answers and followed as it changes.
+  // The settings portal's reduced-motion and contrast, read once it answers and followed as they
+  // change.
   proxyOn(
       G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES, "org.freedesktop.portal.Desktop",
       "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Settings", cancellable_,
@@ -95,14 +99,16 @@ AccessibilitySettingsWatcher::AccessibilitySettingsWatcher(std::function<void(co
           GVariant *value = nullptr;
           if (std::strcmp(signal, "SettingChanged") == 0 && g_variant_is_of_type(params, G_VARIANT_TYPE("(ssv)"))) {
             g_variant_get(params, "(&s&sv)", &ns, &key, &value);
-            if (std::strcmp(ns, "org.freedesktop.appearance") == 0 && std::strcmp(key, "reduced-motion") == 0) {
-              self->readPortal(value);
+            if (std::strcmp(ns, "org.freedesktop.appearance") == 0) {
+              self->readPortal(key, value);
             }
             g_variant_unref(value);
           }
         };
         g_signal_connect_swapped(proxy, "g-signal", G_CALLBACK(changed), self);
-        self->readPortalSetting(false);
+        for (const char *key : kPortalKeys) {
+          self->readPortalSetting(key, false);
+        }
       },
       this);
 
@@ -161,28 +167,33 @@ void AccessibilitySettingsWatcher::portalOwnerChanged() {
   char *owner = g_dbus_proxy_get_name_owner(portal_);
   if (owner) {
     g_free(owner);
-    readPortalSetting(false);
+    for (const char *key : kPortalKeys) {
+      readPortalSetting(key, false);
+    }
     return;
   }
   sources_.portalReducedMotion = false;
+  sources_.portalContrast = false;
   report();
 }
 
 namespace {
 
-// A read of the portal's setting, for the owner it was asked of.
+// A read of one of the portal's settings, for the owner it was asked of. The key is one of
+// kPortalKeys, which outlive the call.
 struct PortalRead {
   AccessibilitySettingsWatcher *self;
+  const char *key;
   unsigned generation;
   bool legacy;
 };
 
 } // namespace
 
-void AccessibilitySettingsWatcher::readPortalSetting(bool legacy) {
+void AccessibilitySettingsWatcher::readPortalSetting(const char *key, bool legacy) {
   // ReadOne where the portal has it (version 2), Read on an older one.
   g_dbus_proxy_call(
-      portal_, legacy ? "Read" : "ReadOne", g_variant_new("(ss)", "org.freedesktop.appearance", "reduced-motion"),
+      portal_, legacy ? "Read" : "ReadOne", g_variant_new("(ss)", "org.freedesktop.appearance", key),
       G_DBUS_CALL_FLAGS_NONE, -1, cancellable_,
       +[](GObject *proxy, GAsyncResult *result, gpointer data) {
         std::unique_ptr<PortalRead> read(static_cast<PortalRead *>(data));
@@ -195,22 +206,27 @@ void AccessibilitySettingsWatcher::readPortalSetting(bool legacy) {
           // Only ReadOne's missing method asks the older Read: if that fails too, the portal has no
           // such setting, and the source stays off.
           if (!cancelled && unknown && !read->legacy && read->generation == read->self->portalRead_) {
-            read->self->readPortalSetting(true);
+            read->self->readPortalSetting(read->key, true);
           }
           return;
         }
         if (read->generation == read->self->portalRead_) {
           GVariant *value = g_variant_get_child_value(reply, 0);
-          read->self->readPortal(value);
+          read->self->readPortal(read->key, value);
           g_variant_unref(value);
         }
         g_variant_unref(reply);
       },
-      new PortalRead{this, portalRead_, legacy});
+      new PortalRead{this, key, portalRead_, legacy});
 }
 
-void AccessibilitySettingsWatcher::readPortal(GVariant *value) {
-  sources_.portalReducedMotion = portalNumber(value) == 1;
+void AccessibilitySettingsWatcher::readPortal(const char *key, GVariant *value) {
+  // reduced-motion 1 is reduce; contrast 1 is higher.
+  if (std::strcmp(key, "reduced-motion") == 0) {
+    sources_.portalReducedMotion = portalNumber(value) == 1;
+  } else if (std::strcmp(key, "contrast") == 0) {
+    sources_.portalContrast = portalNumber(value) == 1;
+  }
   report();
 }
 
