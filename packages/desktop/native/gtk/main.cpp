@@ -16,6 +16,7 @@
 #include "app-windows.h"
 #if NGN_GSTREAMER
 #include "audio.h"
+#include "camera.h"
 #include "video.h"
 #endif
 #include "auth-session.h"
@@ -942,8 +943,10 @@ int main(int argc, char *argv[]) {
   setRunningBundle(bundle);
   auto fileDialogs = ngn::gtk::makeFileDialogs();
 #if NGN_GSTREAMER
-  // The default microphone, through PulseAudio or PipeWire.
+  // The default microphone, through PulseAudio or PipeWire, and the camera through the Camera
+  // portal, with the microphone a recording's sound comes from.
   auto microphone = ngn::gtk::makeAudioInput();
+  auto cameraHardware = ngn::gtk::makeCameraHardware({.microphone = microphone});
 #endif
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
   // is left empty, and its module is not registered: JavaScript reads it as absent (NgNativeHost).
@@ -987,8 +990,12 @@ int main(int argc, char *argv[]) {
        .videoOutput = ngn::gtk::makeVideoOutput(),
 #endif
        .splash = gSplash,
-       // ImagePicker's library half: the FileChooser portal over the user's files. No camera yet.
+       // ImagePicker: the FileChooser portal over the user's files, and the camera's own window.
        .photoPicker = ngn::makeFilePhotoPicker(fileDialogs, caches + "/ImagePicker", ngn::gtk::imagePixelSize),
+#if NGN_GSTREAMER
+       .cameraHardware = cameraHardware,
+       .cameraSheet = cameraHardware ? ngn::gtk::makeCameraSheet() : nullptr,
+#endif
        .imageCodec = ngn::gtk::makeImageCodec(),
        .printSystem = ngn::gtk::makePrintSystem(surfaceWidgetOf),
        .crypto = ngn::gtk::makeCryptoSource(),
@@ -1015,6 +1022,9 @@ int main(int argc, char *argv[]) {
                done(loaded);
              });
            }});
+#if NGN_GSTREAMER
+  ngn::gtk::useCameraHardware(cameraHardware, desktopModules.cameraViews, settings.noPrompts);
+#endif
   // The names fonts are loaded under, which text resolves (fonts.h).
   ngn::gtk::useFontLibrary(desktopModules.fonts);
 

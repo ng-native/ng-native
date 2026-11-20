@@ -56,6 +56,14 @@ void parentHandle(GtkWindow *window, std::function<void(const std::string &handl
 // activation token from.
 GtkWindow *frontWindow();
 
+// A property of the portal object's `interface` (Camera's IsCameraPresent, say), owned by the
+// caller, or null where no portal answers. Blocks for the call, two seconds at most.
+GVariant *property(const char *interface, const char *name);
+
+// A file descriptor for a PipeWire connection `interface` (the Camera portal's) opens for the app,
+// owned by the caller, or -1. Blocks for the call.
+int openPipeWireRemote(const char *interface);
+
 // The connection requests go over: the session bus, or, in the GTK tests, a peer-to-peer
 // connection to a stand-in portal (null restores the session bus).
 void useConnection(GDBusConnection *connection);

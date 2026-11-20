@@ -80,7 +80,7 @@ describe('the platforms line', () => {
   });
 
   test('leaves available() out where the service has none', async () => {
-    const html = await render('# Camera\n\n<!-- platforms: Camera -->\n');
+    const html = await render('# MapView\n\n<!-- platforms: MapView -->\n');
     expect(html).toContain('Absent on Linux and Web host.');
     expect(html).not.toContain('available()');
   });

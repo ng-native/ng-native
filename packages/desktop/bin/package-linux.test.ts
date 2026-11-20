@@ -561,6 +561,8 @@ describe('the package formats', () => {
     assert.match(control, /^Suggests: gstreamer1\.0-plugins-bad$/m);
     assert.doesNotMatch(control, /^Recommends:.*plugins-bad/m);
     assert.doesNotMatch(control, /openh264|libav/);
+    assert.match(control, /^Recommends: gstreamer1\.0-pipewire$/m);
+    assert.equal(control.match(/^Recommends:/gm)?.length, 1);
     assert.match(control, /^Homepage: https:\/\/example\.com\/notes$/m);
     assert.match(
       control,
@@ -583,6 +585,7 @@ describe('the package formats', () => {
     assert.match(spec, /^Requires: gstreamer1-plugins-base >= 1\.22$/m);
     assert.match(spec, /^Requires: gstreamer1-plugins-good$/m);
     assert.match(spec, /^Recommends: gstreamer1-plugins-bad-free$/m);
+    assert.match(spec, /^Recommends: pipewire-gstreamer$/m);
     assert.doesNotMatch(spec, /openh264|libav|-devel/);
     assert.match(spec, /^%global __os_install_post %\{nil\}$/m);
     assert.match(spec, /^100%% notes$/m);

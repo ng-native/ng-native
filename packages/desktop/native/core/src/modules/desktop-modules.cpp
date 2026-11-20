@@ -39,6 +39,22 @@ std::shared_ptr<AudioInput> noAudioInput() {
 
 } // namespace
 
+std::shared_ptr<NativeModule> makeDesktopImagePicker(const DesktopModuleSources &s) {
+  std::optional<PickerCamera> camera;
+  if (s.cameraHardware && s.cameraSheet) {
+    // With no input, a video is recorded without sound.
+    camera = PickerCamera{.hardware = s.cameraHardware, .microphone = s.audioInput ? s.audioInput : noAudioInput(), .sheet = s.cameraSheet,
+                          .folder = s.caches + "/ImagePicker"};
+  }
+  if (s.photos) {
+    // A photo library's picker comes with its camera, or not at all.
+    return camera ? makeImagePickerModule(s.photos, s.photos, s.noPrompts, camera) : nullptr;
+  }
+  // A picker with no photo library behind it (makeFilePhotoPicker), and the camera where the
+  // backend has one.
+  return s.photoPicker ? makeImagePickerModule(s.photoPicker, nullptr, s.noPrompts, camera) : nullptr;
+}
+
 DesktopModules addDesktopModules(ModuleRegistry &registry, const DesktopModuleSources &s) {
   // One launcher for the process: a reload gets a new module over it.
   DesktopModules made{
@@ -131,15 +147,12 @@ DesktopModules addDesktopModules(ModuleRegistry &registry, const DesktopModuleSo
   addSourced(s.photos, "NgNativeMediaLibrary", [photos = s.photos, noPrompts = s.noPrompts, files = s.files] {
     return makeMediaLibraryModule(photos, noPrompts, files);
   });
+  // Made again for each runtime, as every module is: over the photo library only with its camera,
+  // and over a picker with no library with or without one.
   if (s.photos) {
-    addSourced(s.cameraHardware && s.audioInput && s.cameraSheet, "NgNativeImagePicker", [photos = s.photos, noPrompts = s.noPrompts, camera = PickerCamera{.hardware = s.cameraHardware, .microphone = s.audioInput, .sheet = s.cameraSheet, .folder = s.caches + "/ImagePicker"}] {
-      return makeImagePickerModule(photos, photos, noPrompts, camera);
-    });
+    addSourced(s.cameraHardware && s.cameraSheet, "NgNativeImagePicker", [s] { return makeDesktopImagePicker(s); });
   } else {
-    // A picker with no library and no camera: the library half alone.
-    addSourced(s.photoPicker, "NgNativeImagePicker", [picker = s.photoPicker, noPrompts = s.noPrompts] {
-      return makeImagePickerModule(picker, nullptr, noPrompts);
-    });
+    addSourced(s.photoPicker, "NgNativeImagePicker", [s] { return makeDesktopImagePicker(s); });
   }
   addSourced(s.tracking, "NgNativeTrackingTransparency", [tracking = s.tracking, noPrompts = s.noPrompts] {
     return makeTrackingModule(tracking, noPrompts);

@@ -34,6 +34,7 @@ G_END_DECLS
 
 namespace ngn::gtk {
 
+struct CameraSurface;
 struct ImageLoad;
 struct ScrollBox;
 class SvgImageHold;
@@ -64,6 +65,8 @@ struct ViewData {
   ScrollBox *documentOf{nullptr};
   // A placed split view's AdwBreakpointBin (split-view.h), which fills the view.
   GtkWidget *split{nullptr};
+  // An `<expo-camera>`'s picture and running camera (camera.h).
+  std::shared_ptr<CameraSurface> camera;
   // An `<expo-video>`'s picture and controls (video.h).
   std::shared_ptr<VideoSurface> video;
   // An svg's document, which the core builds from the elements under it.

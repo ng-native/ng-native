@@ -105,8 +105,8 @@ protected readonly permission = cameraPermission();
 Made in an injection context, as a field of a component or a service, it checks a refusal again
 each time the app comes back to the front, so turning the camera on in Settings shows the camera
 without a restart. On iOS and Android it calls `expo-camera`'s own permission functions, and on
-macOS the desktop host's, so the same code runs on each. Where there is no such module, as on the
-web or in a test in Node, it answers denied, and `blocked()` is true.
+macOS and Linux the desktop host's, so the same code runs on each. Where there is no such module,
+as on the web or in a test in Node, it answers denied, and `blocked()` is true.
 
 Add to `Info.plist`:
 
@@ -196,6 +196,15 @@ On macOS the movie is a QuickTime file (`.mov`) from the Mac's camera, with any 
 only with the microphone already allowed, and `record()` never asks for it, so it records without
 sound otherwise, as iOS does: ask with `microphonePermission()` first. One recording runs at a time
 for a view; a second `record()` rejects until the first stops.
+
+On Linux the camera comes through the Camera portal, which asks for access once and keeps the
+answer, and its frames through PipeWire, with GStreamer's PipeWire plugin installed. `facing` and
+`mirror` do nothing, since the portal offers the cameras as one. A picture is a JPEG or PNG of the
+newest frame. The movie is a QuickTime file, H.264 where an x264 or OpenH264 encoder and `h264parse`
+are installed and Motion JPEG otherwise. It has sound where an AAC encoder is installed and a
+microphone is present: PipeWire records silence with no error when there is none, so with no
+microphone it records without sound. Linux has no microphone permission, so `microphonePermission()`
+reads as granted.
 
 ## Reference
 

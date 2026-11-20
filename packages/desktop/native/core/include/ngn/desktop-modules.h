@@ -154,6 +154,11 @@ struct DesktopModules {
 // session is an answer of their own (no rating prompt outside the Mac App Store).
 DesktopModules addDesktopModules(ModuleRegistry &registry, const DesktopModuleSources &sources);
 
+// NgNativeImagePicker as addDesktopModules registers it, or null where it is left out: over the
+// photo library with its camera, or over a picker with no library and the camera where there is
+// one.
+std::shared_ptr<NativeModule> makeDesktopImagePicker(const DesktopModuleSources &sources);
+
 // NgNativeHost: `getConstants()` answers `{absentModules}`, the desktop modules this host leaves
 // out by design, which JavaScript reads as absent rather than as a host to rebuild.
 std::shared_ptr<NativeModule> makeHostModule(std::vector<std::string> absent);

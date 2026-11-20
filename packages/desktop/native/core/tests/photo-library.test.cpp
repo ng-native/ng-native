@@ -157,6 +157,7 @@ struct FakeSheet final : ngn::CameraSheet {
 struct FakeMicrophone final : ngn::AudioInput {
   Access state{Access::Granted};
   Access decides{Access::Granted};
+  bool present{true};
   int asked{0};
   Access access() override {
     return state;
@@ -167,7 +168,7 @@ struct FakeMicrophone final : ngn::AudioInput {
     done(state);
   }
   bool hasMicrophone() override {
-    return true;
+    return present;
   }
   std::unique_ptr<ngn::AudioRecording> prepare(const std::string &, const ngn::RecordingSettings &, std::string &error) override {
     error = "not here";
@@ -496,6 +497,19 @@ TEST_CASE("NgNativeImagePicker asks for the microphone for a video as iOS does: 
   CHECK(sheet->shown == 3);
   CHECK_FALSE(sheet->asked->video.sound);
 
+  // Allowed, with no microphone there: no sound, rather than a track of silence.
+  microphone->state = FakeMicrophone::Access::Granted;
+  microphone->present = false;
+  CHECK(recorded(ask(*module, "launchCameraAsync", videos)));
+  CHECK_FALSE(sheet->asked->video.sound);
+  microphone->state = FakeMicrophone::Access::NotDetermined;
+  microphone->decides = FakeMicrophone::Access::Granted;
+  CHECK(recorded(ask(*module, "launchCameraAsync", videos)));
+  CHECK_FALSE(sheet->asked->video.sound);
+  microphone->present = true;
+  microphone->asked = 2;
+  sheet->shown = 3;
+
   // Refused before: not asked again, and recorded with no sound.
   for (auto refused : {FakeMicrophone::Access::Denied, FakeMicrophone::Access::Restricted}) {
     microphone->state = refused;
@@ -547,7 +561,7 @@ TEST_CASE("NgNativeImagePicker shows no camera without the permission, with no p
   CHECK(camera->asked == 0);
   camera->state = FakeCamera::Access::Granted;
   camera->camera = false;
-  CHECK(ask(*module, "launchCameraAsync", dynamic::array(dynamic::object())).failure == "ImagePicker: this Mac has no camera");
+  CHECK(ask(*module, "launchCameraAsync", dynamic::array(dynamic::object())).failure == "ImagePicker: this computer has no camera");
   camera->camera = true;
   auto quiet = ngn::makeImagePickerModule(library, library, true, picker);
   CHECK(ask(*quiet, "launchCameraAsync", dynamic::array(dynamic::object())).value->at("canceled") == dynamic(true));
