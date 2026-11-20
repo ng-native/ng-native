@@ -413,4 +413,12 @@ bool performAxVerb(const ViewProps &props, const ViewEventEmitter *emitter, AxVe
   return false;
 }
 
+bool sendAxAction(const ViewProps &props, const ViewEventEmitter *emitter, const std::string &name) {
+  if (!props.onAccessibilityAction || !emitter) {
+    return false;
+  }
+  emitter->onAccessibilityAction(name);
+  return true;
+}
+
 } // namespace ngn

@@ -131,6 +131,16 @@ TEST_CASE("Device's OS name and a push token's type are the OS's") {
   CHECK(heard[0]["token"]["type"] == "otheros");
 }
 
+TEST_CASE("Linux in a right-to-left locale goes back with Alt+Right and forward with Alt+Left, menu included") {
+  auto os = ngn::linuxOs(true);
+  CHECK(ngn::navigationFor(ngn::KeyChord{.key = "ArrowRight", .modifiers = ngn::Option}, os) == ngn::NavigationDirection::Back);
+  CHECK(ngn::navigationFor(ngn::KeyChord{.key = "ArrowLeft", .modifiers = ngn::Option}, os) == ngn::NavigationDirection::Forward);
+  auto bar = ngn::linuxMenuBar({.appName = "Notes", .os = os});
+  const auto *back = ngn::findMenuItem(bar, ngn::MenuCommand::Back);
+  REQUIRE(back != nullptr);
+  CHECK(back->key == "ArrowRight");
+}
+
 TEST_CASE("Linux's profile: Ctrl for shortcuts, Alt and the arrows for back and forward, no Homebrew") {
   auto os = ngn::linuxOs();
   CHECK(os.id == "linux");

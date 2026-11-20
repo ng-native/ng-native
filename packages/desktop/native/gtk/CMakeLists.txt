@@ -23,6 +23,7 @@ endif()
 pkg_check_modules(NGN_UNIX_PRINT IMPORTED_TARGET gtk4-unix-print)
 
 add_library(ngn_gtk OBJECT
+    accent-colour.cpp
     accessibility-settings.cpp
     accessible.cpp
     accessible-text.cpp
@@ -51,12 +52,14 @@ add_library(ngn_gtk OBJECT
     screens.cpp
     secret-store.cpp
     scroll-view.cpp
+    settings-portal.cpp
     split-view.cpp
     status-notifier.cpp
     surface-input.cpp
     system-access.cpp
     text-field.cpp
-    view-widget.cpp)
+    view-widget.cpp
+    window-scale.cpp)
 target_link_libraries(ngn_gtk PUBLIC ngn_core_runtime ngn_curl ngn_openssl ngn_libraries PkgConfig::NGN_GTK)
 if(NOT APPLE)
   target_link_libraries(ngn_gtk PUBLIC PkgConfig::NGN_X11)
@@ -89,7 +92,7 @@ add_custom_command(TARGET ngn-linux POST_BUILD
 # The GTK view tests: views mounted from Fabric mutations into a window GTK draws, through the
 # backend the binary uses. Built with the core tests, and run beside them.
 if(NGN_TESTS)
-  set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accessibility-settings.test.cpp tests/accessible.test.cpp tests/alerts.test.cpp tests/animation-frames.test.cpp tests/app-windows.test.cpp tests/chrome.test.cpp tests/controls.test.cpp tests/drag-and-drop.test.cpp tests/focus.test.cpp tests/image-view.test.cpp tests/input.test.cpp tests/input-replay.test.cpp tests/linking.test.cpp tests/menus.test.cpp tests/notifications.test.cpp tests/proxy-resolver.test.cpp
+  set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accent-colour.test.cpp tests/accessibility-settings.test.cpp tests/accessible.test.cpp tests/alerts.test.cpp tests/animation-frames.test.cpp tests/app-windows.test.cpp tests/chrome.test.cpp tests/controls.test.cpp tests/drag-and-drop.test.cpp tests/focus.test.cpp tests/image-view.test.cpp tests/input-replay.test.cpp tests/input.test.cpp tests/linking.test.cpp tests/menus.test.cpp tests/notifications.test.cpp tests/proxy-resolver.test.cpp
       tests/screens.test.cpp tests/scroll-view.test.cpp tests/secret-store.test.cpp tests/split-view.test.cpp tests/status-notifier.test.cpp tests/svg.test.cpp tests/system-access.test.cpp tests/system-modules.test.cpp tests/text.test.cpp tests/views.test.cpp)
   add_executable(ngn_gtk_tests ${ngn_gtk_test_SRC} ../core/testing/fake-network.cpp ../core/testing/fake-system.cpp)
   target_include_directories(ngn_gtk_tests PRIVATE ../core/tests ../core/testing)

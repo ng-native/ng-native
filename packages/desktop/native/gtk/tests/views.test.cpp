@@ -9,6 +9,8 @@
 
 #include <doctest/doctest.h>
 
+#include <dlfcn.h>
+
 #include <atomic>
 #include <thread>
 
@@ -231,22 +233,69 @@ struct AppWindows {
 
 } // namespace
 
-TEST_CASE("a window's surface hears a change of scale, which resizes nothing") {
+TEST_CASE("a window's surface takes its fractional scale, and hears a change of scale, which resizes nothing") {
   REQUIRE(ngn::testing::gtkReady());
-  int resized = 0, scale = 0;
-  AppWindows w("dev.ngnative.ScaleTest", {.resizeSurface =
-                                              [&](SurfaceId, int, int, int s) {
+  int resized = 0;
+  double started = 0, scale = 0;
+  std::vector<GtkWidget *> rescaled;
+  AppWindows w("dev.ngnative.ScaleTest", {.startSurface = [&](SurfaceId, int, int, double s) { started = s; },
+                                          .resizeSurface =
+                                              [&](SurfaceId, int, int, double s) {
                                                 resized++;
                                                 scale = s;
-                                              }});
+                                              },
+                                          .rescaled = [&](GtkWidget *window) { rescaled.push_back(window); }});
   auto &windows = w.windows;
   windows.openWindow(12, ngn::WindowRequest{.title = "Scaled"}, ngn::WindowPlacement{}, nullptr);
   ngn::testing::runUntil([&] { return windows.window(12) != nullptr; });
+  GtkWidget *window = windows.window(12);
+  GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(window));
+  // Under a compositor at a fractional scale (NGN_TEST_SCALE: 1.25 under headless mutter), the
+  // surface starts at it before the window shows, when GDK still rounds it up, and keeps it once it
+  // shows; elsewhere, the whole number.
+  // With no override, the monitor's own: fractional from GTK 4.14 (gdk_monitor_get_scale, found at run
+  // time), else its whole number.
+  const char *want = g_getenv("NGN_TEST_SCALE");
+  double expected = want ? std::stod(want) : gtk_widget_get_scale_factor(window);
+  if (!want) {
+    using GetScale = double (*)(GdkMonitor *);
+    auto monitorScale = reinterpret_cast<GetScale>(dlsym(RTLD_DEFAULT, "gdk_monitor_get_scale"));
+    GdkMonitor *monitor = gdk_display_get_monitor_at_surface(gtk_widget_get_display(window), gtk_native_get_surface(GTK_NATIVE(window)));
+    if (monitor) {
+      expected = monitorScale ? monitorScale(monitor) : gdk_monitor_get_scale_factor(monitor);
+    }
+  }
+  CHECK(started == doctest::Approx(expected));
+  windows.didMount(12);
+  ngn::testing::runUntil([&] { return gtk_widget_get_mapped(window); });
+  // GDK's own scale: the surface's `scale` from GTK 4.12, the whole-number factor below it.
+  bool fractional = g_object_class_find_property(G_OBJECT_GET_CLASS(surface), "scale") != nullptr;
+  double gdkScale = gtk_widget_get_scale_factor(window);
+  if (fractional) {
+    ngn::testing::runUntil([&] {
+      g_object_get(surface, "scale", &gdkScale, nullptr);
+      return !want || gdkScale == doctest::Approx(std::stod(want));
+    });
+  }
+  if (want) {
+    MESSAGE("started at " << started << ", GDK says " << gdkScale << " shown, gtk_widget_get_scale_factor " << gtk_widget_get_scale_factor(window));
+  }
+  rescaled.clear();
+
+  // The surface mapping is a notification too: a scale the compositor announced before it did, which
+  // the monitor's stood in for, is read again.
   int before = resized;
-  // As GTK notifies when the window moves to a monitor of another scale.
-  g_object_notify(G_OBJECT(windows.window(12)), "scale-factor");
+  g_object_notify(G_OBJECT(surface), "mapped");
   CHECK(resized == before + 1);
-  CHECK(scale == gtk_widget_get_scale_factor(windows.window(12)));
+  CHECK(rescaled == std::vector<GtkWidget *>{window});
+  rescaled.clear();
+
+  before = resized;
+  // As GDK notifies when the window moves to a monitor of another scale, or the scale changes.
+  g_object_notify(G_OBJECT(surface), fractional ? "scale" : "scale-factor");
+  CHECK(resized == before + 1);
+  CHECK(scale == gdkScale);
+  CHECK(rescaled == std::vector<GtkWidget *>{window});
 }
 
 TEST_CASE("the user closing the last window is the host's to act on; the app or a reload closing it is not") {
