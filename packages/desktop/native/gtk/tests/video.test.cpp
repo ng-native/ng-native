@@ -6,6 +6,7 @@
 #include "../video.h"
 #include "helpers.h"
 #include "mounted-views.h"
+#include "ngn/file-system.h"
 
 #include <doctest/doctest.h>
 #include <gst/gst.h>
@@ -22,7 +23,8 @@ using ngn::testing::MountedViews;
 namespace {
 
 struct Folder {
-  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn-video-" + std::to_string(getpid()));
+  // With a space, as a home folder's name can have.
+  std::filesystem::path path = std::filesystem::temp_directory_path() / ("ngn video-" + std::to_string(getpid()));
   Folder() { std::filesystem::create_directories(path); }
   ~Folder() {
     std::error_code ignored;
@@ -34,7 +36,7 @@ struct Folder {
 // 5 green, 6 blue), with a tone under it.
 std::string videoFile(const Folder &folder, const char *name, int frames, int pattern) {
   auto path = (folder.path / name).string();
-  std::string line = "webmmux name=mux ! filesink location=" + path + " videotestsrc num-buffers=" + std::to_string(frames) +
+  std::string line = "webmmux name=mux ! filesink name=file videotestsrc num-buffers=" + std::to_string(frames) +
                      " pattern=" + std::to_string(pattern) +
                      " ! video/x-raw,width=64,height=48,framerate=30/1 ! vp9enc deadline=1 ! mux. audiotestsrc num-buffers=" +
                      std::to_string(frames * 48000 / 30 / 1024) + " ! audio/x-raw,rate=48000,channels=1 ! opusenc ! mux.";
@@ -42,6 +44,10 @@ std::string videoFile(const Folder &folder, const char *name, int frames, int pa
   GError *error = nullptr;
   GstElement *pipeline = gst_parse_launch(line.c_str(), &error);
   REQUIRE_MESSAGE(error == nullptr, (error ? error->message : ""));
+  // Set, never parsed in the line.
+  GstElement *file = gst_bin_get_by_name(GST_BIN(pipeline), "file");
+  g_object_set(file, "location", path.c_str(), nullptr);
+  gst_object_unref(file);
   gst_element_set_state(pipeline, GST_STATE_PLAYING);
   GstBus *bus = gst_element_get_bus(pipeline);
   GstMessage *end = gst_bus_timed_pop_filtered(bus, 20 * GST_SECOND, static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
@@ -53,7 +59,7 @@ std::string videoFile(const Folder &folder, const char *name, int frames, int pa
   gst_element_set_state(pipeline, GST_STATE_NULL);
   gst_object_unref(pipeline);
   REQUIRE(ended);
-  return "file://" + path;
+  return ngn::fileUri(path);
 }
 
 facebook::react::Props::Shared videoProps(dynamic raw) {
