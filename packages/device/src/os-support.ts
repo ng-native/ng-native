@@ -427,9 +427,12 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
     withoutAvailable: true,
   },
   {
-    ...row('`videoPlayer()`', [], ['yes', 'absent', 'yes', 'yes', 'yes', 'yes'], {
-      videoPlayer: 'NgNativeVideo',
-    }),
+    ...row(
+      '`videoPlayer()`',
+      [],
+      ['yes', 'through GStreamer, H.264 only with a decoder installed', 'yes', 'yes', 'yes', 'yes'],
+      { videoPlayer: 'NgNativeVideo' },
+    ),
     withoutAvailable: true,
   },
   {

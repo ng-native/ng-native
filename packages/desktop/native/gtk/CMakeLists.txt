@@ -91,7 +91,7 @@ if(NGN_SECRET_FOUND)
   target_compile_definitions(ngn_gtk PUBLIC NGN_LIBSECRET=1)
 endif()
 if(NGN_GSTREAMER_FOUND)
-  target_sources(ngn_gtk PRIVATE audio.cpp gst-playback.cpp)
+  target_sources(ngn_gtk PRIVATE audio.cpp gst-frames.cpp gst-playback.cpp video.cpp)
   target_link_libraries(ngn_gtk PUBLIC PkgConfig::NGN_GSTREAMER)
   target_compile_definitions(ngn_gtk PUBLIC NGN_GSTREAMER=1)
 endif()
@@ -120,7 +120,7 @@ add_custom_command(TARGET ngn-linux POST_BUILD
 # backend the binary uses. Built with the core tests, and run beside them.
 if(NGN_TESTS)
   set(ngn_gtk_test_SRC ../core/tests/main.cpp tests/accent-colour.test.cpp tests/accessibility-settings.test.cpp tests/accessible.test.cpp tests/alerts.test.cpp tests/animation-frames.test.cpp tests/app-windows.test.cpp tests/audio.test.cpp tests/chrome.test.cpp tests/clock-format.test.cpp tests/controls.test.cpp tests/drag-and-drop.test.cpp tests/focus.test.cpp tests/fonts.test.cpp tests/image-manipulator.test.cpp tests/image-view.test.cpp tests/input-replay.test.cpp tests/input.test.cpp tests/linking.test.cpp tests/locales.test.cpp tests/machine.test.cpp tests/menus.test.cpp tests/notifications.test.cpp tests/paint.test.cpp tests/proxy-resolver.test.cpp
-      tests/screens.test.cpp tests/scroll-view.test.cpp tests/secret-store.test.cpp tests/split-view.test.cpp tests/status-notifier.test.cpp tests/svg.test.cpp tests/system-access.test.cpp tests/system-modules.test.cpp tests/system-services.test.cpp tests/text.test.cpp tests/views.test.cpp)
+      tests/screens.test.cpp tests/scroll-view.test.cpp tests/secret-store.test.cpp tests/split-view.test.cpp tests/status-notifier.test.cpp tests/svg.test.cpp tests/system-access.test.cpp tests/system-modules.test.cpp tests/system-services.test.cpp tests/text.test.cpp tests/video.test.cpp tests/views.test.cpp)
   add_executable(ngn_gtk_tests ${ngn_gtk_test_SRC} ../core/testing/fake-network.cpp ../core/testing/fake-system.cpp)
   target_include_directories(ngn_gtk_tests PRIVATE ../core/tests ../core/testing)
   target_link_libraries(ngn_gtk_tests PRIVATE ngn_gtk doctest)

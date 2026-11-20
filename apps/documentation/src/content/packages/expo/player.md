@@ -233,6 +233,14 @@ On macOS the desktop host plays a `videoPlayer` with AVPlayer and draws `<expo-v
 AVPlayerView, under the iOS view's name and with its props. `requiresLinearPlayback` does nothing
 there, and the player has no tracks, thumbnails or now-playing controls.
 
+On Linux the desktop host plays a `videoPlayer` through GStreamer, as it plays audio, and draws
+`<expo-video>` as a GTK picture, since GTK has no player view. With `nativeControls` it shows its
+own play and pause button and position slider, and a full-screen button unless
+`fullscreenOptions.enable` is false. Full screen opens a window of its own, asked to fill the
+screen, which Escape or closing it leaves; a window manager that will not make it full screen
+leaves it a window. `requiresLinearPlayback` does nothing there, picture in picture is absent, and
+the player has no tracks, thumbnails or now-playing controls.
+
 `ExpoVideo`'s inputs are `expo-video`'s own `VideoViewProps`, typed: `player`, `nativeControls`
 (default `true`), `contentFit` (`'contain'`, `'cover'` or `'fill'`, default `'contain'`),
 `requiresLinearPlayback`, `fullscreenOptions`, `allowsPictureInPicture`,
