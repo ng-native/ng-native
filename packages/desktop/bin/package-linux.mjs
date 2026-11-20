@@ -60,7 +60,7 @@ export const LINUX_ARCHES = {
  * The oldest of each system library a `deb` or `rpm` runs on: Ubuntu 24.04, Debian 13 and Fedora 44
  * have newer, and the host is built against AlmaLinux 9's glibc. A Flatpak brings its own.
  */
-export const LINUX_MINIMUMS = { glibc: '2.34', gtk: '4.10', libadwaita: '1.4' };
+export const LINUX_MINIMUMS = { glibc: '2.34', gtk: '4.10', libadwaita: '1.4', gstreamer: '1.22' };
 
 /** The GNOME runtime a Flatpak runs on, a new one each year. */
 export const FLATPAK_RUNTIME = {
@@ -515,6 +515,13 @@ export const DEB_DEPENDS = [
   `libadwaita-1-0 (>= ${LINUX_MINIMUMS.libadwaita})`,
   'libsecret-1-0',
   'glib-networking',
+  `libgstreamer1.0-0 (>= ${LINUX_MINIMUMS.gstreamer})`,
+  `libgstreamer-plugins-base1.0-0 (>= ${LINUX_MINIMUMS.gstreamer})`,
+  // Loaded rather than linked: playbin3 and the converters (base), PulseAudio's sink and source,
+  // which PipeWire answers too (pulseaudio), and the WAV, Ogg, MP4 and VP9 elements (good).
+  'gstreamer1.0-plugins-base',
+  'gstreamer1.0-plugins-good',
+  'gstreamer1.0-pulseaudio',
   'libssl3t64',
   'libnghttp2-14',
   'zlib1g',
@@ -535,10 +542,10 @@ export function selfBuiltDebWarning(arch) {
   const m = LINUX_MINIMUMS;
   return (
     `No prebuilt Linux ${arch} host fits this app, so the .deb holds one built on this machine. Its ` +
-    `dependencies (glibc ${m.glibc}, GTK ${m.gtk} and libadwaita ${m.libadwaita} or later) hold ` +
-    'for the prebuilt host, built on AlmaLinux 9, and the one built here may need newer libraries ' +
-    'than they say. Package on AlmaLinux 9, or use the prebuilt host, for a .deb that installs ' +
-    'only where it runs.'
+    `dependencies (glibc ${m.glibc}, GTK ${m.gtk}, libadwaita ${m.libadwaita} and GStreamer ` +
+    `${m.gstreamer} or later) hold for the prebuilt host, built on AlmaLinux 9, and the one built ` +
+    'here may need newer libraries than they say. Package on AlmaLinux 9, or use the prebuilt host, ' +
+    'for a .deb that installs only where it runs.'
   );
 }
 
@@ -556,6 +563,8 @@ export function debControl(app, { arch, installedKiB }) {
     `Maintainer: ${app.maintainer}`,
     `Installed-Size: ${installedKiB}`,
     `Depends: ${DEB_DEPENDS.join(', ')}`,
+    // AAC and HLS, which most MP4 audio and streams need; never a patented decoder such as H.264's.
+    'Recommends: gstreamer1.0-plugins-bad',
     'Section: misc',
     'Priority: optional',
     ...(app.homepage ? [`Homepage: ${app.homepage}`] : []),
@@ -590,6 +599,12 @@ export function rpmSpec(app, { tree }) {
     'Requires: libsecret',
     // A GIO module, loaded rather than linked, so rpm's scanner does not find it.
     'Requires: glib-networking',
+    `Requires: gstreamer1 >= ${m.gstreamer}`,
+    `Requires: gstreamer1-plugins-base >= ${m.gstreamer}`,
+    // Plugins, loaded rather than linked: PulseAudio's sink and source, WAV, Ogg, MP4 and VP9.
+    'Requires: gstreamer1-plugins-good',
+    // AAC and HLS, which most MP4 audio and streams need; never a patented decoder such as H.264's.
+    'Recommends: gstreamer1-plugins-bad-free',
     // The host is stripped when it is built; rpm's own steps would strip it or look for debug info.
     '%global debug_package %{nil}',
     '%global __os_install_post %{nil}',

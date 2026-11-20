@@ -44,7 +44,8 @@ mkdir -p "$out"
 case "$ID" in
   ubuntu | debian)
     export DEBIAN_FRONTEND=noninteractive
-    packages=(libc6 libgtk-4-1 libadwaita-1-0 libsecret-1-0 glib-networking
+    packages=(libc6 libgtk-4-1 libadwaita-1-0 libsecret-1-0 glib-networking libgstreamer1.0-0
+      libgstreamer-plugins-base1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-pulseaudio
       libssl3t64 libnghttp2-14 zlib1g libsqlite3-0 libatomic1 libstdc++6
       xvfb weston libgl1-mesa-dri libegl-mesa0 dbus fonts-dejavu-core)
     has_cell vulkan && packages+=(mesa-vulkan-drivers)
@@ -55,7 +56,7 @@ case "$ID" in
   fedora | almalinux | rhel)
     # OpenSSL by the soname the host links, as an rpm's own requirements name it: Fedora 45 moved
     # openssl-libs to OpenSSL 4, and keeps libssl.so.3 in openssl3-libs.
-    packages=(gtk4 libadwaita libsecret glib-networking
+    packages=(gtk4 libadwaita libsecret glib-networking gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good
       'libssl.so.3()(64bit)' 'libcrypto.so.3()(64bit)' libnghttp2 sqlite-libs libatomic libstdc++ xorg-x11-server-Xvfb weston mesa-dri-drivers dbus-daemon
       dejavu-sans-fonts)
     has_cell vulkan && packages+=(mesa-vulkan-drivers)

@@ -25,6 +25,10 @@ export const LINUX_LIBRARY_MINIMUMS = /** @type {Readonly<Record<string, string>
   'libadwaita-1': '1.4',
   'libsecret-1': '0.20',
   openssl: '3.0',
+  'gstreamer-1.0': '1.22',
+  'gstreamer-app-1.0': '1.22',
+  'gstreamer-video-1.0': '1.22',
+  'gstreamer-pbutils-1.0': '1.22',
 });
 
 /**
@@ -151,6 +155,11 @@ export const LINUX_LIBRARIES = [
   { module: 'libnghttp2', pkg: { apt: 'libnghttp2-dev', dnf: 'libnghttp2-devel' } },
   { module: 'zlib', pkg: { apt: 'zlib1g-dev', dnf: 'zlib-devel' } },
   { module: 'sqlite3', pkg: { apt: 'libsqlite3-dev', dnf: 'sqlite-devel' } },
+  { module: 'gstreamer-1.0', pkg: { apt: 'libgstreamer1.0-dev', dnf: 'gstreamer1-devel' } },
+  ...['gstreamer-app-1.0', 'gstreamer-video-1.0', 'gstreamer-pbutils-1.0'].map((module) => ({
+    module,
+    pkg: { apt: 'libgstreamer-plugins-base1.0-dev', dnf: 'gstreamer1-plugins-base-devel' },
+  })),
 ];
 
 /**

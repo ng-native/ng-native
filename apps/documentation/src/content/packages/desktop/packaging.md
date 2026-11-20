@@ -115,12 +115,16 @@ hands them to one already running.
 - **`app`** is the folder and a `<name>-<version>-<x86_64|aarch64>.tar.gz` of it, run with
   `bin/<name>`. With `NGN_GPG_KEY` set it has a detached `.tar.gz.asc` too.
 - **`deb`** is written in JavaScript, into `/usr`. It depends on `libc6` 2.34, `libgtk-4-1` 4.10,
-  `libadwaita-1-0` 1.4, `libsecret-1-0`, `glib-networking`, `libssl3t64`, `libnghttp2-14`,
-  `zlib1g`, `libsqlite3-0`, `libatomic1` and `libstdc++6`, under the names Debian 13 and
-  Ubuntu 24.04 share. It has a `Maintainer`, from `--maintainer`.
+  `libadwaita-1-0` 1.4, `libsecret-1-0`, `glib-networking`, GStreamer 1.22 (`libgstreamer1.0-0`,
+  `libgstreamer-plugins-base1.0-0`, and the `gstreamer1.0-plugins-base`, `-plugins-good` and
+  `-pulseaudio` plugins), `libssl3t64`, `libnghttp2-14`, `zlib1g`, `libsqlite3-0`, `libatomic1`
+  and `libstdc++6`, under the names Debian 13 and Ubuntu 24.04 share, and recommends
+  `gstreamer1.0-plugins-bad`. It has a `Maintainer`, from `--maintainer`.
 - **`rpm`** is built by `rpmbuild` for each architecture, into `/usr`. It requires `gtk4` 4.10,
-  `libadwaita` 1.4, `libsecret` and `glib-networking`, and rpm adds a requirement for each library
-  the host links. `rpmsign` signs it with `NGN_GPG_KEY`.
+  `libadwaita` 1.4, `libsecret`, `glib-networking`, GStreamer 1.22 (`gstreamer1`,
+  `gstreamer1-plugins-base`) and `gstreamer1-plugins-good`, recommends
+  `gstreamer1-plugins-bad-free`, and rpm adds a requirement for each library the host links.
+  `rpmsign` signs it with `NGN_GPG_KEY`.
 - **`flatpak`** is built by `flatpak-builder` on the GNOME runtime 50 into one OSTree repository,
   `flatpak-repo`, the app's own remote, and a `.flatpak` bundle of each architecture. The manifest,
   `<app-id>.json`, and the source archives it builds from are written beside them. Its permissions

@@ -14,6 +14,9 @@
 #include "animation-frames.h"
 #include "app-info.h"
 #include "app-windows.h"
+#if NGN_GSTREAMER
+#include "audio.h"
+#endif
 #include "auth-session.h"
 #include "battery.h"
 #include "capture.h"
@@ -937,6 +940,10 @@ int main(int argc, char *argv[]) {
   }
   setRunningBundle(bundle);
   auto fileDialogs = ngn::gtk::makeFileDialogs();
+#if NGN_GSTREAMER
+  // The default microphone, through PulseAudio or PipeWire.
+  auto microphone = ngn::gtk::makeAudioInput();
+#endif
   // The desktop host's own modules (desktop-modules.h). What this backend has no source for yet
   // is left empty, and its module is not registered: JavaScript reads it as absent (NgNativeHost).
   auto desktopModules = ngn::addDesktopModules(
@@ -972,6 +979,11 @@ int main(int argc, char *argv[]) {
        .power = ngn::gtk::makePowerSource(),
        .fontRegistrar = ngn::gtk::makeFontRegistrar(),
        .authSession = gAuthSession,
+#if NGN_GSTREAMER
+       // Playback and recording through GStreamer, each left out where it is not installed.
+       .audioOutput = ngn::gtk::makeAudioOutput(),
+       .audioInput = microphone,
+#endif
        .splash = gSplash,
        // ImagePicker's library half: the FileChooser portal over the user's files. No camera yet.
        .photoPicker = ngn::makeFilePhotoPicker(fileDialogs, caches + "/ImagePicker", ngn::gtk::imagePixelSize),

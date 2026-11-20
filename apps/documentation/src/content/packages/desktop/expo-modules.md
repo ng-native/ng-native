@@ -60,11 +60,12 @@ a file. `NgNativeKeepAwake` holds the session idle through the desktop's Inhibit
 `NgNativeFileSystem` watches with `GFileMonitor`. `NgNativeImagePicker` has its library half alone:
 `pick()` opens the FileChooser portal with an image or video filter (see
 [ImagePicker](/packages/expo/image-picker#on-linux)). `NgNativeSplashScreen` holds the app's first
-windows hidden until `hideAsync()`, as on macOS.
+windows hidden until `hideAsync()`, as on macOS. `NgNativeAudio` plays and records through
+GStreamer (see [Players](/packages/expo/player)).
 
 A module the GTK host has no source for, such as `NgNativeHaptics`, `NgNativeCalendar` or
 `NgNativeCamera`, is not registered, and the host's `NgNativeHost` module names it in
 `absentModules`. Its service is absent: `available()` is false and every call does nothing, rather
-than throwing a `MissingModuleError` that says to rebuild the host. `audioPlayer()` and
-`videoPlayer()` throw that the module is not available on Linux. Linux has no push service, so
+than throwing a `MissingModuleError` that says to rebuild the host. `videoPlayer()` throws that
+the module is not available on Linux. Linux has no push service, so
 `Notifications.getDevicePushToken()` answers null.
