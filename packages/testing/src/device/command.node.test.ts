@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
-import { runCommand } from './command.ts';
+import { runCommand, runningInGroup } from './command.ts';
 
 describe('a command the pool runs', () => {
   it('fails with its last output, or gives it back when a failure is allowed', async () => {
@@ -99,5 +99,15 @@ describe('a command the pool runs', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('counts a group of zombies as stopped, and any other member as running', () => {
+    const stat = (pid: number, comm: string, state: string, pgrp: number) =>
+      `${pid} (${comm}) ${state} 1 ${pgrp} ${pgrp} 0 -1 4194560`;
+    const zombies = [stat(10, 'gradle (daemon)', 'Z', 10), stat(11, 'java', 'Z', 10)];
+    assert.equal(runningInGroup(zombies, 10), false, 'only zombies, as where nothing reaps');
+    assert.equal(runningInGroup([...zombies, stat(12, 'a) S 1 10', 'S', 10)], 10), true);
+    assert.equal(runningInGroup([...zombies, stat(13, 'node', 'R', 99)], 10), false);
+    assert.equal(runningInGroup([stat(14, 'sh', 'D', 10)], 10), true, 'in the kernel, not gone');
   });
 });

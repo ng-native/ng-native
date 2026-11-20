@@ -3,7 +3,7 @@
  * each command's output is kept, and a failure names the command and ends with what it printed.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readdirSync, readFileSync } from 'node:fs';
 
 export interface CommandOptions {
   cwd?: string;
@@ -82,21 +82,64 @@ async function stopGroup(child: ChildProcess): Promise<void> {
     child.kill();
     return;
   }
-  const group = -child.pid;
-  const signal = (name: NodeJS.Signals | 0) => {
+  const pgid = child.pid;
+  const signal = (name: NodeJS.Signals) => {
     try {
-      process.kill(group, name);
+      process.kill(-pgid, name);
       return true;
     } catch {
       return false; // The group has gone.
     }
   };
+  const running = () => groupRunning(pgid);
   if (!signal('SIGTERM')) return;
   const ends = Date.now() + STOP_GRACE_MS;
-  while (signal(0) && Date.now() < ends) await sleep(50);
-  if (!signal('SIGKILL')) return;
+  while (running() && Date.now() < ends) await sleep(50);
+  if (!running() || !signal('SIGKILL')) return;
   // SIGKILL cannot be ignored; the wait is bounded for a process stuck in the kernel.
-  for (let tries = 0; tries < 100 && signal(0); tries++) await sleep(50);
+  for (let tries = 0; tries < 100 && running(); tries++) await sleep(50);
+}
+
+/**
+ * Whether any process of group `pgid` is running. On Linux, a zombie does not count: where
+ * nothing reaps orphans (a container's PID 1), a group of zombies would otherwise never end.
+ */
+function groupRunning(pgid: number): boolean {
+  if (process.platform === 'linux') {
+    let entries: string[];
+    try {
+      entries = readdirSync('/proc').filter((name) => /^\d+$/.test(name));
+    } catch {
+      entries = [];
+    }
+    if (entries.length > 0) {
+      return runningInGroup(
+        entries.map((pid) => {
+          try {
+            return readFileSync(`/proc/${pid}/stat`, 'utf8');
+          } catch {
+            return ''; // Gone since the listing.
+          }
+        }),
+        pgid,
+      );
+    }
+  }
+  try {
+    process.kill(-pgid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether any of `/proc/<pid>/stat`'s lines is of a process in group `pgid` that is not a zombie. */
+export function runningInGroup(stats: readonly string[], pgid: number): boolean {
+  return stats.some((stat) => {
+    // `pid (comm) state ppid pgrp ...`, where comm can hold spaces and parentheses.
+    const [state, , pgrp] = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    return Number(pgrp) === pgid && state !== 'Z' && state !== 'X';
+  });
 }
 
 /** The last lines of some output, which is where a tool says what went wrong. */
