@@ -65,6 +65,9 @@ export async function nativeBuild(
   const env = { ...process.env, CI: '1' };
   const native = path.join(projectRoot, os);
   try {
+    // A folder the pool generated is generated again for a new fingerprint: the app config or a
+    // config plugin changed what prebuild writes. One the project keeps is the project's.
+    if (existsSync(path.join(native, GENERATED))) rmSync(native, { recursive: true, force: true });
     if (!existsSync(native)) {
       const expo = createRequire(path.join(projectRoot, 'package.json')).resolve('expo/bin/cli');
       // Prebuild rewrites the app's config and scripts (a bundle identifier, `expo run:*`): what a

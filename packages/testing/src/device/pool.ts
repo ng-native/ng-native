@@ -226,7 +226,8 @@ class DeviceWorker implements PoolWorker {
     }
     const metroPort =
       this.options.metroPort ??
-      (await metroFor(this.projectRoot, { coverage: this.coverage })).port;
+      (await metroFor(this.projectRoot, { coverage: this.coverage, poolPort: this.bridge.port }))
+        .port;
     this.launchedAt = Date.now();
     const app = await launch.start({
       port: this.bridge.port,
@@ -260,9 +261,12 @@ class DeviceWorker implements PoolWorker {
 
   /** What an app's session says to the worker: Vitest's messages, and the loss of the app. */
   private receive(message: unknown): void {
-    if (this.startAnswered && (message as { type?: string }).type === 'started') {
+    // The app's own `started`, which the pool already gave Vitest; not a loss of the app, which
+    // goes on to the relaunch below.
+    const reply = message as { type?: string; error?: unknown };
+    if (this.startAnswered && reply.type === 'started') {
       this.startAnswered = false;
-      return;
+      if (!reply.error) return;
     }
     const error = (message as { error?: unknown }).error;
     const launch = this.options.launch;
@@ -525,6 +529,9 @@ class AppLost extends Error {
 
 /** How long a worker's start waits for a launch before it lets requests wait instead. */
 const START_WAIT_MS = 20_000;
+
+/** The platforms a reference screenshot can be named for. */
+const SCREENSHOT_PLATFORMS = new Set(['ios', 'android', 'macos']);
 
 /** How long an app may go without a word while it owes an answer. */
 const SILENCE_MS = 15_000;
@@ -904,6 +911,10 @@ class Bridge {
       const file = normalised(String(request?.file ?? ''));
       if (!session?.claimant || !session.files.has(file)) {
         throw new Error(`Not a test file this app was sent: ${String(request?.file)}`);
+      }
+      // The app says which platform it is, and the reference's file name is made from it.
+      if (!SCREENSHOT_PLATFORMS.has(session.platform)) {
+        throw new Error(`Not a platform screenshots are kept for: ${session.platform}`);
       }
       const result = matchScreenshot(
         { ...request, file, platform: session.platform },

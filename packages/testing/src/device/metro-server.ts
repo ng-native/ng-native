@@ -13,18 +13,31 @@ import { progress, sleep, tail } from './command.ts';
 export interface MetroServer {
   port: number;
   stop(): Promise<void>;
+  /** Settles when Metro's process ends, however it ends. */
+  exited: Promise<string>;
 }
 
 const servers = new Map<string, Promise<MetroServer>>();
 
-/** The project's Metro, started on first use. Coverage asks Metro to instrument the app's code. */
-export function metroFor(projectRoot: string, { coverage = false } = {}): Promise<MetroServer> {
+/**
+ * The project's Metro, started on first use. Coverage asks Metro to instrument the app's code, and
+ * `poolPort` is the port the app's test host polls, which Metro tells it.
+ */
+export function metroFor(
+  projectRoot: string,
+  { coverage = false, poolPort }: { coverage?: boolean; poolPort?: number } = {},
+): Promise<MetroServer> {
   let server = servers.get(projectRoot);
   if (!server) {
-    server = startMetro(projectRoot, coverage);
-    servers.set(projectRoot, server);
-    // A start that failed is not kept: the next worker tries again.
-    server.catch(() => servers.delete(projectRoot));
+    const started = startMetro(projectRoot, coverage, poolPort);
+    server = started;
+    servers.set(projectRoot, started);
+    // A start that failed, or a Metro that has since ended, is not kept: the next worker starts
+    // another. Only this one: an earlier Metro ending must not drop the one that replaced it.
+    const forget = () => {
+      if (servers.get(projectRoot) === started) servers.delete(projectRoot);
+    };
+    started.then((metro) => metro.exited.then(forget), forget);
   }
   return server;
 }
@@ -36,7 +49,11 @@ export async function stopMetro(): Promise<void> {
   await Promise.all(started.map((server) => server.then((s) => s.stop()).catch(() => {})));
 }
 
-async function startMetro(projectRoot: string, coverage: boolean): Promise<MetroServer> {
+async function startMetro(
+  projectRoot: string,
+  coverage: boolean,
+  poolPort: number | undefined,
+): Promise<MetroServer> {
   const started = Date.now();
   const port = await freePort();
   const cli = createRequire(`${projectRoot}/package.json`).resolve('expo/bin/cli');
@@ -49,6 +66,8 @@ async function startMetro(projectRoot: string, coverage: boolean): Promise<Metro
       ...process.env,
       EXPO_PUBLIC_DEVICE_TESTS: '1',
       ...(coverage && { DEVICE_TESTS_COVERAGE: '1' }),
+      // Which Metro tells the app's test host, for it to poll: see `withDeviceTests`.
+      ...(poolPort !== undefined && { NG_NATIVE_DEVICE_TESTS_POOL_PORT: String(poolPort) }),
       // Not a person's terminal: no prompts, no QR code.
       EXPO_NO_TELEMETRY: '1',
     },
@@ -71,7 +90,7 @@ async function startMetro(projectRoot: string, coverage: boolean): Promise<Metro
     }
     if (await running(port)) {
       progress('metro', `serving on port ${port}`, started);
-      return { port, stop };
+      return { port, stop, exited };
     }
     if (Date.now() > deadline) {
       await stop();
@@ -82,7 +101,11 @@ async function startMetro(projectRoot: string, coverage: boolean): Promise<Metro
 
 async function running(port: number): Promise<boolean> {
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/status`);
+    // Bounded, the body included: a Metro that takes the connection and never answers is not one
+    // to wait on past the start's own deadline.
+    const response = await fetch(`http://127.0.0.1:${port}/status`, {
+      signal: AbortSignal.timeout(2000),
+    });
     return (await response.text()).includes('packager-status:running');
   } catch {
     return false;

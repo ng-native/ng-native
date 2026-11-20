@@ -4,7 +4,7 @@
  * each launch, and loading its bundle from the run's Metro.
  */
 import { spawn } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { progress, runCommand, sleep } from './command.ts';
 import type { AppLauncher, LaunchedApp } from './launcher.ts';
@@ -21,6 +21,9 @@ export interface AndroidEmulatorOptions {
 /** The ABI an emulator runs on this machine, which the build is limited to. */
 const HOST_ABI = process.arch === 'arm64' ? 'arm64-v8a' : 'x86_64';
 
+/** How long a launched app has to show a process before it counts as having ended at once. */
+const FIRST_PROCESS_MS = 15_000;
+
 export function androidEmulatorLauncher(options: AndroidEmulatorOptions = {}): AppLauncher {
   let last: { adb: (...args: string[]) => Promise<string>; since: number } | null = null;
   return {
@@ -28,13 +31,14 @@ export function androidEmulatorLauncher(options: AndroidEmulatorOptions = {}): A
       const sdk = androidSdk();
       const started = Date.now();
       const [serial, build] = await Promise.all([
-        runningEmulator(sdk, options.device),
+        runningEmulator(sdk, options.device, request.signal),
         nativeBuild(request.projectRoot, 'android', { abi: HOST_ABI, signal: request.signal }),
       ]);
       const adb = async (...args: string[]) =>
         (await runCommand(path.join(sdk, 'platform-tools/adb'), ['-s', serial, ...args])).output;
       last = { adb, since: Date.now() };
       progress('android', `${serial} booted and the build ready`, started);
+      request.signal?.throwIfAborted();
       await adb('install', '-r', build.path);
       const pkg = await packageName(sdk, build.path);
       await adb('shell', 'pm', 'clear', pkg);
@@ -50,17 +54,22 @@ export function androidEmulatorLauncher(options: AndroidEmulatorOptions = {}): A
         .split('\n')
         .pop()!;
       progress('android', 'installed; launching, and waiting for Metro to bundle the app', started);
+      request.signal?.throwIfAborted();
       await adb('shell', 'am', 'start', '-W', '-n', activity);
       let stopped = false;
       const exited = (async () => {
-        // The app is gone when its process is, after it has been seen.
+        // The app is gone when its process is, after it has been seen; one never seen in the
+        // first seconds ended as it started. A stop ends the watch whatever adb says.
+        const launched = Date.now();
         let seen = false;
-        for (;;) {
+        while (!stopped) {
           const pid = (await adb('shell', 'pidof', pkg).catch(() => '')).trim();
           if (pid) seen = true;
-          else if (seen || stopped) return 'the process ended';
+          else if (seen) return 'the process ended';
+          else if (Date.now() - launched > FIRST_PROCESS_MS) return 'the process never started';
           await sleep(1000);
         }
+        return 'stopped';
       })();
       return {
         exited,
@@ -68,6 +77,9 @@ export function androidEmulatorLauncher(options: AndroidEmulatorOptions = {}): A
           stopped = true;
           await adb('shell', 'am', 'force-stop', pkg).catch(() => {});
           await exited;
+          // What the run left: the app's data, its Metro preference among it, and its state folder.
+          await adb('shell', 'pm', 'clear', pkg).catch(() => {});
+          rmSync(request.stateDir, { recursive: true, force: true });
         },
       };
     },
@@ -80,11 +92,16 @@ export function androidEmulatorLauncher(options: AndroidEmulatorOptions = {}): A
 }
 
 /** The serial of the emulator to run on, started and booted. */
-async function runningEmulator(sdk: string, name: string | undefined): Promise<string> {
+async function runningEmulator(
+  sdk: string,
+  name: string | undefined,
+  signal: AbortSignal | undefined,
+): Promise<string> {
   const adb = path.join(sdk, 'platform-tools/adb');
   const running = await emulators(adb);
   const found = name ? running.find((emulator) => emulator.avd === name) : running[0];
-  if (found) return found.serial;
+  // One that adb lists can still be booting: its package service is not up yet.
+  if (found) return waitForBoot(adb, found.avd, signal);
 
   const emulator = path.join(sdk, 'emulator/emulator');
   const avds = (await runCommand(emulator, ['-list-avds'])).output.split('\n').filter(Boolean);
@@ -96,17 +113,18 @@ async function runningEmulator(sdk: string, name: string | undefined): Promise<s
         : 'No Android emulator: add one in Android Studio, under Device Manager.',
     );
   }
-  return bootEmulator(emulator, adb, avd);
-}
-
-/** Start the AVD and wait for it to boot: its serial. */
-async function bootEmulator(emulator: string, adb: string, avd: string): Promise<string> {
   const args = ['-avd', avd, '-no-snapshot-save', '-no-boot-anim', '-no-audio'];
   if (process.env['CI']) args.push('-no-window');
   // It stays up after the run, ready for the next: started on its own, not as the pool's child.
   spawn(emulator, args, { detached: true, stdio: 'ignore' }).unref();
+  return waitForBoot(adb, avd, signal);
+}
+
+/** The serial of the AVD's emulator once it has booted; a stop of the run ends the wait. */
+async function waitForBoot(adb: string, avd: string, signal: AbortSignal | undefined) {
   const deadline = Date.now() + 300_000;
   while (Date.now() < deadline) {
+    signal?.throwIfAborted();
     const serial = (await emulators(adb)).find((each) => each.avd === avd)?.serial;
     if (serial && (await booted(adb, serial))) return serial;
     await sleep(2000);

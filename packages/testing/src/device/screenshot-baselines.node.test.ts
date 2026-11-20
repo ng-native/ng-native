@@ -51,10 +51,22 @@ describe('screenshot references', () => {
       path.dirname(screenshotPath('/app/a.device.ts', '../../etc/passwd', 'ios')),
       '/app/__screenshots__/a.device.ts',
     );
-    assert.equal(
+    assert.match(
       path.basename(screenshotPath('/app/a.device.ts', '..', 'ios')),
-      'screenshot-ios.png',
+      /^screenshot-\w{8}-ios\.png$/,
     );
+  });
+
+  it('keep two names apart that differ only in what a file name cannot hold', () => {
+    const save = screenshotPath('/app/a.device.ts', '保存', 'ios');
+    const cancel = screenshotPath('/app/a.device.ts', '取消', 'ios');
+    assert.notEqual(save, cancel);
+    assert.equal(
+      save,
+      screenshotPath('/app/a.device.ts', '保存', 'ios'),
+      'the same name, the same file',
+    );
+    assert.equal(path.basename(screenshotPath('/app/a.device.ts', 'card', 'ios')), 'card-ios.png');
   });
 
   it('are recorded when there is none, and the capture passes', () => {

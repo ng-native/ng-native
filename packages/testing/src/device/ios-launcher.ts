@@ -4,6 +4,7 @@
  * launch so it starts with no data of an earlier one, and loading its bundle from the run's Metro.
  */
 import { spawn } from 'node:child_process';
+import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { progress, runCommand, sleep } from './command.ts';
@@ -13,9 +14,9 @@ import { nativeBuild } from './native-build.ts';
 
 export interface IosSimulatorOptions {
   /**
-   * The simulator's name, as Xcode lists it (`iPhone 17 Pro`), on the newest iOS that has one.
-   * Default: a booted iPhone, or else the first iPhone on the newest iOS. Name one to keep
-   * screenshots the same from machine to machine.
+   * The simulator's name, as Xcode lists it (`iPhone 17 Pro`): one of that name that is booted,
+   * or else the one on the newest iOS. Default: a booted iPhone, or else the first iPhone on the
+   * newest iOS. Name one to keep screenshots the same from machine to machine.
    */
   device?: string;
 }
@@ -76,6 +77,11 @@ export function iosSimulatorLauncher(options: IosSimulatorOptions = {}): AppLaun
           });
           child.kill();
           await exited;
+          // What the run left: the app and its data, and its state folder.
+          await runCommand('xcrun', ['simctl', 'uninstall', simulator.udid, bundle], {
+            allowFailure: true,
+          });
+          rmSync(request.stateDir, { recursive: true, force: true });
         },
       };
     },

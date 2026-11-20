@@ -57,6 +57,18 @@ describe('the Metro a device run starts', () => {
     }
   });
 
+  it('starts again for the next worker once the one it started has stopped', async () => {
+    const { root, started, done } = project();
+    try {
+      await (await metroFor(root)).stop();
+      await metroFor(root);
+      assert.equal(started().length, 2, 'not the stopped one, still cached');
+    } finally {
+      await stopMetro();
+      done();
+    }
+  });
+
   it('fails with what it printed when it stops as it starts', async () => {
     const { root, done } = project();
     try {

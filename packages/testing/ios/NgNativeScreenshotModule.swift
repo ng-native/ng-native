@@ -45,9 +45,14 @@ private func capture(_ window: UIWindow, _ region: CGRect) throws -> String {
   }
   let format = UIGraphicsImageRendererFormat.default()
   format.preferredRange = .standard
+  var drawn = false
   let image = UIGraphicsImageRenderer(bounds: rect, format: format).image { _ in
     // After pending updates, so the last commit is in the picture.
-    window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+    drawn = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+  }
+  // UIKit says when its snapshot is missing image data: no picture, rather than an empty one.
+  guard drawn else {
+    throw ScreenshotException("The window could not be drawn")
   }
   guard let data = image.pngData() else {
     throw ScreenshotException("The capture could not be encoded as a PNG")

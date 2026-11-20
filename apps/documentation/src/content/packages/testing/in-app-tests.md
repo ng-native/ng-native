@@ -49,7 +49,7 @@ export default defineConfig({
 });
 ```
 
-What each OS needs on the machine:
+Device tests need Vitest 5. What each OS needs on the machine:
 
 - iOS: Xcode with an iOS simulator, and CocoaPods.
 - Android: the Android SDK (`ANDROID_HOME`, or where Android Studio puts it), an emulator made in
@@ -106,7 +106,8 @@ The same command runs on CI, with no Metro to start and no app to build first. C
 directory so a run that changes only JavaScript builds nothing; the run checks the fingerprint
 itself, so a cache that is out of date is built again, not used. Save the cache whether the tests
 pass or not (`actions/cache` on its own saves only when they do), or a failing test means a cold
-build on the next run. With GitHub Actions:
+build on the next run, and under a key of the run's own: a cache key cannot be written twice, so
+one saved after a failed build would otherwise stay. With GitHub Actions:
 
 ```yaml
 jobs:
@@ -128,7 +129,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: node_modules/.cache/ng-native-device-tests
-          key: device-tests-ios-${{ hashFiles('package-lock.json', 'app.json') }}
+          key: device-tests-ios-${{ hashFiles('package-lock.json', 'app.json') }}-${{ github.run_id }}
 
   android:
     runs-on: ubuntu-latest
@@ -163,7 +164,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: node_modules/.cache/ng-native-device-tests
-          key: device-tests-android-${{ hashFiles('package-lock.json', 'app.json') }}
+          key: device-tests-android-${{ hashFiles('package-lock.json', 'app.json') }}-${{ github.run_id }}
 ```
 
 A build from nothing takes most of a job: about 30 minutes for iOS on GitHub's macOS runners and
@@ -227,7 +228,9 @@ What it captures:
 - `screen`: the whole window.
 
 The capture is the app's window as iOS or Android drew it, text included. It is taken again until
-two captures in a row agree, so an animation finishes first.
+two captures in a row agree, so what is moving between captures has stopped; one that does not
+stop within `timeout` (5 seconds) fails the test. An animation that is paused, or waiting on its
+delay, looks still: wait for one to end before the screenshot when it matters.
 
 The reference for `card` in `card.device.ts` is `__screenshots__/card.device.ts/card-ios.png` (or
 `card-android.png`) beside the test file. Without a name, a screenshot is named after its test and
@@ -237,9 +240,10 @@ a count. A missing reference is recorded and the test passes, except on CI, wher
 The match is all but exact by default: a pixel whose colour moves by more than one step of 255 in
 any channel fails the test. An iOS simulator draws the odd edge pixel a step apart from one run to
 the next, which this allows; `channelTolerance: 0` asks for an exact match. A failure writes the
-capture (`card-ios-actual.png`) and a difference (`card-ios-diff.png`) next to the reference. They
-go once the screenshot matches again. Allow more for every screenshot in the project, or in one
-call:
+capture (`card-ios-actual.png`) next to the reference, and a difference (`card-ios-diff.png`) when
+the two are the same size; a capture of another size fails on its size alone, with no difference
+image. They go once the screenshot matches again. Allow more for every screenshot in the project,
+or in one call:
 
 ```ts
 deviceTests({

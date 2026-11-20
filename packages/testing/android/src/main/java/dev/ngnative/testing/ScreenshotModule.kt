@@ -47,8 +47,12 @@ class ScreenshotModule : Module() {
         ?: return@AsyncFunction promise.reject(ScreenshotException("The app has no activity"))
       val view = appContext.findView<View>(tag)
         ?: return@AsyncFunction promise.reject(ScreenshotException("No view with tag $tag"))
-      val at = IntArray(2).also { view.getLocationInWindow(it) }
-      val rect = Rect(at[0], at[1], at[0] + view.width, at[1] + view.height)
+      // Where the view shows in the window, through its own and its ancestors' transforms (a
+      // scale, a rotation), which its width and height do not count, and cut to what is visible.
+      val rect = Rect()
+      if (!view.getGlobalVisibleRect(rect)) {
+        return@AsyncFunction promise.reject(ScreenshotException("The view with tag $tag is not visible"))
+      }
       copy(activity.window, rect, activity.window.decorView, promise)
     }.runOnQueue(Queues.MAIN)
 

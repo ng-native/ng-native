@@ -455,6 +455,30 @@ describe('the device pool', () => {
     }
   });
 
+  it('keeps no screenshot for an app that says it is a platform a file name cannot be made from', async () => {
+    const run = await setup();
+    try {
+      const { worker } = run.worker();
+      const starting = worker.start();
+      const app = run.app('odd', 'x/../../../../tmp/escape');
+      const first = app.poll();
+      await starting;
+      const test = join(run.root, 'src/a.device.ts');
+      worker.send(request('run', { files: [{ filepath: test }] }) as never);
+      await first;
+      const image = new PNG({ width: 1, height: 1 });
+      const answer = await app.post('/screenshot', {
+        file: test,
+        name: 'card',
+        png: PNG.sync.write(image).toString('base64'),
+        update: 'all',
+      });
+      assert.match(answer.error, /Not a platform screenshots are kept for/);
+    } finally {
+      await run.done();
+    }
+  });
+
   it('answers a request it cannot read with a 400', async () => {
     const run = await setup();
     try {
@@ -698,6 +722,24 @@ describe('the device pool', () => {
       b.worker.send(request('cancel') as never);
       const asked = await Promise.race([two, wait(1000).then(() => ({ type: 'nothing' }))]);
       assert.equal(asked?.type, 'cancel', 'the app B launched, not the one A was stopping');
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('relaunches an app lost after it was sent start, rather than taking its loss for a repeat', async () => {
+    const { launch, launches } = fakeLauncher();
+    const run = await setup({ launch, appTimeout: 300 });
+    try {
+      const { worker } = run.worker();
+      const starting = worker.start();
+      worker.send(request('start', { config: { root: run.root } }) as never);
+      const asked = await run.app('one').poll();
+      await starting;
+      assert.equal(asked?.type, 'start');
+      // The app goes quiet with start owed, as one that crashed would.
+      await wait(900);
+      assert.equal(launches.length, 2, 'a new app is launched for the files that remain');
     } finally {
       await run.done();
     }

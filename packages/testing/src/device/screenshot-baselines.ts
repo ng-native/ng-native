@@ -8,6 +8,7 @@
  * apart from one run to the next; anything a person could see is a change.
  */
 import { diff } from '@blazediff/core';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { PNG } from 'pngjs';
@@ -68,7 +69,12 @@ export function screenshotPath(file: string, name: string, platform: string): st
 
 /** A name as a file name: no directories, nothing hidden. */
 function safeName(name: string): string {
-  return name.replace(/[^\w .-]+/g, '-').replace(/^[.\s]+/, '') || 'screenshot';
+  const safe = name.replace(/[^\w .-]+/g, '-').replace(/^[.\s]+/, '') || 'screenshot';
+  // Two names that differ only in what was replaced (`保存` and `取消`) keep apart by a short hash
+  // of the name as given; a name that needed nothing replaced keeps its own file name.
+  return safe === name
+    ? safe
+    : `${safe}-${createHash('sha256').update(name).digest('hex').slice(0, 8)}`;
 }
 
 export function matchScreenshot(
