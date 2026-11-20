@@ -632,18 +632,23 @@ export function rpmSpec(app, { tree }) {
   return `${lines.join('\n')}\n`;
 }
 
+/** The packages whose playback reaches the sound server. */
+const MEDIA_PACKAGES = ['expo-audio', 'expo-video'];
+
 /** The top folders a Flatpak's sandbox takes from its runtime, which `--filesystem` cannot give the host's. */
 const RESERVED_PATHS = /^\/(?:app|bin|etc|lib|lib32|lib64|sbin|usr)(?:\/|$)/;
 
 /**
  * The Flatpak permissions the app is built with, kept to what it uses: the display, GL and the
- * network (the Expo Updates client and `fetch` need it), the microphone when the app declares a
- * reason for it, and each path its capabilities declare. Files, links, notifications and secrets go
- * through portals, which need no permission.
+ * network (the Expo Updates client and `fetch` need it), the sound server when the app plays media
+ * (it has expo-audio or expo-video) or declares a reason for the microphone, and each path its
+ * capabilities declare. Files, links, notifications and secrets go through portals, which need no
+ * permission.
  *
  * @param {DesktopAppConfig} config
+ * @param {{ media?: boolean }} [app] `media`: the app has expo-audio or expo-video
  */
-export function finishArgs(config) {
+export function finishArgs(config, { media = false } = {}) {
   const args = [
     '--share=ipc',
     '--socket=wayland',
@@ -651,7 +656,7 @@ export function finishArgs(config) {
     '--device=dri',
     '--share=network',
   ];
-  if (config.permissions.usageStrings['NSMicrophoneUsageDescription']) {
+  if (media || config.permissions.usageStrings['NSMicrophoneUsageDescription']) {
     args.push('--socket=pulseaudio');
   }
   for (const entry of config.options.capabilities?.paths ?? []) {
@@ -967,7 +972,7 @@ function packageTree(sys, plan, { arch, tree, archives }) {
 }
 
 /**
- * @typedef {{ cwd: string, expo: ExpoConfig, config: DesktopAppConfig, app: LinuxApp, format: LinuxFormat, hosts: { arch: LinuxArch, buildDir: string }[], hermesc: string, icons: { size: number, png: Buffer }[], runner: ReturnType<typeof linuxToolRunner> | null, signing: ReturnType<typeof gpgKey>, output: string, staging: string }} LinuxPlan
+ * @typedef {{ cwd: string, expo: ExpoConfig, config: DesktopAppConfig, app: LinuxApp, format: LinuxFormat, media: boolean, hosts: { arch: LinuxArch, buildDir: string }[], hermesc: string, icons: { size: number, png: Buffer }[], runner: ReturnType<typeof linuxToolRunner> | null, signing: ReturnType<typeof gpgKey>, output: string, staging: string }} LinuxPlan
  */
 
 /**
@@ -1028,6 +1033,8 @@ function planLinuxPackage(options, sys) {
     app,
     format,
     hosts,
+    // Resolved from the app, as @ng-native/expo's adapters import them.
+    media: MEDIA_PACKAGES.some((name) => sys.resolvePackage(cwd, name) !== null),
     hermesc: linuxHermesCompiler(sys, { reactNative, hosts, expo }),
     icons,
     runner,
@@ -1304,9 +1311,9 @@ function buildRpm(sys, { app, arch, tree, staging, output, runner, signing }) {
  * since the build runs in that architecture's SDK.
  *
  * @param {System} sys
- * @param {{ app: LinuxApp, config: DesktopAppConfig, archives: { arch: LinuxArch, file: string, sha256: string }[], staging: string, output: string, runner: ReturnType<typeof linuxToolRunner>, signing: ReturnType<typeof gpgKey> }} build
+ * @param {{ app: LinuxApp, config: DesktopAppConfig, media: boolean, archives: { arch: LinuxArch, file: string, sha256: string }[], staging: string, output: string, runner: ReturnType<typeof linuxToolRunner>, signing: ReturnType<typeof gpgKey> }} build
  */
-function buildFlatpak(sys, { app, config, archives, staging, output, runner, signing }) {
+function buildFlatpak(sys, { app, config, media, archives, staging, output, runner, signing }) {
   // The manifest's archives sit beside it, so it builds again from the output folder.
   const placed = archives.map((archive) => {
     const file = path.join(output, path.basename(archive.file));
@@ -1316,7 +1323,7 @@ function buildFlatpak(sys, { app, config, archives, staging, output, runner, sig
   const manifest = path.join(output, `${app.appId}.json`);
   sys.writeFile(
     manifest,
-    flatpakManifest(app, { finishArgs: finishArgs(config), archives: placed }),
+    flatpakManifest(app, { finishArgs: finishArgs(config, { media }), archives: placed }),
   );
   const repo = path.join(output, 'flatpak-repo');
   const sign = signing ? ` --gpg-sign=${shellQuote(signing.key)}` : '';
