@@ -35,16 +35,11 @@ class AccessibilitySettingsWatcher {
 
  private:
   void readGtk();
-<<<<<<< HEAD
-  void readPortalSetting(const char *key, const char *method);
-  void readPortal(const char *key, GVariant *value);
-=======
-  // Asks the portal for reduced-motion: with ReadOne, or with the older Read when `legacy`.
-  void readPortalSetting(bool legacy);
+  // Asks the portal for one of its settings: with ReadOne, or with the older Read when `legacy`.
+  void readPortalSetting(const char *key, bool legacy);
   // The portal's owner appeared, changed or went.
   void portalOwnerChanged();
-  void readPortal(GVariant *value);
->>>>>>> 98e94296e
+  void readPortal(const char *key, GVariant *value);
   void readStatus();
   void report();
 
