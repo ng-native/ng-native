@@ -8,9 +8,12 @@
  * told otherwise), one file at a time per device, and a re-run on any change under `src`, since
  * Vitest never imports a device test (Metro does) and so cannot see what one depends on.
  *
- * A project per platform runs every file on each, and `vitest --project macos` runs the one:
- * the project is named for its `platform`, as `name` says, and for `macos` the pool starts the
- * desktop host itself (`macosLauncher()`), with fresh state for each run.
+ * A project per platform runs every file on each, and `vitest --project ios` runs the one: the
+ * project is named for its `platform`, as `name` says. For each the pool starts Metro, and the app:
+ * the desktop host on a Mac (`macosLauncher()`), and on iOS and Android the project's development
+ * build, built the first time and kept by its native fingerprint, on the simulator or emulator
+ * `device` names (`iosSimulatorLauncher()`, `androidEmulatorLauncher()`), with fresh state for each
+ * run. `launch: false` leaves the app, and Metro, to be started by hand.
  *
  *     projects: [
  *       { plugins: [ngNative()], test: { name: 'node' } },
@@ -19,10 +22,27 @@
  */
 import path from 'node:path';
 import type { Plugin } from 'vite';
+// Vitest's additions to Vite's plugin type, `configureVitest` among them.
+import type {} from 'vitest/config';
+import { androidEmulatorLauncher } from './android-launcher.ts';
+import { iosSimulatorLauncher } from './ios-launcher.ts';
+import type { AppLauncher } from './launcher.ts';
 import { macosLauncher } from './macos-launcher.ts';
+import { stopMetro } from './metro-server.ts';
 import { devicePool, type DevicePoolOptions } from './pool.ts';
 
-export interface DeviceTestsOptions extends DevicePoolOptions {
+export interface DeviceTestsOptions extends Omit<DevicePoolOptions, 'launch'> {
+  /**
+   * The simulator (`iPhone 17 Pro`) or Android emulator (its AVD name) to run on, booted when it is
+   * not. Default: one already running, or else the newest iPhone or the first AVD.
+   */
+  device?: string;
+  /**
+   * How the app is started. Default: by the pool, for the `platform`. `false`: by hand, with Metro
+   * started by hand too (`EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start`), as for a phone on a cable or
+   * Expo Go.
+   */
+  launch?: AppLauncher | false;
   /** The test files. Default `src/**\/*.device.ts`. */
   include?: string[];
   /** The Vitest project's name, for `--project`. Default: the `platform`, or `device`. */
@@ -32,11 +52,23 @@ export interface DeviceTestsOptions extends DevicePoolOptions {
 }
 
 export function deviceTests(options: DeviceTestsOptions = {}): Plugin {
-  const { include = ['src/**/*.device.ts'], sources = ['src'], name, ...pool } = options;
-  // A Mac app is a process the pool can open; a simulator is one a person has open.
-  if (pool.platform === 'macos' && pool.launch === undefined) pool.launch = macosLauncher();
+  const {
+    include = ['src/**/*.device.ts'],
+    sources = ['src'],
+    name,
+    device,
+    launch,
+    ...rest
+  } = options;
+  const pool: DevicePoolOptions = {
+    ...rest,
+    launch: launch === false ? undefined : (launch ?? launcherFor(rest.platform, device)),
+  };
   return {
     name: 'ng-native:device-tests',
+    configureVitest({ vitest }) {
+      vitest.onClose(stopMetro);
+    },
     config(config) {
       const root = path.resolve(config.root ?? process.cwd());
       return {
@@ -64,7 +96,17 @@ export function deviceTests(options: DeviceTestsOptions = {}): Plugin {
   };
 }
 
+/** The launcher a platform's apps start with by default. */
+function launcherFor(platform: DevicePoolOptions['platform'], device: string | undefined) {
+  if (platform === 'macos') return macosLauncher();
+  if (platform === 'ios') return iosSimulatorLauncher({ device });
+  if (platform === 'android') return androidEmulatorLauncher({ device });
+  return undefined;
+}
+
 export { devicePool, type DevicePoolOptions } from './pool.ts';
 export type { ScreenshotComparatorOptions, ScreenshotOptions } from './screenshot-baselines.ts';
 export { macosLauncher, type MacosLauncherOptions } from './macos-launcher.ts';
+export { iosSimulatorLauncher, type IosSimulatorOptions } from './ios-launcher.ts';
+export { androidEmulatorLauncher, type AndroidEmulatorOptions } from './android-launcher.ts';
 export type { AppLauncher, LaunchRequest, LaunchedApp } from './launcher.ts';

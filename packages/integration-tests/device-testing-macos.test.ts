@@ -130,6 +130,7 @@ async function setup(options: { crash?: boolean } = {}) {
   const pool = devicePool({
     port,
     platform: 'macos',
+    metroPort: 8099,
     launch,
     connectTimeout: 10_000,
     appTimeout: 5000,
@@ -226,6 +227,7 @@ describe('the macOS launcher', () => {
       const pool = devicePool({
         port: await freePort(),
         platform: 'macos',
+        metroPort: 8099,
         connectTimeout: 5000,
         launch: macosLauncher({
           command: process.execPath,
@@ -243,12 +245,15 @@ describe('the macOS launcher', () => {
   });
 
   it('names the test environment from the request', () => {
-    assert.deepEqual(testEnvironment({ port: 1, runId: 'r', stateDir: '/s' }), {
-      NGN_TESTS: '1',
-      NGN_STATE_DIR: '/s',
-      NGN_RUN_ID: 'r',
-      NGN_TESTS_FAKE_SYSTEM_UI: '1',
-    });
+    assert.deepEqual(
+      testEnvironment({ port: 1, runId: 'r', stateDir: '/s', projectRoot: '/p', metroPort: 2 }),
+      {
+        NGN_TESTS: '1',
+        NGN_STATE_DIR: '/s',
+        NGN_RUN_ID: 'r',
+        NGN_TESTS_FAKE_SYSTEM_UI: '1',
+      },
+    );
   });
 });
 
@@ -284,7 +289,7 @@ describe('finding the crash report', () => {
 describe('the macos Vitest project', () => {
   const configOf = (options: Parameters<typeof deviceTests>[0]) =>
     (
-      deviceTests(options).config as (config: object) => {
+      deviceTests(options).config as unknown as (config: object) => {
         test: {
           name: string;
           pool: { name: string };

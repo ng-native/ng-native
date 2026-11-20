@@ -1,0 +1,109 @@
+name: Device tests
+
+# The canary's in-app tests (examples/canary/src/device-tests/phone), run the way an app's would
+# be: `vitest --project ios` and `--project android`, which start Metro, build the development
+# build the first time, boot the simulator or emulator, and launch the app themselves. The builds
+# are kept in node_modules/.cache/ng-native-device-tests, by Expo's fingerprint of the native half,
+# and that directory is cached here, so a run that changes only JavaScript builds nothing.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'packages/testing/**'
+      - 'packages/components/**'
+      - 'packages/fabric/**'
+      - 'packages/platform/**'
+      - 'packages/metro/**'
+      - 'examples/canary/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/device-tests.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ios:
+    if: github.event.pull_request.draft != true
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      # Keyed by what the native half is built from (dependencies, app config, the packages' own
+      # native code); the pool checks the fingerprint as well, so a stale build is rebuilt, not run.
+      - uses: actions/cache@v6
+        with:
+          path: examples/canary/node_modules/.cache/ng-native-device-tests
+          key: device-tests-ios-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}
+          restore-keys: device-tests-ios-
+
+      - name: Run the device tests on a simulator
+        working-directory: examples/canary
+        run: npx vitest run --project ios
+
+      - name: Upload the screenshots that did not match
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshots-ios
+          path: examples/canary/src/device-tests/**/__screenshots__
+          if-no-files-found: ignore
+
+  android:
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      # The emulator's userdata partition needs more disk than the runner has left.
+      - name: Free disk space for the emulator
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+            /usr/share/swift /usr/local/share/boost
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version: 17
+
+      - uses: actions/cache@v6
+        with:
+          path: examples/canary/node_modules/.cache/ng-native-device-tests
+          key: device-tests-android-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}
+          restore-keys: device-tests-android-
+
+      # Hardware acceleration: without KVM the emulator is software-emulated and takes minutes to
+      # boot.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # The emulator is up while the script runs, and the tests find it running.
+      - name: Run the device tests on an emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-boot-timeout: 180
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: cd examples/canary && npx vitest run --project android
+
+      - name: Upload the screenshots that did not match
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshots-android
+          path: examples/canary/src/device-tests/**/__screenshots__
+          if-no-files-found: ignore

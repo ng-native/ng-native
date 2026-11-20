@@ -13,7 +13,7 @@ export interface MacosLauncherOptions {
   command?: string;
   /** Arguments before `run`. Default none. */
   args?: readonly string[];
-  /** The Metro port the host loads its bundle from. Default `RCT_METRO_PORT`, or 8081. */
+  /** The Metro port the host loads its bundle from. Default: the Metro the pool started. */
   metroPort?: number;
   /** The directory the command runs in. Default: the current directory. */
   cwd?: string;
@@ -66,7 +66,7 @@ export function macosLauncher(options: MacosLauncherOptions = {}): AppLauncher {
     start(request): LaunchedApp {
       const child: ChildProcess = spawn(
         options.command ?? 'ng-native-desktop',
-        [...(options.args ?? []), 'run', '--port', String(options.metroPort ?? metroPort())],
+        [...(options.args ?? []), 'run', '--port', String(options.metroPort ?? request.metroPort)],
         {
           cwd: options.cwd,
           env: { ...process.env, ...options.env, ...testEnvironment(request) },
@@ -100,9 +100,4 @@ export function macosLauncher(options: MacosLauncherOptions = {}): AppLauncher {
       }
     },
   };
-}
-
-/** The Metro port the host loads its bundle from: `RCT_METRO_PORT`, as React Native reads it. */
-function metroPort(): number {
-  return Number(process.env['RCT_METRO_PORT'] ?? 8081);
 }

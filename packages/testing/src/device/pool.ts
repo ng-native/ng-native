@@ -33,6 +33,7 @@ import path from 'node:path';
 import type { PoolOptions, PoolRunnerInitializer, PoolWorker } from 'vitest/node';
 import { modulesOf, type BundleModule } from './bundle-modules.ts';
 import { mockedSpecifiers } from './mocks.ts';
+import { metroFor } from './metro-server.ts';
 import { DEFAULT_PORT } from './port.ts';
 import { type AppLauncher, type LaunchedApp } from './launcher.ts';
 import {
@@ -54,8 +55,10 @@ export interface DevicePoolOptions {
   /**
    * Starts the app for each worker that finds none connected, and again after the app is lost: a
    * dropped session fails the file that was running, relaunches the app with fresh state, and the
-   * run goes on with the files that remain. See `AppLauncher`, and `macosLauncher()` for a Mac.
-   * Without one the app is opened by hand, as on a simulator, and a lost app ends the run.
+   * run goes on with the files that remain. With a launcher the pool also starts the Metro the app
+   * loads from. See `AppLauncher`, and `macosLauncher()`, `iosSimulatorLauncher()` and
+   * `androidEmulatorLauncher()`. Without one the app, and its Metro, are started by hand, and a
+   * lost app ends the run.
    */
   launch?: AppLauncher;
   /**
@@ -71,6 +74,12 @@ export interface DevicePoolOptions {
    * needs more.
    */
   appTimeout?: number;
+  /**
+   * The port of a Metro already serving the project with `EXPO_PUBLIC_DEVICE_TESTS=1`, for a launched
+   * app to load from. Default: the pool starts its own, on a free port, and stops it as Vitest
+   * closes.
+   */
+  metroPort?: number;
   /** What `toMatchScreenshot()` does unless a call says otherwise: see `ScreenshotOptions`. */
   screenshots?: ScreenshotOptions;
 }
@@ -114,7 +123,10 @@ class DeviceWorker implements PoolWorker {
   private readonly serverRoot: string;
   private readonly projectRoot: string;
   private readonly options: DevicePoolOptions;
+  private readonly coverage: boolean;
   private session: Session | null = null;
+  /** The pool answered Vitest's `start` itself: the app's own answer is not passed on. */
+  private startAnswered = false;
   private launched: LaunchedApp | null = null;
   private launchedAt = 0;
   /** Settles when the worker has an app to send to: after a start, and after a relaunch. */
@@ -127,6 +139,7 @@ class DeviceWorker implements PoolWorker {
     this.bridge = Bridge.on(options.port ?? DEFAULT_PORT);
     this.bridge.silence = options.appTimeout ?? SILENCE_MS;
     this.projectRoot = pool.project.config.root;
+    this.coverage = Boolean(pool.project.config.coverage?.enabled);
     this.serverRoot = options.serverRoot ?? workspaceRoot(this.projectRoot);
   }
 
@@ -145,6 +158,25 @@ class DeviceWorker implements PoolWorker {
   async start(): Promise<void> {
     this.shutdown = new AbortController();
     this.bridge.hold(1);
+    // A launch can build the app first, for minutes, and Vitest gives a worker's start 90 seconds,
+    // its `start` request included: past 20 seconds the start returns, the pool answers `start`
+    // itself (see `send`), and the requests that follow wait for the app, as after a relaunch. A
+    // launch that fails sooner fails the start.
+    if (this.options.launch) {
+      const connecting = this.connect();
+      this.ready = connecting;
+      connecting.catch(() => {});
+      try {
+        await Promise.race([
+          connecting,
+          new Promise((resolve) => setTimeout(resolve, START_WAIT_MS).unref()),
+        ]);
+      } catch (error) {
+        this.bridge.hold(-1);
+        throw error;
+      }
+      return;
+    }
     try {
       await this.connect();
     } catch (error) {
@@ -186,11 +218,16 @@ class DeviceWorker implements PoolWorker {
       this.session = await claim();
       return;
     }
+    const metroPort =
+      this.options.metroPort ??
+      (await metroFor(this.projectRoot, { coverage: this.coverage })).port;
     this.launchedAt = Date.now();
     const app = await launch.start({
       port: this.bridge.port,
       runId: randomUUID(),
       stateDir: mkdtempSync(path.join(tmpdir(), 'ng-native-device-tests-')),
+      projectRoot: this.projectRoot,
+      metroPort,
     });
     this.launched = app;
     const early = app.exited.then((how) => {
@@ -215,6 +252,10 @@ class DeviceWorker implements PoolWorker {
 
   /** What an app's session says to the worker: Vitest's messages, and the loss of the app. */
   private receive(message: unknown): void {
+    if (this.startAnswered && (message as { type?: string }).type === 'started') {
+      this.startAnswered = false;
+      return;
+    }
     const error = (message as { error?: unknown }).error;
     const launch = this.options.launch;
     if (!(error instanceof AppLost) || !launch) {
@@ -265,6 +306,12 @@ class DeviceWorker implements PoolWorker {
       // The app stays open for the next run: there is nothing of it to stop.
       queueMicrotask(() => this.events.emit('message', response('stopped')));
       return;
+    }
+    if (request.type === 'start' && this.options.launch) {
+      // Answered at once, as an app being built and booted can take longer than Vitest waits for
+      // one; the app is still sent the request, with the config it carries, before any file.
+      this.startAnswered = true;
+      queueMicrotask(() => this.events.emit('message', response('started')));
     }
     // After a relaunch the worker's app is the new one, once `ready`.
     void this.ready.then(
@@ -467,6 +514,9 @@ function bundleUrl(script: string, source: string): string {
 class AppLost extends Error {
   override name = 'AppLost';
 }
+
+/** How long a worker's start waits for a launch before it lets requests wait instead. */
+const START_WAIT_MS = 20_000;
 
 /** How long an app may go without a word while it owes an answer. */
 const SILENCE_MS = 15_000;

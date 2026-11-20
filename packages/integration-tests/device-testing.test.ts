@@ -124,7 +124,7 @@ async function setup(options: Parameters<typeof devicePool>[0] = {}) {
   const metroPort = (metro.address() as { port: number }).port;
 
   const port = options.port ?? (await freePort());
-  const pool = devicePool({ connectTimeout: 2000, ...options, port, serverRoot: root });
+  const pool = devicePool({ connectTimeout: 2000, metroPort, ...options, port, serverRoot: root });
   // The stand-in apps' requests, which the pool may hold open: aborted when the test is done, or
   // they would keep the test process running.
   const requests = new AbortController();
@@ -698,6 +698,42 @@ describe('the device pool', () => {
       b.worker.send(request('cancel') as never);
       const asked = await Promise.race([two, wait(1000).then(() => ({ type: 'nothing' }))]);
       assert.equal(asked?.type, 'cancel', 'the app B launched, not the one A was stopping');
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('answers start itself while the app it launches has yet to connect, and only once', async () => {
+    const { launch } = fakeLauncher();
+    const run = await setup({ launch });
+    try {
+      const { worker, messages } = run.worker();
+      const starting = worker.start();
+      worker.send(request('start', { config: { root: run.root } }) as never);
+      await wait(20);
+      assert.deepEqual(
+        messages.map((message) => (message as { type?: string }).type),
+        ['started'],
+        'before any app has connected',
+      );
+      const phone = run.app('one');
+      const asked = await phone.poll();
+      await starting;
+      assert.equal(asked?.type, 'start', 'the app still gets the request, with its config');
+      void phone
+        .poll({
+          reply: {
+            __vitest_worker_response__: true,
+            type: 'started',
+            deviceRequest: asked.deviceRequest,
+          },
+        })
+        .catch(() => {});
+      await wait(50);
+      assert.equal(
+        messages.filter((message) => (message as { type?: string }).type === 'started').length,
+        1,
+      );
     } finally {
       await run.done();
     }
