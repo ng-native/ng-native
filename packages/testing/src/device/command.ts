@@ -95,8 +95,10 @@ async function stopGroup(child: ChildProcess): Promise<void> {
   if (!signal('SIGTERM')) return;
   const ends = Date.now() + STOP_GRACE_MS;
   while (running() && Date.now() < ends) await sleep(50);
-  if (!running() || !signal('SIGKILL')) return;
-  // SIGKILL cannot be ignored; the wait is bounded for a process stuck in the kernel.
+  // Sent whatever the wait last saw: a scan of /proc can miss a member forked during it, and
+  // SIGKILL reaches every member, a zombie harmlessly, and leaves none to fork another. It cannot
+  // be ignored; the wait after it is bounded for a process stuck in the kernel.
+  if (!signal('SIGKILL')) return;
   for (let tries = 0; tries < 100 && running(); tries++) await sleep(50);
 }
 
