@@ -29,7 +29,7 @@ if (process.env.EXPO_PUBLIC_DEVICE_TESTS) {
   const { startDeviceTests } =
     require('@ng-native/testing/device/host') as typeof import('@ng-native/testing/device/host');
   startDeviceTests({
-    mount: mountOptions(),
+    mount: mountOptions,
     // The host follows rotation, the theme and reduced motion as the app does.
     onMount: (app) => {
       const stopWatching = watchConditions(app.engine);

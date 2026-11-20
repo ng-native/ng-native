@@ -110,7 +110,7 @@ describe('in an integrated workspace', () => {
     assert.match(read('metro.config.js'), /withDeviceTests\(withAngularNative\(withNxMetro\(/);
     assert.match(
       read('src/main.ts'),
-      /startDeviceTests\(\{\s*mount: mountOptions\(\),\s*\/\/[^\n]*\n\s*onMount: \(app\) => \{\s*const stopWatching = watchConditions\(app\.engine\);\s*app\.applicationRef\.onDestroy\(stopWatching\);/,
+      /startDeviceTests\(\{\s*mount: mountOptions,\s*\/\/[^\n]*\n\s*onMount: \(app\) => \{\s*const stopWatching = watchConditions\(app\.engine\);\s*app\.applicationRef\.onDestroy\(stopWatching\);/,
       'the test host follows the conditions as the app does',
     );
     const config = read('vitest.config.mts');

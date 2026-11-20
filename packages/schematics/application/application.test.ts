@@ -90,7 +90,7 @@ describe('ng add', () => {
     assert.match(read('metro.config.js'), /withDeviceTests\(withAngularNative\(/);
     assert.match(
       read('src/main.ts'),
-      /startDeviceTests\(\{\s*mount: mountOptions\(\),\s*\/\/[^\n]*\n\s*onMount: \(app\) => \{\s*const stopWatching = watchConditions\(app\.engine\);\s*app\.applicationRef\.onDestroy\(stopWatching\);/,
+      /startDeviceTests\(\{\s*mount: mountOptions,\s*\/\/[^\n]*\n\s*onMount: \(app\) => \{\s*const stopWatching = watchConditions\(app\.engine\);\s*app\.applicationRef\.onDestroy\(stopWatching\);/,
     );
     const config = read('vitest.config.mts');
     assert.match(config, /ngNative\(\)\], test: \{ name: 'node' \}/);

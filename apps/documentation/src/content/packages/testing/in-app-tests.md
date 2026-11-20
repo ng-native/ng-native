@@ -13,13 +13,17 @@ simulator or emulator, and reports to the same terminal, watch mode and CI.
 
 ## Set up
 
-An app made from the template, or by `@ng-native/nx` or `@ng-native/schematics`, has all of this
-already, with `ios` and `android` projects (`macos` for a desktop-only app) and an example,
-`src/app/app.device.ts`. A desktop-only app that later adds iOS and Android keeps only its macOS
-projects, and adds the `ios` and `android` ones below. Another app adds three things.
+An app made from the template, or by `@ng-native/nx` or `@ng-native/schematics`, at this release or
+later has all of this already, with `ios` and `android` projects (`macos` for a desktop-only app)
+and an example, `src/app/app.device.ts`. A desktop-only app that later adds iOS and Android keeps
+only its macOS projects, and adds the `ios` and `android` ones below. An app made before, or any
+other app, adds three things.
 
 Metro wraps its config with `withDeviceTests`, and the app's entry starts the test host when Metro
-is started with `EXPO_PUBLIC_DEVICE_TESTS` set:
+is started with `EXPO_PUBLIC_DEVICE_TESTS` set. The host mounts with the app's own options, so an
+entry that passes `mount` its options inline moves them into a function, `mountOptions` here, that
+both `mount(..., mountOptions())` and the host use. The host is given the function itself and calls
+it each time it mounts, so the conditions it reads are the device's at that mount:
 
 ```js
 const { withDeviceTests } = require('@ng-native/testing/device/metro');
@@ -30,7 +34,7 @@ module.exports = withDeviceTests(config);
 ```ts
 if (process.env.EXPO_PUBLIC_DEVICE_TESTS) {
   const { startDeviceTests } = require('@ng-native/testing/device/host');
-  startDeviceTests({ mount: mountOptions() });
+  startDeviceTests({ mount: mountOptions });
 }
 ```
 

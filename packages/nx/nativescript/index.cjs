@@ -64,7 +64,10 @@ function closing(source, open) {
   return -1;
 }
 
-/** Where a comment or string starting at `at` ends, or `at` itself where none starts there. */
+/**
+ * Where a comment, string or regular expression starting at `at` ends, or `at` itself where none
+ * starts there.
+ */
 function skipped(source, at) {
   const [char, next] = [source[at], source[at + 1]];
   if (char === '/' && next === '/') {
@@ -73,7 +76,50 @@ function skipped(source, at) {
   }
   if (char === '/' && next === '*') return source.indexOf('*/', at + 2) + 1 || source.length;
   if (char === "'" || char === '"' || char === '`') return stringEnd(source, at);
+  if (char === '/' && regexCanStart(source, at)) return regexEnd(source, at);
   return at;
+}
+
+/**
+ * Whether a `/` at `at` opens a regular expression rather than dividing: it follows an operator
+ * or an opening bracket, not a value. ponytail: punctuation only, so `return /x/` reads as a
+ * division; an options object has none.
+ */
+function regexCanStart(source, at) {
+  const before = source.slice(0, at).trimEnd().at(-1);
+  return before === undefined || '(,=:[!&|?{};+-*%<>~^'.includes(before);
+}
+
+/** Where the regular expression starting at `open` ends, past escapes and character classes. */
+function regexEnd(source, open) {
+  let inClass = false;
+  for (let at = open + 1; at < source.length && source[at] !== '\n'; at++) {
+    if (source[at] === '\\') at++;
+    else if (source[at] === '[') inClass = true;
+    else if (source[at] === ']') inClass = false;
+    else if (source[at] === '/' && !inClass) return at;
+  }
+  return open; // Not one after all: the `/` is read as itself.
+}
+
+/** Where `pattern` (sticky) first matches in `source` from `open` to `end`, at the top level. */
+function topLevel(source, open, end, pattern) {
+  let depth = 0;
+  for (let at = open; at < end; at++) {
+    const past = skipped(source, at);
+    if (past !== at) {
+      at = past;
+      continue;
+    }
+    if (depth === 1) {
+      pattern.lastIndex = at;
+      const match = pattern.exec(source);
+      if (match) return match;
+    }
+    if ('([{'.includes(source[at])) depth++;
+    else if (')]}'.includes(source[at])) depth--;
+  }
+  return null;
 }
 
 /** Where the string starting at `open` ends, past its escapes. */
@@ -105,17 +151,20 @@ function addProvider(tree, root) {
     );
   }
   // Only a providers list inside the options: one elsewhere in the file is not the app's.
-  const given = main.slice(open, end);
-  const listed = /(\bproviders:\s*\[)/.exec(given);
+  // Its own key, not one in a comment, a string or a nested object.
+  const listed = topLevel(main, open, end, /\bproviders:\s*\[/y);
   // A second providers key would replace the app's own, so one that is not a list is left alone.
-  if (!listed && /\bproviders\s*[:,}]/.test(given)) {
+  if (!listed && topLevel(main, open, end, /\bproviders\s*[:,}]/y)) {
     return byHand(file, `add ${PROVIDER} to the providers mount is given.`);
   }
   const indent = options[2];
-  const edited = listed
-    ? given.replace(listed[0], `${listed[1]}${PROVIDER}, `)
-    : given.replace(`{\n${indent}`, `{\n${indent}providers: [${PROVIDER}],\n${indent}`);
-  const updated = main.slice(0, open) + edited + main.slice(end);
+  const [insertAt, added] = listed
+    ? [listed.index + listed[0].length, `${PROVIDER}, `]
+    : [
+        main.indexOf(`{\n${indent}`, open) + 2 + indent.length,
+        `providers: [${PROVIDER}],\n${indent}`,
+      ];
+  const updated = main.slice(0, insertAt) + added + main.slice(insertAt);
   if (IMPORTED.test(updated)) return tree.write(file, updated);
   const last = imports.at(-1);
   const at = updated.indexOf(last[0]) + last[0].length;

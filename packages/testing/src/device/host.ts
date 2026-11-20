@@ -28,8 +28,12 @@ declare const require: (id: string) => unknown;
 const reactNative = (): ReactNative => require('react-native') as ReactNative;
 
 export interface DeviceTestsOptions {
-  /** What the app passes `mount()` as its options: providers, global styles, asset resolution. */
-  mount?: Parameters<typeof mount>[3];
+  /**
+   * What the app passes `mount()` as its options: providers, global styles, asset resolution. A
+   * function is called at each mount, so the conditions it reads (size, theme) are the device's
+   * then, as when Android recreates the activity, not when the entry loaded.
+   */
+  mount?: MountOptions | (() => MountOptions);
   /**
    * The pool's URL. Default: port 51730 on the machine running Vitest, which an iOS simulator
    * reaches at 127.0.0.1 and an Android emulator at 10.0.2.2.
@@ -56,12 +60,22 @@ class DeviceTestHost {
   readonly status = signal('Waiting for Vitest');
 }
 
+type MountOptions = NonNullable<Parameters<typeof mount>[3]>;
+
+const mountOptions = (given: DeviceTestsOptions['mount']): MountOptions =>
+  typeof given === 'function' ? given() : (given ?? {});
+
 /** Register the app's runnable as the device test host. Call it instead of the app's own. */
 export function startDeviceTests(options: DeviceTestsOptions = {}): void {
   const { AppRegistry } = reactNative();
   AppRegistry.registerRunnable('main', ({ rootTag }) => {
     const recorder = record(getFabricUIManager());
-    const app = mount(Number(rootTag), DeviceTestHost, recorder.fabric, options.mount ?? {});
+    const app = mount(
+      Number(rootTag),
+      DeviceTestHost,
+      recorder.fabric,
+      mountOptions(options.mount),
+    );
     options.onMount?.(app);
     void Promise.all([rootComponent(app), poolUrl(options.url)]).then(([host, url]) => {
       setHarness({ app, recorder, slot: () => host.slot(), pool: { url, session } });

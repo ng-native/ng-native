@@ -112,6 +112,34 @@ describe('the nativescript generator', () => {
     assert.equal(main.match(/providers:/g)!.length, 1, 'one providers list, not a second');
   });
 
+  it('adds to the providers list itself, not one in a comment, past a regular expression', async () => {
+    const tree = await app();
+    tree.write(
+      'apps/mobile/src/main.ts',
+      [
+        "import { mount } from '@ng-native/platform';",
+        '',
+        "AppRegistry.registerRunnable('main', ({ rootTag }) => {",
+        '  mount(Number(rootTag), App, getFabricUIManager(), {',
+        '    // providers: [],',
+        "    pattern: /'(/,",
+        "    title: 'providers: [',",
+        '    nested: { providers: [] },',
+        '    processColor,',
+        '    providers: [provideRouter([])],',
+        '  });',
+        '});',
+        '',
+      ].join('\n'),
+    );
+    await run(tree);
+    const main = tree.read('apps/mobile/src/main.ts', 'utf-8')!;
+    assert.match(main, /\n {4}\/\/ providers: \[\],\n/, 'the comment is left as it was');
+    assert.match(main, /title: 'providers: \[',/, 'and the string');
+    assert.match(main, /nested: \{ providers: \[\] \}/, 'and a nested object');
+    assert.match(main, / {4}providers: \[provideNativeScript\(\), provideRouter\(\[\]\)\]/);
+  });
+
   it('adds to providers the app already passes', async () => {
     const tree = await app();
     const main = tree.read('apps/mobile/src/main.ts', 'utf-8')!;
