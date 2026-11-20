@@ -20,22 +20,25 @@ export interface MetroServer {
 const servers = new Map<string, Promise<MetroServer>>();
 
 /**
- * The project's Metro, started on first use. Coverage asks Metro to instrument the app's code, and
+ * The project's Metro for a pool, started on first use: one for each pool port, since Metro tells
+ * the app which pool to poll. Coverage asks Metro to instrument the app's code, and
  * `poolPort` is the port the app's test host polls, which Metro tells it.
  */
 export function metroFor(
   projectRoot: string,
   { coverage = false, poolPort }: { coverage?: boolean; poolPort?: number } = {},
 ): Promise<MetroServer> {
-  let server = servers.get(projectRoot);
+  // One per pool too: the Metro tells the app which pool to poll.
+  const key = `${projectRoot}\0${poolPort ?? ''}`;
+  let server = servers.get(key);
   if (!server) {
     const started = startMetro(projectRoot, coverage, poolPort);
     server = started;
-    servers.set(projectRoot, started);
+    servers.set(key, started);
     // A start that failed, or a Metro that has since ended, is not kept: the next worker starts
     // another. Only this one: an earlier Metro ending must not drop the one that replaced it.
     const forget = () => {
-      if (servers.get(projectRoot) === started) servers.delete(projectRoot);
+      if (servers.get(key) === started) servers.delete(key);
     };
     started.then((metro) => metro.exited.then(forget), forget);
   }

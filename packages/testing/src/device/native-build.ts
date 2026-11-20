@@ -28,6 +28,21 @@ export interface NativeBuild {
   log: string;
 }
 
+/** The prebuild under way for each project, which the next one waits for. */
+const prebuilding = new Map<string, Promise<unknown>>();
+
+/** Run `step` once every step already under way for `projectRoot` has ended. */
+async function oneAtATime<T>(projectRoot: string, step: () => Promise<T>): Promise<T> {
+  const before = prebuilding.get(projectRoot) ?? Promise.resolve();
+  const mine = before.catch(() => {}).then(step);
+  prebuilding.set(projectRoot, mine);
+  try {
+    return await mine;
+  } finally {
+    if (prebuilding.get(projectRoot) === mine) prebuilding.delete(projectRoot);
+  }
+}
+
 /** The project's files `expo prebuild` writes to, kept as they were. */
 const CONFIG_FILES = ['app.json', 'app.config.js', 'app.config.ts', 'package.json'];
 
@@ -72,22 +87,26 @@ export async function nativeBuild(
       const expo = createRequire(path.join(projectRoot, 'package.json')).resolve('expo/bin/cli');
       // Prebuild rewrites the app's config and scripts (a bundle identifier, `expo run:*`): what a
       // test run must not leave in the project's sources, so they are put back as they were.
-      const restore = keep(projectRoot, CONFIG_FILES);
-      try {
-        await runCommand(process.execPath, [expo, 'prebuild', '-p', os, '--no-install'], {
-          cwd: projectRoot,
-          env,
-          log,
-          signal,
-        });
-      } catch (error) {
-        // Half of a folder the run was generating is not one the project keeps: gone, so the next
-        // run generates it again rather than building what is there.
-        rmSync(native, { recursive: true, force: true });
-        throw error;
-      } finally {
-        restore();
-      }
+      // One prebuild of a project at a time, iOS's and Android's alike: one snapshot taken while
+      // the other's prebuild had rewritten the files would put the rewrite back as the original.
+      await oneAtATime(projectRoot, async () => {
+        const restore = keep(projectRoot, CONFIG_FILES);
+        try {
+          await runCommand(process.execPath, [expo, 'prebuild', '-p', os, '--no-install'], {
+            cwd: projectRoot,
+            env,
+            log,
+            signal,
+          });
+        } catch (error) {
+          // Half of a folder the run was generating is not one the project keeps: gone, so the
+          // next run generates it again rather than building what is there.
+          rmSync(native, { recursive: true, force: true });
+          throw error;
+        } finally {
+          restore();
+        }
+      });
       writeFileSync(path.join(native, GENERATED), '');
     }
     const output =

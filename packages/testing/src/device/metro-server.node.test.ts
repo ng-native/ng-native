@@ -43,6 +43,18 @@ describe('the Metro a device run starts', () => {
     }
   });
 
+  it('starts one for each pool port, as it tells the app which pool to poll', async () => {
+    const { root, started, done } = project();
+    try {
+      await Promise.all([metroFor(root, { poolPort: 1 }), metroFor(root, { poolPort: 2 })]);
+      await metroFor(root, { poolPort: 1 });
+      assert.equal(started().length, 2);
+    } finally {
+      await stopMetro();
+      done();
+    }
+  });
+
   it('is stopped when the run closes, and started afresh after', async () => {
     const { root, started, done } = project();
     try {

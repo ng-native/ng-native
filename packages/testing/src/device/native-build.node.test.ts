@@ -96,4 +96,26 @@ describe('the development build a device run uses', () => {
       done();
     }
   });
+
+  it("prebuilds one OS at a time, so neither puts back the other's rewrite as the original", async () => {
+    const { root, done } = project();
+    try {
+      const pkg = path.join(root, 'package.json');
+      writeFileSync(pkg, '{"scripts":{"ios":"expo start --ios"}}');
+      mkdirSync(path.join(root, 'node_modules/expo/bin'), { recursive: true });
+      writeFileSync(
+        path.join(root, 'node_modules/expo/bin/cli.js'),
+        `const fs = require('fs');
+         fs.writeFileSync('package.json', '{"scripts":{"ios":"expo run:ios"}}');
+         setTimeout(() => process.exit(1), 300);`,
+      );
+      const ios = nativeBuild(root, 'ios');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const android = nativeBuild(root, 'android', { abi: 'x86_64' });
+      await Promise.allSettled([ios, android]);
+      assert.equal(readFileSync(pkg, 'utf8'), '{"scripts":{"ios":"expo start --ios"}}');
+    } finally {
+      done();
+    }
+  });
 });
