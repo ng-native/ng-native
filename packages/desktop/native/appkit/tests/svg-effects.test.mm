@@ -7,7 +7,9 @@
 #include <doctest/doctest.h>
 
 #include <array>
+#include <atomic>
 #include <cmath>
+#include <functional>
 
 using ngn::SvgBrush;
 using ngn::SvgElement;
@@ -239,6 +241,74 @@ TEST_CASE("every canvas waiting for the same image is told when it loads") {
   CHECK(first == 1);
   CHECK(second == 1);
   CGContextRelease(context);
+}
+
+namespace {
+// Answers every request for the scheme with bytes that are no image, and counts them.
+std::atomic<int> gBrokenRequests{0};
+}
+
+namespace {
+// Runs its function when it goes out of scope, as a failed REQUIRE leaves the test too.
+struct AtExit {
+  std::function<void()> run;
+  ~AtExit() {
+    run();
+  }
+};
+} // namespace
+
+@interface BrokenImageProtocol : NSURLProtocol
+@end
+
+@implementation BrokenImageProtocol
++ (BOOL)canInitWithRequest:(NSURLRequest *)request {
+  return [request.URL.scheme isEqualToString:@"ngn-broken-image"];
+}
++ (NSURLRequest *)canonicalRequestForRequest:(NSURLRequest *)request {
+  return request;
+}
+- (void)startLoading {
+  gBrokenRequests++;
+  NSURLResponse *response = [[NSURLResponse alloc] initWithURL:self.request.URL MIMEType:@"image/png" expectedContentLength:3 textEncodingName:nil];
+  [self.client URLProtocol:self didReceiveResponse:response cacheStoragePolicy:NSURLCacheStorageNotAllowed];
+  [self.client URLProtocol:self didLoadData:[NSData dataWithBytes:"abc" length:3]];
+  [self.client URLProtocolDidFinishLoading:self];
+}
+- (void)stopLoading {
+}
+@end
+
+TEST_CASE("an svg image that failed to load is not asked for again on later draws") {
+  [NSURLProtocol registerClass:BrokenImageProtocol.class];
+  AtExit unregister{[] { [NSURLProtocol unregisterClass:BrokenImageProtocol.class]; }};
+  gBrokenRequests = 0;
+  std::vector<uint8_t> data(4, 0);
+  CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef context = CGBitmapContextCreate(data.data(), 1, 1, 8, 4, space, kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(space);
+  AtExit release{[context] { CGContextRelease(context); }};
+  std::string uri = "ngn-broken-image://host/" + std::to_string(arc4random()) + ".png";
+  auto draw = [&] {
+    auto canvas = NGNMakeCGCanvas(context, CGSizeMake(1, 1), 1, nil);
+    canvas->image(uri, {.x = 0, .y = 0, .width = 1, .height = 1}, "none", 0, 1);
+  };
+  draw();
+  NSDate *until = [NSDate dateWithTimeIntervalSinceNow:10];
+  while (gBrokenRequests == 0 && [until timeIntervalSinceNow] > 0) {
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, false);
+  }
+  // Wait until the loader has recorded the failure, so each redraw below meets it and not the
+  // request still in flight.
+  while (!NGNSvgImageLoadFailed(uri) && [until timeIntervalSinceNow] > 0) {
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, false);
+  }
+  REQUIRE(NGNSvgImageLoadFailed(uri));
+  for (int i = 0; i < 3; i++) {
+    draw();
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.3, false);
+  }
+  CHECK(gBrokenRequests == 1);
 }
 
 // A layer that keeps the transform it is given, as the host's views' layers do (host-view.mm).

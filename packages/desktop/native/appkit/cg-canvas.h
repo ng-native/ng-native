@@ -7,6 +7,7 @@
 #include "ngn/svg.h"
 
 #include <memory>
+#include <string>
 
 // Both answer a +1 reference the caller releases.
 CGColorRef NGNCreateColor(uint32_t argb, double opacity);
@@ -22,3 +23,7 @@ std::unique_ptr<ngn::SvgCanvas> NGNMakeCGCanvas(
     CGFloat scale,
     void (^imageLoaded)(void),
     NSView * (^viewFor)(ngn::Tag) = nil);
+
+// Whether the load of an svg image's uri failed, or its data was no image, so that later draws
+// skip it. Tests wait on it to know the failure was recorded.
+bool NGNSvgImageLoadFailed(const std::string &uri);

@@ -38,6 +38,11 @@ with the colour functions working on sRGB values as Chrome's do. `drop-shadow()`
 A `mix-blend-mode` blends the view with what is drawn under it, as React Native iOS does, in every
 mode but `plus-darker`.
 
+An `<image>` fits its picture to its box by `resizeMode`: `cover`, `contain`, `center` or `stretch`,
+and `repeat`, which tiles the picture from the box's top left corner at its pixel size divided by
+its source's `scale`, as React Native iOS does. With a `tintColor` it shows the colour in the shape
+of its picture, keeping the picture's alpha, as React Native iOS does.
+
 ## Modals
 
 A `<modal>` with `pageSheet`, `formSheet` or no presentation style is an NSWindow sheet on its
@@ -152,8 +157,10 @@ When the app has them installed, the host compiles in the Fabric components of
   the tabs not selected stay mounted, neither drawn nor hit.
 - An svg (`RNSVGSvgView`, which `@ng-native/icons` commits) draws its elements with Core Graphics:
   groups, paths, rects, circles, ellipses and lines, linear and radial gradients, clip paths,
-  luminance masks, `use` and `symbol`, images, and text in spans, with presentation inherited
-  through `propList` and `currentColor` from the svg's `color`. Markers sit at a path's or line's
+  luminance masks, `use` and `symbol`, images (an `<image>` whose request fails, or whose data is
+  not an image, is not requested again while the app runs, like a broken image in a browser), and
+  text in spans, with presentation inherited through `propList` and `currentColor` from the svg's
+  `color`. Markers sit at a path's or line's
   vertices with `orient` (`auto`, `auto-start-reverse` or an angle), `markerUnits`, `refX` and
   `refY`, their viewBox and their box clipping them. A pattern fills or strokes with its tile,
   drawn once and repeated, in either units, with its viewBox, content units and
