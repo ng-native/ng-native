@@ -21,6 +21,17 @@ void fromRawValue(const PropsParserContext &, const RawValue &value, ScrollbarGu
   result = keyword == "stable" ? ScrollbarGutter::Stable : ScrollbarGutter::Auto;
 }
 
+AriaFields parseAriaFields(const PropsParserContext &context, const AriaFields &source, const RawProps &rawProps) {
+  return AriaFields{
+      .required = convertRawProp(context, rawProps, "accessibilityRequired", source.required, false),
+      .invalid = convertRawProp(context, rawProps, "accessibilityInvalid", source.invalid, false),
+      .posInSet = convertRawProp(context, rawProps, "accessibilityPosInSet", source.posInSet, {}),
+      .setSize = convertRawProp(context, rawProps, "accessibilitySetSize", source.setSize, {}),
+      .rowCount = convertRawProp(context, rawProps, "accessibilityRowCount", source.rowCount, {}),
+      .columnCount = convertRawProp(context, rawProps, "accessibilityColumnCount", source.columnCount, {}),
+  };
+}
+
 DesktopProps parseDesktopProps(const PropsParserContext &context, const DesktopProps &source, const RawProps &rawProps) {
   return DesktopProps{
       .focusable = convertRawProp(context, rawProps, "focusable", source.focusable, {}),
@@ -38,6 +49,9 @@ DesktopProps parseDesktopProps(const PropsParserContext &context, const DesktopP
       .contextMenu = convertRawProp(context, rawProps, "contextMenu", source.contextMenu, folly::dynamic(nullptr)),
       .role = convertRawProp(context, rawProps, "role", source.role, std::string{}),
       .accessibilityLevel = convertRawProp(context, rawProps, "accessibilityLevel", source.accessibilityLevel, {}),
+      .accessibilityDescribedBy =
+          convertRawProp(context, rawProps, "accessibilityDescribedBy", source.accessibilityDescribedBy, {}),
+      .aria = parseAriaFields(context, source.aria, rawProps),
   };
 }
 

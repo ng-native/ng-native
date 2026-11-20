@@ -380,6 +380,15 @@ TEST_CASE("a click in a custom row is the content's when it lands on something t
   CHECK_FALSE(ngn::rowContentTakesClick(tree, {4, 5, 6}));
 }
 
+TEST_CASE("a sidebar's collapsed state autosaves under its name in the app's preferences, as a boolean") {
+  CHECK_FALSE(ngn::sidebarCollapsedKey(""));
+  CHECK(ngn::sidebarCollapsedKey("mail") == "NgNativeSidebarCollapsed mail");
+  CHECK(ngn::savedSidebarCollapsed(folly::dynamic(true)) == true);
+  CHECK(ngn::savedSidebarCollapsed(folly::dynamic(false)) == false);
+  CHECK_FALSE(ngn::savedSidebarCollapsed(std::nullopt));
+  CHECK_FALSE(ngn::savedSidebarCollapsed(folly::dynamic("true")));
+}
+
 TEST_CASE("the sidebar's collapsed state follows the app and the user without echoing either") {
   ngn::SidebarCollapse collapse;
   // The app shuts it: the toolkit is told, and its own change after that is not news.
@@ -417,4 +426,80 @@ TEST_CASE("sizes reported as a divider drags reach layout once a frame, the late
   sizes.forget(4);
   sizes.report(4, {750, 700});
   CHECK(sizes.flush().size() == 1);
+}
+
+TEST_CASE("a split view that folds into a stack does so below the compact width, the sidebar in front only when asked") {
+  ngn::SidebarWidths widths{.minimum = 180, .maximum = 320, .starting = 240};
+  CHECK(ngn::sidebarCompactWidth(widths) == 180 + ngn::kSplitContentMinWidth);
+
+  using Showing = ngn::FoldingSplit::Showing;
+  ngn::FoldingSplit split;
+  CHECK(split.showing() == Showing{.stacked = false, .content = true});
+  // Collapsed while wide: the content alone, and Show Sidebar opens it again, which the app hears.
+  split.setCollapsed(true);
+  CHECK(split.showing() == Showing{.stacked = true, .content = true});
+  CHECK(split.toggle() == std::optional<bool>(false));
+  CHECK(split.showing() == Showing{.stacked = false, .content = true});
+
+  // Compact: a stack with the content in front, and Show Sidebar swaps the front pane without
+  // collapsing anything.
+  split.setCompact(true);
+  CHECK(split.showing() == Showing{.stacked = true, .content = true});
+  CHECK(split.toggle() == std::nullopt);
+  CHECK(split.showing() == Showing{.stacked = true, .content = false});
+  // An item chosen there brings the content back.
+  split.chose();
+  CHECK(split.showing() == Showing{.stacked = true, .content = true});
+  CHECK(split.toggle() == std::nullopt);
+  // Wide again: side by side, as the sidebar was never collapsed.
+  split.setCompact(false);
+  CHECK(split.showing() == Showing{.stacked = false, .content = true});
+  // And compact once more starts from the content, whatever was in front before.
+  split.setCompact(true);
+  CHECK(split.showing().content);
+}
+
+TEST_CASE("a source list keeps the sections the user folded until they go, and finds the selected row") {
+  ngn::SourceList list{.groups = {
+      {.tag = 3, .title = "Mailboxes", .collapsible = true, .rows = {{.tag = 4, .label = "Inbox"}, {.tag = 5, .label = "Sent", .selected = true}}},
+      {.tag = 6, .title = "Tags", .collapsible = true, .rows = {{.tag = 7, .label = "Work"}}},
+  }};
+  CHECK(ngn::selectedRow(list) == std::optional<Tag>(5));
+  ngn::SourceListFolds folds;
+  folds.setList(list);
+  folds.fold(3, true);
+  folds.fold(6, true);
+  folds.fold(6, false);
+  CHECK(folds.folded(3));
+  CHECK_FALSE(folds.folded(6));
+  // The same list again keeps the fold; the section gone forgets it, so one with its tag later
+  // starts open.
+  folds.setList(list);
+  CHECK(folds.folded(3));
+  list.groups.erase(list.groups.begin());
+  folds.setList(list);
+  CHECK(ngn::selectedRow(list) == std::nullopt);
+  list.groups.insert(list.groups.begin(), ngn::SidebarGroup{.tag = 3, .title = "Mailboxes"});
+  folds.setList(list);
+  CHECK_FALSE(folds.folded(3));
+}
+
+TEST_CASE("a source list that changed only its selection is told apart from one that changed its rows") {
+  ngn::SourceList tabs{.groups = {{.rows = {{.tag = 3, .label = "Library", .selected = true}, {.tag = 4, .label = "Search"}}}}};
+  auto chosen = tabs;
+  chosen.groups[0].rows[0].selected = false;
+  chosen.groups[0].rows[1].selected = true;
+  CHECK(ngn::onlySelectionDiffers(tabs, chosen));
+  // The same list is no change at all.
+  CHECK_FALSE(ngn::onlySelectionDiffers(tabs, tabs));
+  // A badge, a label or a row more is a change of rows, whatever the selection did.
+  auto badged = chosen;
+  badged.groups[0].rows[1].badge = "2";
+  CHECK_FALSE(ngn::onlySelectionDiffers(tabs, badged));
+  auto renamed = tabs;
+  renamed.groups[0].rows[0].label = "Albums";
+  CHECK_FALSE(ngn::onlySelectionDiffers(tabs, renamed));
+  auto longer = chosen;
+  longer.groups[0].rows.push_back({.tag = 5, .label = "Profile"});
+  CHECK_FALSE(ngn::onlySelectionDiffers(tabs, longer));
 }

@@ -43,6 +43,9 @@ enum class NavigationInput { MouseButton4, MouseButton5, SwipeLeft, SwipeRight }
 // with text editing).
 std::optional<NavigationDirection> navigationFor(NavigationInput input, bool rightToLeft = false);
 std::optional<NavigationDirection> navigationFor(const KeyChord &chord, const HostOs &os);
+// Whether a focused text input owns the press: the OS's primary modifier with Z, X, C, V or A, a
+// letter in either case.
+bool editingChord(const KeyChord &chord, const HostOs &os);
 
 // A window's back and forward history, as the app's router reports it (`setHistory`): the titles
 // of the entries behind and ahead, nearest first.
@@ -113,6 +116,10 @@ class MenuHost {
   // A key press, before the menus and the focused view see it. True when the app's shortcut takes
   // it, and the press goes no further.
   bool keyDown(const KeyChord &chord, bool textInputFocused);
+  // What the Keyboard Shortcuts window lists: the keys of `bar` (the bar drawn), then each shortcut
+  // the app gave a label, in its group (a menu of the same title, or one of its own; the app's name
+  // for none).
+  std::vector<ShortcutGroup> keyboardShortcuts(const std::vector<MenuItem> &bar) const;
   // Back or forward `steps` entries (one, but for a pick from the history menu).
   void navigate(NavigationDirection direction, std::optional<SurfaceId> surface, int steps = 1);
 
@@ -133,7 +140,13 @@ class MenuHost {
   std::shared_ptr<MenuBackend> backend_;
   DefaultMenuOptions options_;
   mutable std::mutex mutex_;
-  std::vector<std::pair<std::string, KeyChord>> shortcuts_;
+  struct Shortcut {
+    std::string id;
+    KeyChord chord;
+    std::string label;
+    std::string group;
+  };
+  std::vector<Shortcut> shortcuts_;
   std::map<SurfaceId, WindowHistory> histories_;
   // A dropped handle waits for its listener's call in progress, so a module going with a reload
   // is never called after.

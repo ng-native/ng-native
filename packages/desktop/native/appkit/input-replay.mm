@@ -158,6 +158,24 @@ NSString *typedWith(NSString *base, NSEventModifierFlags flags) {
   return base;
 }
 
+} // namespace
+
+std::pair<NSString *, unsigned short> keyOf(const std::string &key) {
+  auto function = [](unichar c) { return [NSString stringWithFormat:@"%C", c]; };
+  if (key == "escape") return {@"\x1b", 53};
+  if (key == "return") return {@"\r", 36};
+  if (key == "space") return {@" ", 49};
+  if (key == "tab") return {@"\t", 48};
+  if (key == "delete") return {@"\x7f", 51};
+  if (key == "left") return {function(NSLeftArrowFunctionKey), 123};
+  if (key == "right") return {function(NSRightArrowFunctionKey), 124};
+  if (key == "down") return {function(NSDownArrowFunctionKey), 125};
+  if (key == "up") return {function(NSUpArrowFunctionKey), 126};
+  return {[NSString stringWithUTF8String:key.c_str()], 0};
+}
+
+namespace {
+
 // The window the keyboard's steps go to: the modal window while one runs, else the key window (a
 // red box or a sheet, not only the app's), else the script's window.
 NSWindow *keyboardWindow(NSWindow *scriptWindow) {
@@ -169,18 +187,7 @@ NSWindow *keyboardWindow(NSWindow *scriptWindow) {
 // A key press and its release, to the keyboard's window.
 void sendKey(NSWindow *scriptWindow, const InputStep &step) {
   NSWindow *window = keyboardWindow(scriptWindow);
-  NSString *characters = step.key == "escape" ? @"\x1b"
-      : step.key == "return"                  ? @"\r"
-      : step.key == "space"                   ? @" "
-      : step.key == "tab"                     ? @"\t"
-      : step.key == "delete"                  ? @"\x7f"
-                                              : [NSString stringWithUTF8String:step.key.c_str()];
-  unsigned short code = step.key == "escape" ? 53
-      : step.key == "return"                 ? 36
-      : step.key == "space"                  ? 49
-      : step.key == "tab"                    ? 48
-      : step.key == "delete"                 ? 51
-                                             : 0;
+  auto [characters, code] = keyOf(step.key);
   // A character typed into text goes in as the input method puts it, through NSTextInputClient: a
   // made-up key event reaches the field editor's keyDown, but the text system inserts nothing for
   // one no keyboard sent.
@@ -191,6 +198,8 @@ void sendKey(NSWindow *scriptWindow, const InputStep &step) {
   if (step.modifiers & InputStep::Shift) flags |= NSEventModifierFlagShift;
   if (step.modifiers & InputStep::Option) flags |= NSEventModifierFlagOption;
   if (step.modifiers & InputStep::Control) flags |= NSEventModifierFlagControl;
+  // An arrow is a function key on the keypad, as the keyboard sends it.
+  if (code >= 123 && code <= 126) flags |= NSEventModifierFlagFunction | NSEventModifierFlagNumericPad;
   // Shift and Option change the character typed, as the keyboard layout has them.
   id responder = window.firstResponder;
   if (typed && [responder conformsToProtocol:@protocol(NSTextInputClient)]) {

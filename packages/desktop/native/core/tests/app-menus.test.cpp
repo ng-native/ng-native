@@ -240,10 +240,52 @@ TEST_CASE("a shortcut the app listens for is its, and says whether a text input 
   CHECK(f.host->keyDown({.key = "c", .modifiers = ngn::Command}, false));
   CHECK(f.events.size() == 2);
   CHECK(f.events[0] == "ngNativeMenus {\"id\":\"s1\",\"textInputFocused\":true,\"type\":\"shortcut\"}");
+  // The OS's primary modifier alone, with the letter in either case (Caps Lock on GTK).
+  CHECK(ngn::editingChord({.key = "C", .modifiers = ngn::Control}, ngn::linuxOs()));
+  CHECK_FALSE(ngn::editingChord({.key = "c", .modifiers = ngn::Command}, ngn::linuxOs()));
+  CHECK_FALSE(ngn::editingChord({.key = "z", .modifiers = ngn::Control | ngn::Shift}, ngn::linuxOs()));
+  CHECK_FALSE(ngn::editingChord({.key = "k", .modifiers = ngn::Control}, ngn::linuxOs()));
 
   // A new list replaces the old.
   f.module->call("setShortcuts", dynamic::array(dynamic::array()));
   CHECK_FALSE(f.host->keyDown({.key = "k", .modifiers = ngn::Command}, false));
+}
+
+TEST_CASE("Keyboard Shortcuts lists the bar's keys, then the app's labelled shortcuts in their groups") {
+  Fixture f;
+  f.module->call(
+      "setShortcuts",
+      dynamic::array(dynamic::array(
+          dynamic::object("id", "s0")("chord", chord("k"))("label", "Search")("group", "File"),
+          dynamic::object("id", "s1")("chord", chord("j"))("label", "Jump")("group", "Go"),
+          dynamic::object("id", "s2")("chord", chord("l"))("label", "Lock"),
+          dynamic::object("id", "s3")("chord", chord("u")))));
+  std::vector<MenuItem> bar{MenuItem{.title = "File", .items = {MenuItem{.title = "Print...", .key = "p", .modifiers = ngn::Command}}}};
+  auto groups = f.host->keyboardShortcuts(bar);
+  REQUIRE(groups.size() == 3);
+  CHECK(groups[0].title == "File");
+  REQUIRE(groups[0].entries.size() == 2);
+  CHECK(groups[0].entries[0].title == "Print...");
+  CHECK(groups[0].entries[1].title == "Search");
+  CHECK(groups[0].entries[1].chord == ngn::KeyChord{.key = "k", .modifiers = ngn::Command});
+  CHECK(groups[1].title == "Go");
+  CHECK(groups[1].entries.size() == 1);
+  // No group: under the app's name. No label: not listed.
+  CHECK(groups[2].title == "Notes");
+  REQUIRE(groups[2].entries.size() == 1);
+  CHECK(groups[2].entries[0].title == "Lock");
+  // A new list replaces the old.
+  f.module->call("setShortcuts", dynamic::array(dynamic::array()));
+  CHECK(f.host->keyboardShortcuts(bar).size() == 1);
+}
+
+TEST_CASE("a keyboardShortcuts item is the host's window, unless the app handles it") {
+  auto items = ngn::parseMenu(dynamic::array(
+      dynamic::object("id", "a")("label", "Keyboard Shortcuts")("menuRole", "keyboardShortcuts"),
+      dynamic::object("id", "b")("label", "Keyboard Shortcuts")("menuRole", "keyboardShortcuts")("handled", true)));
+  REQUIRE(items.size() == 2);
+  CHECK(items[0].command == MenuCommand::KeyboardShortcuts);
+  CHECK(items[1].command == MenuCommand::AppItem);
 }
 
 TEST_CASE("the OS's back and forward inputs become navigate, in the window they were in") {

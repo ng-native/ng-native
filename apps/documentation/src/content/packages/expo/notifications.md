@@ -495,8 +495,9 @@ once as it next launches, and a repeating one then waits for its next time. Cale
 the local time zone. Neither desktop asks for permission, so the status is granted and the
 desktop's own settings decide whether a notification shows. A subtitle shows as the first line of
 the body. A click raises the app and is the response. The
-presented list is the host's own, of the last 64 shown. The badge count is kept but not drawn,
-and there are no remote notifications.
+presented list is the host's own, of the last 64 shown. The badge count goes out as the Unity
+launcher entry's count, which KDE Plasma and Ubuntu's dock show and stock GNOME does not, and
+there are no remote notifications.
 
 ## Reference
 

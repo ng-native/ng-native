@@ -1,5 +1,7 @@
 // Localization on Linux: the languages from LANGUAGE and the messages locale, the formats from
 // glibc's locale data for each category's locale. Needs glibc-langpack-en and -de (the CI image's).
+// Off glibc (the macOS dev loop) the host reads no locale data, so the checks of what it gives are
+// left out; the language tags, regions and counts do not read it.
 #include "../host-sources.h"
 #include "../locales.h"
 
@@ -65,11 +67,13 @@ TEST_CASE("Localization lists LANGUAGE's languages, with the formats each catego
   CHECK(locales[1]["languageTag"] == "en-GB");
   CHECK(locales[2]["languageTag"] == "en-US");
   for (const auto &locale : locales) {
+#ifdef __GLIBC__
     CHECK(locale["decimalSeparator"] == ",");
     CHECK(locale["digitGroupingSeparator"] == ".");
     CHECK(locale["currencyCode"] == "GBP");
     CHECK(locale["currencySymbol"] == "£");
     CHECK(locale["measurementSystem"] == "uk");
+#endif
     CHECK(locale["temperatureUnit"] == "celsius");
   }
 }
@@ -80,22 +84,29 @@ TEST_CASE("Localization in the United States: dollars, US units, Fahrenheit and 
   REQUIRE(locales.size() == 1);
   CHECK(locales[0]["languageTag"] == "en-US");
   CHECK(locales[0]["regionCode"] == "US");
+#ifdef __GLIBC__
   CHECK(locales[0]["decimalSeparator"] == ".");
   CHECK(locales[0]["currencyCode"] == "USD");
   CHECK(locales[0]["currencySymbol"] == "$");
+#endif
   CHECK(locales[0]["measurementSystem"] == "us");
   CHECK(locales[0]["temperatureUnit"] == "fahrenheit");
   auto calendar = ngn::gtk::makeLocaleSource()->calendars();
   CHECK(calendar.calendar == "gregorian");
+#ifdef __GLIBC__
   CHECK_FALSE(calendar.uses24hourClock);
   CHECK(calendar.firstWeekday == 1);
+#endif
 }
 
 TEST_CASE("Localization's calendar follows LC_TIME, apart from the language") {
   LocaleEnvironment environment({{"LANG", "en_US.UTF-8"}, {"LC_TIME", "de_DE.UTF-8"}});
+  (void)environment;
+#ifdef __GLIBC__
   auto calendar = ngn::gtk::makeLocaleSource()->calendars();
   CHECK(calendar.uses24hourClock);
   CHECK(calendar.firstWeekday == 2);
+#endif
 }
 
 TEST_CASE("Localization under LC_ALL, and under the C locale") {
@@ -106,7 +117,9 @@ TEST_CASE("Localization under LC_ALL, and under the C locale") {
     CHECK(locales[0]["languageTag"] == "fr");
     CHECK(locales[0]["regionCode"] == "DE");
     CHECK(locales[1]["languageTag"] == "de-DE");
+#ifdef __GLIBC__
     CHECK(locales[1]["currencyCode"] == "EUR");
+#endif
   }
   {
     // No language at all: English, with no region to put it in.

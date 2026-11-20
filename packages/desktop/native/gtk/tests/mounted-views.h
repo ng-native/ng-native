@@ -15,16 +15,24 @@
 
 #include <doctest/doctest.h>
 
+#include <react/renderer/core/EventBeat.h>
+#include <react/renderer/core/EventDispatcher.h>
+#include <react/renderer/core/EventEmitter.h>
 #include <react/renderer/mounting/MountingTransaction.h>
+#include <react/renderer/runtimescheduler/RuntimeScheduler.h>
 
+#include <adwaita.h>
 #include <gtk/gtk.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <ostream>
+#include <set>
 #include <string>
 #include <memory>
 #include <stdexcept>
+#include <vector>
 
 namespace ngn::testing {
 
@@ -69,6 +77,32 @@ void runUntil(Done done) {
   }
 }
 
+// The events a view sends, by type, kept by a dispatcher's listener before any queue. The emitter
+// replaces the view's own.
+template <typename Emitter = facebook::react::EventEmitter>
+struct SentEvents {
+  facebook::react::RuntimeScheduler scheduler{[](auto &&) {}};
+  std::shared_ptr<facebook::react::EventDispatcher> dispatcher;
+  std::vector<std::string> types;
+
+  explicit SentEvents(gtk::ViewData &view) {
+    using namespace facebook::react;
+    EventQueueProcessor processor([](auto &&...) {}, [](auto &&...) {}, [](auto &&...) {}, {});
+    dispatcher = std::make_shared<EventDispatcher>(
+        processor, std::make_unique<EventBeat>(std::make_shared<EventBeat::OwnerBox>(), scheduler), [](auto &&...) {},
+        std::weak_ptr<EventLogger>());
+    dispatcher->addListener(std::make_shared<const EventListener>([this](const RawEvent &event) {
+      types.push_back(event.type);
+      return true;
+    }));
+    view.emitter = std::make_shared<Emitter>(nullptr, dispatcher);
+  }
+
+  long count(const std::string &type) const {
+    return std::count(types.begin(), types.end(), type);
+  }
+};
+
 // An RGBA pixel, unpremultiplied.
 struct Pixel {
   int r{0}, g{0}, b{0}, a{0};
@@ -83,16 +117,16 @@ struct MountedViews {
   GtkWidget *surface = nullptr;
   int frames = 0;
 
-  // `chrome`: the surface in a header bar's window (screens.h), `width` by `height` below it, or
-  // under it for a title bar `options` runs the content under.
+  // `chrome`: the surface in a header bar's AdwWindow, as the host's (screens.h), `width` by
+  // `height` below it, or under it for a title bar `options` runs the content under.
   explicit MountedViews(bool chrome = false, int width = 200, int height = 200, gtk::ChromeOptions options = {}) {
-    window = gtk_window_new();
+    window = chrome ? adw_window_new() : gtk_window_new();
     gtk_window_set_default_size(GTK_WINDOW(window), width, height);
     gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
     surface = gtk::makeSurfaceWidget(kSurface, nullptr);
     if (chrome) {
       gtk_widget_set_size_request(surface, width, height);
-      gtk_window_set_child(GTK_WINDOW(window), gtk::wrapInChrome(surface, options));
+      adw_window_set_content(ADW_WINDOW(window), gtk::wrapInChrome(surface, options));
     } else {
       gtk_window_set_child(GTK_WINDOW(window), surface);
     }
@@ -213,6 +247,39 @@ inline bool bluish(const Pixel &p) {
 }
 inline bool greenish(const Pixel &p) {
   return mostly(p, &Pixel::g, "green");
+}
+
+// Whether two pages of a stack in `widget` share a name. A sliding popover menu puts each
+// submenu on a page named for its label and opens it by that name, so the second opens the first.
+inline bool sharedPageName(GtkWidget *widget) {
+  if (GTK_IS_STACK(widget)) {
+    std::set<std::string> names;
+    GListModel *pages = G_LIST_MODEL(gtk_stack_get_pages(GTK_STACK(widget)));
+    bool shared = false;
+    for (guint i = 0; i < g_list_model_get_n_items(pages); ++i) {
+      auto *page = GTK_STACK_PAGE(g_list_model_get_item(pages, i));
+      if (const char *name = gtk_stack_page_get_name(page)) {
+        shared = shared || !names.insert(name).second;
+      }
+      g_object_unref(page);
+    }
+    g_object_unref(pages);
+    if (shared) {
+      return true;
+    }
+  }
+  for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
+    if (sharedPageName(child)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// The model a menu button's popover menu draws.
+inline GMenuModel *menuButtonModel(GtkWidget *button) {
+  GtkPopover *popover = gtk_menu_button_get_popover(GTK_MENU_BUTTON(button));
+  return GTK_IS_POPOVER_MENU(popover) ? gtk_popover_menu_get_menu_model(GTK_POPOVER_MENU(popover)) : nullptr;
 }
 
 } // namespace ngn::testing

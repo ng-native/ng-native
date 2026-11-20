@@ -122,6 +122,22 @@ TEST_CASE("a key step with Shift types the shifted character into the focused fi
   [window close];
 }
 
+TEST_CASE("a key step's arrows send the arrow keys' characters and codes") {
+  auto arrow = [](const char *key, unichar c, unsigned short code) {
+    auto [characters, sent] = ngn::appkit::keyOf(key);
+    CHECK(characters.length == 1);
+    CHECK([characters characterAtIndex:0] == c);
+    CHECK(sent == code);
+  };
+  arrow("left", NSLeftArrowFunctionKey, 123);
+  arrow("right", NSRightArrowFunctionKey, 124);
+  arrow("down", NSDownArrowFunctionKey, 125);
+  arrow("up", NSUpArrowFunctionKey, 126);
+  CHECK(ngn::appkit::keyOf("return").second == 36);
+  CHECK([ngn::appkit::keyOf("q").first isEqualToString:@"q"]);
+  CHECK(ngn::appkit::keyOf("q").second == 0);
+}
+
 // Tracks each press in a loop of its own, as AppKit's controls do, reading drags and the release
 // from the event queue.
 @interface NGNTrackingTestView : NSView

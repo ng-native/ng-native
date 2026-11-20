@@ -7,8 +7,10 @@
 // bar; `transparent` runs it under a flat one, which the safe area's top inset clears; `hidden` does
 // the same and hides the title, keeping the window controls, as AppKit does. The front screen's
 // header goes into the header bar as the AppKit host puts it into the window's toolbar: the back
-// button, the header's subviews moved into slots of their own, its bar buttons and its search
-// fields, with the title between.
+// and forward pair, the header's subviews moved into slots of their own, its bar buttons and its
+// search fields, with the title between. The pair follows the window's history as the app's router
+// reports it (app-menus.h's historyButtons), and a secondary click or a long press on either lists
+// the entries that way (historyMenu).
 //
 // Where the app's menus go (default-menu.h's MenuPlacement) is set up with the chrome: an empty
 // GtkPopoverMenuBar under the header bar, or a primary GtkMenuButton at its end, each hidden until
@@ -28,6 +30,7 @@
 // `dismissed` for a screen, which the router follows. A click outside a popover asks the same.
 #pragma once
 
+#include "ngn/app-menus.h"
 #include "ngn/app-windows.h"
 #include "ngn/default-menu.h"
 #include "ngn/desktop-modal.h"
@@ -39,11 +42,14 @@
 
 #include <gtk/gtk.h>
 
+#include <dlfcn.h>
+
 #include <functional>
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
+#include <vector>
 
 namespace ngn::gtk {
 
@@ -65,6 +71,17 @@ struct WindowChrome {
   GtkWidget *menuBar{nullptr};
   GtkWidget *primaryMenu{nullptr};
   TitleBar titleBar{TitleBar::Default};
+  // The widgets a cover or drawn sheet in front holds still (Modals::hold), each with what it took
+  // before: the pointer, the focus, whether it was sensitive, and a menu button whether F10 opened it.
+  struct Held {
+    GtkWidget *widget;
+    bool target;
+    bool focus;
+    bool sensitive;
+    bool primary;
+  };
+  std::vector<Held> held;
+  ~WindowChrome();
 };
 
 // The toolbar view holding `surface` under the header bar, for a window's content; the window's
@@ -72,6 +89,10 @@ struct WindowChrome {
 GtkWidget *wrapInChrome(GtkWidget *surface, const ChromeOptions &options = {});
 // The chrome of `surface`'s window, or null for a surface wrapInChrome did not wrap.
 const WindowChrome *chromeOf(GtkWidget *surface);
+// Holds the window still around `front`, a layer on its overlay, as a sheet does on macOS: every
+// header bar's items (its window controls aside) and the menus take no pointer or keyboard, the
+// surface takes no focus, and the overlay's other layers neither. Null gives back what it held.
+void holdChrome(GtkWidget *surface, GtkWidget *front);
 // Whether the surface's content runs under its header bar: `transparent` and `hidden`.
 bool runsUnderHeaderBar(const WindowChrome &chrome);
 // The surface's size and the insets its chrome gives it: none while its content stays below the
@@ -90,6 +111,13 @@ GtkWidget *makeSearchEntry(GtkBackend &backend, Tag tag);
 void applySearchBar(GtkWidget *entry, const facebook::react::Props &props);
 void runSearchBarCommand(GtkWidget *entry, const std::string &name, const folly::dynamic &args);
 
+// A libadwaita function newer than the 1.4 API the build targets, found at run time; null on an
+// older libadwaita.
+template <typename Fn>
+Fn adwFunction(const char *name) {
+  return reinterpret_cast<Fn>(dlsym(RTLD_DEFAULT, name));
+}
+
 // Whether AdwDialog is there to present a sheet with: libadwaita 1.5 or later at run time.
 bool haveAdwDialog();
 
@@ -97,6 +125,8 @@ bool haveAdwDialog();
 // sheet the first time it is asked for; empty for no colour. The class names its colour, so its rule
 // never goes stale.
 std::string colorClass(const char *property, const facebook::react::SharedColor &color);
+// The rule colorClass adds for a class `name`: the alpha is written with a point in any locale.
+std::string colorRule(const char *name, const char *property, float red, float green, float blue, float alpha);
 
 // The header the window of each surface shows.
 class Headers {
@@ -108,8 +138,26 @@ class Headers {
   void refresh();
   // A view went: a header showing it lets it go.
   void forget(Tag tag);
-  // The window's header bar's back button, for tests; null when none shows.
+  // The window's split view came or went: its sidebar button with it (split-view.h).
+  void refreshChrome(SurfaceId surfaceId);
+  // Show Sidebar, from the sidebar button.
+  void toggleSidebar(SurfaceId surfaceId);
+  // The sidebar button, for tests; null when the window has no split view of its own.
+  GtkWidget *sidebarButton(SurfaceId surfaceId) const;
+  // A surface went: its header, history and pair with it.
+  void removeSurface(SurfaceId surfaceId);
+  // The window's history, as the app's router reports it (MenuHost::history), for the pair.
+  void setHistory(SurfaceId surfaceId, const std::optional<WindowHistory> &history);
+  // What a press of the pair, or an entry chosen from its list, asks of the window's history.
+  std::function<void(SurfaceId, NavigationDirection, int steps)> navigate;
+  // A chevron pressed: through the history, or, for an app that reports none, the stack's back.
+  void pressChevron(SurfaceId surfaceId, NavigationDirection direction);
+  // The list of the entries `direction` way, at the chevron, as a secondary click shows it. Whether
+  // there was one to show.
+  bool showHistoryMenu(SurfaceId surfaceId, NavigationDirection direction);
+  // The window's header bar's back and forward chevrons, for tests; null when the pair is not shown.
   GtkWidget *backButton(SurfaceId surfaceId) const;
+  GtkWidget *forwardButton(SurfaceId surfaceId) const;
 
  private:
   struct Shown {
@@ -120,12 +168,20 @@ class Headers {
     // The widgets it put in the header bar, and the views moved into slots.
     std::vector<GtkWidget *> packed;
     std::vector<Tag> hosted;
+    // The window's history, and the pair it shows.
+    std::optional<WindowHistory> history;
+    HistoryButtons buttons;
+    // The search fields packed at the end, kept across a layout that keeps them.
+    std::vector<GtkWidget *> searches;
     GtkWidget *back{nullptr};
+    GtkWidget *forward{nullptr};
+    GtkWidget *sidebarButton{nullptr};
     // The bar's background colour class.
     std::string background;
   };
   void layOut(SurfaceId surfaceId, Shown &shown);
-  void clear(SurfaceId surfaceId, Shown &shown);
+  void layOutBar(SurfaceId surfaceId, Shown &shown);
+  void clear(SurfaceId surfaceId, Shown &shown, bool keepSearches = false);
   GtkWidget *headerBarOf(SurfaceId surfaceId) const;
 
   GtkBackend &backend_;
@@ -162,15 +218,29 @@ class Modals {
   GtkWidget *sheetHeaderOf(Tag tag) const;
   // What Escape does: presses a sheet's Cancel, or asks the app to close the presentation.
   void requestClose(Tag tag);
+  // The presentation shown last over `window`'s surfaces, which Ctrl+W closes before the window, as
+  // Cmd-W does on macOS.
+  std::optional<Tag> front(GtkWindow *window) const;
   // What Return does: presses a sheet's default button. Whether there was one to press.
   bool pressDefault(Tag tag);
+  // Escape over a surface's modals: asks to close the one presented last.
+  void requestCloseFront(SurfaceId surfaceId);
+  // Return over a surface's modals: presses the default button of the one presented last. Whether it had one.
+  bool pressDefaultFront(SurfaceId surfaceId);
+  // The window around the cover or drawn sheet in front holds still (holdChrome), and once none is
+  // left takes input again. Again after the header bar changes, which may have packed new items.
+  void hold(SurfaceId surfaceId);
 
  private:
+  // The tag of the modal presented last on a surface, or 0.
+  Tag frontOf(SurfaceId surfaceId) const;
   struct Presented {
     SurfaceId surfaceId;
     ModalPresentation presentation{ModalPresentation::Sheet};
     // A presented RNSScreen, not a <modal>.
     bool screen{false};
+    // When it was presented among the others: the latest is in front.
+    uint64_t order{0};
     GtkWidget *slot{nullptr};
     // The AdwDialog, the overlay's backdrop or cover, or the popover.
     GtkWidget *dialog{nullptr};
@@ -198,6 +268,7 @@ class Modals {
   SheetNodes sheetNodes_;
   std::set<std::pair<SurfaceId, Tag>> pending_;
   std::map<Tag, Presented> presented_;
+  uint64_t presentations_{0};
 };
 
 } // namespace ngn::gtk

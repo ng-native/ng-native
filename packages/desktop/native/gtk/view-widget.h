@@ -3,7 +3,10 @@
 // Yoga's frames are authoritative: a view asks GTK for no size of its own (`measure` gives 0) and
 // allocates each child at its Fabric frame, moved and transformed as the child's props say. It
 // paints its box and a Paragraph's text as GSK render nodes in its `snapshot`, then its children in
-// Fabric's order, cut to its shape when it clips its overflow. The approach of Basalt's basalt-gtk
+// Fabric's order, cut to its shape when it clips its overflow. Its `filter` (view-filter.h) applies
+// over all of that. A child's `mix-blend-mode` blends it with what its parent drew under it, the
+// parent's box and the children before it: each view is its own group, as `isolation: isolate`
+// makes it in CSS, and GSK has no plus-lighter. The approach of Basalt's basalt-gtk
 // (MIT, Copyright (c) 2026 Vince Vella); the code is ours.
 #pragma once
 
@@ -58,6 +61,8 @@ struct ViewData {
   ScrollBox *scroll{nullptr};
   // A scroll view's document: as large as the content it scrolls, which GTK reads from its measure.
   ScrollBox *documentOf{nullptr};
+  // A placed split view's AdwBreakpointBin (split-view.h), which fills the view.
+  GtkWidget *split{nullptr};
   // An svg's document, which the core builds from the elements under it.
   std::shared_ptr<const SvgDocument> svg;
   // The images its last draw asked for, kept for it in the shared cache.
@@ -71,8 +76,11 @@ struct ViewData {
 };
 
 // A view's widget with its accessible role, which GTK fixes as it makes it, floating: the caller
-// sinks it.
-GtkWidget *makeViewWidget(GtkAccessibleRole role = GTK_ACCESSIBLE_ROLE_GENERIC);
+// sinks it. A Paragraph's (`text`) is read by character, word and line where GTK can
+// (accessible-text.h).
+GtkWidget *makeViewWidget(GtkAccessibleRole role = GTK_ACCESSIBLE_ROLE_GENERIC, bool text = false);
+// Whether the widget is a Paragraph's, made with `text`.
+bool isTextWidget(GtkWidget *widget);
 // The widget a surface's views mount into. It fills its parent and calls `resized` with its size.
 GtkWidget *makeSurfaceWidget(facebook::react::SurfaceId surfaceId, std::function<void(int, int)> resized);
 
@@ -84,5 +92,8 @@ void swapViewData(GtkWidget *a, GtkWidget *b);
 
 // Drops a Paragraph's laid-out text, to be laid out again on its next draw.
 void forgetText(ViewData &data);
+// A Paragraph's text laid out as it draws, laying it out now if it has not been since it changed.
+// Null for any other view.
+PangoLayout *paragraphLayout(ViewData &data);
 
 } // namespace ngn::gtk

@@ -46,7 +46,16 @@ class DBusProperties {
   GDBusProxy *proxy_{nullptr};
   bool ready_{false};
   int next_{0};
-  std::map<int, std::shared_ptr<std::function<void()>>> listeners_;
+
+  // One watch. `calling` is held for the length of each call, so a stop waits for the call in
+  // flight (or, from inside it, is the same thread and goes on); `active` is read under it, so
+  // once a stop has returned the callback never starts again.
+  struct Listener {
+    std::function<void()> changed;
+    std::recursive_mutex calling;
+    bool active{true};
+  };
+  std::map<int, std::shared_ptr<Listener>> listeners_;
 };
 
 } // namespace ngn::gtk

@@ -86,8 +86,13 @@ On macOS the desktop host reads the system's settings: `screenReader` is VoiceOv
 is one, since nothing resizes a Mac app.
 
 On Linux `fontScale` is the desktop's text scaling, which GNOME's Large Text and text scaling
-factor set, and the app's text is laid out at it. A change while the app runs reaches `fontScale`
-the next time the app becomes active.
+factor set, and the app's text is laid out at it. A change while the app runs updates
+`Dimensions` and `PixelRatio.getFontScale()`, and the host lays out the text on screen again at
+once. The engine builds its next commit from the text it committed before, so call
+`watchConditions(app.engine)` to keep every text at the new size: it hands the engine the new
+scale, which its line boxes read, and measures every text again. `Accessibility.fontScale`
+keeps the value read when the app started, because the GTK host never reports the app becoming
+active again, which is what refreshes it elsewhere.
 
 ## Off a device and on the web
 

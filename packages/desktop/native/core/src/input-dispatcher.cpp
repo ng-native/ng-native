@@ -5,6 +5,8 @@
 #include "ngn/app-menus.h"
 #include "ngn/file-system.h"
 
+#include <unordered_set>
+
 #include <react/renderer/components/view/TouchEventEmitter.h>
 #include <react/renderer/components/view/ViewProps.h>
 
@@ -395,14 +397,15 @@ DragItems dragItems(const std::vector<std::string> &urls, std::optional<std::str
   // The toolkit offers a dragged url as text too, and a file as its path: several of them a line
   // each (a file manager's drag of more than one file).
   if (items.text) {
-    auto repeats = [&urls](std::string_view line) {
-      for (const auto &url : urls) {
-        if (url == line || (url.rfind("file://", 0) == 0 && percentDecoded(std::string_view(url).substr(7)) == line)) {
-          return true;
-        }
+    // Each url, and each file url's decoded path, once: a drag of thousands of files stays linear.
+    std::unordered_set<std::string> offered;
+    for (const auto &url : urls) {
+      offered.insert(url);
+      if (url.rfind("file://", 0) == 0) {
+        offered.insert(percentDecoded(std::string_view(url).substr(7)));
       }
-      return false;
-    };
+    }
+    auto repeats = [&offered](std::string_view line) { return offered.count(std::string(line)) > 0; };
     bool onlyUrls = !urls.empty();
     std::string_view rest = *items.text;
     while (onlyUrls && !rest.empty()) {
@@ -468,6 +471,9 @@ bool InputDispatcher::dragOver(const PointerInput &input, const DragItems &items
   leaveDropTarget();
   if (!target) {
     return false;
+  }
+  if (items.pending) {
+    return true;
   }
   dropTarget_ = DropTarget{input.container, *target};
   if (const auto *node = tree_.find(*target)) {

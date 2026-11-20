@@ -82,3 +82,23 @@ TEST_CASE("a stored preference that is not JSON reads as nothing") {
   ngn::JsonPreferences preferences(store, "dev.ngnative.app", false);
   CHECK_FALSE(preferences.get("broken"));
 }
+
+TEST_CASE("an alert's buttons in GNOME's order: Cancel first, the affirmative last and on Return unless destructive") {
+  using ngn::AlertButtonRole;
+  ngn::AlertRequest request;
+  // AppKit's order, right to left: Save, Don't Save, Cancel.
+  request.buttons = {{"Save"}, {"Don't Save", AlertButtonRole::Destructive}, {"Cancel", AlertButtonRole::Cancel}};
+  request.cancelIndex = 2;
+  CHECK(ngn::gnomeAlertLayout(request) == ngn::AlertLayout{.order = {2, 1, 0}, .returnIndex = 0, .escapeIndex = 2});
+  // Cancel anywhere still leads.
+  request.buttons = {{"Delete", AlertButtonRole::Destructive}, {"Cancel", AlertButtonRole::Cancel}, {"Archive"}};
+  request.cancelIndex = 1;
+  CHECK(ngn::gnomeAlertLayout(request) == ngn::AlertLayout{.order = {1, 2, 0}, .returnIndex = -1, .escapeIndex = 1});
+  // No cancel: Escape presses nothing; one button that is the cancel takes no Return.
+  request.cancelIndex = -1;
+  CHECK(ngn::gnomeAlertLayout(request) == ngn::AlertLayout{.order = {2, 1, 0}, .returnIndex = -1, .escapeIndex = -1});
+  request.buttons = {{"OK", AlertButtonRole::Cancel}};
+  request.cancelIndex = 0;
+  CHECK(ngn::gnomeAlertLayout(request) == ngn::AlertLayout{.order = {0}, .returnIndex = -1, .escapeIndex = 0});
+  CHECK(ngn::gnomeAlertLayout(ngn::AlertRequest{}) == ngn::AlertLayout{});
+}
