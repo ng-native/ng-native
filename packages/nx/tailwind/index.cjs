@@ -151,7 +151,7 @@ function passGlobalStyles(tree, root) {
   const main = tree.read(file, 'utf-8');
   if (main === null) return byHand(file, 'it does not exist.');
   if (main.includes(SHEET)) return;
-  const options = /(\bmount\([^\n]*\{\n)([ \t]*)/.exec(main);
+  const options = native.MOUNT_OPTIONS.exec(main);
   const imports = [...main.matchAll(/^import .+;$/gm)];
   if (!options || !imports.length || /\bglobalStyles\b/.test(main)) {
     return byHand(

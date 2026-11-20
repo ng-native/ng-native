@@ -154,6 +154,11 @@ test('counts taps', async () => {
 });
 ```
 
+`app.device.ts` beside it runs inside the app instead, on a simulator or emulator's real native
+views. `npx vitest --project ios` (or `--project android`) starts Metro, builds the app, opens it
+and runs the test. The first run takes some minutes and needs Xcode or the Android SDK; see
+[Tests inside the running app](/packages/testing/in-app-tests).
+
 [Testing](/packages/testing) explains what these tests prove and their limits.
 [Writing a test](/packages/testing/writing-a-test) covers forms, services and routing.
 

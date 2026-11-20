@@ -19,6 +19,7 @@ const SHARED = [
   'CLAUDE.md',
   'LICENSE',
   'gitignore',
+  'metro.config.js',
   'tsconfig.json',
   'assets/icon.png',
 ];

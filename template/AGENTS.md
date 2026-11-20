@@ -18,6 +18,9 @@ npm start           # Metro; press i or a for a simulator, or scan the QR code w
 npm run ios         # the iOS simulator
 npm run android     # the Android emulator
 npm test            # Vitest, in Node against a fake native layer: no simulator needed
+npx vitest --project ios       # tests in src/**/*.device.ts, inside the running app on a
+                               # simulator, which it builds and starts, with its own Metro
+npx vitest --project android   # the same on an Android emulator
 npm run typecheck
 ```
 
@@ -84,6 +87,11 @@ change; both are fast.
 `getByText` or `getByTestId` (which matches `nativeID` and `testID`), and act with
 `userEvent.setup().press(...)` or `.type(...)`, all from `@ng-native/testing`. Tests run in Node
 with no simulator, so write one alongside a change.
+
+A file ending in `.device.ts` runs inside the running app instead, on real native views, from
+`@ng-native/testing/device`: `npx vitest --project` with an OS the app's `vitest.config.mts` has a
+project for (`ios`, `android` or `macos`), from the app's directory. The first run builds the app,
+which needs Xcode or the Android SDK, and takes some minutes; later runs take seconds.
 
 A service that depends on the platform injects `OS` and `OS_VERSION` from `@ng-native/device`
 rather than importing `Platform` from `react-native`, which a test cannot load. A test provides

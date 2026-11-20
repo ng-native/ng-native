@@ -14,6 +14,18 @@ npm run typecheck
 release build or a native module Expo Go does not include needs a development build
 (`npx expo run:ios`).
 
+To run tests inside the app, on real native views, run the `ios` or `android` Vitest project,
+which starts Metro, builds the app and opens it on a simulator or emulator itself
+(`src/app/app.device.ts` is the example):
+
+```sh
+npx vitest --project ios
+npx vitest --project android
+```
+
+The first run builds a development build, which takes some minutes and needs Xcode for iOS or the
+Android SDK for Android; later runs reuse it. `npm test` runs the Node project, `node`, alone.
+
 The app targets iOS and Android, so `npm run web`, which `create-expo-app` suggests as it finishes,
 only says so and exits. Angular Native components can also render in a browser, set up as
 https://ng-native.com/packages/web#beside-a-native-app describes.

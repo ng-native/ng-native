@@ -63,7 +63,13 @@ describe('the generated app', () => {
       text.split('\n').filter((line: string) => line && !line.startsWith('#'));
     const theirs = ignored(readFileSync(path.join(template, 'gitignore'), 'utf8'));
     for (const line of ignored(native.GITIGNORE)) assert.ok(theirs.includes(line), line);
-    assert.deepEqual(ignored(native.GITIGNORE), ['/ios', '/android', '.angular-native/']);
+    assert.deepEqual(ignored(native.GITIGNORE), [
+      '/ios',
+      '/android',
+      '.angular-native/',
+      '**/__screenshots__/**/*-actual.png',
+      '**/__screenshots__/**/*-diff.png',
+    ]);
   });
 
   it('pins the framework packages to its own version, since they are released together', () => {

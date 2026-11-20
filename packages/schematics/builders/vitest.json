@@ -15,7 +15,7 @@
     },
     "project": {
       "type": "string",
-      "description": "Only this Vitest project, by its name in vitest.config.mts. A desktop-only app's test target runs node-macos, since its macos project opens the app."
+      "description": "Only this Vitest project, by its name in vitest.config.mts. A generated app's test target runs node (node-macos in a desktop-only app), since its other projects open the app."
     }
   }
 }

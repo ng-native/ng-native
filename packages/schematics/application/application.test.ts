@@ -59,7 +59,9 @@ describe('ng add', () => {
       'src/app/app.ts',
       'src/main.ts',
       'src/app/app.test.ts',
+      'src/app/app.device.ts',
       'metro.config.js',
+      'vitest.config.mts',
       'tsconfig.json',
     ]) {
       assert.equal(
@@ -77,8 +79,32 @@ describe('ng add', () => {
 
   it('stops watching conditions in main.ts as the app is destroyed', () => {
     const main = tree.readContent('projects/native/src/main.ts');
-    assert.match(main, /^ {2}const stopWatching = watchConditions\(app\.engine\);$/m);
-    assert.match(main, /^ {2}app\.applicationRef\.onDestroy\(stopWatching\);$/m);
+    assert.match(main, /^ {4}const stopWatching = watchConditions\(app\.engine\);$/m);
+    assert.match(main, /^ {4}app\.applicationRef\.onDestroy\(stopWatching\);$/m);
+  });
+
+  it('sets the app up for in-app tests on iOS and Android, and tests in Node alone', () => {
+    const read = (file: string) => tree.readContent(`projects/native/${file}`);
+    // Without withDeviceTests a dev bundle follows main.ts's dead branch into the test host, and
+    // Vitest behind it.
+    assert.match(read('metro.config.js'), /withDeviceTests\(withAngularNative\(/);
+    assert.match(read('src/main.ts'), /startDeviceTests\(\{ mount: mountOptions\(\) \}\)/);
+    const config = read('vitest.config.mts');
+    assert.match(config, /ngNative\(\)\], test: \{ name: 'node' \}/);
+    assert.match(config, /deviceTests\(\{ platform: 'ios' \}\)/);
+    assert.match(config, /deviceTests\(\{ platform: 'android' \}\)/);
+    assert.match(read('src/app/app.device.ts'), /Platform\.OS/);
+    assert.match(read('.gitignore'), /^\*\*\/__screenshots__\/\*\*\/\*-actual\.png$/m);
+    assert.match(read('.gitignore'), /^\*\*\/__screenshots__\/\*\*\/\*-diff\.png$/m);
+    // The ios and android projects build and open the app, so `ng test` names the Node one.
+    const { architect } = json(tree, 'angular.json').projects.native;
+    assert.deepEqual(architect.test, {
+      builder: '@ng-native/schematics:vitest',
+      options: { project: 'node' },
+    });
+    const { scripts } = JSON.parse(readFileSync(path.join(template, 'package.json'), 'utf8'));
+    const { vitestArgs } = require('../builders/vitest.cjs');
+    assert.equal(['vitest', ...vitestArgs(architect.test.options)].join(' '), scripts.test);
   });
 
   it('writes an AGENTS.md with the commands this workspace runs, and a CLAUDE.md that reads it', () => {

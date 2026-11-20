@@ -89,6 +89,11 @@ change; both are fast.
 `userEvent.setup().press(...)` or `.type(...)`, all from `@ng-native/testing`. Tests run in Node
 with no simulator, so write one alongside a change.
 
+A file ending in `.device.ts` runs inside the running app instead, on real native views, from
+`@ng-native/testing/device`: `npx vitest --project` with an OS the app's `vitest.config.mts` has a
+project for (`ios`, `android` or `macos`), from the app's directory. The first run builds the app,
+which needs Xcode or the Android SDK, and takes some minutes; later runs take seconds.
+
 A service that depends on the platform injects `OS` and `OS_VERSION` from `@ng-native/device`
 rather than importing `Platform` from `react-native`, which a test cannot load. A test provides
 the values it wants: `{ provide: OS, useValue: 'android' }`.

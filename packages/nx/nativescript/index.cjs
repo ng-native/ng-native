@@ -49,8 +49,8 @@ function addPlugin(tree, root) {
   tree.write(file, `${JSON.stringify(config, null, 2)}\n`);
 }
 
-/** Where the `mount(...)` call's parentheses close, counting brackets; -1 if they never do. */
-function callEnd(source, open) {
+/** Where the bracket at `open` closes, counting brackets; -1 if it never does. */
+function closing(source, open) {
   let depth = 0;
   for (let at = open; at < source.length; at++) {
     if ('([{'.includes(source[at])) depth++;
@@ -68,9 +68,9 @@ function addProvider(tree, root) {
   if (main === null) return byHand(file, 'it does not exist.');
   if (main.includes(PROVIDER)) return;
   const imports = [...main.matchAll(/^import .+;$/gm)];
-  const options = /(\bmount\([^\n]*\{\n)([ \t]*)/.exec(main);
-  const open = options ? options.index + options[0].indexOf('(') : -1;
-  const end = options ? callEnd(main, open) : -1;
+  const options = native.MOUNT_OPTIONS.exec(main);
+  const open = options ? options.index + options[1].length - 2 : -1;
+  const end = options ? closing(main, open) : -1;
   if (!imports.length || end < 0) {
     return byHand(
       file,
@@ -78,19 +78,17 @@ function addProvider(tree, root) {
         'providers mount is given.',
     );
   }
-  // Only a providers list inside the call: one elsewhere in the file is not the app's.
-  const call = main.slice(open, end);
-  const listed = /(\bproviders:\s*\[)/.exec(call);
+  // Only a providers list inside the options: one elsewhere in the file is not the app's.
+  const given = main.slice(open, end);
+  const listed = /(\bproviders:\s*\[)/.exec(given);
   // A second providers key would replace the app's own, so one that is not a list is left alone.
-  if (!listed && /\bproviders\s*[:,}]/.test(call)) {
+  if (!listed && /\bproviders\s*[:,}]/.test(given)) {
     return byHand(file, `add ${PROVIDER} to the providers mount is given.`);
   }
+  const indent = options[2];
   const edited = listed
-    ? call.replace(listed[0], `${listed[1]}${PROVIDER}, `)
-    : call.replace(
-        options[0].slice(options[0].indexOf('(')),
-        (found) => `${found}${options[2]}providers: [${PROVIDER}],\n${options[2]}`,
-      );
+    ? given.replace(listed[0], `${listed[1]}${PROVIDER}, `)
+    : given.replace(`{\n${indent}`, `{\n${indent}providers: [${PROVIDER}],\n${indent}`);
   const updated = main.slice(0, open) + edited + main.slice(end);
   if (IMPORTED.test(updated)) return tree.write(file, updated);
   const last = imports.at(-1);

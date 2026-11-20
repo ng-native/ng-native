@@ -180,7 +180,7 @@ function targets(directory, port, oneCopy, lint, desktopOnly) {
       outputs: ['{projectRoot}/.angular-native'],
     },
     test: {
-      ...run(desktopOnly ? native.DESKTOP_TEST : 'vitest run'),
+      ...run(desktopOnly ? native.DESKTOP_TEST : native.TEST),
       cache: true,
       inputs: ['default', '^production'],
     },
@@ -250,13 +250,11 @@ async function writeFiles(tree, resolved) {
   const { directory, projectName, workspaces, bundleIdentifier, lint, desktopOnly } = resolved;
   const file = (name, content) => tree.write(joinPathFragments(directory, name), content);
   for (const name of native.SOURCE_FILES) file(name, native.sourceFile(name, desktopOnly));
-  if (desktopOnly)
-    for (const name of native.DESKTOP_ONLY_FILES) file(name, native.sourceFile(name, true));
   const platforms = desktopOnly ? ['macos'] : undefined;
   file('app.json', native.appJson(projectName, bundleIdentifier, platforms));
   file('AGENTS.md', native.agentsFile(commands(projectName, lint, desktopOnly), desktopOnly));
   file('CLAUDE.md', '@AGENTS.md\n');
-  file('metro.config.js', desktopOnly ? native.DESKTOP_METRO_CONFIG : native.METRO_CONFIG);
+  file('metro.config.js', native.METRO_CONFIG);
   file(
     '.gitignore',
     desktopOnly ? `${native.GITIGNORE}\n${native.DESKTOP_GITIGNORE}` : native.GITIGNORE,
@@ -270,7 +268,7 @@ async function writeFiles(tree, resolved) {
   if (linksLibraries(tree, workspaces)) {
     file('tsconfig.typecheck.json', JSON.stringify(native.typecheckTsconfig(), null, 2) + '\n');
   }
-  file('vitest.config.mts', native.vitestConfig(Boolean(base), desktopOnly));
+  file('vitest.config.mts', native.vitestConfig(Boolean(base), desktopOnly ? 'desktop' : 'app'));
 
   const manifest = { name: projectName, version: '0.0.1', private: true, main: 'src/main.ts' };
   const root = readJson(tree, 'package.json');

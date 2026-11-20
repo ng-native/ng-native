@@ -13,6 +13,10 @@ simulator or emulator, and reports to the same terminal, watch mode and CI.
 
 ## Set up
 
+An app made from the template, or by `@ng-native/nx` or `@ng-native/schematics`, has all of this
+already, with `ios` and `android` projects (`macos` for a desktop-only app) and an example,
+`src/app/app.device.ts`. Another app adds three things.
+
 Metro wraps its config with `withDeviceTests`, and the app's entry starts the test host when Metro
 is started with `EXPO_PUBLIC_DEVICE_TESTS` set:
 

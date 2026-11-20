@@ -59,7 +59,33 @@ describe('the nativescript generator', () => {
 
     const main = tree.read('apps/mobile/src/main.ts', 'utf-8')!;
     assert.match(main, /^import \{ provideNativeScript \} from '@ng-native\/nativescript';$/m);
-    assert.match(main, /mount\([^\n]*\{\n\s*providers: \[provideNativeScript\(\)\],/);
+    // In the options the app and its in-app tests both mount with.
+    assert.match(
+      main,
+      /mountOptions = \(\) => \(\{\n {2}providers: \[provideNativeScript\(\)\],\n {2}\/\//,
+    );
+  });
+
+  it("adds it to an older app's mount call, which takes its options inline", async () => {
+    const tree = await app();
+    tree.write(
+      'apps/mobile/src/main.ts',
+      [
+        "import { mount } from '@ng-native/platform';",
+        '',
+        "AppRegistry.registerRunnable('main', ({ rootTag }) => {",
+        '  mount(Number(rootTag), App, getFabricUIManager(), {',
+        '    processColor,',
+        '  });',
+        '});',
+        '',
+      ].join('\n'),
+    );
+    await run(tree);
+    assert.match(
+      tree.read('apps/mobile/src/main.ts', 'utf-8')!,
+      /getFabricUIManager\(\), \{\n {4}providers: \[provideNativeScript\(\)\],\n {4}processColor,/,
+    );
   });
 
   it('adds to providers the app already passes', async () => {
@@ -115,7 +141,10 @@ describe('the nativescript generator', () => {
     await run(tree);
     const updated = tree.read('apps/mobile/src/main.ts', 'utf-8')!;
     assert.match(updated, /^const config = \{ providers: \[\] \};$/m);
-    assert.match(updated, /mount\([^\n]*\{\n\s*providers: \[provideNativeScript\(\)\],/);
+    assert.match(
+      updated,
+      /mountOptions = \(\) => \(\{\n\s*providers: \[provideNativeScript\(\)\],/,
+    );
   });
 
   it('imports provideNativeScript only once', async () => {
