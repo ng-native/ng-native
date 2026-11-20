@@ -94,10 +94,11 @@ TEST_CASE("addDesktopModules registers or names as absent each desktop module, u
 TEST_CASE("addDesktopModules leaves out each module the backend gives no source for, and NgNativeHost names it") {
   ngn::ModuleRegistry registry;
   auto made = ngn::addDesktopModules(registry, sources());
-  // What the core makes over the host's own objects, and the two whose null source is an answer.
+  // What the core makes over the host's own objects, the two whose null source is an answer, and the
+  // tray and Dock, which sources() gives.
   std::vector<std::string> registered{
-      "NgNativeApplication", "NgNativeAsset", "NgNativeClipboard", "NgNativeDevice", "NgNativeHost", "NgNativeMaps",
-      "NgNativeProcesses", "NgNativeSqlite", "NgNativeStoreReview", "NgNativeWebBrowser", "RNCWebViewModule",
+      "NgNativeApplication", "NgNativeAsset", "NgNativeClipboard", "NgNativeDevice", "NgNativeDock", "NgNativeHost", "NgNativeMaps",
+      "NgNativeProcesses", "NgNativeTray", "NgNativeSqlite", "NgNativeStoreReview", "NgNativeWebBrowser", "RNCWebViewModule",
   };
   std::sort(registered.begin(), registered.end());
   CHECK(registry.names() == registered);
