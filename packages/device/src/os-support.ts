@@ -328,7 +328,7 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
   ]),
   expoRow('Updates', 'NgNativeUpdates', [
     'yes',
-    'never fetches an update',
+    'bundle updates when configured; no whole-app updater',
     'yes',
     'yes',
     'yes',

@@ -93,6 +93,32 @@ std::optional<std::string> valueOf(GdkContentProvider *content, GType type) {
 
 } // namespace
 
+// A drag that offers text and fails every read of it, as a source that dies mid-transfer does.
+struct FailingProvider {
+  GdkContentProvider parent;
+};
+struct FailingProviderClass {
+  GdkContentProviderClass parent_class;
+};
+G_DEFINE_TYPE(FailingProvider, failing_provider, GDK_TYPE_CONTENT_PROVIDER)
+static void failing_provider_init(FailingProvider *) {}
+static void failing_provider_class_init(FailingProviderClass *klass) {
+  auto *provider = GDK_CONTENT_PROVIDER_CLASS(klass);
+  provider->ref_formats = [](GdkContentProvider *) { return gdk_content_formats_new_for_gtype(G_TYPE_STRING); };
+  provider->get_value = [](GdkContentProvider *, GValue *, GError **error) {
+    g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_FAILED, "the source went away");
+    return FALSE;
+  };
+}
+
+namespace {
+
+GdkContentProvider *failingText(GtkDragSource *, double, double, gpointer) {
+  return GDK_CONTENT_PROVIDER(g_object_new(failing_provider_get_type(), nullptr));
+}
+
+} // namespace
+
 TEST_CASE("a drop's files and urls come from its file list, and its text from a string") {
   REQUIRE(ngn::testing::gtkReady());
   GValue files = fileListValue({"file:///tmp/a%20report.txt", "https://example.com/page"});
@@ -185,4 +211,42 @@ TEST_CASE("a drag out starts only from the pointer move the input sink is hearin
   CHECK_FALSE(ngn::gtk::dragOutOfPointer(view, ngn::DragOutItem{.text = std::string("x")}));
   CHECK(ngn::gtk::beginDragOut(view, nullptr, ngn::DragOutItem{.text = std::string("x")}) == nullptr);
   g_object_unref(view);
+}
+
+TEST_CASE("a drag whose every read fails is refused, and its drop never reaches the input sink") {
+  REQUIRE(ngn::testing::gtkReady());
+  if (!onX11()) {
+    MESSAGE("not X11: no input script to drag with");
+    return;
+  }
+  RecordingSink sink;
+  GtkWidget *window = gtk_window_new();
+  gtk_window_set_default_size(GTK_WINDOW(window), 400, 100);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *source = gtk_label_new("link");
+  gtk_widget_set_size_request(source, 200, 100);
+  GtkWidget *surface = gtk_label_new("surface");
+  gtk_widget_set_size_request(surface, 200, 100);
+  gtk_box_append(GTK_BOX(box), source);
+  gtk_box_append(GTK_BOX(box), surface);
+  gtk_window_set_child(GTK_WINDOW(window), box);
+  ngn::gtk::attachPointerInput(surface, 1, 7, &sink);
+  GtkDragSource *drag = gtk_drag_source_new();
+  g_signal_connect(drag, "prepare", G_CALLBACK(failingText), nullptr);
+  gtk_widget_add_controller(source, GTK_EVENT_CONTROLLER(drag));
+  gtk_window_present(GTK_WINDOW(window));
+  ngn::testing::runUntil([window] { return gtk_widget_get_mapped(window) && gtk_widget_get_width(window) > 0; });
+
+  auto script = ngn::parseInputScript(
+      "wait 200\nmove 50 50\ndown 50 50\ndrag 80 50\ndrag 150 50\ndrag 250 50\nwait 300\ndrag 270 55\nwait 300\ndrag 290 60\nwait 300\ndrag 300 60\nwait 1500\nup 300 60\nwait 1500\n");
+  REQUIRE(ngn::gtk::replayInputScript(window, std::move(script)));
+  // The script takes about five seconds; the loop is run over it a few at a time.
+  for (int i = 0; i < 2; ++i) {
+    gint64 until = g_get_monotonic_time() + 4 * G_USEC_PER_SEC;
+    ngn::testing::runUntil([until] { return g_get_monotonic_time() > until; });
+  }
+  // The drag was seen over the surface, but nothing was delivered as dropped.
+  CHECK_FALSE(sink.over.empty());
+  CHECK(sink.drops.empty());
+  gtk_window_destroy(GTK_WINDOW(window));
 }

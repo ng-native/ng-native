@@ -80,7 +80,8 @@ class PortalLocation final : public LocationSource, public std::enable_shared_fr
     onMain([self, accuracy, done = std::move(done)] {
       struct Shot {
         bool answered{false};
-        std::string session;
+        // Filled as CreateSession returns the path, which can be before Start has answered.
+        std::shared_ptr<std::string> session;
         guint timeout{0};
         std::function<void(std::optional<Fix>, std::string)> done;
         // Drops the session's listener.
@@ -95,8 +96,8 @@ class PortalLocation final : public LocationSource, public std::enable_shared_fr
             g_source_remove(timeout);
             timeout = 0;
           }
-          if (!session.empty()) {
-            portal::closeSession(session);
+          if (!session->empty()) {
+            portal::closeSession(*session);
           }
           done(std::move(fix), std::move(error));
         }
@@ -104,11 +105,15 @@ class PortalLocation final : public LocationSource, public std::enable_shared_fr
       auto shot = std::make_shared<Shot>();
       shot->done = done;
       auto session = std::make_shared<std::string>();
+      shot->session = session;
       shot->forget = [self, session] { self->fixes_.erase(*session); };
-      self->start(portalAccuracyOf(accuracy), 0, session, [shot, session](bool started, std::string error) {
-        shot->session = *session;
+      self->start(portalAccuracyOf(accuracy), 0, session, [shot](bool started, std::string error) {
         if (!started) {
           shot->answer(std::nullopt, error);
+          return;
+        }
+        // A fix that came before Start answered has been answered, and its session closed.
+        if (shot->answered) {
           return;
         }
         auto *held = new std::shared_ptr<Shot>(shot);
@@ -130,10 +135,13 @@ class PortalLocation final : public LocationSource, public std::enable_shared_fr
       self->watches_[id] = session;
       self->start(portalAccuracyOf(accuracy), distance, session, [self, id, session](bool started, std::string) {
         // Stopped before it started: it ends now.
-        if (started && !self->watches_.count(id)) {
-          portal::closeSession(*session);
+        if (!self->watches_.count(id)) {
+          self->fixes_.erase(*session);
+          if (started) {
+            portal::closeSession(*session);
+          }
         }
-      }, fix);
+      }, fix, [self, id] { return self->watches_.count(id) == 0; });
     });
     return id;
   }
@@ -164,9 +172,11 @@ class PortalLocation final : public LocationSource, public std::enable_shared_fr
   }
 
   // A session of the Location portal, its path into `session` as it is made: `started` hears
-  // whether the portal started it (and so whether access was given), `fix` each update. Main context.
+  // whether the portal started it (and so whether access was given), `fix` each update, `stopped`
+  // (when given) whether the caller has gone by the time the session is made, and the session is
+  // then closed unstarted and `fix` never installed. Main context.
   void start(unsigned accuracy, double distance, std::shared_ptr<std::string> session, std::function<void(bool, std::string)> started,
-             std::function<void(const Fix &)> fix) {
+             std::function<void(const Fix &)> fix, std::function<bool()> stopped = nullptr) {
     if (!unsubscribe_) {
       std::weak_ptr<PortalLocation> weak = weak_from_this();
       unsubscribe_ = portal::subscribe(kLocation, "LocationUpdated", [weak](GVariant *parameters) {
@@ -195,12 +205,17 @@ class PortalLocation final : public LocationSource, public std::enable_shared_fr
     auto self = shared_from_this();
     portal::request(
         kLocation, "CreateSession", g_variant_new("()"), options, nullptr,
-        [self, session, started, fix](portal::Outcome outcome, GVariant *) {
+        [self, session, started, fix, stopped](portal::Outcome outcome, GVariant *) {
           if (outcome != portal::Outcome::Done || session->empty()) {
             if (outcome == portal::Outcome::Absent) {
               self->status_ = static_cast<int>(Authorization::Restricted);
             }
             started(false, outcome == portal::Outcome::Absent ? "No Location portal answers on this desktop" : "The location session could not be made");
+            return;
+          }
+          if (stopped && stopped()) {
+            portal::closeSession(*session);
+            started(false, "The location watch was stopped");
             return;
           }
           if (fix) {

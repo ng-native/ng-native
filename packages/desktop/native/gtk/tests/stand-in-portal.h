@@ -134,6 +134,8 @@ struct StandInPortal {
   std::vector<std::string> closedSessions;
   // The LocationUpdated a session gets as it starts, none when empty.
   std::vector<std::pair<std::string, double>> fix;
+  // Sends that update before Start's Response, as xdg-desktop-portal can.
+  bool fixBeforeResponse{false};
   // Takes each request and never answers it, as a portal does while the user has not chosen.
   bool silent{false};
 
@@ -277,6 +279,9 @@ struct StandInPortal {
       return;
     }
     // After the reply, as xdg-desktop-portal answers once the user has chosen.
+    if (method == "Start" && response == 0 && !fix.empty() && fixBeforeResponse) {
+      update(call.first, fix);
+    }
     GVariantBuilder results;
     g_variant_builder_init(&results, G_VARIANT_TYPE_VARDICT);
     if (interface == "org.freedesktop.portal.FileChooser" && !uris.empty()) {
@@ -292,7 +297,7 @@ struct StandInPortal {
     }
     g_dbus_connection_emit_signal(server, nullptr, handle.c_str(), "org.freedesktop.portal.Request", "Response",
                                   g_variant_new("(ua{sv})", response, &results), nullptr);
-    if (method == "Start" && response == 0 && !fix.empty()) {
+    if (method == "Start" && response == 0 && !fix.empty() && !fixBeforeResponse) {
       update(call.first, fix);
     }
   }

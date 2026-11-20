@@ -3,6 +3,7 @@
 #include "ngn/input-dispatcher.h"
 
 #include <doctest/doctest.h>
+#include <chrono>
 #include <folly/json.h>
 
 using namespace facebook::react;
@@ -410,6 +411,17 @@ TEST_CASE("a drag's urls split into files, named by their last part, and other u
   // A link and words about it are both dragged.
   CHECK(ngn::dragItems({"https://a.example/"}, std::string("https://a.example/\nRead this")).text == "https://a.example/\nRead this");
   CHECK(ngn::dragItems({}, std::string("")).text == "");
+
+  // A drag of thousands of files is matched in linear time: every path a line, none dragged text.
+  std::vector<std::string> many;
+  std::string paths;
+  for (int i = 0; i < 20000; ++i) {
+    many.push_back("file:///tmp/dir%20x/file-" + std::to_string(i) + ".txt");
+    paths += "/tmp/dir x/file-" + std::to_string(i) + ".txt\n";
+  }
+  auto started = std::chrono::steady_clock::now();
+  CHECK_FALSE(ngn::dragItems(many, paths).text);
+  CHECK(std::chrono::steady_clock::now() - started < std::chrono::seconds(3));
 
   folly::json::serialization_opts opts;
   opts.sort_keys = true;

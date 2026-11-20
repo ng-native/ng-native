@@ -19,6 +19,8 @@ struct DropState {
   // The drag being read, and what it carries once read: one at a time.
   GdkDrop *drop{nullptr};
   std::optional<DragItems> items;
+  // The drag whose every read failed: it takes nothing, as a GtkDropTarget's failed load did.
+  GdkDrop *failed{nullptr};
   // Drops made before their items came, with where each was made.
   std::vector<std::pair<GdkDrop *, PointerInput>> waiting;
   // Reads still running, which hold this state.
@@ -69,16 +71,37 @@ void itemsCame(DropState *s, GdkDrop *drop, DragItems items) {
   }
 }
 
+// Every read of the drag failed: a drop made on it is refused, and the drag is not dropped on.
+void readsFailed(DropState *s, GdkDrop *drop) {
+  for (auto it = s->waiting.begin(); it != s->waiting.end(); ++it) {
+    if (it->first == drop) {
+      gdk_drop_finish(drop, GdkDragAction(0));
+      g_object_unref(drop);
+      s->waiting.erase(it);
+      return;
+    }
+  }
+  if (drop == s->drop) {
+    s->failed = drop;
+  }
+}
+
 struct Read {
   DropState *state;
   GdkDrop *drop;
   bool text;
   std::vector<std::string> urls;
+  // A read came back with a value, even an empty string.
+  bool read{false};
 };
 
 void finishRead(std::unique_ptr<Read> read, std::optional<std::string> text) {
   if (!read->state->detached) {
-    itemsCame(read->state, read->drop, dragItems(read->urls, std::move(text)));
+    if (read->read) {
+      itemsCame(read->state, read->drop, dragItems(read->urls, std::move(text)));
+    } else {
+      readsFailed(read->state, read->drop);
+    }
   }
   forget(read->state);
   g_object_unref(read->drop);
@@ -90,6 +113,7 @@ void textRead(GObject *source, GAsyncResult *result, gpointer data) {
   std::optional<std::string> text;
   if (value && G_VALUE_HOLDS_STRING(value) && g_value_get_string(value)) {
     text = g_value_get_string(value);
+    read->read = true;
   }
   finishRead(std::move(read), std::move(text));
 }
@@ -107,11 +131,18 @@ void filesRead(GObject *source, GAsyncResult *result, gpointer data) {
   std::unique_ptr<Read> read(static_cast<Read *>(data));
   const GValue *value = gdk_drop_read_value_finish(GDK_DROP(source), result, nullptr);
   if (value) {
+    read->read = true;
     auto items = dropItems(value);
     for (const auto &file : items.files) {
       read->urls.push_back(file.uri);
     }
     read->urls.insert(read->urls.end(), items.urls.begin(), items.urls.end());
+  }
+  // The target went while the files were read: its drop is finished, and a read on it would never
+  // answer.
+  if (read->state->detached) {
+    finishRead(std::move(read), std::nullopt);
+    return;
   }
   readText(std::move(read));
 }
@@ -140,7 +171,11 @@ GdkDragAction over(DropState *s, GdkDrop *drop, double x, double y) {
   if (drop != s->drop) {
     s->drop = drop;
     s->items.reset();
+    s->failed = nullptr;
     readDrop(s, drop);
+  }
+  if (drop == s->failed) {
+    return GdkDragAction(0);
   }
   // Pending until the drag's data has come: the view under it is hit tested, and hears the enter
   // with what is dragged once itemsCame hands it on.
@@ -158,6 +193,7 @@ void dragLeft(GtkDropTargetAsync *, GdkDrop *, gpointer user) {
   s->over = false;
   s->drop = nullptr;
   s->items.reset();
+  s->failed = nullptr;
   s->input->dragExit(s->container);
 }
 
@@ -167,6 +203,11 @@ gboolean dropped(GtkDropTargetAsync *, GdkDrop *drop, double x, double y, gpoint
   s->y = y;
   s->over = false;
   auto input = dropInput(*s);
+  if (drop == s->failed) {
+    gdk_drop_finish(drop, GdkDragAction(0));
+    s->failed = nullptr;
+    return TRUE;
+  }
   if (drop == s->drop && s->items) {
     bool taken = s->input->drop(input, *s->items);
     gdk_drop_finish(drop, taken ? GDK_ACTION_COPY : GdkDragAction(0));
