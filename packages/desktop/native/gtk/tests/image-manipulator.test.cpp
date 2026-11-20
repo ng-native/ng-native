@@ -133,6 +133,24 @@ TEST_CASE("ImageEditor on Linux crops, flips, rotates and resizes, in order") {
   g_object_unref(resized);
 }
 
+// gdk-pixbuf 2.44 and later write JPEG through glycin, which refuses an image with alpha; older ones
+// took the colour channels and left the alpha out, as the host does now on every version.
+TEST_CASE("ImageEditor on Linux saves an image with transparency as JPEG, keeping its colours") {
+  auto codec = ngn::gtk::makeImageCodec();
+  GdkPixbuf *image = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, 40, 20);
+  gdk_pixbuf_fill(image, 0xff000080);
+  auto png = encoded(image, "png");
+  g_object_unref(image);
+  GdkPixbuf *saved = decoded(codec->render(png, {Step{.kind = Step::Kind::Crop, .size = {20, 10}}}, "jpeg", 0.9));
+  CHECK_FALSE(gdk_pixbuf_get_has_alpha(saved));
+  CHECK(gdk_pixbuf_get_width(saved) == 20);
+  auto red = pixelAt(saved, 10, 5);
+  CHECK(red[0] > 230);
+  CHECK(red[1] < 30);
+  CHECK(red[2] < 30);
+  g_object_unref(saved);
+}
+
 TEST_CASE("ImageEditor on Linux draws an image turned by its Exif orientation the right way up") {
   auto codec = ngn::gtk::makeImageCodec();
   // Red on the left half, blue on the right: blocks JPEG keeps, where it smears a lone pixel.

@@ -175,12 +175,29 @@ TEST_CASE("a choice of more than three buttons stacks them, and two sit side by 
 TEST_CASE("a choice of four buttons over a window stacks them") {
   REQUIRE(ngn::testing::gtkReady());
   adw_init();
-  ngn::testing::MountedViews views(true, 400, 300);
+  ngn::testing::MountedViews views(true, 400, 480);
   std::optional<Answer> answer;
   ngn::gtk::showAlert(choice(4), [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, GTK_WINDOW(views.window));
   GtkWidget *alert = ngn::gtk::shownAlert();
   REQUIRE(alert);
   CHECK(stacked(alert, 4));
+  ngn::gtk::respondToAlert(alert, "b1");
+  REQUIRE(answer);
+}
+
+// Libadwaita 1.6 and later mark an AdwDialog in a window under 360px tall as short, and set an
+// AdwAlertDialog's buttons in one row there on purpose, so they keep their height; older ones, and
+// AdwMessageDialog, stack them there too.
+TEST_CASE("a choice of four buttons over a short window sits in a row from libadwaita 1.6") {
+  REQUIRE(ngn::testing::gtkReady());
+  adw_init();
+  ngn::testing::MountedViews views(true, 600, 300);
+  std::optional<Answer> answer;
+  ngn::gtk::showAlert(choice(4), [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, GTK_WINDOW(views.window));
+  GtkWidget *alert = ngn::gtk::shownAlert();
+  REQUIRE(alert);
+  CAPTURE(adw_get_minor_version());
+  CHECK(stacked(alert, 4) == !(ngn::gtk::haveAdwDialog() && adw_get_minor_version() >= 6));
   ngn::gtk::respondToAlert(alert, "b1");
   REQUIRE(answer);
 }
