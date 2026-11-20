@@ -207,8 +207,7 @@ jobs:
               echo "$build" > "$GITHUB_WORKSPACE/.linux-probe/build-dir"
               "$build/ngn_core_tests"
               "$build/ngn_runtime_tests"
-              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
-              xvfb=$!
+              xvfb=$(native/scripts/start-xvfb.sh "$GITHUB_WORKSPACE/.linux-probe/xvfb-gtk-tests.log")
               trap "kill $xvfb" EXIT
               mkdir -p "$GITHUB_WORKSPACE/.linux-probe/gtk-tests"
               # A session bus of their own, for the tray and the launcher badge (status-notifier.test.cpp).
@@ -257,8 +256,7 @@ jobs:
               probe="$GITHUB_WORKSPACE/.linux-probe"
               host="$(cat "$probe/build-dir")/gtk/ngn-linux"
               export GTK_A11Y=none
-              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
-              xvfb=$!
+              xvfb=$(native/scripts/start-xvfb.sh "$probe/xvfb-launch.log")
               DISPLAY=:99 GDK_BACKEND=x11 NGN_CAPTURE="$probe/x11.png" \
                 native/scripts/launch-probe.sh "$host" "$probe/notes/main.js"
               kill $xvfb
@@ -280,7 +278,7 @@ jobs:
             bash -euo pipefail -c '
               probe="$GITHUB_WORKSPACE/.linux-probe"
               python3 native/scripts/atspi-check.test.py
-              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
+              native/scripts/start-xvfb.sh "$probe/xvfb-atspi.log" > /dev/null
               DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
                 "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/notes/main.js" --role "push button" --role label --relation described-by --tab
             '
@@ -301,7 +299,7 @@ jobs:
               apt-get install -y -qq --no-install-recommends $PACKAGES xvfb dbus at-spi2-core python3-pyatspi \
                 gir1.2-atspi-2.0 fonts-dejavu-core > /dev/null
               probe="$GITHUB_WORKSPACE/.linux-probe"
-              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
+              native/scripts/start-xvfb.sh "$probe/xvfb-debian.log" > /dev/null
               DISPLAY=:99 GDK_BACKEND=x11 dbus-run-session -- python3 native/scripts/atspi-check.py \
                 "$(cat "$probe/build-dir")/gtk/ngn-linux" "$probe/canary/main.js" --url canary://device \
                 --heading 2 --announce "Announce to a screen reader" --action "Announce to a screen reader=repeat"

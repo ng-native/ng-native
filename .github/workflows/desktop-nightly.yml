@@ -161,8 +161,7 @@ jobs:
               build=$(native/scripts/build.sh --backend gtk --no-debug-info | tail -n 1)
               "$build/ngn_core_tests"
               "$build/ngn_runtime_tests"
-              Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > /dev/null 2>&1 &
-              xvfb=$!
+              xvfb=$(native/scripts/start-xvfb.sh "$GITHUB_WORKSPACE/.linux-tests/xvfb.log")
               trap "kill $xvfb" EXIT
               mkdir -p "$GITHUB_WORKSPACE/.linux-tests/gtk-tests"
               pkg-config --modversion gtk4 libadwaita-1 | tee "$GITHUB_WORKSPACE/.linux-tests/versions"
