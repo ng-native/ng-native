@@ -9978,6 +9978,16 @@ export class Engine implements HostEngine {
    * optimisation.
    */
   commit(): boolean {
+    try {
+      return this.commitChanges();
+    } finally {
+      // A commit on a disposed engine, or one a listener disposed it during, can have handed
+      // native an animation, a transition or a move to lay out: each is taken back at once.
+      if (this.disposed) this.letGoNative();
+    }
+  }
+
+  private commitChanges(): boolean {
     if (this.removedSinceCommit.size) {
       // A box that went can have made room for any other: see `heldIn`.
       this.changesHeld = false;
@@ -17089,10 +17099,17 @@ export class Engine implements HostEngine {
     this.leaveEvents();
     if (this.quietTimer !== null) clearTimeout(this.quietTimer);
     this.quietTimer = null;
+    this.letGoNative();
+  }
+
+  /**
+   * Stop what native plays and lays out for the engine. Native keeps what it calls as each
+   * animation it plays ends, and that reaches the engine: an infinite one never ends, and
+   * destroying the views does not stop it.
+   */
+  private letGoNative(): void {
     for (const timer of this.laidTimers) clearTimeout(timer);
     this.laidTimers.clear();
-    // Native keeps what it calls as each animation it plays ends, and that reaches the engine: an
-    // infinite one never ends, and destroying the views does not stop it.
     for (const node of [...this.playedNatively]) this.stopNative(node, node.playing!);
     for (const node of [...this.easedNatively]) this.stopEased(node);
     for (const node of [...this.paintedNodes]) this.stopPainting(node);

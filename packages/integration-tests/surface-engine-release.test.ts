@@ -292,3 +292,68 @@ describe('a disposed engine', () => {
     assert.equal(fabric.calls.completeRoot, commits);
   });
 });
+
+describe('a commit on a disposed engine', () => {
+  const SPIN =
+    '@keyframes spin { to { transform: rotate(360deg) } } .a { animation: spin 1s linear infinite }';
+
+  /** An engine with `rule`, and a view to put in it with `classes` once the test is ready. */
+  function scene(rule: string) {
+    const rec = recorder();
+    const fabric = createFakeFabric();
+    Object.assign(fabric, { configureNextLayoutAnimation: () => {} });
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(rule) as StyleSheet,
+      nativeAnimated: rec.native,
+      now: () => 0,
+    });
+    const started = () => rec.named('start').map(([, id]) => id);
+    const stopped = () => rec.named('stop').map(([, id]) => id);
+    return { rec, fabric, engine, started, stopped };
+  }
+
+  it('leaves native playing nothing it started', () => {
+    const s = scene(SPIN);
+    s.engine.dispose();
+    const view = s.engine.createElement('view');
+    s.engine.setClasses(view, 'a');
+    s.engine.appendChild(s.engine.root, view);
+    s.engine.commit();
+    assert.ok(s.started().length > 0, 'native was playing nothing');
+    assert.deepEqual(s.stopped(), s.started());
+  });
+
+  it('leaves native playing nothing it started after a listener disposed the engine', () => {
+    // A move by a share of the box waits for the box's size, and is handed to native after the
+    // commit has reported its paint: by then a listener told of the paint can have destroyed the
+    // app.
+    const s = scene(
+      '@keyframes slide { to { transform: translateX(200%) } } ' +
+        '.a { background-color: red; animation: slide 2s linear infinite }',
+    );
+    s.fabric.frames.set('View', { x: 0, y: 0, width: 100, height: 40 });
+    const view = s.engine.createElement('view');
+    s.engine.setClasses(view, 'a');
+    s.engine.appendChild(s.engine.root, view);
+    s.engine.takePaint(view, () => s.engine.dispose());
+    s.engine.commit();
+    assert.ok(s.started().length > 0, 'native was playing nothing');
+    assert.deepEqual(s.stopped(), s.started());
+  });
+
+  it('says nothing when a move native was laying out is up', async () => {
+    const s = scene('.a { width: 10px; transition: width 20ms linear } .a.on { width: 30px }');
+    const view = s.engine.createElement('view');
+    s.engine.setClasses(view, 'a');
+    s.engine.appendChild(s.engine.root, view);
+    const ended: string[] = [];
+    s.engine.setEventListener(view, 'topTransitionend', () => void ended.push('end'));
+    s.engine.commit();
+    s.engine.advanceAnimations();
+    s.engine.dispose();
+    s.engine.setClasses(view, 'a on');
+    s.engine.commit();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.deepEqual(ended, []);
+  });
+});
