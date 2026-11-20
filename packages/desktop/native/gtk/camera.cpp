@@ -3,6 +3,7 @@
 #include "audio.h"
 #include "gst-frames.h"
 #include "gst-playback.h"
+#include "image-manipulator.h"
 #include "portal.h"
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -182,8 +183,10 @@ class GstCameraCapture final : public CameraCapture, public std::enable_shared_f
       }
     } else {
       G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-      GdkPixbuf *pixbuf = gdk_pixbuf_get_from_texture(texture);
+      GdkPixbuf *withAlpha = gdk_pixbuf_get_from_texture(texture);
       G_GNUC_END_IGNORE_DEPRECATIONS
+      GdkPixbuf *pixbuf = withAlpha ? withoutAlpha(withAlpha) : nullptr;
+      g_clear_object(&withAlpha);
       std::string quality = std::to_string(static_cast<int>(std::clamp(request.quality, 0.0, 1.0) * 100));
       GError *failure = nullptr;
       if (!pixbuf || !gdk_pixbuf_save(pixbuf, request.path.c_str(), "jpeg", &failure, "quality", quality.c_str(), nullptr)) {
