@@ -17,9 +17,16 @@ export function rgba(value: unknown): Rgba | null {
   return parseColor(value);
 }
 
-export const sameColour = (a: Rgba, b: Rgba, tolerance: number) =>
-  a.slice(0, 3).every((channel, i) => Math.abs(channel - b[i]!) <= tolerance) &&
-  Math.abs(a[3] - b[3]) <= tolerance / 255;
+/**
+ * Whether two colours are within `tolerance` steps of 255 on every channel, alpha included, at the
+ * precision native keeps: `processColor` stores whole steps, so `0.5` alpha is 128 and `51.2` is 51.
+ */
+export const sameColour = (a: Rgba, b: Rgba, tolerance: number) => {
+  const steps = ([red, green, blue, alpha]: Rgba) =>
+    [red, green, blue, alpha * 255].map((channel) => Math.round(channel));
+  const [x, y] = [steps(a), steps(b)];
+  return x.every((channel, i) => Math.abs(channel - y[i]!) <= tolerance);
+};
 
 export const show = (colour: Rgba | null, raw: unknown) =>
   colour ? `rgba(${colour.slice(0, 3).join(', ')}, ${+colour[3].toFixed(3)})` : JSON.stringify(raw);

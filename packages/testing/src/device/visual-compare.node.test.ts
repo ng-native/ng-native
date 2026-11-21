@@ -131,3 +131,24 @@ describe('a point of a target, in the capture native took of it', () => {
     assert.deepEqual(inCapture(null, [{ x: 15, y: 5 }]), [{ x: 15, y: 5 }], 'the whole window');
   });
 });
+
+describe('a CSS colour against the integer native is given', () => {
+  it('matches at the precision native keeps, a step of 255 for each channel and alpha', () => {
+    // processColor stores alpha 0.5 as 128 of 255 (0.502), and a fraction of a channel not at all.
+    const argb = (0x80 << 24) | (51 << 16) | (102 << 8) | 204;
+    const node = { props: { backgroundColor: argb >>> 0 } };
+    assert.deepEqual(
+      styleMismatches(node as unknown as FakeFabricNode, {
+        backgroundColor: 'rgba(51.2, 102, 204, 0.5)',
+      }),
+      [],
+    );
+    assert.equal(
+      styleMismatches(node as unknown as FakeFabricNode, {
+        backgroundColor: 'rgba(51, 102, 204, 0.4)',
+      }).length,
+      1,
+      'a different alpha still differs',
+    );
+  });
+});
