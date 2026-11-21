@@ -775,13 +775,18 @@ describe('the device pool', () => {
       assert.equal(asked?.type, 'start');
       await starting;
       // Started, then its process ends with nothing owed, as an app that crashes between files.
-      const started = (deviceRequest: unknown) => ({
-        reply: { __vitest_worker_response__: true, type: 'started', deviceRequest },
-      });
-      void first.poll(started(asked.deviceRequest)).catch(() => {});
-      await wait(50);
+      // A poll carrying the reply returns only once the pool has read it: with the next request,
+      // a cancel sent for the purpose.
+      const answer = async (app: ReturnType<typeof run.app>, deviceRequest: unknown) => {
+        const next = app.poll({
+          reply: { __vitest_worker_response__: true, type: 'started', deviceRequest },
+        });
+        worker.send(request('cancel') as never);
+        assert.equal((await next)?.type, 'cancel');
+      };
+      await answer(first, asked.deviceRequest);
       launches[0]!.exit('signal SIGKILL');
-      await wait(50);
+      for (let waited = 0; waited < 2000 && launches.length < 2; waited += 10) await wait(10);
       assert.equal(launches.length, 2, 'a new app for the files to come');
       const replacement = run.app('two');
       const second = await Promise.race([
@@ -791,8 +796,7 @@ describe('the device pool', () => {
       assert.equal(second?.type, 'start', 'the new app is told the config before any file');
       assert.deepEqual((second as { context?: unknown }).context, { config });
       // Its own started is the pool's, not Vitest's: Vitest has had one.
-      void replacement.poll(started(second.deviceRequest)).catch(() => {});
-      await wait(50);
+      await answer(replacement, second.deviceRequest);
       const types = messages.map((message) => (message as { type?: string }).type);
       assert.deepEqual(
         types.filter((type) => type === 'started'),
