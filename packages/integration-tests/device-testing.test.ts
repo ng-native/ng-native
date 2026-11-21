@@ -776,13 +776,31 @@ describe('the device pool', () => {
       await starting;
       // Started, then its process ends with nothing owed, as an app that crashes between files.
       // A poll carrying the reply returns only once the pool has read it: with the next request,
-      // a cancel sent for the purpose.
+      // a cancel sent for the purpose. The cancel is answered too, so nothing stays owed, and its
+      // answer reaching Vitest shows the pool has read that as well.
       const answer = async (app: ReturnType<typeof run.app>, deviceRequest: unknown) => {
         const next = app.poll({
           reply: { __vitest_worker_response__: true, type: 'started', deviceRequest },
         });
         worker.send(request('cancel') as never);
-        assert.equal((await next)?.type, 'cancel');
+        const cancel = await next;
+        assert.equal(cancel?.type, 'cancel');
+        const before = messages.length;
+        void app
+          .poll({
+            reply: {
+              __vitest_worker_response__: true,
+              type: 'cancelled',
+              deviceRequest: cancel.deviceRequest,
+            },
+          })
+          .catch(() => {});
+        const read = () =>
+          messages
+            .slice(before)
+            .some((message) => (message as { type?: string }).type === 'cancelled');
+        for (let waited = 0; waited < 2000 && !read(); waited += 10) await wait(10);
+        assert.ok(read(), 'the answer to cancel reached Vitest');
       };
       await answer(first, asked.deviceRequest);
       launches[0]!.exit('signal SIGKILL');
@@ -803,6 +821,7 @@ describe('the device pool', () => {
         ['started'],
         'Vitest hears started once',
       );
+      assert.ok(!types.includes('testfileFinished'), 'nothing was owed when the app exited');
     } finally {
       await run.done();
     }
