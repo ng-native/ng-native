@@ -16,8 +16,9 @@ export function rgba(value: unknown): Rgba | null {
   }
   const colour = parseColor(value);
   // As React Native's processColor reads one: an `rgb()` channel's fraction is dropped (its
-  // `parseInt`), where alpha and the channels `hsl()` and `hwb()` give are rounded.
-  if (colour && typeof value === 'string' && /^\s*rgba?\(/i.test(value)) {
+  // `parseInt`). `parseColor` has already rounded what `hsl()` and `hwb()` give, as processColor
+  // does, and hex and names are whole, so only an `rgb()` fraction is changed.
+  if (colour && typeof value === 'string') {
     const [red, green, blue, alpha] = colour;
     return [Math.trunc(red), Math.trunc(green), Math.trunc(blue), alpha];
   }

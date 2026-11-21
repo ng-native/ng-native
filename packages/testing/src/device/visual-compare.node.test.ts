@@ -161,5 +161,18 @@ describe("a fraction of an rgb() channel, as React Native's processColor reads i
     const want = { backgroundColor: 'rgba(51.8, 102, 204, 1)' };
     assert.deepEqual(styleMismatches(red(51) as unknown as FakeFabricNode, want), []);
     assert.equal(styleMismatches(red(52) as unknown as FakeFabricNode, want).length, 1);
+    // Alpha 0.5 rounds to 128 of 255, not down to 127.
+    const halfAlpha = {
+      props: { backgroundColor: ((0x80 << 24) | (51 << 16) | (102 << 8) | 204) >>> 0 },
+    };
+    const half = { backgroundColor: 'rgba(51.8, 102, 204, 0.5)' };
+    assert.deepEqual(styleMismatches(halfAlpha as unknown as FakeFabricNode, half), []);
+    // hsl(0, 100%, 25%) is red 127.5, which rounds to 128 where truncating would give 127.
+    const hslRed = (r: number) => ({
+      props: { backgroundColor: ((0xff << 24) | (r << 16)) >>> 0 },
+    });
+    const hsl = { backgroundColor: 'hsl(0, 100%, 25%)' };
+    assert.deepEqual(styleMismatches(hslRed(128) as unknown as FakeFabricNode, hsl), []);
+    assert.equal(styleMismatches(hslRed(127) as unknown as FakeFabricNode, hsl).length, 1);
   });
 });
