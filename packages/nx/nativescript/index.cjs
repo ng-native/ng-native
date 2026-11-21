@@ -51,35 +51,46 @@ function addPlugin(tree, root) {
 }
 
 /**
- * The object `mount` is given in main.ts: what `mountOptions = () => ({ ... })` returns, or the
- * object a `mount(...)` call is passed inline, as an older app does. Found by TypeScript's parser,
+ * The object the app's `mount(...)` call is given in main.ts: inline, as an older app passes it,
+ * or what the file's `mountOptions = () => ({ ... })` returns, for `mount(..., mountOptions())`. Found by TypeScript's parser,
  * so a comment, string or regular expression in it reads as what it is.
  */
 function mountOptionsObject(ts, file) {
-  let found = null;
-  const visit = (node) => {
-    found = returnedByMountOptions(ts, node) ?? passedToMount(ts, node);
-    if (!found) found = ts.forEachChild(node, visit) ?? null;
-    return found;
-  };
+  const options = mountCall(ts, file)?.arguments[3];
+  if (!options) return null;
+  if (ts.isObjectLiteralExpression(options)) return options;
+  // `mountOptions()`: the object the file's own factory of that name returns.
+  if (!ts.isCallExpression(options) || !ts.isIdentifier(options.expression)) return null;
+  const name = options.expression.text;
+  for (const statement of file.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      const returned = returnedBy(ts, declaration, name);
+      if (returned) return returned;
+    }
+  }
+  return null;
+}
+
+/** The app's `mount(...)` call: the first in the file, as the app's entry has one. */
+function mountCall(ts, file) {
+  const visit = (node) =>
+    (ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'mount' &&
+      node) ||
+    ts.forEachChild(node, visit);
   return visit(file);
 }
 
-/** The object `const mountOptions = () => ({ ... })` returns, when `node` declares it. */
-function returnedByMountOptions(ts, node) {
-  if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name)) return null;
-  if (node.name.text !== 'mountOptions' || !node.initializer) return null;
-  if (!ts.isArrowFunction(node.initializer)) return null;
-  let body = node.initializer.body;
+/** The object `const <name> = () => ({ ... })` returns, when `declaration` is that. */
+function returnedBy(ts, declaration, name) {
+  const { name: declared, initializer } = declaration;
+  if (!ts.isIdentifier(declared) || declared.text !== name) return null;
+  if (!initializer || !ts.isArrowFunction(initializer)) return null;
+  let body = initializer.body;
   while (ts.isParenthesizedExpression(body)) body = body.expression;
   return ts.isObjectLiteralExpression(body) ? body : null;
-}
-
-/** The options object a `mount(...)` call is passed inline, when `node` is one. */
-function passedToMount(ts, node) {
-  if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) return null;
-  const options = node.expression.text === 'mount' ? node.arguments[3] : undefined;
-  return options && ts.isObjectLiteralExpression(options) ? options : null;
 }
 
 /** Where to add `provideNativeScript()` to `options`, and what: null for a file to edit by hand. */

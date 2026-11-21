@@ -142,6 +142,34 @@ describe('the nativescript generator', () => {
     assert.match(main, / {4}providers: \[provideNativeScript\(\), provideRouter\(\[\]\)\]/);
   });
 
+  it("adds to the options the app's mount call is given, not another function's of that name", async () => {
+    const tree = await app();
+    tree.write(
+      'apps/mobile/src/main.ts',
+      [
+        "import { mount } from '@ng-native/platform';",
+        '',
+        'function preview() {',
+        '  const mountOptions = () => ({',
+        '    providers: [],',
+        '  });',
+        '  return mountOptions;',
+        '}',
+        '',
+        "AppRegistry.registerRunnable('main', ({ rootTag }) => {",
+        '  mount(Number(rootTag), App, getFabricUIManager(), {',
+        '    processColor,',
+        '  });',
+        '});',
+        '',
+      ].join('\n'),
+    );
+    await run(tree);
+    const main = tree.read('apps/mobile/src/main.ts', 'utf-8')!;
+    assert.match(main, /const mountOptions = \(\) => \(\{\n {4}providers: \[\],/, 'left alone');
+    assert.match(main, /getFabricUIManager\(\), \{\n {4}providers: \[provideNativeScript\(\)\],/);
+  });
+
   it('adds to providers the app already passes', async () => {
     const tree = await app();
     const main = tree.read('apps/mobile/src/main.ts', 'utf-8')!;

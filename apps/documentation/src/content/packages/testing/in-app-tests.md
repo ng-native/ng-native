@@ -36,10 +36,12 @@ if (process.env.EXPO_PUBLIC_DEVICE_TESTS) {
   const { startDeviceTests } = require('@ng-native/testing/device/host');
   startDeviceTests({ mount: mountOptions });
 } else {
-  // The app's own runnable, only outside the tests: a second registration of 'main' would replace
+  // The app's own runnable, moved here whole, with all it does after mount (such as
+  // watchConditions), and only outside the tests: a second registration of 'main' would replace
   // the test host.
   AppRegistry.registerRunnable('main', ({ rootTag }) => {
-    mount(Number(rootTag), App, getFabricUIManager(), mountOptions());
+    const app = mount(Number(rootTag), App, getFabricUIManager(), mountOptions());
+    // ...the rest of the app's runnable, as it was.
   });
 }
 ```
