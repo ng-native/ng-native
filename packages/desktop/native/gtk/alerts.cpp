@@ -176,6 +176,11 @@ void showAlert(const AlertRequest &request, std::function<void(int, std::string,
   if (inWindow) {
     api.setDefault(dialog, returnId.empty() ? nullptr : returnId.c_str());
     api.setClose(dialog, escapeId.c_str());
+    // With no cancel button Escape presses nothing, as on macOS: closed with no answer, the app's
+    // Alert callback would never run, and a Dialogs promise never settle.
+    if (layout.escapeIndex < 0) {
+      g_object_set(dialog, "can-close", FALSE, nullptr);
+    }
     if (extra) {
       api.setExtra(dialog, extra);
     }

@@ -100,6 +100,33 @@ TEST_CASE("an alert over a window is an AdwAlertDialog in it on libadwaita 1.5, 
   CHECK(std::get<0>(*answer) == 2);
 }
 
+TEST_CASE("an alert with no cancel button stays until a button answers it, as Escape presses nothing") {
+  REQUIRE(ngn::testing::gtkReady());
+  ngn::testing::MountedViews views(true, 400, 300);
+  ngn::AlertRequest request;
+  request.title = "Saved";
+  request.buttons = {{"OK"}};
+  std::optional<Answer> answer;
+  ngn::gtk::showAlert(request, [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, GTK_WINDOW(views.window));
+  GtkWidget *alert = ngn::gtk::shownAlert();
+  REQUIRE(alert);
+  if (std::string(G_OBJECT_TYPE_NAME(alert)) != "AdwAlertDialog") {
+    MESSAGE("skipped: an AdwMessageDialog below libadwaita 1.5 closes on Escape with its close response");
+    ngn::gtk::respondToAlert(alert, "b0");
+    return;
+  }
+  // What Escape does: an AdwDialog's close, which one that cannot close refuses.
+  ngn::gtk::adwFunction<void (*)(GtkWidget *)>("adw_dialog_close")(alert);
+  for (int i = 0; i < 20; i++) {
+    g_main_context_iteration(nullptr, FALSE);
+  }
+  CHECK_FALSE(answer);
+  CHECK(ngn::gtk::shownAlert() == alert);
+  ngn::gtk::respondToAlert(alert, "b0");
+  REQUIRE(answer);
+  CHECK(std::get<0>(*answer) == 0);
+}
+
 namespace {
 
 void buttonsIn(GtkWidget *root, std::vector<GtkWidget *> &out) {
