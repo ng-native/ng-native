@@ -32,8 +32,12 @@ module.exports = withDeviceTests(config);
 ```
 
 ```ts
+import { watchConditions } from '@ng-native/device';
+
 if (process.env.EXPO_PUBLIC_DEVICE_TESTS) {
-  const { startDeviceTests } = require('@ng-native/testing/device/host');
+  // Typed as the module, so the callbacks below are typed too.
+  const { startDeviceTests } =
+    require('@ng-native/testing/device/host') as typeof import('@ng-native/testing/device/host');
   startDeviceTests({
     mount: mountOptions,
     // What the app's runnable does after mount, for the host too: here, following rotation,
