@@ -144,6 +144,17 @@ export function runningInGroup(stats: readonly string[], pgid: number): boolean 
   });
 }
 
+/**
+ * Output as it arrives, cut to its last `lines` lines with its line breaks kept, so the next chunk
+ * carries on from it: `tail` trims, which would join one chunk's last line to the next's first.
+ */
+export function keepLines(output: string, lines: number): string {
+  const parts = output.split('\n');
+  // A break that ends the output leaves an empty last part, which is not a line of its own.
+  const counted = parts.at(-1) === '' ? lines + 1 : lines;
+  return parts.length > counted ? parts.slice(-counted).join('\n') : output;
+}
+
 /** The last lines of some output, which is where a tool says what went wrong. */
 export function tail(output: string, lines = 30): string {
   return output.trimEnd().split('\n').slice(-lines).join('\n');

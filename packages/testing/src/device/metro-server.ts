@@ -8,7 +8,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
-import { progress, sleep, tail } from './command.ts';
+import { keepLines, progress, sleep } from './command.ts';
 
 export interface MetroServer {
   port: number;
@@ -78,8 +78,8 @@ async function startMetro(
     },
   });
   let output = '';
-  child.stdout!.on('data', (chunk: Buffer) => (output = tail(output + chunk, 60)));
-  child.stderr!.on('data', (chunk: Buffer) => (output = tail(output + chunk, 60)));
+  child.stdout!.on('data', (chunk: Buffer) => (output = keepLines(output + chunk, 60)));
+  child.stderr!.on('data', (chunk: Buffer) => (output = keepLines(output + chunk, 60)));
   const exited = new Promise<string>((resolve) => {
     child.once('error', (error) => resolve(`it could not be started: ${error.message}`));
     child.once('close', (code, signal) => resolve(signal ? `signal ${signal}` : `status ${code}`));

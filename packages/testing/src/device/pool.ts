@@ -241,8 +241,11 @@ class DeviceWorker implements PoolWorker {
       signal: this.shutdown.signal,
     });
     this.launched = app;
+    // Where the app stopped: what it and Metro last printed.
+    const lastOutputs = () =>
+      lastOutput("Metro's", metro?.output()) + lastOutput("The app's", app.output?.());
     const early = app.exited.then((how) => {
-      const error = new Error(`The app exited before it connected (${how}).`);
+      const error = new Error(`The app exited before it connected (${how}).${lastOutputs()}`);
       return crashReportOf(launch, this.launchedAt).then((report) => {
         if (report) error.message += `\n${report}`;
         throw error;
@@ -253,9 +256,7 @@ class DeviceWorker implements PoolWorker {
     early.catch(() => claiming.abort());
     this.session = await Promise.race([
       claim(claiming.signal, true).catch((error: Error) => {
-        // Where the app stopped: what it and Metro last printed.
-        error.message +=
-          lastOutput("Metro's", metro?.output()) + lastOutput("The app's", app.output?.());
+        error.message += lastOutputs();
         throw error;
       }),
       early,

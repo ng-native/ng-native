@@ -785,6 +785,22 @@ describe('the device pool', () => {
     }
   });
 
+  it('ends the failure of a launched app that exits before it connects with what it printed', async () => {
+    const { launch, launches } = fakeLauncher(undefined, () => 'Unhandled JS Exception');
+    const run = await setup({ launch });
+    try {
+      const starting = run.worker().worker.start();
+      await wait(20);
+      launches[0]!.exit('status 1');
+      await assert.rejects(
+        starting,
+        /exited before it connected \(status 1\)\.\n\nThe app's last output:\nUnhandled JS Exception/,
+      );
+    } finally {
+      await run.done();
+    }
+  });
+
   it('answers start itself while the app it launches has yet to connect, and only once', async () => {
     const { launch } = fakeLauncher();
     const run = await setup({ launch });

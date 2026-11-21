@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
-import { runCommand, runningInGroup } from './command.ts';
+import { keepLines, runCommand, runningInGroup } from './command.ts';
 
 describe('a command the pool runs', () => {
   it('fails with its last output, or gives it back when a failure is allowed', async () => {
@@ -109,5 +109,13 @@ describe('a command the pool runs', () => {
     assert.equal(runningInGroup([...zombies, stat(12, 'a) S 1 10', 'S', 10)], 10), true);
     assert.equal(runningInGroup([...zombies, stat(13, 'node', 'R', 99)], 10), false);
     assert.equal(runningInGroup([stat(14, 'sh', 'D', 10)], 10), true, 'in the kernel, not gone');
+  });
+
+  it('keeps the last lines of output that arrives in chunks, line breaks and all', () => {
+    let kept = '';
+    for (const chunk of ['Loading\n', 'Waiting\n', 'for Metro', ' still\n']) {
+      kept = keepLines(kept + chunk, 2);
+    }
+    assert.equal(kept, 'Waiting\nfor Metro still\n');
   });
 });

@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { progress, runCommand, sleep, tail } from './command.ts';
+import { keepLines, progress, runCommand, sleep } from './command.ts';
 import type { AppLauncher, LaunchedApp } from './launcher.ts';
 import { crashReportSince } from './macos-launcher.ts';
 import { nativeBuild } from './native-build.ts';
@@ -69,7 +69,7 @@ export function iosSimulatorLauncher(options: IosSimulatorOptions = {}): AppLaun
       );
       // The app's console, kept to its last lines for a failure to say where the app stopped.
       let output = '';
-      const keep = (chunk: Buffer) => (output = tail(output + chunk, 60));
+      const keep = (chunk: Buffer) => (output = keepLines(output + chunk, 60));
       child.stdout.on('data', keep);
       child.stderr.on('data', keep);
       const exited = new Promise<string>((resolve) => {
