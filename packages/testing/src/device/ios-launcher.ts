@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { progress, runCommand, sleep } from './command.ts';
+import { progress, runCommand, sleep, tail } from './command.ts';
 import type { AppLauncher, LaunchedApp } from './launcher.ts';
 import { crashReportSince } from './macos-launcher.ts';
 import { nativeBuild } from './native-build.ts';
@@ -65,8 +65,13 @@ export function iosSimulatorLauncher(options: IosSimulatorOptions = {}): AppLaun
           '-RCT_jsLocation',
           `127.0.0.1:${request.metroPort}`,
         ],
-        { stdio: 'ignore' },
+        { stdio: ['ignore', 'pipe', 'pipe'] },
       );
+      // The app's console, kept to its last lines for a failure to say where the app stopped.
+      let output = '';
+      const keep = (chunk: Buffer) => (output = tail(output + chunk, 60));
+      child.stdout.on('data', keep);
+      child.stderr.on('data', keep);
       const exited = new Promise<string>((resolve) => {
         child.once('error', (error) => resolve(`it could not be started: ${error.message}`));
         child.once('close', (code, signal) =>
@@ -75,6 +80,7 @@ export function iosSimulatorLauncher(options: IosSimulatorOptions = {}): AppLaun
       });
       return {
         exited,
+        output: () => output,
         async stop() {
           await runCommand('xcrun', ['simctl', 'terminate', simulator.udid, bundle], {
             allowFailure: true,

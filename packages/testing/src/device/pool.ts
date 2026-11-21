@@ -33,7 +33,7 @@ import path from 'node:path';
 import type { PoolOptions, PoolRunnerInitializer, PoolWorker } from 'vitest/node';
 import { modulesOf, type BundleModule } from './bundle-modules.ts';
 import { mockedSpecifiers } from './mocks.ts';
-import { progress } from './command.ts';
+import { progress, tail } from './command.ts';
 import { metroFor } from './metro-server.ts';
 import { DEFAULT_PORT } from './port.ts';
 import { type AppLauncher, type LaunchedApp } from './launcher.ts';
@@ -226,10 +226,10 @@ class DeviceWorker implements PoolWorker {
       this.session = await claim();
       return;
     }
-    const metroPort =
-      this.options.metroPort ??
-      (await metroFor(this.projectRoot, { coverage: this.coverage, poolPort: this.bridge.port }))
-        .port;
+    const metro = this.options.metroPort
+      ? null
+      : await metroFor(this.projectRoot, { coverage: this.coverage, poolPort: this.bridge.port });
+    const metroPort = this.options.metroPort ?? metro!.port;
     this.launchedAt = Date.now();
     const app = await launch.start({
       port: this.bridge.port,
@@ -250,7 +250,15 @@ class DeviceWorker implements PoolWorker {
     // An app that ended takes its claim with it: a claim left waiting would take the next app.
     const claiming = new AbortController();
     early.catch(() => claiming.abort());
-    this.session = await Promise.race([claim(claiming.signal, true), early]);
+    this.session = await Promise.race([
+      claim(claiming.signal, true).catch((error: Error) => {
+        // Where the app stopped: what it and Metro last printed.
+        error.message +=
+          lastOutput("Metro's", metro?.output()) + lastOutput("The app's", app.output?.());
+        throw error;
+      }),
+      early,
+    ]);
     progress(this.options.platform ?? 'app', 'connected', this.launchedAt);
     // From here a process that ends is a lost app at once, not after the silence is waited out.
     void app.exited.then((how) => {
@@ -1090,6 +1098,11 @@ function realPath(file: string): string | null {
 }
 
 /** What a launcher can say of a lost app's crash: nothing, rather than a failure of its own. */
+/** `text`'s last lines under a heading, or nothing when there are none. */
+function lastOutput(whose: string, text: string | undefined): string {
+  return text?.trim() ? `\n\n${whose} last output:\n${tail(text)}` : '';
+}
+
 async function crashReportOf(launch: AppLauncher, since: number): Promise<string | undefined> {
   try {
     return await launch.crashReport?.(since);

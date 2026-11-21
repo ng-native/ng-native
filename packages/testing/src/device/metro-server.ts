@@ -15,6 +15,8 @@ export interface MetroServer {
   stop(): Promise<void>;
   /** Settles when Metro's process ends, however it ends. */
   exited: Promise<string>;
+  /** The last lines Metro printed. */
+  output(): string;
 }
 
 const servers = new Map<string, Promise<MetroServer>>();
@@ -93,7 +95,7 @@ async function startMetro(
     }
     if (await running(port)) {
       progress('metro', `serving on port ${port}`, started);
-      return { port, stop, exited };
+      return { port, stop, exited, output: () => output };
     }
     if (Date.now() > deadline) {
       await stop();

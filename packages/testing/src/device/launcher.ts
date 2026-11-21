@@ -57,6 +57,8 @@ export interface LaunchedApp {
   readonly exited: Promise<string>;
   /** End the app if it is running, and remove the state it was given. */
   stop(): Promise<void>;
+  /** The last lines the app printed, for a failure to say where it stopped. */
+  output?(): string;
 }
 
 export interface AppLauncher {
