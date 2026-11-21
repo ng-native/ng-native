@@ -4,6 +4,7 @@
  */
 import { isColorProp, parseColor } from '@ng-native/fabric';
 import type { FakeFabricNode } from '../test-utils.ts';
+import type { Frame } from './index.ts';
 
 export type Rgba = [number, number, number, number];
 
@@ -46,9 +47,13 @@ const LONGHANDS: Record<string, readonly string[]> = {
 
 /** Where `key` of `expected` differs from what the node committed, as a line saying how. */
 function mismatch(key: string, want: unknown, got: unknown): string | null {
-  if (isColorProp(key)) {
-    const [a, b] = [rgba(want), rgba(got)];
-    return a && b && sameColour(a, b, 0) ? null : `${key}: ${show(a, want)}, got ${show(b, got)}`;
+  const [wantColour, gotColour] = isColorProp(key) ? [rgba(want), rgba(got)] : [null, null];
+  // A colour either side; anything else the engine commits for one (`null`, a processed brush)
+  // is compared as the value it is.
+  if (wantColour || gotColour) {
+    return wantColour && gotColour && sameColour(wantColour, gotColour, 0)
+      ? null
+      : `${key}: ${show(wantColour, want)}, got ${show(gotColour, got)}`;
   }
   const [a, b] = [points(want), points(got)];
   const equal = sameValue(a, b);
@@ -91,4 +96,17 @@ function sameValue(a: unknown, b: unknown): boolean {
     );
   }
   return Object.is(a, b);
+}
+
+/**
+ * Points of a target, from its top-left, as points of the capture native took of it: the capture
+ * holds only the part inside the window, so a target cut off at the left or top starts that much
+ * further in. `frame` is the target's place in the window, null for the whole window.
+ */
+export function inCapture(
+  frame: Frame | null,
+  at: readonly { x: number; y: number }[],
+): { x: number; y: number }[] {
+  const [left, top] = frame ? [Math.max(0, -frame.x), Math.max(0, -frame.y)] : [0, 0];
+  return at.map(({ x, y }) => ({ x: x - left, y: y - top }));
 }

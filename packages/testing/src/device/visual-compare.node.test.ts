@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { FakeFabricNode } from '../test-utils.ts';
-import { rgba, sameColour, styleMismatches } from './visual-compare.ts';
+import { inCapture, rgba, sameColour, styleMismatches } from './visual-compare.ts';
 
 const node = (props: Record<string, unknown>) => ({ props }) as unknown as FakeFabricNode;
 
@@ -99,5 +99,35 @@ describe("a node's committed style", () => {
     );
     assert.match(misses[1]!, /^borderRadius: 8, got 16$/);
     assert.match(misses[2]!, /^color: .*got undefined$/, 'a colour the node does not have');
+  });
+});
+
+describe('a colour prop the engine commits as something other than a colour string', () => {
+  it('matches the same null, or the same processed value, as equal', () => {
+    const node = { props: { backgroundColor: null, color: { semantic: ['label'] } } };
+    assert.deepEqual(
+      styleMismatches(node as unknown as FakeFabricNode, {
+        backgroundColor: null,
+        color: { semantic: ['label'] },
+      }),
+      [],
+    );
+    assert.equal(
+      styleMismatches(node as unknown as FakeFabricNode, { backgroundColor: 'red' }).length,
+      1,
+    );
+  });
+});
+
+describe('a point of a target, in the capture native took of it', () => {
+  it('moves by what the window cut off at the left and top, and no more', () => {
+    const offscreen = { x: -10, y: -4, width: 30, height: 10 };
+    assert.deepEqual(inCapture(offscreen, [{ x: 15, y: 5 }]), [{ x: 5, y: 1 }]);
+    assert.deepEqual(
+      inCapture({ x: 8, y: 20, width: 30, height: 10 }, [{ x: 15, y: 5 }]),
+      [{ x: 15, y: 5 }],
+      'a target wholly in the window keeps its points',
+    );
+    assert.deepEqual(inCapture(null, [{ x: 15, y: 5 }]), [{ x: 15, y: 5 }], 'the whole window');
   });
 });

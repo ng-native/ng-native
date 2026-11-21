@@ -244,8 +244,27 @@ A screenshot compares everything at once; these check one thing, and read the sa
 simulator and emulator:
 
 ```ts
+import { Component, signal } from '@angular/core';
+import { View } from '@ng-native/components';
 import { render, screen } from '@ng-native/testing/device';
 import { expect, it } from 'vitest';
+
+@Component({
+  selector: 'app-swatch',
+  imports: [View],
+  template: `
+    <view testID="frame" style="padding: 10px">
+      <view
+        testID="swatch"
+        style="width: 300px; height: 100px; border-radius: 12px"
+        [style.backgroundColor]="warm() ? '#cc6633' : '#3366cc'"
+      ></view>
+    </view>
+  `,
+})
+class Swatch {
+  readonly warm = signal(false);
+}
 
 it('draws the swatch', async () => {
   await render(Swatch);
@@ -258,24 +277,48 @@ it('draws the swatch', async () => {
 ```
 
 - `toHaveStyle` reads the props the engine committed to the node, by React Native's names. A
-  colour matches in any CSS form or as the integer native is given; a length is in points (`16`
+  colour matches as hex, `rgb()` or `rgba()` with numbers, `hsl()`, `hwb()` or a name, or as the
+  integer native is given, and a value that is not one (`null`, a platform colour) matches the
+  same value; a length is in points (`16`
   or `'16px'`). A shorthand the engine commits as its parts (`borderRadius`, `borderWidth`,
   `borderColor`, `padding`, `margin`) matches when every part does.
 - `toHaveSize` and `toBeWithin` read where native laid the node out, as `measure` does, within
   half a point by default (`{ tolerance }`).
 - `toHaveColorAt` reads the colour native drew at a point of the node (or of a region, or
   `screen`), in points from its top-left, within one step of 255 on each channel by default
-  (`{ tolerance }`). Await it: it captures the window, as a screenshot does. `colorsAt(target,
+  (`{ tolerance }`). Await it: it captures the window, as a screenshot does, so it needs iOS or
+  Android 8 (API 26) or later, and does not work on macOS yet. A point of a node partly outside
+  the window is read where that point is drawn, and one outside the window fails. `colorsAt(target,
 points)` gives the colours themselves.
 
 ## Turning animations off
 
-Animations play in a device test as they do in the app. `setAnimations(false)` turns them off
-from the next change on, so what a test reads or captures is where each change ends:
+Animations play in a device test as they do in the app. `setAnimations(false)` turns off the
+ones listed below from the next change on, so what a test reads or captures is where each of
+those changes ends:
 
 ```ts
+import { Component, signal } from '@angular/core';
+import { View } from '@ng-native/components';
 import { render, screen, setAnimations } from '@ng-native/testing/device';
 import { expect, it } from 'vitest';
+
+@Component({
+  selector: 'app-swatch',
+  imports: [View],
+  template: `
+    <view testID="frame" style="padding: 10px">
+      <view
+        testID="swatch"
+        style="width: 300px; height: 100px; border-radius: 12px"
+        [style.backgroundColor]="warm() ? '#cc6633' : '#3366cc'"
+      ></view>
+    </view>
+  `,
+})
+class Swatch {
+  readonly warm = signal(false);
+}
 
 it('lands on the warm colour', async () => {
   await setAnimations(false);
@@ -290,7 +333,8 @@ What it turns off:
 
 - the engine's CSS transitions and `@keyframes` animations: a transition lands on its new value,
   a finite animation ends within two frames (on its last frame where its fill mode keeps it),
-  and one that repeats forever is not played;
+  and one that repeats forever is not played. One already running when animations go off is
+  ended the next time its node is restyled;
 - UIKit's view animations on iOS;
 - every Android `Animator`, through the app's own animator duration scale. Android can refuse
   that call, and `setAnimations` then resolves `false`: the engine's animations are still off.

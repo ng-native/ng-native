@@ -6,9 +6,9 @@
 import { expect } from 'vitest';
 import type { FakeFabricNode } from '../test-utils.ts';
 import { harness } from './harness.ts';
-import type { Frame } from './index.ts';
+import { screen, type Frame } from './index.ts';
 import { screenshot, type ScreenshotTarget } from './screenshot.ts';
-import { rgba, sameColour, show, styleMismatches, type Rgba } from './visual-compare.ts';
+import { inCapture, rgba, sameColour, show, styleMismatches, type Rgba } from './visual-compare.ts';
 
 declare const require: (id: string) => unknown;
 
@@ -16,6 +16,12 @@ function frameOf(node: FakeFabricNode): Frame {
   const frame = harness().recorder.measure(node.reactTag);
   if (!frame) throw new Error('The node has no frame: it is gone, or native has not laid it out.');
   return frame;
+}
+
+/** Where a target is in the window, in points: null for the whole window. */
+function placeOf(target: ScreenshotTarget): Frame | null {
+  if (target === screen) return null;
+  return 'reactTag' in target ? frameOf(target as FakeFabricNode) : (target as Frame);
 }
 
 /** The colour native drew at each point of a target, in its own points from its top-left. */
@@ -29,7 +35,13 @@ export async function colorsAt(
   const { PixelRatio } = require('react-native') as { PixelRatio: { get(): number } };
   const response = await fetch(`${pool.url}/colors`, {
     method: 'POST',
-    body: JSON.stringify({ session: pool.session, png, points: at, scale: PixelRatio.get() }),
+    body: JSON.stringify({
+      session: pool.session,
+      png,
+      // The capture is of the part of the target inside the window.
+      points: inCapture(placeOf(target), at),
+      scale: PixelRatio.get(),
+    }),
   });
   const answer = (await response.json()) as { result?: Rgba[]; error?: string };
   if (!answer.result) throw new Error(answer.error ?? 'No answer from the pool');
