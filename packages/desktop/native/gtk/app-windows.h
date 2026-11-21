@@ -79,6 +79,10 @@ class GtkWindows final : public WindowBackend {
   // Whether a window fills the screen, so it has the size GTK gives it rather than its own. A seam for
   // tests, which run without a window manager to maximise one.
   std::function<bool(GtkWindow *)> windowFills = &GtkWindows::fillsScreen;
+  // The app's name (the host's --title): the title of a window the app gives none, as the main window
+  // is unless it says otherwise. GNOME's header bar, the taskbar, Alt+Tab and Orca name a window by
+  // its title, where macOS names the app in its menu bar and Dock. Set once, before any window opens.
+  std::string appName;
 
   // The host the close button asks first. Set once, before any window opens.
   void setHost(std::weak_ptr<WindowHost> host);
@@ -117,6 +121,8 @@ class GtkWindows final : public WindowBackend {
     double reportedHeight{0};
   };
   void show(SurfaceId surface);
+  // `title`, or the app's name where it is empty.
+  const char *titleFor(const std::string &title) const;
   static void disconnect(Window &entry);
   static bool fillsScreen(GtkWindow *window);
   void open(SurfaceId surface, const WindowRequest &request, const WindowPlacement &placement, std::function<void()> opened);

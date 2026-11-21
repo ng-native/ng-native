@@ -854,6 +854,7 @@ int main(int argc, char *argv[]) {
             }
           },
   }, gHost.application, menuPlacement);
+  gHost.windows->appName = settings.title;
   auto windowHost = std::make_shared<ngn::WindowHost>(gHost.windows, system);
   gHost.windows->setHost(windowHost);
   // A second launch, or the session bus: activate raises the app, and open hands it links and

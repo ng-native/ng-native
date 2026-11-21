@@ -210,6 +210,27 @@ TEST_CASE("the user closing the last window is the host's to act on only when no
   CHECK(w.quits == 0);
 }
 
+TEST_CASE("a window with no title of its own is titled with the app's name, which the desktop shows for it") {
+  REQUIRE(ngn::testing::gtkReady());
+  Windows w;
+  w.windows->appName = "Tracker";
+  auto title = [&w](SurfaceId surface) {
+    const char *title = gtk_window_get_title(GTK_WINDOW(w.windows->window(surface)));
+    return std::string(title ? title : "");
+  };
+  // The main window, which an app opens with no title unless it gives one.
+  auto main = w.open({.key = "main"});
+  CHECK(title(main) == "Tracker");
+  w.host->setTitle(main, "Inbox");
+  settle();
+  CHECK(title(main) == "Inbox");
+  // Its title taken away: the app's name again, never a window the taskbar and Orca cannot name.
+  w.host->setTitle(main, "");
+  settle();
+  CHECK(title(main) == "Tracker");
+  CHECK(title(w.open({.title = "Library"})) == "Library");
+}
+
 TEST_CASE("launching the app again raises its window, or asks the app to reopen one when it has none") {
   REQUIRE(ngn::testing::gtkReady());
   Windows w;

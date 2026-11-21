@@ -322,7 +322,8 @@ void SplitViews::place(SurfaceId surfaceId, Tag split, bool window) {
     contentChild = overlay;
   }
   AdwNavigationPage *sidebar = adw_navigation_page_new(sidebarChild, "Sidebar");
-  AdwNavigationPage *content = adw_navigation_page_new(contentChild, "Content");
+  // Titled by the sidebar's selected row (titleContent), or a tabs host's chosen tab: none until then.
+  AdwNavigationPage *content = adw_navigation_page_new(contentChild, "");
   // The router's back and forward are the only history: the stack's own pop is off.
   adw_navigation_page_set_can_pop(content, FALSE);
   adw_navigation_split_view_set_sidebar(ADW_NAVIGATION_SPLIT_VIEW(s.view), sidebar);
@@ -437,6 +438,12 @@ void SplitViews::host(Split &s, Tag pane) {
   backend_.hostView(pane, slot);
   backend_.hooks.containerRoot(pane, true);
   backend_.hooks.attachInput(slot, s.surfaceId, pane);
+  // A sidebar whose list was filled before it came here titles the content now.
+  if (auto l = lists_.find(pane); sidebar && l != lists_.end()) {
+    for (GtkWidget *box : l->second.boxes) {
+      titleContent(box, gtk_list_box_get_selected_row(GTK_LIST_BOX(box)));
+    }
+  }
 }
 
 void SplitViews::hostScreen(Split &s, Tag screen) {
@@ -713,6 +720,10 @@ void SplitViews::rebuild(Tag parent, const std::vector<SourceList> &lists) {
   }
   l.lists = lists;
   if (lists.empty()) {
+    // Its rows gone, so is the title they gave the content.
+    if (parentWidget) {
+      titleContent(parentWidget, nullptr);
+    }
     if (l.refill != 0) {
       g_source_remove(l.refill);
     }
@@ -727,8 +738,9 @@ void SplitViews::rebuild(Tag parent, const std::vector<SourceList> &lists) {
     gtk_list_box_set_selection_mode(GTK_LIST_BOX(box), GTK_SELECTION_SINGLE);
     g_object_set_data_full(G_OBJECT(box), "ngn-frame", new Rect{}, [](gpointer p) { delete static_cast<Rect *>(p); });
     auto *target = new RowTarget{this, parent};
-    g_signal_connect_data(box, "row-selected", G_CALLBACK(+[](GtkListBox *, GtkListBoxRow *row, gpointer data) {
+    g_signal_connect_data(box, "row-selected", G_CALLBACK(+[](GtkListBox *list, GtkListBoxRow *row, gpointer data) {
       auto *t = static_cast<RowTarget *>(data);
+      t->splits->titleContent(GTK_WIDGET(list), row);
       if (row && g_object_get_data(G_OBJECT(row), "ngn-row")) {
         t->splits->chose(t->parent, GPOINTER_TO_INT(g_object_get_data(G_OBJECT(row), "ngn-row")));
       }
@@ -799,6 +811,7 @@ void SplitViews::fill(Tag parent, Lists &l, size_t index) {
     for (const auto &r : group.rows) {
       GtkWidget *row = gtk_list_box_row_new();
       g_object_set_data(G_OBJECT(row), "ngn-row", GINT_TO_POINTER(r.tag));
+      g_object_set_data_full(G_OBJECT(row), "ngn-label", g_strdup(r.label.c_str()), g_free);
       if (r.custom) {
         // The item's own views, in a slot of the row that is a container of its own.
         GtkWidget *slot = makeHostSlot();
@@ -830,7 +843,20 @@ void SplitViews::fill(Tag parent, Lists &l, size_t index) {
     }
   }
   gtk_list_box_select_row(GTK_LIST_BOX(box), selected);
+  // Said again: a refill that keeps the same row selected may emit nothing.
+  titleContent(box, selected);
   l.syncing = false;
+}
+
+void SplitViews::titleContent(GtkWidget *within, GtkListBoxRow *row) {
+  for (auto &[tag, s] : splits_) {
+    GtkWidget *pane = s.sidebar >= 0 ? backend_.view(s.sidebar) : nullptr;
+    if (s.tabs || !pane || !(within == pane || gtk_widget_is_ancestor(within, pane))) {
+      continue;
+    }
+    const char *label = row ? static_cast<const char *>(g_object_get_data(G_OBJECT(row), "ngn-label")) : nullptr;
+    adw_navigation_page_set_title(adw_navigation_split_view_get_content(ADW_NAVIGATION_SPLIT_VIEW(s.view)), label ? label : "");
+  }
 }
 
 void SplitViews::layOut() {

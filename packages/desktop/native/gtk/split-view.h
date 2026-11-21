@@ -161,6 +161,9 @@ class SplitViews {
   // Saves the collapsed state under the sidebar's autosaveName.
   void autosave(const Split &s);
   void fill(Tag parent, Lists &l, size_t index);
+  // The content page's title, which its header bar shows: the label of `row`, selected in a list
+  // `within` a sidebar, or none. A tabs host titles its own (showTabList).
+  void titleContent(GtkWidget *within, GtkListBoxRow *row);
   // Builds `parent`'s lists afresh, rows and all.
   void rebuild(Tag parent, const std::vector<SourceList> &lists);
   // Selects the row list `index` has selected, without building it again.
