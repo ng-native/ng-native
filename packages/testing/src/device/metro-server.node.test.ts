@@ -20,7 +20,10 @@ function project(): { root: string; started: () => string[]; done: () => void } 
     `const fs = require('fs');
      const port = Number(process.argv[process.argv.indexOf('--port') + 1]);
      fs.appendFileSync(${JSON.stringify(log)}, [process.argv[2], port, process.env.EXPO_PUBLIC_DEVICE_TESTS, process.env.DEVICE_TESTS_COVERAGE ?? '-'].join(' ') + '\\n');
-     require('http').createServer((req, res) => res.end('packager-status:running')).listen(port, '127.0.0.1');`,
+     require('http').createServer((req, res) => {
+       if (req.url === '/index.bundle') console.log('Bundling 42%');
+       res.end('packager-status:running');
+     }).listen(port, '127.0.0.1');`,
   );
   return {
     root,
@@ -49,6 +52,21 @@ describe('the Metro a device run starts', () => {
       await Promise.all([metroFor(root, { poolPort: 1 }), metroFor(root, { poolPort: 2 })]);
       await metroFor(root, { poolPort: 1 });
       assert.equal(started().length, 2);
+    } finally {
+      await stopMetro();
+      done();
+    }
+  });
+
+  it('keeps the last of what Metro printed, for a failure to show', async () => {
+    const { root, done } = project();
+    try {
+      const metro = await metroFor(root);
+      await (await fetch(`http://127.0.0.1:${metro.port}/index.bundle`)).text();
+      for (let waited = 0; waited < 5000 && !metro.output().includes('Bundling'); waited += 10) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.match(metro.output(), /Bundling 42%/);
     } finally {
       await stopMetro();
       done();

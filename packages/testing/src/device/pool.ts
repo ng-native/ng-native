@@ -226,9 +226,10 @@ class DeviceWorker implements PoolWorker {
       this.session = await claim();
       return;
     }
-    const metro = this.options.metroPort
-      ? null
-      : await metroFor(this.projectRoot, { coverage: this.coverage, poolPort: this.bridge.port });
+    const metro =
+      this.options.metroPort !== undefined
+        ? null
+        : await metroFor(this.projectRoot, { coverage: this.coverage, poolPort: this.bridge.port });
     const metroPort = this.options.metroPort ?? metro!.port;
     this.launchedAt = Date.now();
     const app = await launch.start({
@@ -1097,12 +1098,12 @@ function realPath(file: string): string | null {
   }
 }
 
-/** What a launcher can say of a lost app's crash: nothing, rather than a failure of its own. */
 /** `text`'s last lines under a heading, or nothing when there are none. */
 function lastOutput(whose: string, text: string | undefined): string {
   return text?.trim() ? `\n\n${whose} last output:\n${tail(text)}` : '';
 }
 
+/** What a launcher can say of a lost app's crash: nothing, rather than a failure of its own. */
 async function crashReportOf(launch: AppLauncher, since: number): Promise<string | undefined> {
   try {
     return await launch.crashReport?.(since);
