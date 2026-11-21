@@ -122,7 +122,7 @@ describe('the nativescript generator', () => {
         "AppRegistry.registerRunnable('main', ({ rootTag }) => {",
         '  mount(Number(rootTag), App, getFabricUIManager(), {',
         '    // providers: [],',
-        "    pattern: /'(/,",
+        "    pattern: /* a quote */ /'\\(/,",
         '    match: (value) => { return /}}/.test(value); },',
         '    half: (value) => { let n = Number(value); return n++ / 2; }, // A division, then a comment.',
         "    title: 'providers: [',",
