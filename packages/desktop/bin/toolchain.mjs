@@ -46,7 +46,7 @@ export const LINUX_FIRST_BUILD_NOTE =
   'Native, Hermes, ICU and libcurl compile, which takes many minutes. Later runs reuse it.';
 
 /**
- * @typedef {{ run(command: string, args: string[], options?: { capture?: boolean }): { status: number, stdout: string }, readFile?(file: string): string }} ToolRunner
+ * @typedef {{ run(command: string, args: string[], options?: { capture?: boolean, quiet?: boolean }): { status: number, stdout: string }, readFile?(file: string): string }} ToolRunner
  */
 
 /**
@@ -62,7 +62,8 @@ export const LINUX_FIRST_BUILD_NOTE =
 function probe(sys, command, args) {
   const line = [command, ...args].join(' ');
   try {
-    const result = sys.run(command, args, { capture: true });
+    // Quiet: unzip answers --version with its usage on stderr, which is no problem to report.
+    const result = sys.run(command, args, { capture: true, quiet: true });
     if (result.status === 0) return { stdout: result.stdout };
     return {
       failed: `${line} failed (status ${result.status})`,

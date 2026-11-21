@@ -25,6 +25,15 @@ const launcher = (...args: string[]) =>
     encoding: 'utf8',
   });
 
+const compilers = (os: string, env: Record<string, string> = {}) => {
+  // Without the caller's CC and CXX, so the defaults are what a desktop with GCC installed gets.
+  const { CC: _cc, CXX: _cxx, ...rest } = process.env;
+  return spawnSync('bash', [fileURLToPath(new URL('compilers.sh', scripts)), os], {
+    encoding: 'utf8',
+    env: { ...rest, ...env },
+  });
+};
+
 const lock = (packages: string[], snapshots = '') =>
   `lockfileVersion: '9.0'\n\npackages:\n\n${packages.map((p) => `  ${p}:\n    resolution: {integrity: x}\n\n`).join('')}snapshots:\n\n${snapshots}`;
 
@@ -124,6 +133,34 @@ describe('the compiler launcher of the desktop build', () => {
       assert.match(script, /compiler-launcher\.sh" "\$\{NGN_COMPILER_LAUNCHER:-\}"/, name);
       assert.match(script, /\$\{launcher_args\[@\]\+"\$\{launcher_args\[@\]\}"\}/, name);
     }
+  });
+});
+
+describe('the compilers the desktop build passes to CMake', () => {
+  it('is clang on Linux, where CMake would otherwise take the system GCC', () => {
+    assert.deepEqual(compilers('Linux').stdout.trim().split('\n'), [
+      '-DCMAKE_C_COMPILER=clang',
+      '-DCMAKE_CXX_COMPILER=clang++',
+    ]);
+  });
+
+  it('is CC and CXX when they are set', () => {
+    assert.deepEqual(
+      compilers('Linux', { CC: 'clang-19', CXX: 'clang++-19' }).stdout.trim().split('\n'),
+      ['-DCMAKE_C_COMPILER=clang-19', '-DCMAKE_CXX_COMPILER=clang++-19'],
+    );
+  });
+
+  it("is Xcode's own on macOS", () => {
+    const result = compilers('Darwin');
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '');
+  });
+
+  it('is what build.sh passes to its CMake', () => {
+    const script = readFileSync(new URL('build.sh', scripts), 'utf8');
+    assert.match(script, /compilers\.sh"\)/);
+    assert.match(script, /\$\{compiler_args\[@\]\+"\$\{compiler_args\[@\]\}"\}/);
   });
 });
 

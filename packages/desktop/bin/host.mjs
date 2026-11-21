@@ -104,12 +104,14 @@ export const system = {
   /**
    * @param {string} command
    * @param {string[]} args
-   * @param {{ capture?: boolean, env?: Record<string, string> }} [options] `env` is added to
-   *   this process's environment
+   * @param {{ capture?: boolean, quiet?: boolean, env?: Record<string, string> }} [options] `env`
+   *   is added to this process's environment; `quiet` drops the command's stderr, for a probe
+   *   whose answer is its status and stdout
    */
-  run(command, args, { capture = false, env } = {}) {
+  run(command, args, { capture = false, quiet = false, env } = {}) {
+    const stderr = quiet ? 'ignore' : 'inherit';
     const result = spawnSync(command, args, {
-      stdio: capture ? ['inherit', 'pipe', 'inherit'] : 'inherit',
+      stdio: capture ? ['inherit', 'pipe', stderr] : ['inherit', 'inherit', stderr],
       encoding: 'utf8',
       ...(env && { env: { ...process.env, ...env } }),
     });
