@@ -69,9 +69,11 @@ export function iosSimulatorLauncher(options: IosSimulatorOptions = {}): AppLaun
       );
       // The app's console, kept to its last lines for a failure to say where the app stopped.
       let output = '';
-      const keep = (chunk: Buffer) => (output = keepLines(output + chunk, 60));
-      child.stdout.on('data', keep);
-      child.stderr.on('data', keep);
+      // Decoded per stream, so a character split across two chunks stays whole.
+      for (const stream of [child.stdout, child.stderr]) {
+        stream.setEncoding('utf8');
+        stream.on('data', (chunk: string) => (output = keepLines(output + chunk, 60)));
+      }
       const exited = new Promise<string>((resolve) => {
         child.once('error', (error) => resolve(`it could not be started: ${error.message}`));
         child.once('close', (code, signal) =>

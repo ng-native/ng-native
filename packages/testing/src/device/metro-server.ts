@@ -78,8 +78,11 @@ async function startMetro(
     },
   });
   let output = '';
-  child.stdout!.on('data', (chunk: Buffer) => (output = keepLines(output + chunk, 60)));
-  child.stderr!.on('data', (chunk: Buffer) => (output = keepLines(output + chunk, 60)));
+  // Decoded per stream, so a character split across two chunks stays whole.
+  for (const stream of [child.stdout!, child.stderr!]) {
+    stream.setEncoding('utf8');
+    stream.on('data', (chunk: string) => (output = keepLines(output + chunk, 60)));
+  }
   const exited = new Promise<string>((resolve) => {
     child.once('error', (error) => resolve(`it could not be started: ${error.message}`));
     child.once('close', (code, signal) => resolve(signal ? `signal ${signal}` : `status ${code}`));
