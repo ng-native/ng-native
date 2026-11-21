@@ -136,6 +136,8 @@ class DeviceWorker implements PoolWorker {
   private startAnswered = false;
   /** Vitest's `start`, with the config it carries, which an app the worker relaunches is sent too. */
   private startRequest: { [key: string]: unknown; type?: string } | null = null;
+  /** The session last sent `start`, which is not sent it again. */
+  private startSentTo: Session | null = null;
   private launched: LaunchedApp | null = null;
   private launchedAt = 0;
   /** Settles when the worker has an app to send to: after a start, and after a relaunch. */
@@ -320,10 +322,16 @@ class DeviceWorker implements PoolWorker {
     await this.connect();
     // The new app has none of the config the old one was started with: it is sent `start` before
     // any file, and its `started` goes no further, as Vitest has had one.
-    if (this.startRequest && this.session) {
-      this.startAnswered = true;
-      this.bridge.send(this.session, this.startRequest);
-    }
+    if (this.startRequest && this.session) this.sendStart(this.session);
+  }
+
+  /** Vitest's `start` to `session`, once: a relaunch and Vitest's own can both reach a new app. */
+  private sendStart(session: Session): void {
+    if (this.startSentTo === session || !this.startRequest) return;
+    this.startSentTo = session;
+    // An app the pool answered `start` for, or relaunched, has its `started` go no further.
+    if (this.options.launch) this.startAnswered = true;
+    this.bridge.send(session, this.startRequest);
   }
 
   send(message: unknown): void {
@@ -354,6 +362,10 @@ class DeviceWorker implements PoolWorker {
       () => {
         const session = this.session;
         if (!session) return;
+        if (request.type === 'start') {
+          this.sendStart(session);
+          return;
+        }
         if (request.type !== 'run' && request.type !== 'collect') {
           this.bridge.send(session, request);
           return;

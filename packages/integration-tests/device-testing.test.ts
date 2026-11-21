@@ -771,27 +771,72 @@ describe('the device pool', () => {
       const config = { root: run.root };
       worker.send(request('start', { config }) as never);
       const first = run.app('one');
-      assert.equal((await first.poll())?.type, 'start');
+      const asked = await first.poll();
+      assert.equal(asked?.type, 'start');
       await starting;
       // Started, then its process ends with nothing owed, as an app that crashes between files.
-      void first
-        .poll({ reply: { __vitest_worker_response__: true, type: 'started' } })
-        .catch(() => {});
+      const started = (deviceRequest: unknown) => ({
+        reply: { __vitest_worker_response__: true, type: 'started', deviceRequest },
+      });
+      void first.poll(started(asked.deviceRequest)).catch(() => {});
       await wait(50);
       launches[0]!.exit('signal SIGKILL');
       await wait(50);
       assert.equal(launches.length, 2, 'a new app for the files to come');
+      const replacement = run.app('two');
       const second = await Promise.race([
-        run.app('two').poll(),
+        replacement.poll(),
         wait(2000).then(() => ({ type: 'nothing' })),
       ]);
       assert.equal(second?.type, 'start', 'the new app is told the config before any file');
       assert.deepEqual((second as { context?: unknown }).context, { config });
+      // Its own started is the pool's, not Vitest's: Vitest has had one.
+      void replacement.poll(started(second.deviceRequest)).catch(() => {});
+      await wait(50);
       const types = messages.map((message) => (message as { type?: string }).type);
       assert.deepEqual(
         types.filter((type) => type === 'started'),
         ['started'],
         'Vitest hears started once',
+      );
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('sends start once to an app it relaunched before Vitest sent start', async () => {
+    const { launch, launches } = fakeLauncher();
+    const run = await setup({ launch });
+    try {
+      const { worker, messages } = run.worker();
+      const starting = worker.start();
+      void run
+        .app('one')
+        .poll()
+        .catch(() => {});
+      await starting;
+      // Gone before Vitest's start, which then arrives while the replacement connects.
+      launches[0]!.exit('signal SIGKILL');
+      await wait(20);
+      worker.send(request('start', { config: { root: run.root } }) as never);
+      const replacement = run.app('two');
+      const first = await replacement.poll();
+      assert.equal(first?.type, 'start');
+      const next = await Promise.race([
+        replacement.poll({
+          reply: {
+            __vitest_worker_response__: true,
+            type: 'started',
+            deviceRequest: first.deviceRequest,
+          },
+        }),
+        wait(500).then(() => ({ type: 'nothing' })),
+      ]);
+      assert.equal(next?.type, 'nothing', 'no second start');
+      const types = messages.map((message) => (message as { type?: string }).type);
+      assert.deepEqual(
+        types.filter((type) => type === 'started'),
+        ['started'],
       );
     } finally {
       await run.done();
