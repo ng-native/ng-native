@@ -20,6 +20,7 @@ const {
   readJson,
 } = require('@nx/devkit');
 const native = require('../native-app.cjs');
+const { typescript } = require('@ng-native/migrate/move-imports.cjs');
 const { usesWorkspaces } = require('../application/workspaces.cjs');
 
 // The iOS SDK's types ship with the runtime; Android's are a package of their own.
@@ -50,85 +51,57 @@ function addPlugin(tree, root) {
 }
 
 /**
- * Where the bracket at `open` closes, counting brackets outside comments and strings, so a comment
- * such as `// 1) Convert native colours` does not end the scan; -1 if it never closes.
+ * The object `mount` is given in main.ts: what `mountOptions = () => ({ ... })` returns, or the
+ * object a `mount(...)` call is passed inline, as an older app does. Found by TypeScript's parser,
+ * so a comment, string or regular expression in it reads as what it is.
  */
-function closing(source, open) {
-  let depth = 0;
-  for (let at = open; at < source.length; at++) {
-    const past = skipped(source, at);
-    if (past !== at) at = past;
-    else if ('([{'.includes(source[at])) depth++;
-    else if (')]}'.includes(source[at]) && --depth === 0) return at;
-  }
-  return -1;
+function mountOptionsObject(ts, file) {
+  let found = null;
+  const visit = (node) => {
+    found = returnedByMountOptions(ts, node) ?? passedToMount(ts, node);
+    if (!found) found = ts.forEachChild(node, visit) ?? null;
+    return found;
+  };
+  return visit(file);
 }
 
-/**
- * Where a comment, string or regular expression starting at `at` ends, or `at` itself where none
- * starts there.
- */
-function skipped(source, at) {
-  const [char, next] = [source[at], source[at + 1]];
-  if (char === '/' && next === '/') {
-    const end = source.indexOf('\n', at);
-    return end < 0 ? source.length : end;
-  }
-  if (char === '/' && next === '*') return source.indexOf('*/', at + 2) + 1 || source.length;
-  if (char === "'" || char === '"' || char === '`') return stringEnd(source, at);
-  if (char === '/' && regexCanStart(source, at)) return regexEnd(source, at);
-  return at;
+/** The object `const mountOptions = () => ({ ... })` returns, when `node` declares it. */
+function returnedByMountOptions(ts, node) {
+  if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name)) return null;
+  if (node.name.text !== 'mountOptions' || !node.initializer) return null;
+  if (!ts.isArrowFunction(node.initializer)) return null;
+  let body = node.initializer.body;
+  while (ts.isParenthesizedExpression(body)) body = body.expression;
+  return ts.isObjectLiteralExpression(body) ? body : null;
 }
 
-/**
- * Whether a `/` at `at` opens a regular expression rather than dividing: it follows an operator
- * or an opening bracket, not a value. ponytail: punctuation only, so `return /x/` reads as a
- * division; an options object has none.
- */
-function regexCanStart(source, at) {
-  const before = source.slice(0, at).trimEnd().at(-1);
-  return before === undefined || '(,=:[!&|?{};+-*%<>~^'.includes(before);
+/** The options object a `mount(...)` call is passed inline, when `node` is one. */
+function passedToMount(ts, node) {
+  if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) return null;
+  const options = node.expression.text === 'mount' ? node.arguments[3] : undefined;
+  return options && ts.isObjectLiteralExpression(options) ? options : null;
 }
 
-/** Where the regular expression starting at `open` ends, past escapes and character classes. */
-function regexEnd(source, open) {
-  let inClass = false;
-  for (let at = open + 1; at < source.length && source[at] !== '\n'; at++) {
-    if (source[at] === '\\') at++;
-    else if (source[at] === '[') inClass = true;
-    else if (source[at] === ']') inClass = false;
-    else if (source[at] === '/' && !inClass) return at;
+/** Where to add `provideNativeScript()` to `options`, and what: null for a file to edit by hand. */
+function providerEdit(ts, file, options) {
+  const named = options.properties.filter(
+    (property) =>
+      property.name && ts.isIdentifier(property.name) && property.name.text === 'providers',
+  );
+  const own = named.at(-1);
+  if (own) {
+    // A list to add to; anything else (a variable, a spread) is the app's to change.
+    const list = ts.isPropertyAssignment(own) ? own.initializer : null;
+    return list && ts.isArrayLiteralExpression(list)
+      ? { at: list.getStart(file) + 1, text: `${PROVIDER}, ` }
+      : null;
   }
-  return open; // Not one after all: the `/` is read as itself.
-}
-
-/** Where `pattern` (sticky) first matches in `source` from `open` to `end`, at the top level. */
-function topLevel(source, open, end, pattern) {
-  let depth = 0;
-  for (let at = open; at < end; at++) {
-    const past = skipped(source, at);
-    if (past !== at) {
-      at = past;
-      continue;
-    }
-    if (depth === 1) {
-      pattern.lastIndex = at;
-      const match = pattern.exec(source);
-      if (match) return match;
-    }
-    if ('([{'.includes(source[at])) depth++;
-    else if (')]}'.includes(source[at])) depth--;
-  }
-  return null;
-}
-
-/** Where the string starting at `open` ends, past its escapes. */
-function stringEnd(source, open) {
-  for (let at = open + 1; at < source.length; at++) {
-    if (source[at] === '\\') at++;
-    else if (source[at] === source[open]) return at;
-  }
-  return source.length;
+  // First, straight after the brace: before any comment that heads the first property.
+  const first = options.properties[0];
+  if (!first) return null;
+  const start = first.getStart(file);
+  const indent = /[ \t]*$/.exec(file.text.slice(file.text.lastIndexOf('\n', start) + 1, start))[0];
+  return { at: options.getStart(file) + 1, text: `\n${indent}providers: [${PROVIDER}],` };
 }
 
 const IMPORTED =
@@ -140,31 +113,23 @@ function addProvider(tree, root) {
   if (main === null) return byHand(file, 'it does not exist.');
   if (main.includes(PROVIDER)) return;
   const imports = [...main.matchAll(/^import .+;$/gm)];
-  const options = native.MOUNT_OPTIONS.exec(main);
-  const open = options ? options.index + options[1].length - 2 : -1;
-  const end = options ? closing(main, open) : -1;
-  if (!imports.length || end < 0) {
+  let edit = null;
+  try {
+    const ts = typescript();
+    const source = ts.createSourceFile(file, main, ts.ScriptTarget.Latest, true);
+    const options = mountOptionsObject(ts, source);
+    edit = options && providerEdit(ts, source, options);
+  } catch {
+    // No TypeScript with a JavaScript API (TypeScript 7): the same as a file it cannot follow.
+  }
+  if (!imports.length || !edit) {
     return byHand(
       file,
       `import { provideNativeScript } from '@ng-native/nativescript' and add ${PROVIDER} to the ` +
         'providers mount is given.',
     );
   }
-  // Only a providers list inside the options: one elsewhere in the file is not the app's.
-  // Its own key, not one in a comment, a string or a nested object.
-  const listed = topLevel(main, open, end, /\bproviders:\s*\[/y);
-  // A second providers key would replace the app's own, so one that is not a list is left alone.
-  if (!listed && topLevel(main, open, end, /\bproviders\s*[:,}]/y)) {
-    return byHand(file, `add ${PROVIDER} to the providers mount is given.`);
-  }
-  const indent = options[2];
-  const [insertAt, added] = listed
-    ? [listed.index + listed[0].length, `${PROVIDER}, `]
-    : [
-        main.indexOf(`{\n${indent}`, open) + 2 + indent.length,
-        `providers: [${PROVIDER}],\n${indent}`,
-      ];
-  const updated = main.slice(0, insertAt) + added + main.slice(insertAt);
+  const updated = main.slice(0, edit.at) + edit.text + main.slice(edit.at);
   if (IMPORTED.test(updated)) return tree.write(file, updated);
   const last = imports.at(-1);
   const at = updated.indexOf(last[0]) + last[0].length;

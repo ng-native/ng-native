@@ -112,7 +112,7 @@ describe('the nativescript generator', () => {
     assert.equal(main.match(/providers:/g)!.length, 1, 'one providers list, not a second');
   });
 
-  it('adds to the providers list itself, not one in a comment, past a regular expression', async () => {
+  it('adds to the providers list itself, not one in a comment, past regular expressions and division', async () => {
     const tree = await app();
     tree.write(
       'apps/mobile/src/main.ts',
@@ -123,6 +123,8 @@ describe('the nativescript generator', () => {
         '  mount(Number(rootTag), App, getFabricUIManager(), {',
         '    // providers: [],',
         "    pattern: /'(/,",
+        '    match: (value) => { return /}}/.test(value); },',
+        '    half: (value) => { let n = Number(value); return n++ / 2; }, // A division, then a comment.',
         "    title: 'providers: [',",
         '    nested: { providers: [] },',
         '    processColor,',

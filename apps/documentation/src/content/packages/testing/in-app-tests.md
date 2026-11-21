@@ -35,6 +35,12 @@ module.exports = withDeviceTests(config);
 if (process.env.EXPO_PUBLIC_DEVICE_TESTS) {
   const { startDeviceTests } = require('@ng-native/testing/device/host');
   startDeviceTests({ mount: mountOptions });
+} else {
+  // The app's own runnable, only outside the tests: a second registration of 'main' would replace
+  // the test host.
+  AppRegistry.registerRunnable('main', ({ rootTag }) => {
+    mount(Number(rootTag), App, getFabricUIManager(), mountOptions());
+  });
 }
 ```
 
