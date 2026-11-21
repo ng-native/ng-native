@@ -232,6 +232,7 @@ import { View } from '../components/src/view.ts';
   template: \`
     <view class="outer">
       <view nativeID="a" [attr.style]="'--h: ;'" [style.min-height]="'var(--h)'" />
+      <view nativeID="c" [attr.style]="'--h:;'" [style.min-height]="'var(--h)'" />
       <view nativeID="b" [style.--h]="'  '" [style.min-height]="'var(--h)'" />
     </view>
   \`,
@@ -245,6 +246,11 @@ export class BlankAttribute {}
       styleOf(fabric, 'a')['minHeight'] ?? null,
       null,
       'the attribute, as Chrome leaves it unset',
+    );
+    assert.equal(
+      styleOf(fabric, 'c')['minHeight'] ?? null,
+      null,
+      'and with no space after the colon',
     );
   });
 });
