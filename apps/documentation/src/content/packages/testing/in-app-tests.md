@@ -294,8 +294,8 @@ points)` gives the colours themselves.
 ## Turning animations off
 
 Animations play in a device test as they do in the app. `setAnimations(false)` turns off the
-ones listed below from the next change on, so what a test reads or captures is where each of
-those changes ends:
+ones listed below from the next change on (Android's animators only where Android accepts the
+call, which it reports), so what a test reads or captures is where each of those changes ends:
 
 ```ts
 import { Component, signal } from '@angular/core';
