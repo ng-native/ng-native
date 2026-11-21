@@ -34,7 +34,15 @@ module.exports = withDeviceTests(config);
 ```ts
 if (process.env.EXPO_PUBLIC_DEVICE_TESTS) {
   const { startDeviceTests } = require('@ng-native/testing/device/host');
-  startDeviceTests({ mount: mountOptions });
+  startDeviceTests({
+    mount: mountOptions,
+    // What the app's runnable does after mount, for the host too: here, following rotation,
+    // the theme and reduced motion.
+    onMount: (app) => {
+      const stopWatching = watchConditions(app.engine);
+      app.applicationRef.onDestroy(stopWatching);
+    },
+  });
 } else {
   // The app's own runnable, moved here whole, with all it does after mount (such as
   // watchConditions), and only outside the tests: a second registration of 'main' would replace
