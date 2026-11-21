@@ -40,8 +40,9 @@ if (process.env.EXPO_PUBLIC_DEVICE_TESTS) {
     require('@ng-native/testing/device/host') as typeof import('@ng-native/testing/device/host');
   startDeviceTests({
     mount: mountOptions,
-    // What the app's runnable does after mount, for the host too: here, following rotation,
-    // the theme and reduced motion.
+    // What the app's runnable does after mount, for the host too, with the same options (such as
+    // { darkClass: false }), or no onMount if the app does nothing: here, following rotation, the
+    // theme and reduced motion.
     onMount: (app) => {
       const stopWatching = watchConditions(app.engine);
       app.applicationRef.onDestroy(stopWatching);
