@@ -152,3 +152,14 @@ describe('a CSS colour against the integer native is given', () => {
     );
   });
 });
+
+describe("a fraction of an rgb() channel, as React Native's processColor reads it", () => {
+  it('drops it, where alpha and hsl() channels are rounded', () => {
+    const red = (r: number) => ({
+      props: { backgroundColor: ((0xff << 24) | (r << 16) | (102 << 8) | 204) >>> 0 },
+    });
+    const want = { backgroundColor: 'rgba(51.8, 102, 204, 1)' };
+    assert.deepEqual(styleMismatches(red(51) as unknown as FakeFabricNode, want), []);
+    assert.equal(styleMismatches(red(52) as unknown as FakeFabricNode, want).length, 1);
+  });
+});

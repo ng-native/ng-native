@@ -14,12 +14,20 @@ export function rgba(value: unknown): Rgba | null {
     const argb = value >>> 0;
     return [(argb >>> 16) & 255, (argb >>> 8) & 255, argb & 255, (argb >>> 24) / 255];
   }
-  return parseColor(value);
+  const colour = parseColor(value);
+  // As React Native's processColor reads one: an `rgb()` channel's fraction is dropped (its
+  // `parseInt`), where alpha and the channels `hsl()` and `hwb()` give are rounded.
+  if (colour && typeof value === 'string' && /^\s*rgba?\(/i.test(value)) {
+    const [red, green, blue, alpha] = colour;
+    return [Math.trunc(red), Math.trunc(green), Math.trunc(blue), alpha];
+  }
+  return colour;
 }
 
 /**
  * Whether two colours are within `tolerance` steps of 255 on every channel, alpha included, at the
- * precision native keeps: `processColor` stores whole steps, so `0.5` alpha is 128 and `51.2` is 51.
+ * precision native keeps: whole steps, with alpha `0.5` as 128 (`rgba` has already dropped an
+ * `rgb()` channel's fraction, as `processColor` does).
  */
 export const sameColour = (a: Rgba, b: Rgba, tolerance: number) => {
   const steps = ([red, green, blue, alpha]: Rgba) =>
