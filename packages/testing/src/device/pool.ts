@@ -134,6 +134,8 @@ class DeviceWorker implements PoolWorker {
   private session: Session | null = null;
   /** The pool answered Vitest's `start` itself: the app's own answer is not passed on. */
   private startAnswered = false;
+  /** Vitest's `start`, with the config it carries, which an app the worker relaunches is sent too. */
+  private startRequest: { [key: string]: unknown; type?: string } | null = null;
   private launched: LaunchedApp | null = null;
   private launchedAt = 0;
   /** Settles when the worker has an app to send to: after a start, and after a relaunch. */
@@ -316,6 +318,12 @@ class DeviceWorker implements PoolWorker {
     await launched?.stop();
     if (this.shutdown.signal.aborted) return;
     await this.connect();
+    // The new app has none of the config the old one was started with: it is sent `start` before
+    // any file, and its `started` goes no further, as Vitest has had one.
+    if (this.startRequest && this.session) {
+      this.startAnswered = true;
+      this.bridge.send(this.session, this.startRequest);
+    }
   }
 
   send(message: unknown): void {
@@ -334,6 +342,7 @@ class DeviceWorker implements PoolWorker {
       queueMicrotask(() => this.events.emit('message', response('stopped')));
       return;
     }
+    if (request.type === 'start') this.startRequest = request;
     if (request.type === 'start' && this.options.launch) {
       // Answered at once, as an app being built and booted can take longer than Vitest waits for
       // one; the app is still sent the request, with the config it carries, before any file.

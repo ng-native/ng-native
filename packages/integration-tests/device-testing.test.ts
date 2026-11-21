@@ -762,6 +762,42 @@ describe('the device pool', () => {
     }
   });
 
+  it('sends start again to the app it relaunches, before any file, and Vitest hears it once', async () => {
+    const { launch, launches } = fakeLauncher();
+    const run = await setup({ launch });
+    try {
+      const { worker, messages } = run.worker();
+      const starting = worker.start();
+      const config = { root: run.root };
+      worker.send(request('start', { config }) as never);
+      const first = run.app('one');
+      assert.equal((await first.poll())?.type, 'start');
+      await starting;
+      // Started, then its process ends with nothing owed, as an app that crashes between files.
+      void first
+        .poll({ reply: { __vitest_worker_response__: true, type: 'started' } })
+        .catch(() => {});
+      await wait(50);
+      launches[0]!.exit('signal SIGKILL');
+      await wait(50);
+      assert.equal(launches.length, 2, 'a new app for the files to come');
+      const second = await Promise.race([
+        run.app('two').poll(),
+        wait(2000).then(() => ({ type: 'nothing' })),
+      ]);
+      assert.equal(second?.type, 'start', 'the new app is told the config before any file');
+      assert.deepEqual((second as { context?: unknown }).context, { config });
+      const types = messages.map((message) => (message as { type?: string }).type);
+      assert.deepEqual(
+        types.filter((type) => type === 'started'),
+        ['started'],
+        'Vitest hears started once',
+      );
+    } finally {
+      await run.done();
+    }
+  });
+
   it('says the app it launched did not connect, not to open one by hand', async () => {
     const { launch } = fakeLauncher();
     const run = await setup({ launch, connectTimeout: 100 });
