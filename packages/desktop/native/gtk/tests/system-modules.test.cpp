@@ -9,6 +9,7 @@
 #include "mounted-views.h"
 #include "stand-in-portal.h"
 
+#include <adwaita.h>
 #include <doctest/doctest.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/x11/gdkx.h>
@@ -203,6 +204,32 @@ TEST_CASE("DocumentPicker saves through SaveFile with the suggested name, and ch
 
   // A uri that is not a local file is no path.
   CHECK_FALSE(ngn::gtk::pathsOfUris({"https://example.com/a"}));
+}
+
+TEST_CASE("the colour scheme is the desktop's, heard as it changes, and the app's while it overrides it") {
+  REQUIRE(ngn::testing::gtkReady());
+  AdwStyleManager *styles = adw_style_manager_get_default();
+  struct Restore {
+    AdwStyleManager *styles;
+    ~Restore() {
+      adw_style_manager_set_color_scheme(styles, ADW_COLOR_SCHEME_DEFAULT);
+    }
+  } restore{styles};
+  adw_style_manager_set_color_scheme(styles, ADW_COLOR_SCHEME_FORCE_LIGHT);
+  std::vector<std::string> heard;
+  auto system = ngn::gtk::makeSystem("ngn.scheme.test", g_get_tmp_dir(), {}, [&heard](const std::string &scheme) {
+    heard.push_back(scheme);
+  });
+  CHECK(system->colorScheme() == "light");
+  // The desktop goes dark (libadwaita follows the settings portal): the app hears it.
+  adw_style_manager_set_color_scheme(styles, ADW_COLOR_SCHEME_FORCE_DARK);
+  ngn::testing::runUntil([&] { return !heard.empty(); });
+  CHECK(system->colorScheme() == "dark");
+  CHECK(heard.back() == "dark");
+  // And light again.
+  adw_style_manager_set_color_scheme(styles, ADW_COLOR_SCHEME_FORCE_LIGHT);
+  ngn::testing::runUntil([&] { return heard.back() == "light"; });
+  CHECK(system->colorScheme() == "light");
 }
 
 TEST_CASE("The clipboard is GDK's: the app's text is there at once, and another app's arrives as a change") {

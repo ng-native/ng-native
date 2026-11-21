@@ -109,13 +109,19 @@ std::string systemScheme() {
 
 class GtkSystem final : public System {
  public:
-  GtkSystem(const std::string &appId, std::string appData, std::function<void(int64_t)> clipboardChanged)
+  GtkSystem(const std::string &appId, std::string appData, std::function<void(int64_t)> clipboardChanged,
+            std::function<void(const std::string &)> colorSchemeChanged)
       : appData_(std::move(appData)),
         preferences_(makeKeyFileStore(appData_ + "/preferences.ini"), appId, false),
         scheme_(systemScheme()),
-        clipboardChanged_(std::move(clipboardChanged)) {
-    g_signal_connect(adw_style_manager_get_default(), "notify::dark", G_CALLBACK(+[](GObject *, GParamSpec *, gpointer self) {
-      static_cast<GtkSystem *>(self)->scheme_.systemChanged(systemScheme());
+        clipboardChanged_(std::move(clipboardChanged)),
+        colorSchemeChanged_(std::move(colorSchemeChanged)) {
+    g_signal_connect(adw_style_manager_get_default(), "notify::dark", G_CALLBACK(+[](GObject *, GParamSpec *, gpointer data) {
+      auto *self = static_cast<GtkSystem *>(data);
+      self->scheme_.systemChanged(systemScheme());
+      if (self->colorSchemeChanged_) {
+        self->colorSchemeChanged_(self->scheme_.current());
+      }
     }), this);
     if (GdkDisplay *display = gdk_display_get_default()) {
       clipboard_ = GDK_CLIPBOARD(g_object_ref(gdk_display_get_clipboard(display)));
@@ -265,6 +271,7 @@ class GtkSystem final : public System {
   JsonPreferences preferences_;
   ColorSchemeOverride scheme_;
   std::function<void(int64_t)> clipboardChanged_;
+  std::function<void(const std::string &)> colorSchemeChanged_;
   GdkClipboard *clipboard_{nullptr};
   std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
   // Reads started, on the main context.
@@ -320,8 +327,9 @@ bool canOpenUri(const std::string &uri, bool sandboxed, const std::function<bool
   return sandboxed || hasHandler(name);
 }
 
-std::shared_ptr<System> makeSystem(const std::string &appId, const std::string &appDataDirectory, std::function<void(int64_t)> clipboardChanged) {
-  return std::make_shared<GtkSystem>(appId, appDataDirectory, std::move(clipboardChanged));
+std::shared_ptr<System> makeSystem(const std::string &appId, const std::string &appDataDirectory, std::function<void(int64_t)> clipboardChanged,
+                                   std::function<void(const std::string &)> colorSchemeChanged) {
+  return std::make_shared<GtkSystem>(appId, appDataDirectory, std::move(clipboardChanged), std::move(colorSchemeChanged));
 }
 
 std::shared_ptr<StringStore> makeKeyFileStore(const std::string &path) {
