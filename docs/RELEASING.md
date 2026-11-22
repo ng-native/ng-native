@@ -13,14 +13,13 @@ one version. `.github/workflows/release.yml` does it, run by hand from the Actio
    organization `ng-native`, repository `ng-native`, workflow `release.yml`. The release publishes
    through OIDC and no npm token is stored anywhere. The first release must be above `0.0.1`:
    `0.1.0`, or a `minor` bump.
-4. **Set up the release App.** `main` takes changes only through pull requests, and the release
-   commit is the one exception: the "Protect main" ruleset lets the `ng-native-release` GitHub App
-   push past it, and nothing else. The App is owned by the `ng-native` organization, installed on
-   this repository only, and asks for contents read and write, beside the metadata read every App
-   has. The `release` environment, which only `main` can deploy to, holds its client ID as the
-   variable `RELEASE_APP_CLIENT_ID` and its private key as the secret `RELEASE_APP_PRIVATE_KEY`.
-   The release job asks for a token from them before anything is published, so a missing App or key
-   stops it with nothing on npm.
+4. **Set up the release App.** The release commit goes straight to `main`, past the "Protect main"
+   ruleset, which lets the `ng-native-release` GitHub App through and nothing else. The App is
+   owned by the `ng-native` organization, installed on this repository only, and asks for contents
+   read and write, beside the metadata read every App has. The `release` environment, which only
+   `main` can deploy to, holds its client ID as the variable `RELEASE_APP_CLIENT_ID` and its private
+   key as the secret `RELEASE_APP_PRIVATE_KEY`. The release job asks for a token from them before
+   it publishes, so a missing App or key stops a run before it publishes anything.
 
 ## Adding a package
 
@@ -164,10 +163,10 @@ Once `@ng-native/desktop` is out, finish with **Re-run failed jobs** on the same
 `prebuilt.json` names that run's desktop hosts by SHA-256, a new run builds others, and the release
 job stops rather than attach archives the published package would refuse.
 
-A missing App installation, client ID or key fails the release job's first step, before anything is
-published. A push refused after publishing, when the rebase went through, means the App is no longer
-a bypass actor on the "Protect main" ruleset: add it back, then **Re-run failed jobs**. To replace
-its key, generate a new one on the App's settings page, set it with `gh secret set
+A missing App installation, client ID or key fails the release job's first step, before that run
+publishes anything. A push refused after publishing, when the rebase went through, means the App is
+no longer a bypass actor on the "Protect main" ruleset: add it back, then **Re-run failed jobs**. To
+replace its key, generate a new one on the App's settings page, set it with `gh secret set
 RELEASE_APP_PRIVATE_KEY --env release < key.pem`, delete the file and revoke the old key.
 
 ## Checking distribution locally

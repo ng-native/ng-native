@@ -215,10 +215,9 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      # Pushes to `main` need a pull request, except from the release App, which the ruleset lets
-      # through. Its token comes first, so a missing App or key stops the release before anything
-      # is published, and lives an hour, far longer than this job takes.
-      - id: app-token
+      # Only the release App gets past the ruleset on `main`. A token first, so a missing App or key
+      # stops the run before it publishes anything; the push mints its own, as one lives an hour.
+      - name: Check the release App
         if: ${{ !inputs.dry_run }}
         uses: actions/create-github-app-token@v3
         with:
@@ -339,6 +338,14 @@ jobs:
             fi
             npm publish "$tarball" "$DRY_RUN" --access public --tag '${{ steps.version.outputs.tag }}'
           done
+
+      - id: app-token
+        if: ${{ !inputs.dry_run }}
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
 
       - name: Push the version commit and tag
         if: ${{ !inputs.dry_run }}
