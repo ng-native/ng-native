@@ -37,5 +37,12 @@ export class InlineTransform {
     { id: 'zero-z-unit', turned: true, value: 'translate3d(4px, 8px, 0em)' },
     { id: 'one-of-three', turned: true, value: 'scale3d(2)' },
     { id: 'two-of-three', turned: true, value: 'translate3d(4px, 8px)' },
+    { id: 'unspaced', turned: true, value: 'translate(4px,8px)rotate(90deg)' },
+    { id: 'separators', turned: true, value: 'translate( 4px ,\t8px ) scale(2)' },
+    { id: 'math', turned: true, value: 'translate(calc(2px + 2px), 8px) rotate(calc(45deg * 2))' },
+    { id: 'fractions', turned: true, value: 'translateX(-.5px) rotate(.5turn)' },
+    { id: 'spelt', turned: true, value: 'translateX(+4PX) translateY(1e1px) scale(1E-1)' },
+    { id: 'empty-argument', turned: true, value: 'rotate( , )' },
+    { id: 'left-open', turned: true, value: 'translate(4px, 8px) rotate(90deg' },
   ];
 }

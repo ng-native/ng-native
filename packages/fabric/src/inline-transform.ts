@@ -41,12 +41,14 @@ const AXES: Readonly<Record<string, readonly [string, string]>> = {
   skew: ['skewX', 'skewY'],
 };
 
-const PX = /^-?\d*\.?\d+(px)?$/;
+/** A number, or a length in pixels: signed, with an exponent, its unit in any case, as CSS reads one. */
+const PX = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?(?:px)?$/i;
 /** A transform function's argument: a number, a length, an angle or a percentage. */
 const ARGUMENT = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:%|[a-z]+)?$/i;
 /** CSS whitespace: a space, a tab, a newline, a carriage return or a form feed, and no other. */
 const SEPARATOR = /[ \t\n\r\f,]/;
-const PADDED = /^[ \t\n\r\f]+|[ \t\n\r\f]+$/g;
+const SEPARATORS = /[ \t\n\r\f,]+/;
+const NONE = /^[ \t\n\r\f]*none[ \t\n\r\f]*$/i;
 const CALL = /([a-zA-Z0-9]+)\(/y;
 /** Whether a value could hold a length measured where it is used, without reading it. */
 const MEASURED = /\d(?:em|vw|vh|vmin|vmax)/i;
@@ -93,6 +95,8 @@ function mathArgument(slot: MathValue['type'], math: MathValue): Argument | unde
 
 /** An argument as native takes it, or undefined for one CSS does not read in this function. */
 function argument(name: string, raw: string): Argument | undefined {
+  // Nearly every argument: a number of pixels, which needs none of the reads below.
+  if (PX.test(raw)) return parseFloat(raw);
   if (MATH_FUNCTION.test(raw)) {
     const math = mathValue(raw);
     return math && mathArgument(slotOf(name), math);
@@ -101,7 +105,7 @@ function argument(name: string, raw: string): Argument | undefined {
   const relative = RELATIVE.exec(raw);
   if (relative && slotOf(name) !== 'length') return undefined;
   if (relative) return measured(relative[2]!.toLowerCase() as RelativeUnit, Number(relative[1]));
-  return PX.test(raw) ? parseFloat(raw) : raw;
+  return raw;
 }
 
 /**
@@ -117,6 +121,8 @@ function onAView(name: string, args: readonly Argument[]): boolean {
 
 /** The arguments in a function's body, split on whitespace and commas outside its brackets. */
 function argumentsIn(body: string): string[] {
+  // Nearly every body: no math function, so nothing in brackets to keep whole.
+  if (!body.includes('(')) return body.split(SEPARATORS).filter(Boolean);
   const parts: string[] = [];
   let part = '';
   let depth = 0;
@@ -136,6 +142,9 @@ function argumentsIn(body: string): string[] {
 
 /** Where the bracket closes that is open at `from`, or -1. */
 function closing(text: string, from: number): number {
+  const close = text.indexOf(')', from);
+  const open = text.indexOf('(', from);
+  if (open === -1 || open > close) return close;
   let depth = 1;
   for (let at = from; at < text.length; at++) {
     if (text[at] === '(') depth++;
@@ -144,12 +153,33 @@ function closing(text: string, from: number): number {
   return -1;
 }
 
+/**
+ * A function's arguments as `reader` reads them, or undefined for none or one it cannot read. A
+ * loop, not `map`: this reads every bound transform, each frame of an animation. Each is read, an
+ * unreadable one too, as `transformMathRefused` asks of every one.
+ */
+function argumentsRead(
+  name: string,
+  raw: readonly string[],
+  reader: (name: string, raw: string) => Argument | undefined,
+): Argument[] | undefined {
+  const args: Argument[] = [];
+  let readable = raw.length > 0;
+  for (const part of raw) {
+    const read = reader(name, part);
+    if (read === undefined) readable = false;
+    else args.push(read);
+  }
+  return readable ? args : undefined;
+}
+
 /** Each function and its arguments, or undefined where anything else is in the value. */
 function readCalls(
   value: string,
-  read: (name: string, raw: string) => Argument | undefined = argument,
+  reader: (name: string, raw: string) => Argument | undefined = argument,
 ): { name: string; args: Argument[] }[] | undefined {
   const calls: { name: string; args: Argument[] }[] = [];
+  let flat = true;
   const cursor = { text: value, at: 0 };
   for (;;) {
     match(cursor, SPACE);
@@ -159,13 +189,12 @@ function readCalls(
     if (!name) return undefined;
     const end = closing(value, cursor.at);
     if (end === -1) return undefined;
-    const raw = argumentsIn(value.slice(cursor.at, end));
-    const args = raw.map((part) => read(name, part));
-    if (!raw.length || args.includes(undefined)) return undefined;
-    calls.push({ name, args: args as Argument[] });
+    const args = argumentsRead(name, argumentsIn(value.slice(cursor.at, end)), reader);
+    if (!args) return undefined;
+    if (name in THREE_D && !onAView(name, args)) flat = false;
+    calls.push({ name, args });
     cursor.at = end + 1;
   }
-  const flat = calls.every(({ name, args }) => !(name in THREE_D) || onAView(name, args));
   return calls.length && flat ? calls : undefined;
 }
 
@@ -196,10 +225,15 @@ export function transformList(value: string): TransformEntry[] | undefined {
   return list && !hasMeasured(list) ? (list as TransformEntry[]) : undefined;
 }
 
-const hasMeasured = (list: readonly object[]): boolean =>
-  list.some((entry) =>
-    Object.values(entry).some((value) => typeof value === 'object' && '__defer' in value),
-  );
+function hasMeasured(list: readonly object[]): boolean {
+  for (const entry of list) {
+    for (const key in entry) {
+      const value = (entry as Record<string, unknown>)[key];
+      if (typeof value === 'object' && value !== null && '__defer' in value) return true;
+    }
+  }
+  return false;
+}
 
 /** The list of a transform with a length to measure where it is used; undefined for any other. */
 export function measuredTransform(value: string): readonly object[] | undefined {
@@ -210,7 +244,7 @@ export function measuredTransform(value: string): readonly object[] | undefined 
 
 function listOf(value: string): object[] | undefined {
   const out: object[] = [];
-  if (value.replace(PADDED, '').toLowerCase() === 'none') return out;
+  if (NONE.test(value)) return out;
   const calls = readCalls(value);
   if (!calls) return undefined;
   for (const { name, args } of calls) {

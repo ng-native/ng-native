@@ -888,6 +888,34 @@ export class MathRefused {
     }
   });
 
+  it('counts no bracket in quotes as one left open, past a quote escaped in them', async () => {
+    const FAMILIES = ['"Fo(o"', '"Fo\\"(o"', "'Fo(o'"];
+    const views = FAMILIES.map(
+      (_, i) =>
+        `<view nativeID="f${i}"><text nativeID="t${i}" [style.fontFamily]="rows[${i}]">x</text></view>`,
+    ).join('');
+    const mod = await build(
+      'quoted-bracket',
+      `
+import { Component } from '@angular/core';
+import { Text } from '../components/src/text.ts';
+import { View } from '../components/src/view.ts';
+@Component({
+  selector: 'x-quoted-bracket',
+  imports: [Text, View],
+  template: '${views}',
+})
+export class QuotedBracket {
+  readonly rows = ${JSON.stringify(FAMILIES)};
+}
+`,
+    );
+    const { fabric } = await render(mod['QuotedBracket'] as Type<unknown>);
+    const family = (i: number) => styleOf(fabric, `t${i}`, ['fontFamily'])['fontFamily'];
+    // A bracket counted in quotes would be closed after them, and the family would keep them.
+    assert.deepEqual([0, 1, 2].map(family), ['Fo(o', 'Fo"(o', 'Fo(o']);
+  });
+
   it('drops a transform CSS refuses', async () => {
     const REFUSED = [
       'scale(calc(1px + 1px))',
