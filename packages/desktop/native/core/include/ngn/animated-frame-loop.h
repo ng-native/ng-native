@@ -25,7 +25,10 @@ class AnimatedFrameLoop {
   // Any thread. `render` runs on the UI thread once each display frame until `stop`. A start while
   // running replaces the callback.
   void start(std::function<void()> render);
-  // Any thread, the render itself too.
+  // Any thread, the render itself too. The loop runs while it has had more starts than stops, as
+  // React Native's manager makes them in turn but they can come out of order: a start that
+  // overtakes the stop before it keeps the loop running, and a stop that overtakes its start
+  // leaves it stopped.
   void stop();
   // Any thread but the render's: stops the loop for good, once a render running on another thread
   // has returned. A reload closes it before it destroys the ReactHost whose manager renders here.

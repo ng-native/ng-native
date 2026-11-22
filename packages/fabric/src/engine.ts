@@ -9544,11 +9544,13 @@ export class Engine implements HostEngine {
     }
     // A declaration of paint alone, on a node nothing else changed on since it was committed, can
     // be patched into what it committed: see `patchedPaint`.
-    const patch = paintPatchWith(node, key);
+    // Noted before the marking, which leaves it: a listener the marking calls (`onDirty`) may
+    // change the node, and what it changes clears the patch as any other change does.
+    keepPaintPatch(node, paintPatchWith(node, key));
     // As `setProp` restyles for a new style object: a child that takes one of its values, an
     // `inherit`, follows the one changed in place too.
-    this.markProps(node, this.inlineReachesStyle(node) || node.styleCache?.heirs === true);
-    keepPaintPatch(node, patch);
+    const heirs = this.inlineReachesStyle(node) || node.styleCache?.heirs === true;
+    this.markProps(node, heirs, true, Boolean(node.paintPatch));
     this.markParagraph(node);
   }
 
@@ -9675,10 +9677,11 @@ export class Engine implements HostEngine {
 
   // --- dirty marking ----------------------------------------------------
 
-  private markProps(node: EngineNode, affectsStyle = true, beside = true): void {
+  /** `patched`: the change is one `paintPatch` already notes, which the marking leaves. */
+  private markProps(node: EngineNode, affectsStyle = true, beside = true, patched = false): void {
     // `dirtyProps`, written out: this runs for every change to every node.
     node.propsDirty = true;
-    if (node.paintPatch) node.paintPatch = false;
+    if (node.paintPatch && !patched) node.paintPatch = false;
     // Classes, `nativeID` and anything else a selector can read live in props, so any of them
     // changing can change what this node matches, and through it what its whole subtree does.
     // Marking only when it can is what keeps an animated `[style]` from re-cascading everything
@@ -13114,6 +13117,9 @@ export class Engine implements HostEngine {
     for (const key of keys) {
       const value = passed.has(key) ? patchedValue(node, key, style[key]) : undefined;
       if (value === undefined) return null;
+      // A transform that comes or goes makes or unmakes the box a containing block, which the
+      // merge commits as its position: see `gridLayout`.
+      if (key === 'transform' && given(value) !== given(committed[key])) return null;
       patched[key] = value;
     }
     return this.dev ? this.checkedPatch(node, patched) : patched;

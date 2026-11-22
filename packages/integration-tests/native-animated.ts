@@ -24,7 +24,10 @@ const READS: Readonly<Record<string, readonly string[]>> = {
   transform: ['transforms'],
   tracking: ['animationId', 'toValue', 'value', 'animationConfig'],
   frames: ['frames', 'toValue'],
-  spring: ['stiffness', 'damping', 'mass', 'initialVelocity', 'overshootClamping'],
+  spring: [
+    ...['stiffness', 'damping', 'mass', 'initialVelocity', 'overshootClamping', 'toValue'],
+    ...['restSpeedThreshold', 'restDisplacementThreshold'],
+  ],
   decay: ['deceleration', 'velocity'],
 };
 

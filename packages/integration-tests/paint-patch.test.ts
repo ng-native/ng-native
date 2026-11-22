@@ -185,3 +185,81 @@ describe('paint bound on a view a generated sheet hides', () => {
     assert.equal(fabric.committed[0]!.props['opacity'], 0);
   });
 });
+
+describe('paint bound on a view whose dirty listener changes another of its props', () => {
+  it('merges the prop the listener set, rather than patching the paint alone', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { dev: false });
+    const view = engine.createElement('view');
+    const own: Record<string, unknown> = { opacity: 0 };
+    view.ownStyle = own;
+    engine.setProp(view, 'style', own);
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    // The host hears the tree go dirty as the paint changes, and changes the view on the way.
+    let once = true;
+    engine.setOnDirty(() => {
+      if (!once) return;
+      once = false;
+      engine.setProp(view, 'pointerEvents', 'none');
+    });
+    own['opacity'] = 0.5;
+    engine.styleChanged(view, 'opacity');
+    engine.commit();
+    assert.equal(once, false, 'the listener ran');
+    assert.equal(fabric.committed[0]!.props['opacity'], 0.5);
+    assert.equal(fabric.committed[0]!.props['pointerEvents'], 'none');
+  });
+});
+
+describe('a bound transform that makes or unmakes a containing block', () => {
+  // A transform makes a static box what its absolute boxes are placed against, which Yoga knows
+  // only as a position: the merge commits it `relative`, its insets dropped, while it has one, and
+  // static, with them, once it goes.
+  const box = (transform: string) => ({ position: 'static', left: 5, transform });
+  const commitWith = (first: string, then: string) => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { dev: false });
+    const view = engine.createElement('view');
+    const own: Record<string, unknown> = box(first);
+    view.ownStyle = own;
+    engine.setProp(view, 'style', own);
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    own['transform'] = then;
+    engine.styleChanged(view, 'transform');
+    engine.commit();
+    return fabric.committed[0]!.props;
+  };
+  const mergedWith = (transform: string) => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { dev: false });
+    const view = engine.createElement('view');
+    engine.setProp(view, 'style', box(transform));
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    const { position, left } = fabric.committed[0]!.props;
+    return { position, left };
+  };
+  const placed = (props: Record<string, unknown>) => ({
+    position: props['position'],
+    // A null removes the inset committed before, as no inset commits none.
+    left: props['left'] ?? undefined,
+  });
+
+  it('is merged as the transform goes', () => {
+    assert.deepEqual(mergedWith('none'), { position: 'static', left: 5 });
+    assert.deepEqual(placed(commitWith('translateX(2px)', 'none')), mergedWith('none'));
+  });
+
+  it('is merged as the transform comes', () => {
+    assert.deepEqual(mergedWith('translateX(2px)'), { position: 'relative', left: undefined });
+    assert.deepEqual(placed(commitWith('none', 'translateX(2px)')), mergedWith('translateX(2px)'));
+  });
+
+  it('is patched from one transform to another', () => {
+    const props = commitWith('translateX(2px)', 'translateX(3px)');
+    assert.deepEqual(props['transform'], [{ translateX: 3 }]);
+    assert.deepEqual(placed(props), mergedWith('translateX(3px)'));
+  });
+});

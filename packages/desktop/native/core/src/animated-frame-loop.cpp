@@ -4,7 +4,6 @@
 
 #include <cstdint>
 #include <mutex>
-#include <thread>
 #include <utility>
 
 namespace ngn {
@@ -26,14 +25,13 @@ struct AnimatedFrameLoop::State {
   bool running = false;
   // Closed for good, as its ReactHost goes: a start from the manager that is going does nothing.
   bool closed = false;
-  // While a render runs, and whether a start came during it. React Native clears its own started
-  // flag before it stops the loop from inside its render, so JavaScript can start it again in
-  // between: that start comes before the stop, which must not drop it, or no frame comes and React
-  // Native, taking the loop to be running, never starts it again.
-  bool inRender = false;
-  bool startedInRender = false;
-  // The thread the render runs on: a stop from it is the render's own; one from elsewhere stops.
-  std::thread::id renderThread;
+  // The starts and stops the manager has made. It starts the loop only once it has cleared its own
+  // started flag, and stops it only once it has set it, so the two alternate as it makes them, but
+  // they can come here out of turn: a render clears the flag and then stops the loop, and a start
+  // from JavaScript in between comes first. So the loop runs while there are more starts than
+  // stops, rather than by the last call, whichever thread or render each comes from.
+  std::uint64_t starts = 0;
+  std::uint64_t stops = 0;
   // Stops and closes waiting for a render on another thread to return.
   int waiting = 0;
 };
@@ -56,16 +54,12 @@ void onFrame(const std::weak_ptr<AnimatedFrameLoop::State> &weak, std::uint64_t 
         return;
       }
       render = state->render;
-      state->inRender = true;
-      state->startedInRender = false;
-      state->renderThread = std::this_thread::get_id();
     }
     // Outside the lock: the manager stops the loop from inside its render once nothing animates.
     render();
   }
   {
     std::lock_guard lock(state->mutex);
-    state->inRender = false;
     if (!state->running || state->run != run) {
       return;
     }
@@ -93,8 +87,11 @@ void AnimatedFrameLoop::start(std::function<void()> render) {
     if (state_->closed) {
       return;
     }
+    // A stop that came before the start it answers leaves the loop stopped, and nothing to render.
+    if (++state_->starts <= state_->stops) {
+      return;
+    }
     state_->render = std::move(render);
-    state_->startedInRender = state_->startedInRender || state_->inRender;
     if (state_->running) {
       return;
     }
@@ -109,10 +106,9 @@ void AnimatedFrameLoop::stop() {
   std::function<void()> released;
   {
     std::lock_guard lock(state_->mutex);
-    // A stop from a render that a start overtook: what the start asked for stands, and the loop goes
-    // on with it. Not once closed, which stops it whatever came before.
-    bool ownRender = state_->inRender && state_->renderThread == std::this_thread::get_id();
-    if (ownRender && state_->startedInRender && !state_->closed) {
+    // A stop a later start overtook: what the start asked for stands, and the loop goes on with it.
+    // Not once closed, which stops it whatever is due.
+    if (++state_->stops < state_->starts && !state_->closed) {
       return;
     }
     state_->running = false;

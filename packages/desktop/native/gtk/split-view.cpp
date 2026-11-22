@@ -75,6 +75,19 @@ namespace ngn::gtk {
 
 namespace {
 
+// The label of the item the app selects in a list, or null where it selects none.
+const char *selectedLabel(const SourceList &list) {
+  auto chosen = selectedRow(list);
+  for (const auto &group : list.groups) {
+    for (const auto &row : group.rows) {
+      if (chosen == row.tag) {
+        return row.label.c_str();
+      }
+    }
+  }
+  return nullptr;
+}
+
 void send(const ViewData *d, const char *name, folly::dynamic payload) {
   if (d && d->emitter) {
     d->emitter->dispatchEvent(name, std::move(payload), RawEvent::Category::Discrete);
@@ -438,11 +451,10 @@ void SplitViews::host(Split &s, Tag pane) {
   backend_.hostView(pane, slot);
   backend_.hooks.containerRoot(pane, true);
   backend_.hooks.attachInput(slot, s.surfaceId, pane);
-  // A sidebar whose list was filled before it came here titles the content now.
-  if (auto l = lists_.find(pane); sidebar && l != lists_.end()) {
-    for (GtkWidget *box : l->second.boxes) {
-      titleContent(box, gtk_list_box_get_selected_row(GTK_LIST_BOX(box)));
-    }
+  // A sidebar whose lists were filled before it came here titles the content now: its own, and
+  // those of views within it, which are kept by their own tags.
+  if (GtkWidget *widget = sidebar ? backend_.view(pane) : nullptr) {
+    titleContent(widget, nullptr);
   }
 }
 
@@ -701,6 +713,9 @@ void SplitViews::select(Lists &l, size_t index) {
     }
   }
   if (gtk_list_box_get_selected_row(GTK_LIST_BOX(box)) == row) {
+    // No row changes, so none says so: an item selected or not in a folded section has no row,
+    // but titles the content all the same.
+    titleContent(box, row);
     return;
   }
   l.syncing = true;
@@ -862,14 +877,19 @@ void SplitViews::titleContent(GtkWidget *within, GtkListBoxRow * /*row*/) {
     // The sidebar's selected row, whichever of its lists holds it, not the row of the list that
     // asked: a list with nothing selected, filled after the one that has it, would clear the title.
     // The app selects one row in a sidebar; were there more, the first list's would title it.
+    // A row the user picked, before the app hears of it, or else the item the app selects, which a
+    // folded section shows no row for.
     const char *label = nullptr;
     for (const auto &[parent, l] : lists_) {
-      for (GtkWidget *box : l.boxes) {
-        if (label || !(box == pane || gtk_widget_is_ancestor(box, pane))) {
+      for (size_t i = 0; i < l.boxes.size() && !label; i++) {
+        GtkWidget *box = l.boxes[i];
+        if (!(box == pane || gtk_widget_is_ancestor(box, pane))) {
           continue;
         }
         if (GtkListBoxRow *selected = gtk_list_box_get_selected_row(GTK_LIST_BOX(box))) {
           label = static_cast<const char *>(g_object_get_data(G_OBJECT(selected), "ngn-label"));
+        } else if (i < l.lists.size()) {
+          label = selectedLabel(l.lists[i]);
         }
       }
     }

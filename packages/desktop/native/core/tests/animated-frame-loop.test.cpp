@@ -194,9 +194,55 @@ TEST_CASE("AnimatedFrameLoop keeps a start that arrives while a render is stoppi
   CHECK(second == 2);
 }
 
-TEST_CASE("AnimatedFrameLoop's stop from another thread stops it, though a start came during the render") {
-  // Only the render's own stop is one a start overtook: a stop from elsewhere stops the loop, and
-  // waits for the render, as it would with no start.
+TEST_CASE("AnimatedFrameLoop keeps a start that overtakes a stop from a render outside its frames") {
+  // React Native's manager renders outside the loop's frames too, on the layout animation's timer
+  // and as an animation is scheduled on the UI thread, and stops the loop from there, clearing its
+  // flag first. A start that JavaScript makes in between comes before that stop and must outlast
+  // it: the manager calls start only once it has cleared its flag, so the stop is the earlier one's.
+  ngn::AnimationFrames frames;
+  ngn::AnimatedFrameLoop loop(frames);
+  int first = 0;
+  int second = 0;
+  loop.start([&] { ++first; });
+  std::thread javascript([&] { loop.start([&] { ++second; }); });
+  javascript.join();
+  loop.stop();
+  CHECK(loop.running());
+  frames.frame(16);
+  frames.frame(32);
+  CHECK(first == 0);
+  CHECK(second == 2);
+
+  // The start's own stop stops it.
+  loop.stop();
+  CHECK_FALSE(loop.running());
+  frames.frame(48);
+  CHECK(second == 2);
+  CHECK_FALSE(frames.wanted());
+}
+
+TEST_CASE("AnimatedFrameLoop's stop that comes before its start's leaves it stopped") {
+  // The manager's start and stop calls can reach the loop in either order: a stop that overtakes
+  // the start it answers leaves the loop stopped once that start comes.
+  ngn::AnimationFrames frames;
+  ngn::AnimatedFrameLoop loop(frames);
+  int renders = 0;
+  loop.stop();
+  loop.start([&] { ++renders; });
+  CHECK_FALSE(loop.running());
+  frames.frame(16);
+  CHECK(renders == 0);
+
+  // And the next start runs it.
+  loop.start([&] { ++renders; });
+  CHECK(loop.running());
+  frames.frame(32);
+  CHECK(renders == 1);
+}
+
+TEST_CASE("AnimatedFrameLoop's close from another thread stops it, though a start came during the render") {
+  // A start during a render leaves a stop due, which a stop from elsewhere may be: a reload closes
+  // the loop, which stops it whatever is due, and waits for the render.
   ngn::AnimationFrames frames;
   ngn::AnimatedFrameLoop loop(frames);
   int renders = 0;
@@ -214,7 +260,7 @@ TEST_CASE("AnimatedFrameLoop's stop from another thread stops it, though a start
   });
   std::thread ui([&] { frames.frame(16); });
   started.get_future().wait();
-  std::thread other([&] { loop.stop(); });
+  std::thread other([&] { loop.close(); });
   CHECK(waitFor([&] { return loop.waiting() > 0; }));
   finish.set_value();
   other.join();
