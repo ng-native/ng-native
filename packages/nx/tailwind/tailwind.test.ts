@@ -249,43 +249,59 @@ describe('Tailwind 4, by default', () => {
     assert.match(read(tree, 'apps/mobile/src/main.ts'), /app\.tailwind\.js/);
   });
 
-  it('wraps an export whose only withTailwind call is in a branch that may not run', async () => {
+  it('leaves to be done by hand an export that calls withTailwind only where it may not run', async () => {
+    // Its own call may name another input, which a wrapper of this one's would override.
+    for (const exported of [
+      "process.env.PLAIN ? config : withTailwind(config, { input: './src/other.css' })",
+      'fallback(maybeWrap?.(withTailwind(config)))',
+      'withTailwind?.(config)',
+    ]) {
+      const tree = await integrated();
+      const before = [
+        "const { withTailwind } = require('@ng-native/tailwind/config.cjs');",
+        'const config = {};',
+        `module.exports = ${exported};`,
+        '',
+      ].join('\n');
+      tree.write('apps/mobile/metro.config.js', before);
+      const main = read(tree, 'apps/mobile/src/main.ts');
+      const warnings: string[] = [];
+      const { logger } = require('@nx/devkit') as typeof import('@nx/devkit');
+      const warn = logger.warn;
+      logger.warn = (message: unknown) => void warnings.push(String(message));
+      try {
+        await generate(tree, {});
+      } finally {
+        logger.warn = warn;
+      }
+      assert.equal(read(tree, 'apps/mobile/metro.config.js'), before, exported);
+      assert.equal(read(tree, 'apps/mobile/src/main.ts'), main, exported);
+      assert.ok(
+        warnings.some((message) => /withTailwind/.test(message)),
+        exported,
+      );
+    }
+  });
+
+  it('wraps an export beside a withTailwind required under another name', async () => {
     const tree = await integrated();
     tree.write(
       'apps/mobile/metro.config.js',
       [
         "const { getDefaultConfig } = require('expo/metro-config');",
-        "const { withTailwind } = require('@ng-native/tailwind/config.cjs');",
-        'const config = getDefaultConfig(__dirname);',
-        'module.exports = process.env.PLAIN ? config : withTailwind(config);',
+        "const { withTailwind: tw } = require('@ng-native/tailwind/config.cjs');",
+        'module.exports = getDefaultConfig(__dirname);',
         '',
       ].join('\n'),
     );
     await generate(tree, {});
+    const config = read(tree, 'apps/mobile/metro.config.js');
+    // `tw` is what is bound: withTailwind itself is required, as it is called.
     assert.match(
-      read(tree, 'apps/mobile/metro.config.js'),
-      /^module\.exports = withTailwind\(process\.env\.PLAIN \? config : withTailwind\(config\), \{$/m,
+      config,
+      /^const \{ withTailwind \} = require\('@ng-native\/tailwind\/config\.cjs'\);$/m,
     );
-  });
-
-  it('wraps an export whose withTailwind call is in an optional call that may skip it', async () => {
-    for (const exported of [
-      'fallback(maybeWrap?.(withTailwind(config)))',
-      'withTailwind?.(config)',
-    ]) {
-      const tree = await integrated();
-      tree.write(
-        'apps/mobile/metro.config.js',
-        [
-          "const { withTailwind } = require('@ng-native/tailwind/config.cjs');",
-          `module.exports = ${exported};`,
-          '',
-        ].join('\n'),
-      );
-      await generate(tree, {});
-      const config = read(tree, 'apps/mobile/metro.config.js');
-      assert.ok(config.includes(`module.exports = withTailwind(${exported}, {`), config);
-    }
+    assert.match(config, /^module\.exports = withTailwind\(getDefaultConfig\(__dirname\), \{$/m);
   });
 
   it('leaves an export that runs withTailwind among its calls as it is', async () => {

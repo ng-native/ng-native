@@ -171,6 +171,29 @@ function callsWithTailwind({ ts, source, statement }) {
   return runs(statement.expression.right);
 }
 
+/**
+ * Whether a declaration's name binds `withTailwind` itself: `withTailwind`, or `{ withTailwind }`,
+ * and not `{ withTailwind: tw }`, which binds `tw`.
+ */
+function binds(ts, name) {
+  if (ts.isIdentifier(name)) return name.text === 'withTailwind';
+  if (!ts.isObjectBindingPattern(name) && !ts.isArrayBindingPattern(name)) return false;
+  return name.elements.some(
+    (element) => !ts.isOmittedExpression(element) && binds(ts, element.name),
+  );
+}
+
+/**
+ * Whether the export calls `withTailwind` anywhere in its expression, run or not: a comment or a
+ * string naming it does not count.
+ */
+function namesWithTailwind({ ts, source, statement }) {
+  const calls = (node) =>
+    (ts.isCallExpression(node) && node.expression.getText(source) === 'withTailwind') ||
+    Boolean(ts.forEachChild(node, (child) => calls(child) || undefined));
+  return calls(statement.expression.right);
+}
+
 /** The config with the active export wrapped in `withTailwind`, or null where it would not parse. */
 function wrappedConfig(config, { ts, source, statement }) {
   const expression = statement.expression.right.getText(source);
@@ -180,9 +203,7 @@ function wrappedConfig(config, { ts, source, statement }) {
   const declared = above.some(
     (one) =>
       ts.isVariableStatement(one) &&
-      one.declarationList.declarations.some((declaration) =>
-        /\bwithTailwind\b/.test(declaration.name.getText(source)),
-      ),
+      one.declarationList.declarations.some((declaration) => binds(ts, declaration.name)),
   );
   const required = declared
     ? ''
@@ -224,7 +245,9 @@ function wrapMetroConfig(tree, root) {
   }
   const found = activeExport(config);
   if (found && callsWithTailwind(found)) return true;
-  const wrapped = found && wrappedConfig(config, found);
+  // One that calls it only where it may not run is left as it is: its own call may name another
+  // input, which a wrapper of this one's would override.
+  const wrapped = found && !namesWithTailwind(found) && wrappedConfig(config, found);
   if (!wrapped) {
     byHand(
       file,
