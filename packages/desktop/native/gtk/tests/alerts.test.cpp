@@ -79,6 +79,25 @@ TEST_CASE("a prompt's fields reach the answer, and an alert closed with no respo
   CHECK(std::get<0>(*answer) == 2);
 }
 
+TEST_CASE("a prompt destroyed with no response answers at once, with what its fields held") {
+  // As its window goes: by the next idle the dialog has let go of its fields, which the answer
+  // reads, so it is answered as it is destroyed.
+  REQUIRE(ngn::testing::gtkReady());
+  ngn::AlertRequest request = saveRequest();
+  request.input = ngn::AlertInput::LoginPassword;
+  request.defaultValue = "ashley";
+  std::optional<Answer> answer;
+  ngn::gtk::showAlert(request, [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, nullptr);
+  GtkWidget *alert = ngn::gtk::shownAlert();
+  REQUIRE(alert);
+  GtkWidget *extra = adw_message_dialog_get_extra_child(ADW_MESSAGE_DIALOG(alert));
+  REQUIRE(extra);
+  gtk_editable_set_text(GTK_EDITABLE(gtk_widget_get_next_sibling(gtk_widget_get_first_child(extra))), "secret");
+  gtk_window_destroy(GTK_WINDOW(alert));
+  REQUIRE(answer);
+  CHECK(*answer == Answer{2, "ashley", "secret"});
+}
+
 TEST_CASE("an alert over a window is an AdwAlertDialog in it on libadwaita 1.5, else a dialog over it") {
   REQUIRE(ngn::testing::gtkReady());
   ngn::testing::MountedViews views(true, 400, 300);

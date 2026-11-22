@@ -868,7 +868,7 @@ void SplitViews::fill(Tag parent, Lists &l, size_t index) {
   l.syncing = false;
 }
 
-void SplitViews::titleContent(GtkWidget *within, GtkListBoxRow * /*row*/) {
+void SplitViews::titleContent(GtkWidget *within, GtkListBoxRow *row) {
   for (auto &[tag, s] : splits_) {
     GtkWidget *pane = s.sidebar >= 0 ? backend_.view(s.sidebar) : nullptr;
     if (s.tabs || !pane || !(within == pane || gtk_widget_is_ancestor(within, pane))) {
@@ -879,7 +879,8 @@ void SplitViews::titleContent(GtkWidget *within, GtkListBoxRow * /*row*/) {
     // The app selects one row in a sidebar; were there more, the first list's would title it.
     // A row the user picked, before the app hears of it, or else the item the app selects, which a
     // folded section shows no row for.
-    const char *label = nullptr;
+    // The row just selected, first: another list may still hold the one selected before it.
+    const char *label = row ? static_cast<const char *>(g_object_get_data(G_OBJECT(row), "ngn-label")) : nullptr;
     for (const auto &[parent, l] : lists_) {
       for (size_t i = 0; i < l.boxes.size() && !label; i++) {
         GtkWidget *box = l.boxes[i];

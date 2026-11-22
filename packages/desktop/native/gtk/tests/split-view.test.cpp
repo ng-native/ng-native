@@ -437,6 +437,15 @@ TEST_CASE("a sidebar of two lists titles the content with the selected row, whic
   views.update(inbox, item("Inbox", false));
   views.update(work, item("Work", true));
   CHECK(std::string(adw_navigation_page_get_title(page)) == "Work");
+
+  // Back to Inbox, then the user picks Work, before the app hears of it: the first list still has
+  // Inbox selected, but the row picked is what the title follows.
+  views.update(work, item("Work", false));
+  views.update(inbox, item("Inbox", true));
+  REQUIRE(std::string(adw_navigation_page_get_title(page)) == "Inbox");
+  GtkWidget *second = splits.lists(3)[1];
+  gtk_list_box_select_row(GTK_LIST_BOX(second), GTK_LIST_BOX_ROW(rowsOf(second).back()));
+  CHECK(std::string(adw_navigation_page_get_title(page)) == "Work");
 }
 
 TEST_CASE("a sidebar deleted from its split takes its title off the content") {

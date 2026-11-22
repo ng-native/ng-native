@@ -263,3 +263,29 @@ describe('a bound transform that makes or unmakes a containing block', () => {
     assert.deepEqual(placed(props), mergedWith('translateX(3px)'));
   });
 });
+
+describe('paint bound on a view and changed alone, in a release build', () => {
+  it('is patched into what was committed, with no merge of its props', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { dev: false });
+    const view = engine.createElement('view');
+    const own: Record<string, unknown> = { opacity: 0, transform: 'translateX(1px)' };
+    view.ownStyle = own;
+    engine.setProp(view, 'style', own);
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    const merges = mock.method(engine as unknown as { mergeProps(): unknown }, 'mergeProps');
+    try {
+      own['opacity'] = 0.5;
+      engine.styleChanged(view, 'opacity');
+      own['transform'] = 'translateX(2px)';
+      engine.styleChanged(view, 'transform');
+      engine.commit();
+      assert.equal(merges.mock.callCount(), 0, 'the paint was patched, not merged');
+      assert.equal(fabric.committed[0]!.props['opacity'], 0.5);
+      assert.deepEqual(fabric.committed[0]!.props['transform'], [{ translateX: 2 }]);
+    } finally {
+      merges.mock.restore();
+    }
+  });
+});

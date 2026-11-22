@@ -213,19 +213,30 @@ void showAlert(const AlertRequest &request, std::function<void(int, std::string,
     answer(d, response);
     closeRefused(d);
   }), nullptr);
-  // The answer arrives however it goes, even closed with no response. After the closing call
-  // returns: libadwaita's AdwAlertDialog closes before it emits a clicked button's response, and
-  // with no close animation (animations off, as with reduced motion) "closed" comes first, so
-  // answering at once would answer the cancel button for a click on any other.
-  g_signal_connect(dialog, inWindow ? "closed" : "destroy", G_CALLBACK(+[](GtkWidget *d, gpointer) {
-    if (gLast == d) {
-      gLast = nullptr;
-    }
-    g_idle_add_full(G_PRIORITY_HIGH, +[](gpointer data) -> gboolean {
-      answer(GTK_WIDGET(data), "close");
-      return G_SOURCE_REMOVE;
-    }, g_object_ref(d), g_object_unref);
-  }), nullptr);
+  // The answer arrives however it goes, even closed with no response. Over a window, after the
+  // closing call returns: libadwaita's AdwAlertDialog closes before it emits a clicked button's
+  // response, and with no close animation (animations off, as with reduced motion) "closed" comes
+  // first, so answering at once would answer the cancel button for a click on any other.
+  if (inWindow) {
+    g_signal_connect(dialog, "closed", G_CALLBACK(+[](GtkWidget *d, gpointer) {
+      if (gLast == d) {
+        gLast = nullptr;
+      }
+      g_idle_add_full(G_PRIORITY_HIGH, +[](gpointer data) -> gboolean {
+        answer(GTK_WIDGET(data), "close");
+        return G_SOURCE_REMOVE;
+      }, g_object_ref(d), g_object_unref);
+    }), nullptr);
+  } else {
+    // A message dialog responds before it goes, and lets go of its fields, which the answer
+    // reads, once it is destroyed: it is answered as it is.
+    g_signal_connect(dialog, "destroy", G_CALLBACK(+[](GtkWidget *d, gpointer) {
+      if (gLast == d) {
+        gLast = nullptr;
+      }
+      answer(d, "close");
+    }), nullptr);
+  }
   gLast = dialog;
   if (inWindow) {
     api.present(dialog, GTK_WIDGET(parent));
