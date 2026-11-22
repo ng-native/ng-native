@@ -375,6 +375,54 @@ describe('Tailwind 4, by default', () => {
     assert.match(read(tree, 'apps/mobile/src/main.ts'), /app\.tailwind\.js/);
   });
 
+  for (const [what, lines] of [
+    [
+      'a let it may be rebound',
+      [
+        "let tw = require('@ng-native/tailwind/config.cjs').withTailwind;",
+        'tw = (config) => config;',
+        'const config = tw(getDefaultConfig(__dirname));',
+        'module.exports = config;',
+      ],
+    ],
+    [
+      'a rest element, an object',
+      [
+        "const { ...withTailwind } = require('@ng-native/tailwind/config.cjs');",
+        'module.exports = getDefaultConfig(__dirname);',
+      ],
+    ],
+  ] as const) {
+    it(`leaves a config whose withTailwind is ${what} to be wrapped by hand`, async () => {
+      const tree = await integrated();
+      const config = [
+        "const { getDefaultConfig } = require('expo/metro-config');",
+        ...lines,
+        '',
+      ].join('\n');
+      tree.write('apps/mobile/metro.config.js', config);
+      await generate(tree, {});
+      assert.equal(read(tree, 'apps/mobile/metro.config.js'), config);
+      assert.doesNotMatch(read(tree, 'apps/mobile/src/main.ts'), /app\.tailwind\.js/);
+    });
+  }
+
+  it("leaves an export that calls the package's withTailwind off its require as it is", async () => {
+    const tree = await integrated();
+    const config = [
+      "const { getDefaultConfig } = require('expo/metro-config');",
+      "module.exports = require('@ng-native/tailwind/config.cjs').withTailwind(getDefaultConfig(__dirname), {",
+      "  input: './src/app.css',",
+      '});',
+      '',
+    ].join('\n');
+    tree.write('apps/mobile/metro.config.js', config);
+    await generate(tree, {});
+    // Wrapped again, the default input's sheet would overwrite the one its own input builds.
+    assert.equal(read(tree, 'apps/mobile/metro.config.js'), config);
+    assert.match(read(tree, 'apps/mobile/src/main.ts'), /app\.tailwind\.js/);
+  });
+
   for (const exported of ['config', 'withDeviceTests(config)', '(config)']) {
     it(`leaves an export of ${exported}, where config is bound to a withTailwind call, as it is`, async () => {
       const tree = await integrated();

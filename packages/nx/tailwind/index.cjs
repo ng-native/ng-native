@@ -197,29 +197,35 @@ function requiresTailwindConfig(ts, node) {
 /**
  * The names the package's `withTailwind` is called by in a config: its own, and any it is bound to
  * at the top, `tw` of `const { withTailwind: tw } = require('@ng-native/tailwind/config.cjs')`, with
- * whether `withTailwind` is bound at the top to anything else (`foreign`). One destructured from
- * anything else is not the one that builds the sheet, and nor is a `withTailwind` of the config's
- * own, which leaves it out.
+ * whether `withTailwind` is bound at the top to anything else, or the package's is bound by a
+ * `let` or `var` (`foreign`). One destructured from anything else is not the one that builds the
+ * sheet, and nor is a `withTailwind` of the config's own, which leaves it out.
  */
 function namesOfWithTailwind(ts, statements) {
   const names = new Set();
   let foreign = false;
   for (const statement of statements) {
-    if (
-      (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) &&
-      statement.name?.text === 'withTailwind'
-    ) {
-      foreign = true;
-    }
+    if (declaresOwnWithTailwind(ts, statement)) foreign = true;
     if (!ts.isVariableStatement(statement)) continue;
+    // A `let` or `var` may be bound to something else later: which it calls is not certain.
+    const constant = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0;
     for (const { name, initializer } of statement.declarationList.declarations) {
       const packages = packageBindings(ts, name, initializer);
-      for (const bound of packages) names.add(bound);
+      if (constant) for (const bound of packages) names.add(bound);
+      else if (packages.length) foreign = true;
       if (binds(ts, name) && !packages.includes('withTailwind')) foreign = true;
     }
   }
   if (!foreign) names.add('withTailwind');
   return { names, foreign };
+}
+
+/** Whether a statement is a function or class of the config's own named `withTailwind`. */
+function declaresOwnWithTailwind(ts, statement) {
+  return (
+    (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) &&
+    statement.name?.text === 'withTailwind'
+  );
 }
 
 /**
@@ -229,19 +235,30 @@ function namesOfWithTailwind(ts, statements) {
  * `withTailwind`.
  */
 function packageBindings(ts, name, initializer) {
-  if (ts.isIdentifier(name)) {
-    const property =
-      initializer !== undefined &&
-      ts.isPropertyAccessExpression(initializer) &&
-      initializer.name.text === 'withTailwind' &&
-      requiresTailwindConfig(ts, initializer.expression);
-    return property ? [name.text] : [];
-  }
+  if (ts.isIdentifier(name)) return readsWithTailwind(ts, initializer) ? [name.text] : [];
   if (!ts.isObjectBindingPattern(name) || !requiresTailwindConfig(ts, initializer)) return [];
-  return name.elements
-    .filter((element) => (element.propertyName ?? element.name).getText() === 'withTailwind')
-    .filter((element) => ts.isIdentifier(element.name))
-    .map((element) => element.name.text);
+  return (
+    name.elements
+      .filter((element) => (element.propertyName ?? element.name).getText() === 'withTailwind')
+      // `{ ...withTailwind }` binds an object of the rest, not the function.
+      .filter((element) => element.dotDotDotToken === undefined && ts.isIdentifier(element.name))
+      .map((element) => element.name.text)
+  );
+}
+
+/** Whether `node` reads `withTailwind` off the package's require, `require('…').withTailwind`. */
+function readsWithTailwind(ts, node) {
+  return (
+    node !== undefined &&
+    ts.isPropertyAccessExpression(node) &&
+    node.name.text === 'withTailwind' &&
+    requiresTailwindConfig(ts, node.expression)
+  );
+}
+
+/** Whether a call's callee is the package's `withTailwind`: a name bound to it, or read off it. */
+function callsTheWrapper({ ts, source, names }, call) {
+  return names.has(call.expression.getText(source)) || readsWithTailwind(ts, call.expression);
 }
 
 /**
@@ -251,7 +268,8 @@ function packageBindings(ts, name, initializer) {
  * comment or string naming it does not, nor a call in a branch, a function, an optional call, a
  * `let` that may be rebound or anything else that may not run.
  */
-function callsWithTailwind({ ts, source, statement, names, declarations }) {
+function callsWithTailwind(found) {
+  const { ts, statement, declarations } = found;
   const seen = new Set();
   const runs = (node) => {
     if (ts.isParenthesizedExpression(node)) return runs(node.expression);
@@ -263,7 +281,7 @@ function callsWithTailwind({ ts, source, statement, names, declarations }) {
     }
     // An optional call, `wrap?.(x)`, runs neither itself nor its arguments where `wrap` is missing.
     if (!ts.isCallExpression(node) || ts.isOptionalChain(node)) return false;
-    return names.has(node.expression.getText(source)) || node.arguments.some(runs);
+    return callsTheWrapper(found, node) || node.arguments.some(runs);
   };
   return runs(statement.expression.right);
 }
@@ -284,7 +302,8 @@ function binds(ts, name) {
  * Whether the export calls `withTailwind` anywhere in its expression, run or not, or in what a
  * variable it names starts as: a comment or a string naming it does not count.
  */
-function namesWithTailwind({ ts, source, statement, names, declarations }) {
+function namesWithTailwind(found) {
+  const { ts, statement, declarations } = found;
   const seen = new Set();
   const calls = (node) => {
     if (ts.isIdentifier(node) && declarations.has(node.text) && !seen.has(node.text)) {
@@ -292,7 +311,7 @@ function namesWithTailwind({ ts, source, statement, names, declarations }) {
       if (calls(declarations.get(node.text).initializer)) return true;
     }
     return (
-      (ts.isCallExpression(node) && names.has(node.expression.getText(source))) ||
+      (ts.isCallExpression(node) && callsTheWrapper(found, node)) ||
       Boolean(ts.forEachChild(node, (child) => calls(child) || undefined))
     );
   };
