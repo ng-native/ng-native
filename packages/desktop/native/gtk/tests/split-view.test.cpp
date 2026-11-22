@@ -461,6 +461,29 @@ TEST_CASE("a sidebar taken out of its split, not deleted, takes its title off th
   CHECK(std::string(adw_navigation_page_get_title(page)).empty());
 }
 
+TEST_CASE("a sidebar taken out of its split lets go of its input and container root, as one deleted does") {
+  REQUIRE(ngn::testing::gtkReady());
+  Split s;
+  std::vector<Tag> detached;
+  std::vector<std::pair<Tag, bool>> roots;
+  auto &hooks = s.views.backend->hooks;
+  auto detach = hooks.detachInput;
+  auto root = hooks.containerRoot;
+  hooks.detachInput = [&](Tag tag) {
+    detached.push_back(tag);
+    if (detach) detach(tag);
+  };
+  hooks.containerRoot = [&](Tag tag, bool on) {
+    roots.emplace_back(tag, on);
+    if (root) root(tag, on);
+  };
+  s.views.mount({ShadowViewMutation::RemoveMutation(2, s.sidebar, 0)});
+  hooks.detachInput = detach;
+  hooks.containerRoot = root;
+  CHECK(std::find(detached.begin(), detached.end(), s.sidebar.tag) != detached.end());
+  CHECK(std::find(roots.begin(), roots.end(), std::pair<Tag, bool>{s.sidebar.tag, false}) != roots.end());
+}
+
 TEST_CASE("a sidebar deleted from its split takes its title off the content") {
   REQUIRE(ngn::testing::gtkReady());
   Split s;

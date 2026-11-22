@@ -529,6 +529,10 @@ void SplitViews::removed(Tag parent, Tag child) {
   if (auto it = splits_.find(parent); it != splits_.end() && !it->second.tabs && it->second.sidebar == child) {
     Split &s = it->second;
     adw_navigation_page_set_title(adw_navigation_split_view_get_content(ADW_NAVIGATION_SPLIT_VIEW(s.view)), "");
+    // What `host` registered for it, let go here: once the split has forgotten it, `deleted`
+    // would not.
+    backend_.hooks.detachInput(child);
+    backend_.hooks.containerRoot(child, false);
     s.sidebar = -1;
     NGN_PANE_SLOT(s.sidebarSlot)->pane = -1;
     return;
