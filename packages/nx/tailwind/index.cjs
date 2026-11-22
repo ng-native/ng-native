@@ -121,6 +121,18 @@ function byHand(file, what) {
   logger.warn(`Could not update ${file}: ${what}`);
 }
 
+/** Whether `node` is `module.exports`, spelt with a dot or `module['exports']`. */
+function isModuleExports(ts, node) {
+  const target = ts.isPropertyAccessExpression(node)
+    ? node.name.text
+    : ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression)
+      ? node.argumentExpression.text
+      : undefined;
+  return (
+    target === 'exports' && ts.isIdentifier(node.expression) && node.expression.text === 'module'
+  );
+}
+
 /**
  * A Metro config's export: its one top-level `module.exports = <expression>` statement, with the
  * parser it was read with, or null where this cannot tell which export Metro runs.
@@ -150,7 +162,7 @@ function activeExport(config) {
     ts.isExpressionStatement(statement) &&
     ts.isBinaryExpression(statement.expression) &&
     statement.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-    statement.expression.left.getText(source) === 'module.exports';
+    isModuleExports(ts, statement.expression.left);
   const exports = source.statements.filter(isExport);
   if (exports.length !== 1) return null;
   const statement = exports[0];
@@ -205,7 +217,7 @@ function namesOfWithTailwind(ts, statements) {
   const names = new Set();
   let foreign = false;
   for (const statement of statements) {
-    if (declaresOwnWithTailwind(ts, statement)) foreign = true;
+    if (declaresOwnWithTailwind(ts, statement) || rebindsRequire(ts, statement)) foreign = true;
     if (!ts.isVariableStatement(statement)) continue;
     // A `let` or `var` may be bound to something else later: which it calls is not certain.
     const constant = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0;
@@ -218,6 +230,29 @@ function namesOfWithTailwind(ts, statements) {
   }
   if (!foreign) names.add('withTailwind');
   return { names, foreign };
+}
+
+/**
+ * Whether a statement binds `require` to something of the config's own, declared or assigned at the
+ * top: what it then loads may not be the package.
+ */
+function rebindsRequire(ts, statement) {
+  if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) {
+    return statement.name?.text === 'require';
+  }
+  if (ts.isVariableStatement(statement)) {
+    return statement.declarationList.declarations.some(({ name }) =>
+      bindsName(ts, name, 'require'),
+    );
+  }
+  const { expression } = ts.isExpressionStatement(statement) ? statement : {};
+  return (
+    expression !== undefined &&
+    ts.isBinaryExpression(expression) &&
+    expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    ts.isIdentifier(expression.left) &&
+    expression.left.text === 'require'
+  );
 }
 
 /** Whether a statement is a function or class of the config's own named `withTailwind`. */
@@ -239,7 +274,11 @@ function packageBindings(ts, name, initializer) {
   if (!ts.isObjectBindingPattern(name) || !requiresTailwindConfig(ts, initializer)) return [];
   return (
     name.elements
-      .filter((element) => (element.propertyName ?? element.name).getText() === 'withTailwind')
+      .filter((element) => {
+        // `'withTailwind': tw` names it in quotes, which its text keeps.
+        const key = element.propertyName ?? element.name;
+        return (ts.isIdentifier(key) || ts.isStringLiteral(key)) && key.text === 'withTailwind';
+      })
       // `{ ...withTailwind }` binds an object of the rest, not the function.
       .filter((element) => element.dotDotDotToken === undefined && ts.isIdentifier(element.name))
       .map((element) => element.name.text)
@@ -312,10 +351,15 @@ function writesTheSheet({ ts }, call) {
  * and not `{ withTailwind: tw }`, which binds `tw`.
  */
 function binds(ts, name) {
-  if (ts.isIdentifier(name)) return name.text === 'withTailwind';
+  return bindsName(ts, name, 'withTailwind');
+}
+
+/** Whether a declaration's name binds `bound`, itself or in a pattern. */
+function bindsName(ts, name, bound) {
+  if (ts.isIdentifier(name)) return name.text === bound;
   if (!ts.isObjectBindingPattern(name) && !ts.isArrayBindingPattern(name)) return false;
   return name.elements.some(
-    (element) => !ts.isOmittedExpression(element) && binds(ts, element.name),
+    (element) => !ts.isOmittedExpression(element) && bindsName(ts, element.name, bound),
   );
 }
 
@@ -357,7 +401,13 @@ function wrappedConfig(config, { ts, source, statement }) {
     .filter((one) => one.end <= statement.getStart(source) && ts.isVariableStatement(one))
     .filter((one) => /\brequire\(/.test(one.getText(source)))
     .at(-1);
-  const at = last ? last.end : 0;
+  // With none, after the directives that open the file: a `'use strict'` after it is no directive.
+  let prologue = 0;
+  for (const one of source.statements) {
+    if (!ts.isExpressionStatement(one) || !ts.isStringLiteral(one.expression)) break;
+    prologue = one.end;
+  }
+  const at = last ? last.end : prologue;
   const wrapped =
     config.slice(0, at) +
     required +
@@ -406,8 +456,10 @@ function wrapMetroConfig(tree, root) {
   if (!wrapped) {
     byHand(
       file,
-      "wrap its export in withTailwind(config, { input: './src/styles.css' }), from " +
-        "'@ng-native/tailwind/config.cjs'.",
+      "wrap its export in withTailwind(config, { input: './src/styles.css' }) from " +
+        "'@ng-native/tailwind/config.cjs', bound under another name where the file has a " +
+        `withTailwind of its own, then import tailwind from '${SHEET}' in src/main.ts and pass ` +
+        'it to mount as { globalStyles: tailwind }.',
     );
     return false;
   }
