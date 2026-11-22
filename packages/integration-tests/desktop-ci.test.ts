@@ -275,7 +275,12 @@ describe('the compilers the desktop build passes to CMake', () => {
   it('is what build.sh passes to its CMake', () => {
     const script = readFileSync(new URL('build.sh', scripts), 'utf8');
     assert.match(script, /compilers\.sh"\)/);
-    assert.match(script, /\$\{compiler_args\[@\]\+"\$\{compiler_args\[@\]\}"\}/);
+    // In the CMake command itself, its continued lines: the reset before it expands them too.
+    const configure = /^cmake --log-level(?:[^\n]*\\\n)*[^\n]*/m.exec(script)?.[0] ?? '';
+    assert.match(configure, /\$\{compiler_args\[@\]\+"\$\{compiler_args\[@\]\}"\}/);
+    // And the directory is cleared for them first, where it was configured with another.
+    const reset = script.indexOf('"$here/reset-for-compilers.sh" "$BUILD"');
+    assert.ok(reset !== -1 && reset < script.indexOf(configure), 'reset before the CMake command');
   });
 });
 

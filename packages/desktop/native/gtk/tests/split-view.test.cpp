@@ -469,6 +469,16 @@ TEST_CASE("a sidebar taken out of its split lets go of its input and container r
   auto &hooks = s.views.backend->hooks;
   auto detach = hooks.detachInput;
   auto root = hooks.containerRoot;
+  // Put back however the test ends: the hooks below hold this test's locals.
+  struct Restore {
+    ngn::gtk::GtkBackend::Hooks &hooks;
+    std::function<void(Tag)> detach;
+    std::function<void(Tag, bool)> root;
+    ~Restore() {
+      hooks.detachInput = detach;
+      hooks.containerRoot = root;
+    }
+  } restore{hooks, detach, root};
   hooks.detachInput = [&](Tag tag) {
     detached.push_back(tag);
     if (detach) detach(tag);
@@ -478,8 +488,6 @@ TEST_CASE("a sidebar taken out of its split lets go of its input and container r
     if (root) root(tag, on);
   };
   s.views.mount({ShadowViewMutation::RemoveMutation(2, s.sidebar, 0)});
-  hooks.detachInput = detach;
-  hooks.containerRoot = root;
   CHECK(std::find(detached.begin(), detached.end(), s.sidebar.tag) != detached.end());
   CHECK(std::find(roots.begin(), roots.end(), std::pair<Tag, bool>{s.sidebar.tag, false}) != roots.end());
 }

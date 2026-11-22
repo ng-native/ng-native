@@ -931,6 +931,8 @@ export class QuotedBracket {
       // A bracket left open is closed where the value ends, as Chrome closes it, so the one left
       // open here is the math's.
       'translateX(calc(1px + 2)',
+      // A call it cannot read before one whose math it refuses: the refusal is still said.
+      'scale(2px) rotate(calc(2px + 2px))',
     ];
     const views = REFUSED.map(
       (_, i) => `<view nativeID="r${i}" [style.transform]="rows[${i}]"></view>`,
@@ -962,6 +964,7 @@ export class MathTransform {
       assert.ok(said('translateX(calc(1px + 2))'), warnings.join('\n'));
       assert.ok(said('scale(calc(1px + 1px))'), warnings.join('\n'));
       assert.ok(said('translateX(calc(1deg + 1deg))'), warnings.join('\n'));
+      assert.ok(said('scale(2px) rotate(calc(2px + 2px))'), warnings.join('\n'));
       assert.ok(!said('translateX(calc(50% + 1px))'), 'Chrome reads it: nothing to refuse');
       assert.ok(!said('scale(1em)'), 'not a math function');
     } finally {
