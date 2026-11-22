@@ -8,9 +8,12 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 import type { Type } from '@angular/core';
-import type { Engine, EngineNode } from '@ng-native/fabric';
-import { cleanup, render, type FakeFabricNode } from '@ng-native/testing';
+import { createRequire } from 'node:module';
+import { Engine, type EngineNode } from '@ng-native/fabric';
+import { cleanup, createFakeFabric, render, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
+
+const { compileCss } = createRequire(import.meta.url)('@ng-native/metro/css/compile.cjs');
 
 interface Bench {
   opacity: { set(value: number | null): void };
@@ -107,6 +110,16 @@ describe('paint bound on a view and changed alone', () => {
     assert.equal(style('plain')['accessibilityLabel'], 'after');
   });
 
+  it('keeps a styleOverride over the bound value, one it once equalled too', async () => {
+    const plain = bench.plain().nativeElement;
+    const engine = plain.engine as unknown as Engine;
+    engine.setProp(plain, 'styleOverride', { opacity: 1 });
+    await detectChanges();
+    bench.opacity.set(0.5);
+    await detectChanges();
+    assert.equal(style('plain')['opacity'], 1);
+  });
+
   it("takes a rule's value back when the bound one is removed", async () => {
     bench.transform.set('translateX(2px)');
     await detectChanges();
@@ -146,5 +159,29 @@ describe('paint bound on a view a transition eases', () => {
     eased.opacity.set(0.5);
     await result.detectChanges();
     assert.equal(eased.fading().nativeElement.transitions?.get('opacity')?.to, 0.5);
+  });
+});
+
+describe('paint bound on a view a generated sheet hides', () => {
+  it('keeps it unseen, where its own opacity once equalled the hidden one', () => {
+    // `visibility` is read from a generated sheet, Tailwind's `invisible`, as css-visibility.test.ts.
+    const sheet = compileCss('.invisible { visibility: hidden }', 'app.tailwind.css', {
+      generated: true,
+    });
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as never, dev: false });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 'invisible');
+    // The element's own style, as the renderer sets it for \`[style.opacity]\`.
+    const own: Record<string, unknown> = { opacity: 0 };
+    view.ownStyle = own;
+    engine.setProp(view, 'style', own);
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['opacity'], 0);
+    own['opacity'] = 1;
+    engine.styleChanged(view, 'opacity');
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['opacity'], 0);
   });
 });

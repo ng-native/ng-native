@@ -650,6 +650,11 @@ void SplitViews::deleted(Tag tag) {
   reported_.erase(tag);
   for (auto &[split, s] : splits_) {
     std::erase(s.screens, tag);
+    // The content's title is the deleted sidebar's selected row: taken off with it, while the split
+    // still knows which sidebar was its own.
+    if (s.sidebar == tag && !s.tabs) {
+      adw_navigation_page_set_title(adw_navigation_split_view_get_content(ADW_NAVIGATION_SPLIT_VIEW(s.view)), "");
+    }
     for (auto [pane, slot] : {std::pair{&s.sidebar, s.sidebarSlot}, std::pair{&s.content, s.contentSlot}}) {
       if (*pane == tag) {
         backend_.hooks.detachInput(tag);
@@ -848,13 +853,26 @@ void SplitViews::fill(Tag parent, Lists &l, size_t index) {
   l.syncing = false;
 }
 
-void SplitViews::titleContent(GtkWidget *within, GtkListBoxRow *row) {
+void SplitViews::titleContent(GtkWidget *within, GtkListBoxRow * /*row*/) {
   for (auto &[tag, s] : splits_) {
     GtkWidget *pane = s.sidebar >= 0 ? backend_.view(s.sidebar) : nullptr;
     if (s.tabs || !pane || !(within == pane || gtk_widget_is_ancestor(within, pane))) {
       continue;
     }
-    const char *label = row ? static_cast<const char *>(g_object_get_data(G_OBJECT(row), "ngn-label")) : nullptr;
+    // The sidebar's selected row, whichever of its lists holds it, not the row of the list that
+    // asked: a list with nothing selected, filled after the one that has it, would clear the title.
+    // The app selects one row in a sidebar; were there more, the first list's would title it.
+    const char *label = nullptr;
+    for (const auto &[parent, l] : lists_) {
+      for (GtkWidget *box : l.boxes) {
+        if (label || !(box == pane || gtk_widget_is_ancestor(box, pane))) {
+          continue;
+        }
+        if (GtkListBoxRow *selected = gtk_list_box_get_selected_row(GTK_LIST_BOX(box))) {
+          label = static_cast<const char *>(g_object_get_data(G_OBJECT(selected), "ngn-label"));
+        }
+      }
+    }
     adw_navigation_page_set_title(adw_navigation_split_view_get_content(ADW_NAVIGATION_SPLIT_VIEW(s.view)), label ? label : "");
   }
 }

@@ -126,6 +126,22 @@ void answer(GtkWidget *dialog, const char *response) {
   pending->done(index, textOf(pending->field), textOf(pending->password));
 }
 
+// An alert that refuses Escape (`can-close` false, with no cancel button) refuses its own buttons'
+// close too: libadwaita's AdwAlertDialog closes before it responds, and that close keeps the
+// property. Once a button has answered, it is closed by force, as a pressed button closes it.
+void closeRefused(GtkWidget *dialog) {
+  if (!g_object_class_find_property(G_OBJECT_GET_CLASS(dialog), "can-close")) {
+    return;
+  }
+  gboolean canClose = TRUE;
+  g_object_get(dialog, "can-close", &canClose, nullptr);
+  if (!canClose) {
+    if (const auto &api = alertDialogApi(); api.close) {
+      api.close(dialog);
+    }
+  }
+}
+
 } // namespace
 
 GtkWindow *activeWindow() {
@@ -193,7 +209,10 @@ void showAlert(const AlertRequest &request, std::function<void(int, std::string,
     gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
   }
   g_object_set_data_full(G_OBJECT(dialog), "ngn-alert", pending, [](gpointer p) { delete static_cast<Pending *>(p); });
-  g_signal_connect(dialog, "response", G_CALLBACK(+[](GtkWidget *d, const char *response, gpointer) { answer(d, response); }), nullptr);
+  g_signal_connect(dialog, "response", G_CALLBACK(+[](GtkWidget *d, const char *response, gpointer) {
+    answer(d, response);
+    closeRefused(d);
+  }), nullptr);
   // The answer arrives however it goes, even closed with no response. After the closing call
   // returns: libadwaita's AdwAlertDialog closes before it emits a clicked button's response, and
   // with no close animation (animations off, as with reduced motion) "closed" comes first, so

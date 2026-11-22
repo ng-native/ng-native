@@ -139,6 +139,40 @@ TEST_CASE("text aligns by the layout's direction, whatever its script's, as on m
   }
 }
 
+TEST_CASE("a justified paragraph's last line follows the paragraph's own direction, as on macOS") {
+  // Where its last line starts and ends: a justified paragraph's other lines fill the width.
+  auto lastLine = [](const std::string &text, LayoutDirection direction) {
+    TextAttributes attributes;
+    attributes.fontSize = 16;
+    attributes.alignment = TextAlignment::Justified;
+    attributes.layoutDirection = direction;
+    AttributedString string;
+    string.appendFragment({.string = text, .textAttributes = attributes, .parentShadowView = {}});
+    auto layout = ngn::gtk::layoutText(string, {}, 300, ngn::gtk::LineHeights::Own);
+    PangoLayoutIter *iter = pango_layout_get_iter(layout.layout);
+    while (pango_layout_iter_next_line(iter)) {
+    }
+    PangoRectangle logical;
+    pango_layout_iter_get_line_extents(iter, nullptr, &logical);
+    pango_layout_iter_free(iter);
+    double x = static_cast<double>(logical.x) / PANGO_SCALE;
+    return std::pair{x, x + static_cast<double>(logical.width) / PANGO_SCALE};
+  };
+  std::string wrapped;
+  for (int i = 0; i < 6; i++) {
+    wrapped += kHebrew + " ";
+  }
+  wrapped += kHebrew;
+  for (auto direction : {LayoutDirection::LeftToRight, LayoutDirection::RightToLeft}) {
+    CAPTURE(static_cast<int>(direction));
+    // Hebrew ends at the right, a short paragraph and a wrapped one's last line alike.
+    CHECK(lastLine(kHebrew, direction).second > 299);
+    CHECK(lastLine(wrapped, direction).second > 299);
+    // English at the left.
+    CHECK(lastLine("Hello", direction).first < 1);
+  }
+}
+
 TEST_CASE("text with no line height is as tall as its lines") {
   ngn::gtk::PangoTextMeasurer own(ngn::gtk::LineHeights::Own);
   auto text = paragraph("one line", 0);
@@ -370,6 +404,38 @@ TEST_CASE("a placeholder with no colour of its own is the theme's text, dimmed, 
       CHECK(alpha < 200);
       CHECK(light == dark);
     }
+  }
+}
+
+TEST_CASE("a placeholder dims a theme's translucent text further, never drawing more solid than it") {
+  REQUIRE(ngn::testing::gtkReady());
+  // A theme whose text is itself 40% opaque.
+  GtkCssProvider *css = gtk_css_provider_new();
+  gtk_css_provider_load_from_data(css, "text, textview, textview text, label { color: rgba(0, 0, 0, 0.4); }", -1);
+  gtk_style_context_add_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_USER);
+  struct Restore {
+    GtkCssProvider *css;
+    ~Restore() {
+      gtk_style_context_remove_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(css));
+      g_object_unref(css);
+    }
+  } restore{css};
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    views.add(MountedViews::shadow(
+        2, "TextInput", textInputProps(dynamic::object("multiline", multiline)("placeholder", "MMMMMMMM")("fontSize", 30)),
+        {{0, 0}, {240, 80}}));
+    views.settle();
+    int alpha = 0;
+    for (int x = 2; x < 230; x += 5) {
+      for (int y = 2; y < 78; y += 3) {
+        alpha = std::max(alpha, static_cast<int>(views.pixel(x, y).a));
+      }
+    }
+    CHECK(alpha > 10);
+    // Half the text's 0.4: below the 102 of typed text, which an absolute 0.5 (127) is above.
+    CHECK(alpha < 80);
   }
 }
 

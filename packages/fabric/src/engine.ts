@@ -4684,16 +4684,33 @@ function paintPassedIn(
   style: Record<string, unknown>,
   merged: Record<string, unknown>,
 ): Set<string> | undefined {
+  // A view hidden or clipped away commits its paint as hiding sets it, whatever its own style says:
+  // `visibility: hidden` and a view held unseen (UNSEEN), or `clip` (CLIPPED_AWAY), each of which
+  // turns its touches off too. Equal to its style once, it is still not its style's.
+  if (merged['pointerEvents'] === 'none') return undefined;
+  const over = setOver(node);
   let passed: Set<string> | undefined;
   for (const key of PATCHED_PAINT) {
     const value = style[key];
-    // An `!important` rule's value is committed over it; once equal, it is still not the style's.
-    if (value === undefined || node.styleCache?.important?.has(key)) continue;
+    if (value === undefined || over.has(key)) continue;
     const committed = key === 'transform' ? boundTransformList(node, value) : value;
     if (committed !== undefined && merged[key] === committed) (passed ??= new Set()).add(key);
   }
   return passed;
 }
+
+/**
+ * The keys committed over a node's own style: an `!important` rule's, and a component's
+ * `styleOverride`'s. Equal to the style's once, such a value is still not the style's.
+ */
+function setOver(node: EngineNode): ReadonlySet<string> {
+  const important = node.styleCache?.important;
+  const override = node.props[STYLE_OVERRIDE];
+  if (!override) return important ?? NO_KEYS_SET;
+  return new Set([...(important ?? []), ...Object.keys(flattenStyle(override, {}))]);
+}
+
+const NO_KEYS_SET: ReadonlySet<string> = new Set();
 
 /** The list a bound transform was last read as, where `text` is what it was read from. */
 function boundTransformList(node: EngineNode, text: unknown): unknown[] | undefined {

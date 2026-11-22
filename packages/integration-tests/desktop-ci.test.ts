@@ -144,11 +144,16 @@ describe('the compilers the desktop build passes to CMake', () => {
     ]);
   });
 
-  it('is CC and CXX when they are set', () => {
-    assert.deepEqual(
-      compilers('Linux', { CC: 'clang-19', CXX: 'clang++-19' }).stdout.trim().split('\n'),
-      ['-DCMAKE_C_COMPILER=clang-19', '-DCMAKE_CXX_COMPILER=clang++-19'],
-    );
+  it('leaves CC and CXX, when set, for CMake to read with their arguments', () => {
+    // CMake splits `clang -pthread` from the environment into a compiler and its flags; named in
+    // -DCMAKE_C_COMPILER it would be taken as a program called that.
+    const both = compilers('Linux', { CC: 'clang -pthread', CXX: 'clang++ -pthread' });
+    assert.equal(both.status, 0, both.stderr);
+    assert.equal(both.stdout.trim(), '');
+    // Each defaults alone: CC set leaves C++ to clang++.
+    assert.deepEqual(compilers('Linux', { CC: 'clang-19' }).stdout.trim().split('\n'), [
+      '-DCMAKE_CXX_COMPILER=clang++',
+    ]);
   });
 
   it("is Xcode's own on macOS", () => {

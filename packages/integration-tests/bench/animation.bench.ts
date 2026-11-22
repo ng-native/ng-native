@@ -10,7 +10,7 @@
  * `bench/release.mjs` turns `ngDevMode` off as a release build does.
  */
 import { Component, signal } from '@angular/core';
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { Session } from 'node:inspector';
 import { mount } from '@ng-native/platform';
 import type { FabricUIManager } from '@ng-native/fabric';
@@ -120,6 +120,7 @@ function nullFabric(): FabricUIManager {
 }
 
 const PROFILE = process.env['PROFILE'];
+if (PROFILE) mkdirSync(PROFILE, { recursive: true });
 const profiler = PROFILE ? new Session() : null;
 profiler?.connect();
 profiler?.post('Profiler.enable');

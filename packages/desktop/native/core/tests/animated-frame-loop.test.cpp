@@ -2,6 +2,13 @@
 
 #include <doctest/doctest.h>
 
+#include <chrono>
+#include <future>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
+
 TEST_CASE("AnimatedFrameLoop renders every frame between a start and a stop") {
   ngn::AnimationFrames frames;
   ngn::AnimatedFrameLoop loop(frames);
@@ -71,4 +78,37 @@ TEST_CASE("AnimatedFrameLoop renders nothing once it is gone") {
   frames.frame(16);
   CHECK(renders == 0);
   CHECK_FALSE(frames.wanted());
+}
+
+TEST_CASE("AnimatedFrameLoop's stop from another thread waits for a render running on this one") {
+  // A reload destroys React Native's animated manager on its own thread, stopping the loop on the
+  // way, while the UI thread may be inside the manager's render: the stop must outlast it.
+  ngn::AnimationFrames frames;
+  ngn::AnimatedFrameLoop loop(frames);
+  std::mutex order;
+  std::vector<std::string> events;
+  auto note = [&](const char *event) {
+    std::lock_guard lock(order);
+    events.emplace_back(event);
+  };
+  std::promise<void> rendering;
+  std::promise<void> finish;
+  auto finished = finish.get_future().share();
+  loop.start([&] {
+    rendering.set_value();
+    finished.wait();
+    note("render returned");
+  });
+  std::thread ui([&] { frames.frame(16); });
+  rendering.get_future().wait();
+  std::thread reload([&] {
+    loop.stop();
+    note("stop returned");
+  });
+  // Long enough for a stop that does not wait to have returned.
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  finish.set_value();
+  reload.join();
+  ui.join();
+  CHECK(events == std::vector<std::string>{"render returned", "stop returned"});
 }

@@ -130,6 +130,28 @@ TEST_CASE("an alert with no cancel button stays until a button answers it, as Es
   CHECK(std::get<0>(*answer) == 0);
 }
 
+TEST_CASE("an alert with no cancel button closes when its own button is clicked") {
+  REQUIRE(ngn::testing::gtkReady());
+  ngn::testing::MountedViews views(true, 400, 300);
+  ngn::AlertRequest request;
+  request.title = "Saved";
+  request.buttons = {{"OK"}};
+  std::optional<Answer> answer;
+  ngn::gtk::showAlert(request, [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, GTK_WINDOW(views.window));
+  GtkWidget *alert = ngn::gtk::shownAlert();
+  REQUIRE(alert);
+  ngn::testing::runUntil([&] { return gtk_widget_get_mapped(alert); });
+  std::vector<GtkWidget *> found;
+  buttonsIn(alert, found);
+  REQUIRE(found.size() == 1);
+  // As a person clicks it: the dialog's own button, not `respondToAlert`, which closes it by force.
+  g_signal_emit_by_name(found[0], "clicked");
+  ngn::testing::runUntil([&] { return answer.has_value() && ngn::gtk::shownAlert() == nullptr; });
+  REQUIRE(answer);
+  CHECK(std::get<0>(*answer) == 0);
+  CHECK(ngn::gtk::shownAlert() == nullptr);
+}
+
 TEST_CASE("a button clicked with animations off answers as itself, though libadwaita closes before it responds") {
   REQUIRE(ngn::testing::gtkReady());
   GtkSettings *settings = gtk_settings_get_default();

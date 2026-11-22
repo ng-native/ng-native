@@ -16,6 +16,10 @@ struct AnimatedFrameLoop::State {
 
   AnimationFrames &frames;
   std::mutex mutex;
+  // Held for the length of a render, which a stop waits on: React Native's manager is destroyed,
+  // stopping the loop on the way, on a reload's own thread, while the UI thread may be inside its
+  // render. Recursive, as the manager stops the loop from inside its render too.
+  std::recursive_mutex rendering;
   std::function<void()> render;
   std::uint64_t run = 0;
   bool running = false;
@@ -30,16 +34,19 @@ void onFrame(const std::weak_ptr<AnimatedFrameLoop::State> &weak, std::uint64_t 
   if (!state) {
     return;
   }
-  std::function<void()> render;
   {
-    std::lock_guard lock(state->mutex);
-    if (!state->running || state->run != run) {
-      return;
+    std::lock_guard rendering(state->rendering);
+    std::function<void()> render;
+    {
+      std::lock_guard lock(state->mutex);
+      if (!state->running || state->run != run) {
+        return;
+      }
+      render = state->render;
     }
-    render = state->render;
+    // Outside the lock: the manager stops the loop from inside its render once nothing animates.
+    render();
   }
-  // Outside the lock: the manager stops the loop from inside its render once nothing animates.
-  render();
   {
     std::lock_guard lock(state->mutex);
     if (!state->running || state->run != run) {
@@ -85,6 +92,9 @@ void AnimatedFrameLoop::stop() {
     released = std::move(state_->render);
     state_->render = nullptr;
   }
+  // A render running on another thread returns before this does, so what it renders with outlives
+  // it; none starts after, as the loop no longer runs.
+  std::lock_guard rendering(state_->rendering);
 }
 
 std::shared_ptr<facebook::react::NativeAnimatedNodesManagerProvider> animatedNodesManagerProvider(
