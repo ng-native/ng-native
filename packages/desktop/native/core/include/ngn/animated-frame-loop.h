@@ -34,6 +34,8 @@ class AnimatedFrameLoop {
   // Whether it renders each frame, and whether it is closed. Any thread.
   bool running() const;
   bool closed() const;
+  // How many stops or closes are waiting for a render on another thread to return. Any thread.
+  int waiting() const;
 
   // What a frame waiting for the loop holds: the loop may be gone by the frame.
   struct State;

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <mutex>
+#include <thread>
 #include <utility>
 
 namespace ngn {
@@ -31,6 +32,10 @@ struct AnimatedFrameLoop::State {
   // Native, taking the loop to be running, never starts it again.
   bool inRender = false;
   bool startedInRender = false;
+  // The thread the render runs on: a stop from it is the render's own; one from elsewhere stops.
+  std::thread::id renderThread;
+  // Stops and closes waiting for a render on another thread to return.
+  int waiting = 0;
 };
 
 namespace {
@@ -53,6 +58,7 @@ void onFrame(const std::weak_ptr<AnimatedFrameLoop::State> &weak, std::uint64_t 
       render = state->render;
       state->inRender = true;
       state->startedInRender = false;
+      state->renderThread = std::this_thread::get_id();
     }
     // Outside the lock: the manager stops the loop from inside its render once nothing animates.
     render();
@@ -105,7 +111,8 @@ void AnimatedFrameLoop::stop() {
     std::lock_guard lock(state_->mutex);
     // A stop from a render that a start overtook: what the start asked for stands, and the loop goes
     // on with it. Not once closed, which stops it whatever came before.
-    if (state_->inRender && state_->startedInRender && !state_->closed) {
+    bool ownRender = state_->inRender && state_->renderThread == std::this_thread::get_id();
+    if (ownRender && state_->startedInRender && !state_->closed) {
       return;
     }
     state_->running = false;
@@ -114,7 +121,13 @@ void AnimatedFrameLoop::stop() {
   }
   // A render running on another thread returns before this does, so what it renders with outlives
   // it; none starts after, as the loop no longer runs.
+  {
+    std::lock_guard lock(state_->mutex);
+    ++state_->waiting;
+  }
   std::lock_guard rendering(state_->rendering);
+  std::lock_guard lock(state_->mutex);
+  --state_->waiting;
 }
 
 void AnimatedFrameLoop::close() {
@@ -129,6 +142,11 @@ void AnimatedFrameLoop::close() {
 bool AnimatedFrameLoop::running() const {
   std::lock_guard lock(state_->mutex);
   return state_->running;
+}
+
+int AnimatedFrameLoop::waiting() const {
+  std::lock_guard lock(state_->mutex);
+  return state_->waiting;
 }
 
 bool AnimatedFrameLoop::closed() const {

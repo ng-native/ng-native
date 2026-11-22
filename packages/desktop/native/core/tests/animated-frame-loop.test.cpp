@@ -9,6 +9,24 @@
 #include <thread>
 #include <vector>
 
+namespace {
+
+// Whether `holds` came true within two seconds: a test whose other thread never reaches the point
+// it waits for fails, rather than hanging.
+template <typename Condition>
+bool waitFor(Condition holds) {
+  auto until = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (!holds()) {
+    if (std::chrono::steady_clock::now() > until) {
+      return false;
+    }
+    std::this_thread::yield();
+  }
+  return true;
+}
+
+} // namespace
+
 TEST_CASE("AnimatedFrameLoop renders every frame between a start and a stop") {
   ngn::AnimationFrames frames;
   ngn::AnimatedFrameLoop loop(frames);
@@ -105,12 +123,8 @@ TEST_CASE("AnimatedFrameLoop's stop from another thread waits for a render runni
     loop.stop();
     note("stop returned");
   });
-  // Once the stop has begun, and so reached its wait: then long enough for one that does not wait
-  // to have returned.
-  while (loop.running()) {
-    std::this_thread::yield();
-  }
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  // Once the stop is waiting for the render: one that does not wait never is, and has returned.
+  CHECK(waitFor([&] { return loop.waiting() > 0; }));
   finish.set_value();
   reload.join();
   ui.join();
@@ -144,12 +158,8 @@ TEST_CASE("AnimatedFrameLoop's close waits for a render that stopped itself, and
     loop.close();
     note("close returned");
   });
-  // Once the close has begun, and so reached its wait: then long enough for one that does not
-  // wait to have returned.
-  while (!loop.closed()) {
-    std::this_thread::yield();
-  }
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  // Once the close is waiting for the render: one that does not wait never is, and has returned.
+  CHECK(waitFor([&] { return loop.waiting() > 0; }));
   finish.set_value();
   reload.join();
   ui.join();
@@ -182,4 +192,34 @@ TEST_CASE("AnimatedFrameLoop keeps a start that arrives while a render is stoppi
   frames.frame(48);
   CHECK(first == 1);
   CHECK(second == 2);
+}
+
+TEST_CASE("AnimatedFrameLoop's stop from another thread stops it, though a start came during the render") {
+  // Only the render's own stop is one a start overtook: a stop from elsewhere stops the loop, and
+  // waits for the render, as it would with no start.
+  ngn::AnimationFrames frames;
+  ngn::AnimatedFrameLoop loop(frames);
+  int renders = 0;
+  std::promise<void> started;
+  std::promise<void> finish;
+  auto finished = finish.get_future().share();
+  loop.start([&] {
+    if (++renders > 1) {
+      return;
+    }
+    std::thread javascript([&] { loop.start([&] { ++renders; }); });
+    javascript.join();
+    started.set_value();
+    finished.wait();
+  });
+  std::thread ui([&] { frames.frame(16); });
+  started.get_future().wait();
+  std::thread other([&] { loop.stop(); });
+  CHECK(waitFor([&] { return loop.waiting() > 0; }));
+  finish.set_value();
+  other.join();
+  ui.join();
+  CHECK_FALSE(loop.running());
+  frames.frame(32);
+  CHECK(renders == 1);
 }
