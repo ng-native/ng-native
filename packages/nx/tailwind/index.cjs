@@ -159,12 +159,13 @@ function activeExport(config) {
  * Whether the export certainly runs `withTailwind`, which builds the sheet: it is a call to it, or
  * reaches one through the arguments of the calls it is made of, as
  * `withDeviceTests(withTailwind(config))` does. A comment or string naming it does not, nor a call
- * in a branch, a function or anything else that may not run.
+ * in a branch, a function, an optional call or anything else that may not run.
  */
 function callsWithTailwind({ ts, source, statement }) {
   const runs = (node) => {
     if (ts.isParenthesizedExpression(node)) return runs(node.expression);
-    if (!ts.isCallExpression(node)) return false;
+    // An optional call, `wrap?.(x)`, runs neither itself nor its arguments where `wrap` is missing.
+    if (!ts.isCallExpression(node) || ts.isOptionalChain(node)) return false;
     return node.expression.getText(source) === 'withTailwind' || node.arguments.some(runs);
   };
   return runs(statement.expression.right);

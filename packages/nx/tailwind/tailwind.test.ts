@@ -268,6 +268,26 @@ describe('Tailwind 4, by default', () => {
     );
   });
 
+  it('wraps an export whose withTailwind call is in an optional call that may skip it', async () => {
+    for (const exported of [
+      'fallback(maybeWrap?.(withTailwind(config)))',
+      'withTailwind?.(config)',
+    ]) {
+      const tree = await integrated();
+      tree.write(
+        'apps/mobile/metro.config.js',
+        [
+          "const { withTailwind } = require('@ng-native/tailwind/config.cjs');",
+          `module.exports = ${exported};`,
+          '',
+        ].join('\n'),
+      );
+      await generate(tree, {});
+      const config = read(tree, 'apps/mobile/metro.config.js');
+      assert.ok(config.includes(`module.exports = withTailwind(${exported}, {`), config);
+    }
+  });
+
   it('leaves an export that runs withTailwind among its calls as it is', async () => {
     const tree = await integrated();
     const config = [
