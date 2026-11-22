@@ -314,3 +314,25 @@ describe('paint bound on a view its parent paints its own background on', () => 
     assert.equal(painted(), 'red', "the parent's, as a merge paints it");
   });
 });
+
+describe("paint bound on a view the engine's root paints its background on", () => {
+  // The root is not reconciled as other parents are, so nothing merges its child again for it.
+  it("keeps the root's background, which the merge paints over the view's own", () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { dev: false });
+    engine.setProp(engine.root, 'style', { backgroundColor: 'red' });
+    const child = engine.createElement('view');
+    const own: Record<string, unknown> = { backgroundColor: 'red' };
+    child.ownStyle = own;
+    engine.setProp(child, 'style', own);
+    engine.appendChild(engine.root, child);
+    engine.paintOn(engine.root, child);
+    engine.commit();
+    const painted = () => fabric.committed[0]!.props['backgroundColor'];
+    assert.equal(painted(), 'red');
+    own['backgroundColor'] = 'blue';
+    engine.styleChanged(child, 'backgroundColor');
+    engine.commit();
+    assert.equal(painted(), 'red', "the root's, as a merge paints it");
+  });
+});

@@ -521,6 +521,8 @@ void SplitViews::inserted(Tag parent, Tag child) {
     applySidebar(it->second);
     show(it->second);
   }
+  // A split in another's sidebar: the pane's lists may title that one's content too.
+  retitleSidebarsHolding(parent);
 }
 
 void SplitViews::removed(Tag parent, Tag child) {

@@ -147,10 +147,27 @@ describe('the compiler launcher of the desktop build', () => {
 describe('a build directory configured with another compiler', () => {
   // CMake starts a directory over when its compiler changes, without the -D's it was given, so
   // RN_DIR and the rest come out empty: the build clears it first.
-  const reset = (cached: string | undefined, args: string[]) => {
+  // A clang++ of its own on PATH, which CMake would find for `clang++`: the path it is cached as.
+  const reset = (
+    cached: string | undefined | ((found: string) => string),
+    args: string[],
+    // The path CMake recorded for it, under CMakeFiles, where the cache keeps the name as given.
+    recorded?: (found: string) => string,
+  ) => {
     const dir = mkdtempSync(join(tmpdir(), 'ngn-compilers-'));
+    const bin = join(dir, 'bin');
+    const found = join(bin, 'clang++');
     try {
-      mkdirSync(join(dir, 'CMakeFiles'));
+      mkdirSync(bin);
+      writeFileSync(found, '#!/bin/sh\n', { mode: 0o755 });
+      if (typeof cached === 'function') cached = cached(found);
+      mkdirSync(join(dir, 'CMakeFiles', '4.4.4'), { recursive: true });
+      if (recorded) {
+        writeFileSync(
+          join(dir, 'CMakeFiles', '4.4.4', 'CMakeCXXCompiler.cmake'),
+          `set(CMAKE_CXX_COMPILER "${recorded(found)}")\n`,
+        );
+      }
       writeFileSync(
         join(dir, 'CMakeCache.txt'),
         cached === undefined
@@ -160,9 +177,7 @@ describe('a build directory configured with another compiler', () => {
       const run = spawnSync(
         'bash',
         [fileURLToPath(new URL('reset-for-compilers.sh', scripts)), dir, ...args],
-        {
-          encoding: 'utf8',
-        },
+        { encoding: 'utf8', env: { ...process.env, PATH: `${bin}:/usr/bin:/bin` } },
       );
       assert.equal(run.status, 0, run.stderr);
       return {
@@ -181,11 +196,42 @@ describe('a build directory configured with another compiler', () => {
     });
   });
 
-  it('is kept when it was configured with the compiler asked for', () => {
-    assert.deepEqual(reset('/usr/bin/clang++', ['-DCMAKE_CXX_COMPILER=clang++']), {
-      cache: true,
-      files: true,
+  it('is cleared when it was configured with a clang that PATH no longer finds first', () => {
+    // CMake compares the path it finds with the cached one, and starts over where they differ.
+    assert.deepEqual(reset('/opt/llvm/bin/clang++', ['-DCMAKE_CXX_COMPILER=clang++']), {
+      cache: false,
+      files: false,
     });
+  });
+
+  it('is kept when it was configured with the compiler asked for', () => {
+    assert.deepEqual(
+      reset((found) => found, ['-DCMAKE_CXX_COMPILER=clang++']),
+      {
+        cache: true,
+        files: true,
+      },
+    );
+  });
+
+  it('is kept when it keeps the name as given and recorded the path PATH finds', () => {
+    assert.deepEqual(
+      reset('clang++', ['-DCMAKE_CXX_COMPILER=clang++'], (found) => found),
+      {
+        cache: true,
+        files: true,
+      },
+    );
+  });
+
+  it('is cleared when it keeps the name as given and recorded another path', () => {
+    assert.deepEqual(
+      reset('clang++', ['-DCMAKE_CXX_COMPILER=clang++'], () => '/opt/llvm/bin/clang++'),
+      {
+        cache: false,
+        files: false,
+      },
+    );
   });
 
   it('is kept when no compiler is asked for, CC and CXX being the caller', () => {

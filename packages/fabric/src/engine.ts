@@ -4689,10 +4689,13 @@ function paintPassedIn(
   // turns its touches off too. Equal to its style once, it is still not its style's.
   if (merged['pointerEvents'] === 'none') return undefined;
   const over = setOver(node);
+  // Paint its parent hands it, `paintOn`, is the parent's: the root's too, which is not
+  // reconciled as other parents are, so nothing merges this view again for it (`repaint`).
+  const handed = node.parent?.paintsOn === node;
   let passed: Set<string> | undefined;
   for (const key of PATCHED_PAINT) {
     const value = style[key];
-    if (value === undefined || over.has(key)) continue;
+    if (value === undefined || over.has(key) || (handed && PAINT_KEYS.includes(key))) continue;
     const committed = key === 'transform' ? boundTransformList(node, value) : value;
     if (committed !== undefined && merged[key] === committed) (passed ??= new Set()).add(key);
   }

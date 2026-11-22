@@ -23,8 +23,20 @@ for arg in "$@"; do
   wanted="${arg#*=}"
   cached="$(sed -n "s/^$name:[A-Z]*=//p" "$cache" | head -n 1)"
   [ -n "$cached" ] || continue
-  # CMake keeps the path it found: compared by name, as the name is what is asked for.
-  if [ "$(basename "$cached")" != "$(basename "$wanted")" ]; then
+  # The path CMake found for it, which it compares with the one it finds again on PATH: in
+  # CMakeFiles/<version>/CMake{C,CXX}Compiler.cmake, where the cache keeps the name as given.
+  lang=CXX
+  [ "$name" = CMAKE_C_COMPILER ] && lang=C
+  recorded="$(sed -n "s/^set($name \"\(.*\)\")$/\1/p" "$build"/CMakeFiles/*/CMake${lang}Compiler.cmake 2>/dev/null | head -n 1 || true)"
+  [ -n "$recorded" ] || { case "$cached" in */*) recorded="$cached" ;; esac; }
+  found="$(command -v "$wanted" 2>/dev/null || true)"
+  if [ -n "$recorded" ] && [ -n "$found" ]; then
+    differs=$([ "$found" != "$recorded" ] && echo 1 || echo 0)
+  else
+    # Nothing to compare paths by: by name, as the name is what is asked for.
+    differs=$([ "$(basename "$cached")" != "$(basename "$wanted")" ] && echo 1 || echo 0)
+  fi
+  if [ "$differs" = 1 ]; then
     rm -rf "$cache" "$build/CMakeFiles"
     exit 0
   fi

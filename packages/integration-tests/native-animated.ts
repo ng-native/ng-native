@@ -2,13 +2,14 @@
 import type { NativeAnimated } from '@ng-native/fabric';
 
 /**
- * The keys React Native's C++ animated module reads from each node's config and each animation's,
+ * The keys React Native's C++ animated module requires of each node's config and each animation's,
  * by type (`ReactCommon/react/renderer/animated`). It reads them with `folly::dynamic`'s throwing
  * lookup, so a config missing one ends the app on a desktop host, which runs that module, where
- * iOS's Objective-C module reads it as absent and goes on.
+ * iOS's Objective-C module reads it as absent and goes on. A value node's `value` and `offset` are
+ * read only where both are there, and are 0 otherwise, so it requires none.
  */
 const READS: Readonly<Record<string, readonly string[]>> = {
-  value: ['value', 'offset'],
+  value: [],
   interpolation: ['inputRange', 'outputRange', 'outputType', 'extrapolateLeft', 'extrapolateRight'],
   addition: ['input'],
   subtraction: ['input'],
