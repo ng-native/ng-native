@@ -431,6 +431,7 @@ export class VirtualList<T> extends ScrollViewProps {
   /** The sticky rows and header: see `StickyRows`. */
   private readonly sticky = new StickyRows(this.engine, this.node, {
     indices: this.stickyIndices,
+    items: this.items,
     header: this.stickyHeader,
     headerHeight: this.headerHeight,
     horizontal: () => this.horizontal(),
@@ -1030,7 +1031,7 @@ export class VirtualList<T> extends ScrollViewProps {
             ? this.sticky.style(pinned)
             : this.measuring()
               ? this.sticky.flowStyle(this.topOf(first) - this.heightOf(pinned) - this.rowGap())
-              : this.slotStyle(pinned, this.sticky.offset()),
+              : this.slotStyle(pinned, this.sticky.pinnedAt(pinned)),
         }),
       );
     }
@@ -1069,7 +1070,7 @@ export class VirtualList<T> extends ScrollViewProps {
     if (this.measuring()) {
       return pinned ? this.sticky.flowStyle(this.topOf(index)) : this.flowStyle();
     }
-    return pinned ? this.slotStyle(index, this.sticky.offset()) : this.slotStyle(index);
+    return pinned ? this.slotStyle(index, this.sticky.pinnedAt(index)) : this.slotStyle(index);
   }
 
   /**
@@ -1391,7 +1392,9 @@ export class VirtualList<T> extends ScrollViewProps {
       // the inversion.
       if (pinnedAt !== undefined) style['zIndex'] = 1;
       if (flip) style['transform'] = flip;
-      this.slots.set(index, style);
+      // Not a pinned row's, which the row would keep, zIndex and all, where it is pinned at its
+      // own place and then is a plain row there.
+      if (pinnedAt === undefined) this.slots.set(index, style);
       return style;
     }
     return style!;

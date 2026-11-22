@@ -652,6 +652,67 @@ describe('windowed list options', () => {
     );
   });
 
+  it('pushes a pinned row off with the next sticky row as it arrives', async () => {
+    await boot({ height: VIEWPORT });
+    instance.sticky.set([0, 20]);
+    await settle();
+    // Row 20 is half a row short of the edge, so it has pushed row 0 half way off.
+    await fireEvent.scroll(host, { contentOffset: { y: 19.5 * ITEM_HEIGHT } });
+    const pinned = rows().find((row) => row.props['zIndex'] === 1)!;
+    assert.ok(labels({ committed: [pinned] } as FakeFabric).includes('row 0'));
+    assert.equal(pinned.props['top'], 19 * ITEM_HEIGHT, 'row 0 ends where row 20 starts');
+  });
+
+  it('gives a row the next sticky row took the place of no zIndex once it is a plain row', async () => {
+    await boot({ height: VIEWPORT });
+    instance.sticky.set([0, 5, 6]);
+    await settle();
+    // Row 6 follows row 5 with no space between them, so row 5 is pinned at its own place.
+    await fireEvent.scroll(host, { contentOffset: { y: 5.5 * ITEM_HEIGHT } });
+    instance.sticky.set([0, 6, 7]);
+    await settle();
+    const row = (label: string) =>
+      rows().find((each) => labels({ committed: [each] } as FakeFabric).includes(label))!;
+    assert.equal(row('row 0').props['zIndex'], 1, 'row 0 is the pinned row now');
+    assert.equal(row('row 5').props['top'], 5 * ITEM_HEIGHT);
+    assert.equal(row('row 5').props['zIndex'] ?? null, null, 'and row 5 is under it');
+  });
+
+  it('has native hold a sticky row still that the next one follows with no space between them', async () => {
+    // Row 6 is at the edge the moment row 5 would pin there, so row 5 has nowhere to hold.
+    const { native, drives } = recorder();
+    await boot({ height: VIEWPORT }, { nativeAnimated: native });
+    instance.sticky.set([5, 6]);
+    await settle();
+    await fireEvent.scroll(host, { contentOffset: { y: 2 * ITEM_HEIGHT } });
+    const row = (label: string) =>
+      rows().find((each) => labels({ committed: [each] } as FakeFabric).includes(label))!;
+    assert.deepEqual(
+      (drives().get(row('row 5').reactTag) as { outputRange?: number[] }).outputRange,
+      [0, 0],
+      'row 5 is moved nowhere',
+    );
+    assert.equal(drives().get(row('row 6').reactTag)?.inputRange[0], 6 * ITEM_HEIGHT);
+  });
+
+  it('has native put a row it moved back when the next sticky row comes to follow it', async () => {
+    // Native keeps the translate it moved a row by after it lets go, so a row that no longer has
+    // anywhere to hold is not let go: native is told to move it nowhere.
+    const { native, drives } = recorder();
+    await boot({ height: VIEWPORT }, { nativeAnimated: native });
+    instance.sticky.set([5, 20]);
+    await settle();
+    await fireEvent.scroll(host, { contentOffset: { y: 7 * ITEM_HEIGHT } });
+    const row = () =>
+      rows().find((each) => labels({ committed: [each] } as FakeFabric).includes('row 5'))!;
+    const range = () =>
+      drives().get(row().reactTag) as { inputRange: number[]; outputRange?: number[] } | undefined;
+    assert.deepEqual(range()?.inputRange, [5 * ITEM_HEIGHT, 19 * ITEM_HEIGHT]);
+    instance.sticky.set([5, 6]);
+    await settle();
+    assert.deepEqual(range()?.outputRange, [0, 0]);
+  });
+
   it('leaves a sticky row in its own slot when native moves it', async () => {
     const { native, drives } = recorder();
     await boot({ height: VIEWPORT }, { nativeAnimated: native });

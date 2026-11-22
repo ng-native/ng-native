@@ -22,6 +22,7 @@ import {
   type FakeFabricNode,
 } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
+import { recorder } from './native-animated.ts';
 
 const WIDTH = 300;
 const VIEWPORT = 400;
@@ -263,6 +264,51 @@ describe('a windowed list in columns', () => {
     assert.equal(tile(0)?.props['zIndex'], 1);
     assert.equal(tile(0)?.props['top'], 120);
   });
+
+  it('keeps the real sticky row pinned to the end of the content inset, beside one past the end', async () => {
+    // 20 lines of 40, and a 400 inset after them: at 820 the viewport is past the last line.
+    const { tile, scroll } = await boot((page) => {
+      page.tiles.set(Array.from({ length: 60 }, (_, id) => ({ id, label: `tile ${id}` })));
+      page.sticky.set([0, 500]);
+      page.inset.set({ bottom: 400 });
+    });
+    await scroll(820);
+    assert.equal(tile(0)?.props['top'], 820);
+  });
+
+  it('pushes the sticky row off with one that was past the end, once its row arrives', async () => {
+    const { instance, tile, scroll } = await boot((page) => {
+      page.tiles.set(Array.from({ length: 6 }, (_, id) => ({ id, label: `tile ${id}` })));
+      page.sticky.set([0, 10]);
+    });
+    instance.tiles.set(Array.from({ length: 100 }, (_, id) => ({ id, label: `tile ${id}` })));
+    await settle();
+    // Tile 0, three lines of tiles 1 to 9, then tile 10 at 160: at 140 it is 20 into tile 0.
+    await scroll(140);
+    assert.equal(tile(0)?.props['top'], 120);
+  });
+
+  for (const [where, options, placed] of [
+    ['from JavaScript', {}, { top: 500 }],
+    ['by native', { nativeAnimated: recorder().native }, { transform: [{ translateY: 260 }] }],
+  ] as const) {
+    it(`pins a sticky row whose items arrive in a scrolled list where the list is, moved ${where}`, async () => {
+      // Six rows of 40 and an 800 inset after them: the list scrolls to 500 with no sticky row.
+      const { instance, tile, scroll } = await boot((page) => {
+        page.columns.set(1);
+        page.tiles.set(Array.from({ length: 6 }, (_, id) => ({ id, label: `tile ${id}` })));
+        page.sticky.set([6]);
+        page.inset.set({ bottom: 800 });
+      }, options);
+      await scroll(500);
+      instance.tiles.set(Array.from({ length: 100 }, (_, id) => ({ id, label: `tile ${id}` })));
+      await settle();
+      // Row 6 is 240 down the list, so 260 from the leading edge at 500.
+      for (const [prop, value] of Object.entries(placed)) {
+        assert.deepEqual(tile(6)?.props[prop], value);
+      }
+    });
+  }
 
   it('takes an infinite count as one column', async () => {
     const { tile } = await boot((page) => page.columns.set(Infinity));

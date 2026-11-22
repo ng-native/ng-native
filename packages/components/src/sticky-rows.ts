@@ -13,6 +13,7 @@ import { STICKY_SETTLE_MS } from './sticky-headers.ts';
 export interface StickyRowsList {
   /** The sticky rows' indices, as `stickyIndices` gives them. */
   readonly indices: Signal<readonly number[]>;
+  readonly items: Signal<readonly unknown[]>;
   /** Whether the list header is pinned too, as `stickyHeader` says. */
   readonly header: Signal<boolean>;
   readonly headerHeight: Signal<number>;
@@ -93,12 +94,21 @@ export class StickyRows {
     this.native = engine.drivesScroll;
   }
 
+  /**
+   * The sticky indices that have a row. One given for rows not there yet pins nothing and pushes
+   * nothing off until its row arrives.
+   */
+  private readonly indices = computed(() => {
+    const count = this.list.items().length;
+    return this.list.indices().filter((index) => index < count);
+  });
+
   /** Whether the scroll offset is needed as a signal, which only pinning needs. */
-  private readonly pinning = computed(() => this.list.header() || this.list.indices().length > 0);
+  private readonly pinning = computed(() => this.list.header() || this.indices().length > 0);
 
   /** Each sticky row, and the one after it, which pushes it off. */
   readonly next = computed(() => {
-    const sticky = this.list.indices();
+    const sticky = this.indices();
     return new Map(sticky.map((index, at) => [index, sticky[at + 1]]));
   });
 
@@ -107,7 +117,7 @@ export class StickyRows {
    * Null when the list has scrolled back above the first of them.
    */
   readonly pinned = computed<number | null>(() => {
-    const sticky = this.list.indices();
+    const sticky = this.indices();
     if (sticky.length === 0) return null;
     const offset = this.offset();
 
@@ -127,7 +137,7 @@ export class StickyRows {
     const flip = this.list.flipText();
     if (!this.list.header()) return flip ? { transform: flip } : undefined;
     const along = this.offset() + this.list.headerHeight();
-    const first = this.list.indices()[0];
+    const first = this.indices()[0];
     const limit = first === undefined ? Infinity : this.list.topOf(first);
     const shift = Math.min(Math.max(0, along), limit);
     const move =
@@ -135,6 +145,14 @@ export class StickyRows {
     const transform = [move, flip ?? ''].filter(Boolean).join(' ');
     return transform ? { zIndex: 1, transform } : { zIndex: 1 };
   });
+
+  /**
+   * Where a pinned row placed by its `top` is: at the leading edge, until the next sticky row
+   * reaches it there and pushes it off.
+   */
+  pinnedAt(index: number): number {
+    return Math.min(this.offset(), this.stopOf(index));
+  }
 
   /** A pinned row in flow, moved from where flow put it to the leading edge by a transform. */
   flowStyle(at: number): Record<string, unknown> {
@@ -191,14 +209,15 @@ export class StickyRows {
       // An event from before the jump, or on the way, is not where it lands.
       if (Math.abs(along - this.jumpedTo) <= 1) this.landed = true;
     }
-    // A pinned row follows the scroll continuously, so with sticky rows the offset has to be a
-    // signal - and only then. Without them this stays out of change detection, and a fling that
-    // moves no row in or out of the window costs none.
-    if (!this.pinning()) return;
+    // A pinned row follows the scroll continuously, so the offset is a signal. Nothing reads it
+    // until a row or the header is pinned, so without them this stays out of change detection,
+    // and a fling that moves no row in or out of the window costs none. It is kept all the same:
+    // a row that turns sticky in a scrolled list is pinned where the list is, not where it was.
     this.leading.set(offset);
     if (!this.native) return;
-    // See `STICKY_SETTLE_MS`.
     clearTimeout(this.settleTimer);
+    if (!this.pinning()) return this.settled.set(offset);
+    // See `STICKY_SETTLE_MS`.
     this.settleTimer = setTimeout(() => this.settled.set(offset), STICKY_SETTLE_MS);
   }
 
@@ -296,13 +315,17 @@ export class StickyRows {
   /**
    * How native moves a rendered row, or null when it does not: along the scroll view's own
    * offset, which counts the header, from the row's top until the next sticky row pushes it off.
+   * A row the next one follows with no space between them holds nowhere, so native moves it
+   * nowhere: it is not let go, since native keeps the translate it had moved a row by.
    */
   private driveOf(row: Row): { range: ScrollRange; statics: readonly StaticTransform[] } | null {
     if (!this.native || row.parked || !this.next().has(row.index)) return null;
     const header = this.list.headerHeight();
     const start = header + this.list.topOf(row.index);
+    const stop = header + this.stopOf(row.index);
     return {
-      range: pinnedRange(start, header + this.stopOf(row.index)),
+      range:
+        stop > start ? pinnedRange(start, stop) : { input: [start, start + 1], output: [0, 0] },
       statics: this.list.flip() ?? [],
     };
   }
