@@ -214,22 +214,65 @@ function requiresTailwindConfig(ts, node) {
  * sheet, and nor is a `withTailwind` of the config's own, which leaves it out.
  */
 function namesOfWithTailwind(ts, statements) {
-  const names = new Set();
-  let foreign = false;
+  const found = { names: new Set(), namespaces: new Set(), foreign: false };
   for (const statement of statements) {
-    if (declaresOwnWithTailwind(ts, statement) || rebindsRequire(ts, statement)) foreign = true;
+    if (declaresOwnWithTailwind(ts, statement) || rebindsRequire(ts, statement))
+      found.foreign = true;
     if (!ts.isVariableStatement(statement)) continue;
     // A `let` or `var` may be bound to something else later: which it calls is not certain.
     const constant = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0;
-    for (const { name, initializer } of statement.declarationList.declarations) {
-      const packages = packageBindings(ts, name, initializer);
-      if (constant) for (const bound of packages) names.add(bound);
-      else if (packages.length) foreign = true;
-      if (binds(ts, name) && !packages.includes('withTailwind')) foreign = true;
+    for (const declaration of statement.declarationList.declarations) {
+      noteDeclaration(ts, declaration, constant, found);
     }
   }
-  if (!foreign) names.add('withTailwind');
-  return { names, foreign };
+  if (statements.some((statement) => writesInto(ts, statement, found.namespaces))) {
+    found.foreign = true;
+  }
+  if (!found.foreign) found.names.add('withTailwind');
+  return found;
+}
+
+/**
+ * What one top-level declaration binds of the package, into `found`: the names its `withTailwind`
+ * is called by, and the namespaces it is called off, `const tailwind = require('…')`, which calls
+ * it as `tailwind.withTailwind`. A `let` or `var` of either, or a `withTailwind` of the config's
+ * own, makes what the config calls uncertain (`foreign`).
+ */
+function noteDeclaration(ts, { name, initializer }, constant, found) {
+  const packages = packageBindings(ts, name, initializer);
+  const namespace = ts.isIdentifier(name) && requiresTailwindConfig(ts, initializer);
+  if (!constant && (packages.length || namespace)) found.foreign = true;
+  if (constant) for (const bound of packages) found.names.add(bound);
+  if (constant && namespace) found.namespaces.add(name.text);
+  if (binds(ts, name) && !packages.includes('withTailwind')) found.foreign = true;
+}
+
+/**
+ * Whether a statement writes a property of one of the package's namespaces, anywhere in it:
+ * `tailwind.withTailwind = …` makes what it calls the config's own.
+ */
+function writesInto(ts, statement, namespaces) {
+  if (!namespaces.size) return false;
+  const writes = (node) => {
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+      (ts.isPropertyAccessExpression(node.left) || ts.isElementAccessExpression(node.left)) &&
+      namespaceOf(ts, node.left.expression, namespaces)
+    ) {
+      return true;
+    }
+    return Boolean(ts.forEachChild(node, (child) => writes(child) || undefined));
+  };
+  return writes(statement);
+}
+
+/** Whether `node` is one of the package's namespaces, in parentheses or not. */
+function namespaceOf(ts, node, namespaces) {
+  let inner = node;
+  while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
+  return ts.isIdentifier(inner) && namespaces.has(inner.text);
 }
 
 /**
@@ -267,15 +310,10 @@ function declaresOwnWithTailwind(ts, statement) {
  * The names a declaration binds the package's `withTailwind` to:
  * `const { withTailwind: tw } = require('@ng-native/tailwind/config.cjs')` binds `tw`, and
  * `const withTailwind = require('@ng-native/tailwind/config.cjs').withTailwind` binds
- * `withTailwind`, and `const tailwind = require('@ng-native/tailwind/config.cjs')` calls it by
- * `tailwind.withTailwind`.
+ * `withTailwind`.
  */
 function packageBindings(ts, name, initializer) {
-  if (ts.isIdentifier(name)) {
-    if (readsWithTailwind(ts, initializer)) return [name.text];
-    // The package itself, `const tailwind = require('…')`, calls it as `tailwind.withTailwind`.
-    return requiresTailwindConfig(ts, initializer) ? [`${name.text}.withTailwind`] : [];
-  }
+  if (ts.isIdentifier(name)) return readsWithTailwind(ts, initializer) ? [name.text] : [];
   if (!ts.isObjectBindingPattern(name) || !requiresTailwindConfig(ts, initializer)) return [];
   return (
     name.elements
@@ -301,11 +339,21 @@ function readsWithTailwind(ts, node) {
 }
 
 /** Whether a call's callee is the package's `withTailwind`: a name bound to it, or read off it. */
-function callsTheWrapper({ ts, source, names }, call) {
+function callsTheWrapper({ ts, names, namespaces }, call) {
   // `(withTailwind)(config)` calls it too.
   let callee = call.expression;
   while (ts.isParenthesizedExpression(callee)) callee = callee.expression;
-  return names.has(callee.getText(source)) || readsWithTailwind(ts, callee);
+  if (ts.isIdentifier(callee)) return names.has(callee.text);
+  // `tailwind.withTailwind`, `tailwind['withTailwind']` or across lines, off the package's namespace.
+  const property = ts.isPropertyAccessExpression(callee)
+    ? callee.name.text
+    : ts.isElementAccessExpression(callee) && ts.isStringLiteralLike(callee.argumentExpression)
+      ? callee.argumentExpression.text
+      : undefined;
+  if (property !== 'withTailwind') return false;
+  return (
+    namespaceOf(ts, callee.expression, namespaces) || requiresTailwindConfig(ts, callee.expression)
+  );
 }
 
 /**
