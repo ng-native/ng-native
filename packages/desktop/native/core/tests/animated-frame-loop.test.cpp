@@ -112,3 +112,44 @@ TEST_CASE("AnimatedFrameLoop's stop from another thread waits for a render runni
   ui.join();
   CHECK(events == std::vector<std::string>{"render returned", "stop returned"});
 }
+
+TEST_CASE("AnimatedFrameLoop's close waits for a render that stopped itself, and starts nothing after") {
+  // React Native's manager stops the loop from inside its render once nothing animates, clearing
+  // its own flag first, so its destructor then stops nothing: a reload closes the loop itself,
+  // before it destroys the manager, and must outlast that render.
+  ngn::AnimationFrames frames;
+  ngn::AnimatedFrameLoop loop(frames);
+  std::mutex order;
+  std::vector<std::string> events;
+  auto note = [&](const char *event) {
+    std::lock_guard lock(order);
+    events.emplace_back(event);
+  };
+  std::promise<void> rendering;
+  std::promise<void> finish;
+  auto finished = finish.get_future().share();
+  loop.start([&] {
+    loop.stop();
+    rendering.set_value();
+    finished.wait();
+    note("render returned");
+  });
+  std::thread ui([&] { frames.frame(16); });
+  rendering.get_future().wait();
+  std::thread reload([&] {
+    loop.close();
+    note("close returned");
+  });
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  finish.set_value();
+  reload.join();
+  ui.join();
+  CHECK(events == std::vector<std::string>{"render returned", "close returned"});
+
+  // Closed for good: a start from the manager that is going renders nothing.
+  int renders = 0;
+  loop.start([&] { ++renders; });
+  frames.frame(32);
+  CHECK(renders == 0);
+  CHECK_FALSE(frames.wanted());
+}

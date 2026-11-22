@@ -23,6 +23,8 @@ struct AnimatedFrameLoop::State {
   std::function<void()> render;
   std::uint64_t run = 0;
   bool running = false;
+  // Closed for good, as its ReactHost goes: a start from the manager that is going does nothing.
+  bool closed = false;
 };
 
 namespace {
@@ -73,6 +75,9 @@ void AnimatedFrameLoop::start(std::function<void()> render) {
   std::uint64_t run = 0;
   {
     std::lock_guard lock(state_->mutex);
+    if (state_->closed) {
+      return;
+    }
     state_->render = std::move(render);
     if (state_->running) {
       return;
@@ -95,6 +100,15 @@ void AnimatedFrameLoop::stop() {
   // A render running on another thread returns before this does, so what it renders with outlives
   // it; none starts after, as the loop no longer runs.
   std::lock_guard rendering(state_->rendering);
+}
+
+void AnimatedFrameLoop::close() {
+  {
+    std::lock_guard lock(state_->mutex);
+    state_->closed = true;
+  }
+  // Waits for a render on another thread, whether or not that render stopped the loop itself.
+  stop();
 }
 
 std::shared_ptr<facebook::react::NativeAnimatedNodesManagerProvider> animatedNodesManagerProvider(

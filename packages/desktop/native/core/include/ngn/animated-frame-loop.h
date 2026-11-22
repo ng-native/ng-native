@@ -27,6 +27,9 @@ class AnimatedFrameLoop {
   void start(std::function<void()> render);
   // Any thread, the render itself too.
   void stop();
+  // Any thread but the render's: stops the loop for good, once a render running on another thread
+  // has returned. A reload closes it before it destroys the ReactHost whose manager renders here.
+  void close();
 
   // What a frame waiting for the loop holds: the loop may be gone by the frame.
   struct State;

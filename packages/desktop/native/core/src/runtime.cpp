@@ -152,6 +152,8 @@ void Runtime::createHost() {
     config.devServerPort = devServer_->port;
   }
 
+  // Its own, for this instance: the last one's was closed with its host.
+  animatedFrames_ = std::make_shared<AnimatedFrameLoop>(workletHost().frames);
   host_ = std::make_unique<ReactHost>(
       config,
       mounting_,
@@ -164,7 +166,7 @@ void Runtime::createHost() {
       nullptr,
       // React Native's animated module, on the host's frames: Animated's native driver, and the
       // engine's native paint and the animations it hands native, play without a commit a frame.
-      animatedNodesManagerProvider(std::make_shared<AnimatedFrameLoop>(workletHost().frames)),
+      animatedNodesManagerProvider(animatedFrames_),
       devServer_ ? ReactInstance::BindingsInstallFunc([this](jsi::Runtime &runtime) { installErrorListener(runtime); })
                  : nullptr);
   // React Native's own reloads (DevSettings, the dev server's, the debugger's) come here instead
@@ -173,6 +175,15 @@ void Runtime::createHost() {
   // Reanimated reaches the UIManager through here as it installs (worklet-host.h).
   auto *host = host_.get();
   workletHost().runOnScheduler.set([host](std::function<void(Scheduler &)> task) { host->runOnScheduler(std::move(task)); });
+}
+
+// Before the host goes, on the thread that destroys it: React Native's animated manager renders on
+// the UI thread through the loop, and a render in flight must return before the manager is gone.
+// Not left to the manager's destructor, whose stop does nothing where a render stopped itself.
+void Runtime::closeAnimatedFrames() {
+  if (animatedFrames_) {
+    animatedFrames_->close();
+  }
 }
 
 Runtime::~Runtime() {
@@ -352,6 +363,7 @@ void Runtime::reload(std::function<void(bool)> done) {
         host_->stopAllSurfaces();
         workletHost().runOnScheduler.set(nullptr);
         routeHostReload(host_.get(), nullptr);
+        closeAnimatedFrames();
         host_.reset();
         createHost();
         direction_.instanceStarted();
@@ -431,6 +443,7 @@ void Runtime::shutdown() {
     workletHost().runOnScheduler.set(nullptr);
     host_->stopAllSurfaces();
     routeHostReload(host_.get(), nullptr);
+    closeAnimatedFrames();
     host_.reset();
   }
 }
