@@ -31,6 +31,10 @@ class AnimatedFrameLoop {
   // has returned. A reload closes it before it destroys the ReactHost whose manager renders here.
   void close();
 
+  // Whether it renders each frame, and whether it is closed. Any thread.
+  bool running() const;
+  bool closed() const;
+
   // What a frame waiting for the loop holds: the loop may be gone by the frame.
   struct State;
 

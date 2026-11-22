@@ -105,7 +105,11 @@ TEST_CASE("AnimatedFrameLoop's stop from another thread waits for a render runni
     loop.stop();
     note("stop returned");
   });
-  // Long enough for a stop that does not wait to have returned.
+  // Once the stop has begun, and so reached its wait: then long enough for one that does not wait
+  // to have returned.
+  while (loop.running()) {
+    std::this_thread::yield();
+  }
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
   finish.set_value();
   reload.join();
@@ -140,6 +144,11 @@ TEST_CASE("AnimatedFrameLoop's close waits for a render that stopped itself, and
     loop.close();
     note("close returned");
   });
+  // Once the close has begun, and so reached its wait: then long enough for one that does not
+  // wait to have returned.
+  while (!loop.closed()) {
+    std::this_thread::yield();
+  }
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
   finish.set_value();
   reload.join();
@@ -152,4 +161,25 @@ TEST_CASE("AnimatedFrameLoop's close waits for a render that stopped itself, and
   frames.frame(32);
   CHECK(renders == 0);
   CHECK_FALSE(frames.wanted());
+}
+
+TEST_CASE("AnimatedFrameLoop keeps a start that arrives while a render is stopping it") {
+  // React Native clears its own started flag before it stops the loop from inside its render, so
+  // JavaScript can start it again in between: that start must not be lost to the stop after it,
+  // or no frame comes and React Native, believing the loop runs, never starts it again.
+  ngn::AnimationFrames frames;
+  ngn::AnimatedFrameLoop loop(frames);
+  int first = 0;
+  int second = 0;
+  loop.start([&] {
+    ++first;
+    std::thread javascript([&] { loop.start([&] { ++second; }); });
+    javascript.join();
+    loop.stop();
+  });
+  frames.frame(16);
+  frames.frame(32);
+  frames.frame(48);
+  CHECK(first == 1);
+  CHECK(second == 2);
 }

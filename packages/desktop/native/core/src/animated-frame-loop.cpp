@@ -25,6 +25,12 @@ struct AnimatedFrameLoop::State {
   bool running = false;
   // Closed for good, as its ReactHost goes: a start from the manager that is going does nothing.
   bool closed = false;
+  // While a render runs, and whether a start came during it. React Native clears its own started
+  // flag before it stops the loop from inside its render, so JavaScript can start it again in
+  // between: that start comes before the stop, which must not drop it, or no frame comes and React
+  // Native, taking the loop to be running, never starts it again.
+  bool inRender = false;
+  bool startedInRender = false;
 };
 
 namespace {
@@ -45,12 +51,15 @@ void onFrame(const std::weak_ptr<AnimatedFrameLoop::State> &weak, std::uint64_t 
         return;
       }
       render = state->render;
+      state->inRender = true;
+      state->startedInRender = false;
     }
     // Outside the lock: the manager stops the loop from inside its render once nothing animates.
     render();
   }
   {
     std::lock_guard lock(state->mutex);
+    state->inRender = false;
     if (!state->running || state->run != run) {
       return;
     }
@@ -68,7 +77,7 @@ void requestFrame(const std::shared_ptr<AnimatedFrameLoop::State> &state, std::u
 AnimatedFrameLoop::AnimatedFrameLoop(AnimationFrames &frames) : state_(std::make_shared<State>(frames)) {}
 
 AnimatedFrameLoop::~AnimatedFrameLoop() {
-  stop();
+  close();
 }
 
 void AnimatedFrameLoop::start(std::function<void()> render) {
@@ -79,6 +88,7 @@ void AnimatedFrameLoop::start(std::function<void()> render) {
       return;
     }
     state_->render = std::move(render);
+    state_->startedInRender = state_->startedInRender || state_->inRender;
     if (state_->running) {
       return;
     }
@@ -93,6 +103,11 @@ void AnimatedFrameLoop::stop() {
   std::function<void()> released;
   {
     std::lock_guard lock(state_->mutex);
+    // A stop from a render that a start overtook: what the start asked for stands, and the loop goes
+    // on with it. Not once closed, which stops it whatever came before.
+    if (state_->inRender && state_->startedInRender && !state_->closed) {
+      return;
+    }
     state_->running = false;
     released = std::move(state_->render);
     state_->render = nullptr;
@@ -109,6 +124,16 @@ void AnimatedFrameLoop::close() {
   }
   // Waits for a render on another thread, whether or not that render stopped the loop itself.
   stop();
+}
+
+bool AnimatedFrameLoop::running() const {
+  std::lock_guard lock(state_->mutex);
+  return state_->running;
+}
+
+bool AnimatedFrameLoop::closed() const {
+  std::lock_guard lock(state_->mutex);
+  return state_->closed;
 }
 
 std::shared_ptr<facebook::react::NativeAnimatedNodesManagerProvider> animatedNodesManagerProvider(
