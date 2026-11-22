@@ -262,28 +262,49 @@ function callsTheWrapper({ ts, source, names }, call) {
 }
 
 /**
- * Whether the export certainly runs `withTailwind`, which builds the sheet: it is a call to it, or
+ * The `withTailwind` call the export certainly runs, which builds the sheet, or null: it is one, or
  * reaches one through the arguments of the calls it is made of, as
  * `withDeviceTests(withTailwind(config))` does, or through a `const` above it that starts as one. A
  * comment or string naming it does not, nor a call in a branch, a function, an optional call, a
  * `let` that may be rebound or anything else that may not run.
  */
-function callsWithTailwind(found) {
+function wrapperCall(found) {
   const { ts, statement, declarations } = found;
   const seen = new Set();
   const runs = (node) => {
     if (ts.isParenthesizedExpression(node)) return runs(node.expression);
     if (ts.isIdentifier(node)) {
       const declared = declarations.get(node.text);
-      if (!declared?.constant || seen.has(node.text)) return false;
+      if (!declared?.constant || seen.has(node.text)) return null;
       seen.add(node.text);
       return runs(declared.initializer);
     }
     // An optional call, `wrap?.(x)`, runs neither itself nor its arguments where `wrap` is missing.
-    if (!ts.isCallExpression(node) || ts.isOptionalChain(node)) return false;
-    return callsTheWrapper(found, node) || node.arguments.some(runs);
+    if (!ts.isCallExpression(node) || ts.isOptionalChain(node)) return null;
+    if (callsTheWrapper(found, node)) return node;
+    for (const argument of node.arguments) {
+      const call = runs(argument);
+      if (call) return call;
+    }
+    return null;
   };
   return runs(statement.expression.right);
+}
+
+/**
+ * Whether a `withTailwind` call writes the sheet `src/main.ts` imports, `app.tailwind.js`: its
+ * options are an object that names no `output` of its own. Options read from elsewhere, or spread
+ * from it, may name one.
+ */
+function writesTheSheet({ ts }, call) {
+  const options = call.arguments[1];
+  if (options === undefined) return true;
+  if (!ts.isObjectLiteralExpression(options)) return false;
+  return options.properties.every(
+    (property) =>
+      (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)) &&
+      property.name.getText() !== 'output',
+  );
 }
 
 /**
@@ -368,7 +389,15 @@ function wrapMetroConfig(tree, root) {
     return false;
   }
   const found = activeExport(config);
-  if (found && callsWithTailwind(found)) return true;
+  const call = found && wrapperCall(found);
+  if (call) {
+    if (writesTheSheet(found, call)) return true;
+    byHand(
+      joinPathFragments(root, 'src/main.ts'),
+      `import the sheet ${file}'s withTailwind writes and pass it to mount as { globalStyles }.`,
+    );
+    return false;
+  }
   // One that calls it only where it may not run is left as it is: its own call may name another
   // input, which a wrapper of this one's would override. So is one with a withTailwind of its own,
   // which this cannot call the package's by.

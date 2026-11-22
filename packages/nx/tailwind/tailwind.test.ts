@@ -407,6 +407,27 @@ describe('Tailwind 4, by default', () => {
     });
   }
 
+  for (const [what, options] of [
+    ['an output of its own', "{ input: './src/app.css', output: '.angular-native/custom.js' }"],
+    ['options it cannot read', 'options'],
+    ['options spread from elsewhere', "{ input: './src/app.css', ...options }"],
+  ] as const) {
+    it(`imports no sheet for a withTailwind call with ${what}, which may write another`, async () => {
+      const tree = await integrated();
+      const config = [
+        "const { getDefaultConfig } = require('expo/metro-config');",
+        "const { withTailwind } = require('@ng-native/tailwind/config.cjs');",
+        "const options = { input: './src/app.css' };",
+        `module.exports = withTailwind(getDefaultConfig(__dirname), ${options});`,
+        '',
+      ].join('\n');
+      tree.write('apps/mobile/metro.config.js', config);
+      await generate(tree, {});
+      assert.equal(read(tree, 'apps/mobile/metro.config.js'), config);
+      assert.doesNotMatch(read(tree, 'apps/mobile/src/main.ts'), /app\.tailwind\.js/);
+    });
+  }
+
   it("leaves an export that calls the package's withTailwind off its require as it is", async () => {
     const tree = await integrated();
     const config = [
