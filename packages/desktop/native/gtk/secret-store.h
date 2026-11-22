@@ -1,6 +1,7 @@
-// SecureStore's secrets on Linux: the Secret Service (GNOME Keyring, KWallet) through libsecret,
-// which inside a Flatpak keeps them through the Secret portal instead. Never a file: with no
-// Secret Service to reach, there is no store and SecureStore is absent.
+// SecureStore's secrets on Linux: the Secret Service (GNOME Keyring, KWallet) through libsecret.
+// Inside a Flatpak with the Secret portal, libsecret may keep them in the app's own encrypted file
+// instead, with its key from the portal. Outside one, with no Secret Service to reach, there is no
+// store and SecureStore is absent.
 #pragma once
 
 #include "ngn/desktop-expo.h"

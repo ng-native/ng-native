@@ -382,7 +382,7 @@ void GtkBackend::removeChild(SurfaceId, Tag parent, Tag child, int) {
   if (auto c = views_.find(child); c != views_.end()) {
     unparentStayingHidden(c->second);
   }
-  splitViews_->removed(parent);
+  splitViews_->removed(parent, child);
 }
 
 void GtkBackend::updateProps(const ShadowView &view) {

@@ -519,7 +519,12 @@ void SplitViews::inserted(Tag parent, Tag child) {
   }
 }
 
-void SplitViews::removed(Tag parent) {
+void SplitViews::removed(Tag parent, Tag child) {
+  // The sidebar out of its split, kept for another place: no row of it titles this content.
+  if (auto it = splits_.find(parent); it != splits_.end() && !it->second.tabs && it->second.sidebar == child) {
+    adw_navigation_page_set_title(adw_navigation_split_view_get_content(ADW_NAVIGATION_SPLIT_VIEW(it->second.view)), "");
+    return;
+  }
   GtkWidget *from = backend_.view(parent);
   if (!from) {
     return;

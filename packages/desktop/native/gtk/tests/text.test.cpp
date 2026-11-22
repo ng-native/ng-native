@@ -439,6 +439,43 @@ TEST_CASE("a placeholder dims a theme's translucent text further, never drawing 
   }
 }
 
+TEST_CASE("a placeholder dims from the theme's text as it is when the theme changes after it is shown") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    views.add(MountedViews::shadow(
+        2, "TextInput", textInputProps(dynamic::object("multiline", multiline)("placeholder", "MMMMMMMM")("fontSize", 30)),
+        {{0, 0}, {240, 80}}));
+    views.settle();
+    auto mostOpaque = [&views] {
+      int alpha = 0;
+      for (int x = 2; x < 230; x += 5) {
+        for (int y = 2; y < 78; y += 3) {
+          alpha = std::max(alpha, static_cast<int>(views.pixel(x, y).a));
+        }
+      }
+      return alpha;
+    };
+    REQUIRE(mostOpaque() > 80);
+    // The theme's text turns 40% opaque, with no prop or layout change to the field.
+    GtkCssProvider *css = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(css, "text, textview, textview text, label { color: rgba(0, 0, 0, 0.4); }", -1);
+    gtk_style_context_add_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_USER);
+    struct Restore {
+      GtkCssProvider *css;
+      ~Restore() {
+        gtk_style_context_remove_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(css));
+        g_object_unref(css);
+      }
+    } restore{css};
+    views.settle();
+    CHECK(mostOpaque() > 10);
+    // Half the text's 0.4, as it would be had the theme been so from the start.
+    CHECK(mostOpaque() < 80);
+  }
+}
+
 TEST_CASE("autoCapitalize capitalizes what is typed or pasted, one line or many, and tells the input method") {
   REQUIRE(ngn::testing::gtkReady());
   for (bool multiline : {false, true}) {

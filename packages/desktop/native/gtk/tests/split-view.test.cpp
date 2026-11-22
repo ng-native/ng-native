@@ -448,6 +448,15 @@ TEST_CASE("a sidebar of two lists titles the content with the selected row, whic
   CHECK(std::string(adw_navigation_page_get_title(page)) == "Work");
 }
 
+TEST_CASE("a sidebar taken out of its split, not deleted, takes its title off the content") {
+  REQUIRE(ngn::testing::gtkReady());
+  Split s;
+  auto *page = adw_navigation_split_view_get_content(s.widget());
+  REQUIRE(std::string(adw_navigation_page_get_title(page)) == "Sent");
+  s.views.mount({ShadowViewMutation::RemoveMutation(2, s.sidebar, 0)});
+  CHECK(std::string(adw_navigation_page_get_title(page)).empty());
+}
+
 TEST_CASE("a sidebar deleted from its split takes its title off the content") {
   REQUIRE(ngn::testing::gtkReady());
   Split s;
