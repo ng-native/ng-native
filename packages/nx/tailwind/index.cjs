@@ -121,30 +121,49 @@ function byHand(file, what) {
 }
 
 /**
- * A Metro config's `module.exports = <expression>;` statement and its expression, or null where it
- * has none this can wrap. The expression may span lines, as a formatter splits one longer than a
- * line, the generated app's among them since it went into withDeviceTests too. It runs to the first
- * line-ending `;` at which it parses whole: one inside it, in a function body, is not its end.
+ * A Metro config with its export wrapped in `withTailwind`, or null where this cannot wrap it whole.
+ *
+ * The export may span lines, as a formatter splits one longer than a line, the generated app's
+ * among them since it went into withDeviceTests too. It runs to the first line-ending `;` at which
+ * it is one expression and the wrapped config parses: one inside it, in a function body or at the
+ * end of a comment, is not its end. Nothing is run. An export that goes on past one expression, a
+ * comma statement, is not wrapped at all, since wrapping its first part would pass the rest on.
  */
-function exportOf(config) {
+function wrappedConfig(config) {
   const start = /^module\.exports = /m.exec(config);
   if (!start) return null;
   const from = start.index + start[0].length;
+  // After the last require above the export, which the wrapped export needs defined by then.
+  const requires = [...config.matchAll(/^const .+ = require\(.+\);$/gm)];
+  const last = requires.filter((one) => one.index < start.index).at(-1);
+  const at = last ? last.index + last[0].length : 0;
+  const required = "\nconst { withTailwind } = require('@ng-native/tailwind/config.cjs');";
   const ends = /;[ \t]*$/gm;
   ends.lastIndex = from;
   for (let end = ends.exec(config); end; end = ends.exec(config)) {
     const expression = config.slice(from, end.index);
-    if (parsesAsExpression(expression)) {
-      return [config.slice(start.index, end.index + 1), expression];
-    }
+    if (!isOneExpression(expression)) continue;
+    const wrapped =
+      config.slice(0, at) +
+      required +
+      config.slice(at, start.index) +
+      `module.exports = withTailwind(${expression}, {\n  input: './src/styles.css',\n});` +
+      config.slice(end.index + 1);
+    if (parses(wrapped)) return wrapped;
   }
   return null;
 }
 
-/** Whether `text` is one whole JavaScript expression, without running it. */
-function parsesAsExpression(text) {
+/**
+ * Whether `text` is one JavaScript expression with no comma of its own at its top: a computed key
+ * takes one assignment expression, where parentheses would take `a, b` as well.
+ */
+const isOneExpression = (text) => parses(`({ [${text}\n]: 0 });`);
+
+/** Whether `code` parses as a script, without running it. */
+function parses(code) {
   try {
-    new vm.Script(`(${text}\n)`);
+    new vm.Script(code);
     return true;
   } catch {
     return false;
@@ -163,8 +182,8 @@ function wrapMetroConfig(tree, root) {
     return false;
   }
   if (config.includes('withTailwind')) return true;
-  const exported = exportOf(config);
-  if (!exported) {
+  const wrapped = wrappedConfig(config);
+  if (!wrapped) {
     byHand(
       file,
       "wrap its export in withTailwind(config, { input: './src/styles.css' }), from " +
@@ -172,18 +191,7 @@ function wrapMetroConfig(tree, root) {
     );
     return false;
   }
-  const requires = [...config.matchAll(/^const .+ = require\(.+\);$/gm)];
-  const last = requires.at(-1);
-  const at = last ? last.index + last[0].length : 0;
-  const required = "\nconst { withTailwind } = require('@ng-native/tailwind/config.cjs');";
-  const withRequire = config.slice(0, at) + required + config.slice(at);
-  tree.write(
-    file,
-    withRequire.replace(
-      exported[0],
-      `module.exports = withTailwind(${exported[1]}, {\n  input: './src/styles.css',\n});`,
-    ),
-  );
+  tree.write(file, wrapped);
   return true;
 }
 

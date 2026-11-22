@@ -211,6 +211,48 @@ describe('Tailwind 4, by default', () => {
     );
   });
 
+  for (const [what, export_, expected] of [
+    // A comma statement: the export is `config`, not all of it.
+    [
+      'a statement that goes on past the export, after a comma',
+      ['module.exports = config,', "  config.resolver.assetExts.push('db');"],
+      'unchanged',
+    ],
+    // A `;` at the end of a comment is not the statement's.
+    [
+      'an export whose line ends in a comment with a semicolon',
+      ['module.exports = makeConfig(', '  __dirname,', ') // keep it short;'],
+      'either',
+    ],
+  ] as const) {
+    it(`writes a config that parses, and imports the sheet only if it wrapped, for ${what}`, async () => {
+      const tree = await integrated();
+      const before = [
+        "const { getDefaultConfig } = require('expo/metro-config');",
+        'const config = getDefaultConfig(__dirname);',
+        ...export_,
+        '',
+      ].join('\n');
+      tree.write('apps/mobile/metro.config.js', before);
+      const { logger } = require('@nx/devkit') as typeof import('@nx/devkit');
+      const warn = logger.warn;
+      logger.warn = () => {};
+      try {
+        await generate(tree, {});
+      } finally {
+        logger.warn = warn;
+      }
+      const config = read(tree, 'apps/mobile/metro.config.js');
+      assert.doesNotThrow(() => new vm.Script(config), `not JavaScript:\n${config}`);
+      const wrapped = config !== before;
+      // One this cannot wrap whole is left as it is: wrapping part of it would pass the rest on.
+      if (expected === 'unchanged') assert.equal(config, before);
+      assert.equal(wrapped, config.includes('withTailwind('), config);
+      const imports = /app\.tailwind\.js/.test(read(tree, 'apps/mobile/src/main.ts'));
+      assert.equal(imports, wrapped, 'the sheet is imported where, and only where, it is built');
+    });
+  }
+
   it('passes the generated sheet to mount as the global stylesheet', async () => {
     const tree = await integrated();
     await generate(tree, {});
