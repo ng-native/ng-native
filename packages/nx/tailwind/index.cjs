@@ -297,7 +297,10 @@ function readsWithTailwind(ts, node) {
 
 /** Whether a call's callee is the package's `withTailwind`: a name bound to it, or read off it. */
 function callsTheWrapper({ ts, source, names }, call) {
-  return names.has(call.expression.getText(source)) || readsWithTailwind(ts, call.expression);
+  // `(withTailwind)(config)` calls it too.
+  let callee = call.expression;
+  while (ts.isParenthesizedExpression(callee)) callee = callee.expression;
+  return names.has(callee.getText(source)) || readsWithTailwind(ts, callee);
 }
 
 /**
@@ -336,6 +339,8 @@ function wrapperCall(found) {
  * from it, may name one.
  */
 function writesTheSheet({ ts }, call) {
+  // A spread is all the arguments, the options among them.
+  if (call.arguments.some((argument) => ts.isSpreadElement(argument))) return false;
   const options = call.arguments[1];
   if (options === undefined) return true;
   if (!ts.isObjectLiteralExpression(options)) return false;
@@ -366,23 +371,16 @@ function bindsName(ts, name, bound) {
 }
 
 /**
- * Whether the export calls `withTailwind` anywhere in its expression, run or not, or in what a
- * variable it names starts as: a comment or a string naming it does not count.
+ * Whether the config calls `withTailwind` anywhere, run or not: in its export, in what a variable
+ * starts as, or in a statement of its own, which builds a sheet as the export is left as it is. A
+ * comment or a string naming it does not count.
  */
 function namesWithTailwind(found) {
-  const { ts, statement, declarations } = found;
-  const seen = new Set();
-  const calls = (node) => {
-    if (ts.isIdentifier(node) && declarations.has(node.text) && !seen.has(node.text)) {
-      seen.add(node.text);
-      if (calls(declarations.get(node.text).initializer)) return true;
-    }
-    return (
-      (ts.isCallExpression(node) && callsTheWrapper(found, node)) ||
-      Boolean(ts.forEachChild(node, (child) => calls(child) || undefined))
-    );
-  };
-  return calls(statement.expression.right);
+  const { ts, source } = found;
+  const calls = (node) =>
+    (ts.isCallExpression(node) && callsTheWrapper(found, node)) ||
+    Boolean(ts.forEachChild(node, (child) => calls(child) || undefined));
+  return calls(source);
 }
 
 /** The config with the active export wrapped in `withTailwind`, or null where it would not parse. */
