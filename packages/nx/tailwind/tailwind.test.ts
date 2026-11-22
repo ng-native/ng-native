@@ -249,6 +249,39 @@ describe('Tailwind 4, by default', () => {
     assert.match(read(tree, 'apps/mobile/src/main.ts'), /app\.tailwind\.js/);
   });
 
+  it('wraps an export whose only withTailwind call is in a branch that may not run', async () => {
+    const tree = await integrated();
+    tree.write(
+      'apps/mobile/metro.config.js',
+      [
+        "const { getDefaultConfig } = require('expo/metro-config');",
+        "const { withTailwind } = require('@ng-native/tailwind/config.cjs');",
+        'const config = getDefaultConfig(__dirname);',
+        'module.exports = process.env.PLAIN ? config : withTailwind(config);',
+        '',
+      ].join('\n'),
+    );
+    await generate(tree, {});
+    assert.match(
+      read(tree, 'apps/mobile/metro.config.js'),
+      /^module\.exports = withTailwind\(process\.env\.PLAIN \? config : withTailwind\(config\), \{$/m,
+    );
+  });
+
+  it('leaves an export that runs withTailwind among its calls as it is', async () => {
+    const tree = await integrated();
+    const config = [
+      "const { getDefaultConfig } = require('expo/metro-config');",
+      "const { withTailwind } = require('@ng-native/tailwind/config.cjs');",
+      "const { withDeviceTests } = require('@ng-native/testing/device/metro');",
+      "module.exports = withDeviceTests(withTailwind(getDefaultConfig(__dirname), { input: './src/styles.css' }));",
+      '',
+    ].join('\n');
+    tree.write('apps/mobile/metro.config.js', config);
+    await generate(tree, {});
+    assert.equal(read(tree, 'apps/mobile/metro.config.js'), config);
+  });
+
   it('leaves an export that already calls withTailwind as it is', async () => {
     const tree = await integrated();
     const config = [

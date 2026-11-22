@@ -156,14 +156,18 @@ function activeExport(config) {
 }
 
 /**
- * Whether the export's own expression calls `withTailwind`, which builds the sheet: a comment or a
- * string naming it is not that.
+ * Whether the export certainly runs `withTailwind`, which builds the sheet: it is a call to it, or
+ * reaches one through the arguments of the calls it is made of, as
+ * `withDeviceTests(withTailwind(config))` does. A comment or string naming it does not, nor a call
+ * in a branch, a function or anything else that may not run.
  */
 function callsWithTailwind({ ts, source, statement }) {
-  const calls = (node) =>
-    (ts.isCallExpression(node) && node.expression.getText(source) === 'withTailwind') ||
-    Boolean(ts.forEachChild(node, (child) => calls(child) || undefined));
-  return calls(statement.expression.right);
+  const runs = (node) => {
+    if (ts.isParenthesizedExpression(node)) return runs(node.expression);
+    if (!ts.isCallExpression(node)) return false;
+    return node.expression.getText(source) === 'withTailwind' || node.arguments.some(runs);
+  };
+  return runs(statement.expression.right);
 }
 
 /** The config with the active export wrapped in `withTailwind`, or null where it would not parse. */
