@@ -211,6 +211,29 @@ describe('Tailwind 4, by default', () => {
     );
   });
 
+  it('wraps the export Metro runs, not an old one kept in a comment', async () => {
+    const tree = await integrated();
+    const commented = ['/*', 'module.exports = getDefaultConfig(', '  __dirname,', ');', '*/'];
+    tree.write(
+      'apps/mobile/metro.config.js',
+      [
+        "const { getDefaultConfig } = require('expo/metro-config');",
+        'const config = getDefaultConfig(__dirname);',
+        ...commented,
+        'module.exports = config;',
+        '',
+      ].join('\n'),
+    );
+    await generate(tree, {});
+    const config = read(tree, 'apps/mobile/metro.config.js');
+    assert.doesNotThrow(() => new vm.Script(config), `not JavaScript:\n${config}`);
+    assert.ok(config.includes(commented.join('\n')), `the comment is left as it was:\n${config}`);
+    assert.match(
+      config,
+      /^module\.exports = withTailwind\(config, \{\n {2}input: '\.\/src\/styles\.css',\n\}\);$/m,
+    );
+  });
+
   for (const [what, export_, expected] of [
     // A comma statement: the export is `config`, not all of it.
     [
