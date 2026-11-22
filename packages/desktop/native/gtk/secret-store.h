@@ -15,6 +15,9 @@ namespace ngn::gtk {
 // Whether `bus` has a Secret Service running or one it can start (org.freedesktop.secrets).
 bool secretServiceOn(GDBusConnection *bus);
 
+// The label a secret is kept under, which the keyring's app (Seahorse, KWallet) lists it by.
+std::string secretLabel(const std::string &appId, const std::string &service, const std::string &key);
+
 // The app's secrets, under a schema named for `appId` with the attributes `service` and `key`;
 // null when no Secret Service is reachable (outside a Flatpak) or libsecret is not built in (the
 // dev loop on a Mac).

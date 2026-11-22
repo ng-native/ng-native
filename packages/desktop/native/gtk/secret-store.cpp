@@ -8,6 +8,14 @@
 
 namespace ngn::gtk {
 
+std::string secretLabel(const std::string &appId, const std::string &service, const std::string &key) {
+  // SecureStore's default service is the app's id, which the label already starts with.
+  if (service.empty() || service == appId) {
+    return appId + " " + key;
+  }
+  return appId + " " + service + " " + key;
+}
+
 namespace {
 
 bool listed(GVariant *names, const char *name) {
@@ -52,7 +60,7 @@ class LibsecretStore final : public SecretStore {
 
   void set(const std::string &service, const std::string &key, const std::string &value) override {
     GError *error = nullptr;
-    auto label = name_ + " " + service + " " + key;
+    auto label = secretLabel(name_, service, key);
     secret_password_store_sync(&schema_, SECRET_COLLECTION_DEFAULT, label.c_str(), value.c_str(), nullptr, &error, "service",
                                service.c_str(), "key", key.c_str(), nullptr);
     fail(error);

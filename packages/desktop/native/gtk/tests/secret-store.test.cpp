@@ -69,6 +69,13 @@ struct StandInBus {
 
 } // namespace
 
+TEST_CASE("a secret's label, which the keyring's app shows, names the app and the key, and a service of its own") {
+  // The default service is the app's id: named once, not twice.
+  CHECK(ngn::gtk::secretLabel("dev.example.Notes", "dev.example.Notes", "api-token") == "dev.example.Notes api-token");
+  CHECK(ngn::gtk::secretLabel("dev.example.Notes", "sync", "api-token") == "dev.example.Notes sync api-token");
+  CHECK(ngn::gtk::secretLabel("dev.example.Notes", "", "api-token") == "dev.example.Notes api-token");
+}
+
 TEST_CASE("SecureStore has a store only where a Secret Service runs or can be started") {
   StandInBus bus;
   bus.running = {"org.freedesktop.DBus", "org.a11y.Bus"};
