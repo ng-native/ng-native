@@ -26,6 +26,30 @@ it('commits no length to measure from a style set as a whole', () => {
   }
 });
 
+it('drops a length where a number or an angle goes, as Chrome does, and reads one where it goes', () => {
+  const committed = (transform: string) => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const node: EngineNode = engine.createElement('view');
+    engine.setProp(node, 'style', { transform });
+    engine.appendChild(engine.root, node);
+    engine.commit();
+    const style = fabric.committed[0]!.props['style'] as Record<string, unknown> | undefined;
+    return style?.['transform'] ?? fabric.committed[0]!.props['transform'];
+  };
+  for (const transform of [
+    'scale(2px)',
+    'scaleX(2PX)',
+    'rotate(2px)',
+    'skewX(2px)',
+    'matrix(1px, 0, 0, 1, 0, 0)',
+  ]) {
+    assert.equal(committed(transform), undefined, transform);
+  }
+  assert.deepEqual(committed('scale(2)'), [{ scale: 2 }]);
+  assert.deepEqual(committed('translateX(2px)'), [{ translateX: 2 }]);
+});
+
 describe('a transform bound on an element', () => {
   let transform: (id: string) => unknown;
 

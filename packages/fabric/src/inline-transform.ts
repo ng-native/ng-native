@@ -95,8 +95,11 @@ function mathArgument(slot: MathValue['type'], math: MathValue): Argument | unde
 
 /** An argument as native takes it, or undefined for one CSS does not read in this function. */
 function argument(name: string, raw: string): Argument | undefined {
-  // Nearly every argument: a number of pixels, which needs none of the reads below.
-  if (PX.test(raw)) return parseFloat(raw);
+  // Nearly every argument: a number of pixels, which needs none of the reads below. A length goes
+  // only where one does: `scale(2px)` and `rotate(2px)` are no transform, as Chrome reads them.
+  if (PX.test(raw)) {
+    return /px$/i.test(raw) && slotOf(name) !== 'length' ? undefined : parseFloat(raw);
+  }
   if (MATH_FUNCTION.test(raw)) {
     const math = mathValue(raw);
     return math && mathArgument(slotOf(name), math);
