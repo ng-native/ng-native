@@ -455,3 +455,40 @@ describe('a painted view an animation of something else starts on', () => {
     assert.deepEqual(s.fabric.committed[0]!.props['transform'], [{ translateX: 40 }]);
   });
 });
+
+describe('many views painted in one commit', () => {
+  it('sends native what they paint in one batch, not one a view', () => {
+    const rec = recorder();
+    const fabric = createLaidOutFabric();
+    let now = 0;
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(BAR) as StyleSheet,
+      nativeAnimated: rec.native,
+      now: () => now,
+    });
+    const views = Array.from({ length: 20 }, () => {
+      const view = engine.createElement('view');
+      engine.setClasses(view, 'bar');
+      engine.appendChild(engine.root, view);
+      return view;
+    });
+    engine.commit();
+    engine.advanceAnimations();
+    // Each frame moves every view, as an animation driven from JavaScript does; the second hands
+    // them to native.
+    const frame = (x: number) => {
+      now += 16;
+      engine.advanceAnimations();
+      for (const view of views) engine.setProp(view, 'style', move(x));
+      engine.commit();
+    };
+    frame(1);
+    frame(2);
+    const flushes = rec.named('flush').length;
+    frame(3);
+    assert.deepEqual(rec.painted(engine.tagOf(views[19]!)), { transform: [{ translateX: 3 }] });
+    // React Native's C++ module runs each batch as a task of the UI thread's: twenty a frame
+    // were twenty tasks.
+    assert.equal(rec.named('flush').length - flushes, 1);
+  });
+});
