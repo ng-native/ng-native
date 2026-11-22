@@ -16,11 +16,11 @@ one version. `.github/workflows/release.yml` does it, run by hand from the Actio
 4. **Set up the release App.** `main` takes changes only through pull requests, and the release
    commit is the one exception: the "Protect main" ruleset lets the `ng-native-release` GitHub App
    push past it, and nothing else. The App is owned by the `ng-native` organization, installed on
-   this repository only, and has one permission, contents read and write. The `release`
-   environment, which only `main` can deploy to, holds its client ID as the variable
-   `RELEASE_APP_CLIENT_ID` and its private key as the secret `RELEASE_APP_PRIVATE_KEY`. The release
-   job asks for a token from them before anything is published, so a missing App or key stops it
-   with nothing on npm.
+   this repository only, and asks for contents read and write, beside the metadata read every App
+   has. The `release` environment, which only `main` can deploy to, holds its client ID as the
+   variable `RELEASE_APP_CLIENT_ID` and its private key as the secret `RELEASE_APP_PRIVATE_KEY`.
+   The release job asks for a token from them before anything is published, so a missing App or key
+   stops it with nothing on npm.
 
 ## Adding a package
 
@@ -150,8 +150,8 @@ pass, it runs the same gate CI does, then:
 - `pnpm pack` turns each `workspace:*` dependency into that exact version, and `npm publish`
   publishes each tarball with provenance, on `latest`. A version with a prerelease suffix
   (`0.2.0-rc.0`) would go out under that suffix's dist-tag instead, so `latest` never moves to it.
-- The commit and tag are pushed with the release App's token, and a GitHub release is created with the changelog entry as its
-  notes and both prebuilt desktop hosts' archives attached.
+- The commit and tag are pushed with the release App's token, and a GitHub release is created with
+  the changelog entry as its notes and both prebuilt desktop hosts' archives attached.
 - The documentation site is built from the tag and deployed to production (`docs.yml`), so
   ng-native.com documents what is on npm, not what is on `main`. A documentation-only fix can go
   live sooner by running **Docs** by hand on `main`.
@@ -164,11 +164,11 @@ Once `@ng-native/desktop` is out, finish with **Re-run failed jobs** on the same
 `prebuilt.json` names that run's desktop hosts by SHA-256, a new run builds others, and the release
 job stops rather than attach archives the published package would refuse.
 
-If the push itself is refused after publishing, the App lost its bypass or its installation: check
-that it is installed on the repository and listed as a bypass actor on the "Protect main" ruleset,
-then **Re-run failed jobs**. To replace its key, generate a new one on the App's settings page, set
-it with `gh secret set RELEASE_APP_PRIVATE_KEY --env release < key.pem`, delete the file and revoke
-the old key.
+A missing App installation, client ID or key fails the release job's first step, before anything is
+published. A push refused after publishing, when the rebase went through, means the App is no longer
+a bypass actor on the "Protect main" ruleset: add it back, then **Re-run failed jobs**. To replace
+its key, generate a new one on the App's settings page, set it with `gh secret set
+RELEASE_APP_PRIVATE_KEY --env release < key.pem`, delete the file and revoke the old key.
 
 ## Checking distribution locally
 
