@@ -209,12 +209,29 @@ jobs:
     needs: [validate, native, verify, generators, storybook, desktop-host]
     if: github.ref == 'refs/heads/main' || inputs.dry_run
     runs-on: ubuntu-latest
+    # The environment holds the release App's key and only lets `main` in. A dry run, which can
+    # start from any branch, pushes nothing and runs outside it.
+    environment: ${{ !inputs.dry_run && 'release' || '' }}
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
+      # Pushes to `main` need a pull request, except from the release App, which the ruleset lets
+      # through. Its token comes first, so a missing App or key stops the release before anything
+      # is published, and lives an hour, far longer than this job takes.
+      - id: app-token
+        if: ${{ !inputs.dry_run }}
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      # No credentials left in the git config: the build runs installed packages' code, and only
+      # the push step below gets the App's token. The repository is public, so fetching needs none.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: ./.github/actions/setup
         with:
@@ -325,7 +342,10 @@ jobs:
 
       - name: Push the version commit and tag
         if: ${{ !inputs.dry_run }}
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
+          git remote set-url origin "https://x-access-token:$TOKEN@github.com/$GITHUB_REPOSITORY.git"
           # Pull requests can merge while a release runs. Replay the release commit on top of them
           # and tag where it lands. A rebase conflict (a merge that touched a version, the
           # changelog or a migrations.json) fails the step rather than guessing.
