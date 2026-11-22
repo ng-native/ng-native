@@ -374,6 +374,9 @@ GtkWidget *placeholderLabel(GtkWidget *text) {
   return nullptr;
 }
 
+// How opaque a placeholder with no placeholderTextColor is, over the theme's text colour.
+constexpr float kPlaceholderAlpha = 0.5f;
+
 // The run of text attributes a TextInput's text takes, its font and colour, or its placeholder
 // takes, its font and placeholderTextColor.
 PangoAttrList *textAttributes(const DesktopTextInputProps &props, bool placeholder = false) {
@@ -383,9 +386,9 @@ PangoAttrList *textAttributes(const DesktopTextInputProps &props, bool placehold
   pango_attr_list_insert(list, pango_attr_font_desc_new(font));
   pango_font_description_free(font);
   SharedColor color = placeholder ? props.placeholderTextColor : attributes.foregroundColor;
+  auto channel = [](float v) { return static_cast<guint16>(std::clamp(v, 0.0f, 1.0f) * 65535); };
   if (color) {
     auto c = colorComponentsFromColor(color);
-    auto channel = [](float v) { return static_cast<guint16>(std::clamp(v, 0.0f, 1.0f) * 65535); };
     pango_attr_list_insert(list, pango_attr_foreground_new(channel(c.red), channel(c.green), channel(c.blue)));
     pango_attr_list_insert(list, pango_attr_foreground_alpha_new(channel(c.alpha)));
   }
@@ -660,12 +663,15 @@ void applyTextFieldProps(ViewData &view) {
     PangoAttrList *list = textAttributes(*props);
     gtk_text_set_attributes(text, list);
     pango_attr_list_unref(list);
-    // The placeholder in the text's font, and in placeholderTextColor when set, else in GTK's
-    // dimmed text.
+    // The placeholder in the text's font, and in placeholderTextColor when set, else in the
+    // theme's text, dimmed: libadwaita dims a placeholder only inside an entry, and a bare
+    // GtkText's would read as typed text. Dimmed as it is drawn, over whatever the theme's text is
+    // then, translucent or not, light or dark, and however the theme changes after.
     if (GtkWidget *label = placeholderLabel(field.text)) {
       PangoAttrList *placeholder = textAttributes(*props, true);
       gtk_label_set_attributes(GTK_LABEL(label), placeholder);
       pango_attr_list_unref(placeholder);
+      gtk_widget_set_opacity(label, props->placeholderTextColor ? 1 : kPlaceholderAlpha);
     }
     gtk_text_set_input_hints(text, capitalizeHints(textInputOptions(*props).capitalize));
     gtk_editable_set_editable(GTK_EDITABLE(text), editable);
@@ -749,8 +755,10 @@ void snapshotPlaceholder(const ViewData &view, GtkSnapshot *snapshot) {
     case GTK_JUSTIFY_RIGHT: pango_layout_set_alignment(layout, PANGO_ALIGN_RIGHT); break;
     default: pango_layout_set_alignment(layout, PANGO_ALIGN_LEFT); break;
   }
-  // The placeholder colour, or GTK's own dimmed text.
-  GdkRGBA color{0, 0, 0, 0.5f};
+  // The placeholder colour, or the theme's text dimmed, light or dark.
+  GdkRGBA color;
+  gtk_widget_get_color(field->text, &color);
+  color.alpha *= kPlaceholderAlpha;
   if (props->placeholderTextColor) {
     auto c = colorComponentsFromColor(props->placeholderTextColor);
     color = {c.red, c.green, c.blue, c.alpha};

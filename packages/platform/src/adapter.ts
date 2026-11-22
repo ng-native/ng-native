@@ -153,10 +153,13 @@ function closedAtEnd(text: unknown): unknown {
 function leftOpen(text: string): number {
   let open = 0;
   let quote = '';
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i]!;
+  // From one character that counts to the next, not each in turn: this reads every bound style
+  // with a bracket in it, each frame of an animation, and the search runs natively.
+  BRACKETS.lastIndex = 0;
+  for (let found = BRACKETS.exec(text); found; found = BRACKETS.exec(text)) {
+    const char = found[0];
     if (quote) {
-      if (char === '\\') i++;
+      if (char === '\\') BRACKETS.lastIndex++;
       else if (char === quote) quote = '';
     } else if (char === '"' || char === "'") quote = char;
     else if (char === '(') open++;
@@ -164,6 +167,9 @@ function leftOpen(text: string): number {
   }
   return open;
 }
+
+/** What `leftOpen` counts: a bracket, a quote, and in quotes the escape that hides one. */
+const BRACKETS = /[()"'\\]/g;
 
 /**
  * A `font-family` is a stack, quoted or not, where native takes one family by name: the first,

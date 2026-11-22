@@ -6,7 +6,15 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -24,6 +32,15 @@ const launcher = (...args: string[]) =>
   spawnSync('bash', [fileURLToPath(new URL('compiler-launcher.sh', scripts)), ...args], {
     encoding: 'utf8',
   });
+
+const compilers = (os: string, env: Record<string, string> = {}) => {
+  // Without the caller's CC and CXX, so the defaults are what a desktop with GCC installed gets.
+  const { CC: _cc, CXX: _cxx, ...rest } = process.env;
+  return spawnSync('bash', [fileURLToPath(new URL('compilers.sh', scripts)), os], {
+    encoding: 'utf8',
+    env: { ...rest, ...env },
+  });
+};
 
 const lock = (packages: string[], snapshots = '') =>
   `lockfileVersion: '9.0'\n\npackages:\n\n${packages.map((p) => `  ${p}:\n    resolution: {integrity: x}\n\n`).join('')}snapshots:\n\n${snapshots}`;
@@ -124,6 +141,146 @@ describe('the compiler launcher of the desktop build', () => {
       assert.match(script, /compiler-launcher\.sh" "\$\{NGN_COMPILER_LAUNCHER:-\}"/, name);
       assert.match(script, /\$\{launcher_args\[@\]\+"\$\{launcher_args\[@\]\}"\}/, name);
     }
+  });
+});
+
+describe('a build directory configured with another compiler', () => {
+  // CMake starts a directory over when its compiler changes, without the -D's it was given, so
+  // RN_DIR and the rest come out empty: the build clears it first.
+  // A clang++ of its own on PATH, which CMake would find for `clang++`: the path it is cached as.
+  const reset = (
+    cached: string | undefined | ((found: string) => string),
+    args: string[],
+    // The path CMake recorded for it, under CMakeFiles, where the cache keeps the name as given.
+    recorded?: (found: string) => string,
+  ) => {
+    const dir = mkdtempSync(join(tmpdir(), 'ngn-compilers-'));
+    const bin = join(dir, 'bin');
+    const found = join(bin, 'clang++');
+    try {
+      mkdirSync(bin);
+      writeFileSync(found, '#!/bin/sh\n', { mode: 0o755 });
+      if (typeof cached === 'function') cached = cached(found);
+      mkdirSync(join(dir, 'CMakeFiles', '4.4.4'), { recursive: true });
+      if (recorded) {
+        writeFileSync(
+          join(dir, 'CMakeFiles', '4.4.4', 'CMakeCXXCompiler.cmake'),
+          `set(CMAKE_CXX_COMPILER "${recorded(found)}")\n`,
+        );
+      }
+      writeFileSync(
+        join(dir, 'CMakeCache.txt'),
+        cached === undefined
+          ? 'RN_DIR:PATH=/rn\n'
+          : `RN_DIR:PATH=/rn\nCMAKE_CXX_COMPILER:FILEPATH=${cached}\n`,
+      );
+      const run = spawnSync(
+        'bash',
+        [fileURLToPath(new URL('reset-for-compilers.sh', scripts)), dir, ...args],
+        { encoding: 'utf8', env: { ...process.env, PATH: `${bin}:/usr/bin:/bin` } },
+      );
+      assert.equal(run.status, 0, run.stderr);
+      return {
+        cache: existsSync(join(dir, 'CMakeCache.txt')),
+        files: existsSync(join(dir, 'CMakeFiles')),
+      };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it('is cleared when it was configured with GCC and clang is asked for', () => {
+    assert.deepEqual(reset('/usr/bin/c++', ['-DCMAKE_CXX_COMPILER=clang++']), {
+      cache: false,
+      files: false,
+    });
+  });
+
+  it('is cleared when it was configured with a clang that PATH no longer finds first', () => {
+    // CMake compares the path it finds with the cached one, and starts over where they differ.
+    assert.deepEqual(reset('/opt/llvm/bin/clang++', ['-DCMAKE_CXX_COMPILER=clang++']), {
+      cache: false,
+      files: false,
+    });
+  });
+
+  it('is kept when it was configured with the compiler asked for', () => {
+    assert.deepEqual(
+      reset((found) => found, ['-DCMAKE_CXX_COMPILER=clang++']),
+      {
+        cache: true,
+        files: true,
+      },
+    );
+  });
+
+  it('is kept when it keeps the name as given and recorded the path PATH finds', () => {
+    assert.deepEqual(
+      reset('clang++', ['-DCMAKE_CXX_COMPILER=clang++'], (found) => found),
+      {
+        cache: true,
+        files: true,
+      },
+    );
+  });
+
+  it('is cleared when it keeps the name as given and recorded another path', () => {
+    assert.deepEqual(
+      reset('clang++', ['-DCMAKE_CXX_COMPILER=clang++'], () => '/opt/llvm/bin/clang++'),
+      {
+        cache: false,
+        files: false,
+      },
+    );
+  });
+
+  it('is kept when no compiler is asked for, CC and CXX being the caller', () => {
+    assert.deepEqual(reset('/usr/bin/c++', []), { cache: true, files: true });
+  });
+
+  it('is kept when it names no compiler yet', () => {
+    assert.deepEqual(reset(undefined, ['-DCMAKE_CXX_COMPILER=clang++']), {
+      cache: true,
+      files: true,
+    });
+  });
+});
+
+describe('the compilers the desktop build passes to CMake', () => {
+  it('is clang on Linux, where CMake would otherwise take the system GCC', () => {
+    assert.deepEqual(compilers('Linux').stdout.trim().split('\n'), [
+      '-DCMAKE_C_COMPILER=clang',
+      '-DCMAKE_CXX_COMPILER=clang++',
+    ]);
+  });
+
+  it('leaves CC and CXX, when set, for CMake to read with their arguments', () => {
+    // CMake splits `clang -pthread` from the environment into a compiler and its flags; named in
+    // -DCMAKE_C_COMPILER it would be taken as a program called that.
+    const both = compilers('Linux', { CC: 'clang -pthread', CXX: 'clang++ -pthread' });
+    assert.equal(both.status, 0, both.stderr);
+    assert.equal(both.stdout.trim(), '');
+    // Each defaults alone: CC set leaves C++ to clang++.
+    assert.deepEqual(compilers('Linux', { CC: 'clang-19' }).stdout.trim().split('\n'), [
+      '-DCMAKE_CXX_COMPILER=clang++',
+    ]);
+  });
+
+  it("is Xcode's own on macOS", () => {
+    const result = compilers('Darwin');
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '');
+  });
+
+  it('is what build.sh passes to its CMake', () => {
+    const script = readFileSync(new URL('build.sh', scripts), 'utf8');
+    assert.match(script, /compilers\.sh"\)/);
+    // In the CMake command itself, its continued lines: the reset before it expands them too.
+    const configure = /^cmake --log-level(?:[^\n]*\\\n)*[^\n]*/m.exec(script)?.[0] ?? '';
+    assert.match(configure, /\$\{compiler_args\[@\]\+"\$\{compiler_args\[@\]\}"\}/);
+    // And the directory is cleared for them first, where it was configured with another.
+    const reset = script.indexOf('"$here/reset-for-compilers.sh" "$BUILD"');
+    assert.ok(reset !== -1 && reset < script.indexOf(configure), 'reset before the CMake command');
   });
 });
 

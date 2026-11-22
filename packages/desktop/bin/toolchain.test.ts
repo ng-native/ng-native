@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { describe, it } from 'node:test';
 
 import { UsageError } from './host.mjs';
@@ -269,6 +270,43 @@ describe('toolchainProblems on Linux', () => {
         `${module} is checked`,
       );
     }
+  });
+});
+
+describe('the toolchain probes', () => {
+  it('ask each tool quietly, so a usage message on stderr never reaches the terminal', () => {
+    const options: unknown[] = [];
+    const sys = linux(LINUX_EVERYTHING, UBUNTU);
+    const run = sys.run;
+    toolchainProblems(
+      {
+        ...sys,
+        run(command: string, args: string[], option?: unknown) {
+          options.push(option);
+          return run(command, args);
+        },
+      },
+      'linux',
+    );
+    assert.ok(options.length > LINUX_TOOLS.length);
+    for (const option of options) assert.deepEqual(option, { capture: true, quiet: true });
+  });
+
+  it('are run by the system with stderr dropped, and stdout kept', () => {
+    const child = spawnSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `import { system } from ${JSON.stringify(new URL('./host.mjs', import.meta.url).href)};
+         const { stdout } = system.run('sh', ['-c', 'echo out; echo usage >&2'], { capture: true, quiet: true });
+         process.stdout.write('got ' + stdout);`,
+      ],
+      { encoding: 'utf8' },
+    );
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(child.stdout, 'got out\n');
+    assert.equal(child.stderr, '');
   });
 });
 

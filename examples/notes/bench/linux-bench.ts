@@ -1,8 +1,8 @@
 // The workload `pnpm bench:linux` measures beside the notes example (scripts/bench-linux.mjs): a
 // release bundle of its own, exported from this folder with the notes example's Metro config, that
 // is not part of the notes app. It opens four more windows (and closes them), mounts a list of
-// 2,000 views, scrolls it while one view changes a frame, and drags a divider by changing a width
-// each frame, telling the
+// 2,000 views, scrolls it while one view changes a frame, drags a divider by changing a width
+// each frame, and plays a CSS animation on a grid of views, telling the
 // bench's local server when each step begins and ends so it can read what the host logged in
 // between (the commits and frames, NGN_LOG_COMMITS) and the process's memory. A step that did not
 // do what it measures (the list did not reach its height, the window did not open) says so, and
@@ -22,6 +22,10 @@ const ROW_HEIGHT = 24;
 const FRAMES = 120;
 /** How many windows the window step opens: one window's memory is small beside a process's noise. */
 const EXTRA_WINDOWS = 4;
+/** How many views the animation step turns and fades. */
+const SPINNERS = 200;
+/** How long the animation step watches the animation play. */
+const ANIMATE_MS = 2000;
 
 const tell = (path: string): Promise<unknown> => fetch(`${SERVER}/${path}`).then((r) => r.text());
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -37,6 +41,35 @@ class BenchWindow {}
 @Component({
   selector: 'bench-root',
   imports: [ScrollView, View],
+  styles: `
+    .spinners {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 400px;
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+    .spinner {
+      width: 16px;
+      height: 16px;
+      margin: 2px;
+      background-color: #3366cc;
+    }
+    .spinning {
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+        opacity: 1;
+      }
+      to {
+        transform: rotate(360deg);
+        opacity: 0.4;
+      }
+    }
+  `,
   template: `
     <view style="flex: 1; flex-direction: row">
       <view [style]="{ width: divider(), backgroundColor: '#dddddd' }"></view>
@@ -50,6 +83,11 @@ class BenchWindow {}
           ></view>
         }
       </scroll-view>
+      <view class="spinners">
+        @for (spinner of spinners(); track spinner) {
+          <view class="spinner" [class.spinning]="spinning()"></view>
+        }
+      </view>
     </view>
   `,
 })
@@ -63,6 +101,9 @@ class BenchRoot {
   protected readonly changing = signal(-1);
   /** The width of the strip a drag would resize. */
   protected readonly divider = signal(200);
+  /** The views the animation step plays an animation on, and whether it plays. */
+  protected readonly spinners = signal<number[]>([]);
+  protected readonly spinning = signal(false);
   /** What the list's content measures, which reaches the rows' height once they are mounted. */
   protected readonly contentHeight = signal(0);
 
@@ -107,6 +148,15 @@ class BenchRoot {
       }
       return true;
     });
+    // Mounted before the step, which measures the animation and not the views it plays on.
+    this.spinners.set(Array.from({ length: SPINNERS }, (_, spinner) => spinner));
+    await nextFrame();
+    await this.step('animate', async () => {
+      this.spinning.set(true);
+      await sleep(ANIMATE_MS);
+      return true;
+    });
+    this.spinning.set(false);
     await tell('done');
   }
 

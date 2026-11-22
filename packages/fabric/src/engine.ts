@@ -926,6 +926,13 @@ export interface EngineNode extends HostNode {
   /** The last bound `transform` string and the list it reads as, undefined where CSS cannot. */
   boundTransform?: { text: string; list: unknown[] | undefined };
   /**
+   * The paint a commit can take from the element's own style as it is, without merging its props
+   * again: see `Engine.patchedPaint`. `paintPassed` holds the keys the last merge committed just as
+   * the element set them; `paintPatch` the keys set since, or false once anything else changed.
+   */
+  paintPassed?: ReadonlySet<string>;
+  paintPatch?: Set<string> | false;
+  /**
    * Set by the component that owns this element. A host primitive that reaches a commit without it
    * was written in a template that never imported the component, which is reported in dev.
    */
@@ -4591,7 +4598,7 @@ function sameFlow(child: EngineNode, before: Flow, after: Flow): boolean {
 function leaveFlow(container: EngineNode, before: Flow | undefined, after: Flow | undefined): void {
   for (const child of before?.members ?? []) {
     if (after?.members.has(child)) continue;
-    child.propsDirty = true;
+    dirtyProps(child);
     if (child.flowIn === container) child.flowIn = undefined;
   }
 }
@@ -4601,7 +4608,7 @@ function joinFlow(container: EngineNode, before: Flow | undefined, after: Flow |
   if (!after) return;
   for (const child of after.members) {
     if (before && sameFlow(child, before, after)) continue;
-    child.propsDirty = true;
+    dirtyProps(child);
     child.flowIn = container;
   }
 }
@@ -4637,6 +4644,93 @@ function keptForNative(node: EngineNode, props: Record<string, unknown>): void {
  * layout to read: under a row with `align-items: baseline` the baseline is not a number, and
  * the row comes to no height with nothing in it placed. Out of the flow it is passed over.
  */
+/** Have a node's props merged again, in full: no patch of its paint (`Engine.patchedPaint`). */
+function dirtyProps(node: EngineNode): void {
+  node.propsDirty = true;
+  if (node.paintPatch) node.paintPatch = false;
+}
+
+/**
+ * What a commit can patch of a view's paint, set in its own style: what native paints, and nothing
+ * the layout or another prop reads. See `Engine.patchedPaint`.
+ */
+const PATCHED_PAINT = new Set(['opacity', 'transform', 'backgroundColor']);
+
+/**
+ * The paint keys a node's own style changed since its commit with `key` among them, or false where
+ * anything else changed: a node already marked for something else is merged in full.
+ */
+function paintPatchWith(node: EngineNode, key: string | undefined): Set<string> | false {
+  if (key === undefined || !PATCHED_PAINT.has(key)) return false;
+  if (node.propsDirty && !node.paintPatch) return false;
+  return (node.paintPatch || new Set<string>()).add(key);
+}
+
+/** Note the paint keys to patch, where there are any or were: most nodes never have the field. */
+function keepPaintPatch(node: EngineNode, patch: Set<string> | false): void {
+  if (patch || node.paintPatch !== undefined) node.paintPatch = patch;
+}
+
+/** Whether a style sets any paint a commit can patch: asked of every node merged, without a loop. */
+const setsPaint = (style: Record<string, unknown> | undefined): style is Record<string, unknown> =>
+  style !== undefined &&
+  (style['opacity'] !== undefined ||
+    style['transform'] !== undefined ||
+    style['backgroundColor'] !== undefined);
+
+/** The paint keys a merge committed just as the node's own style sets them. */
+function paintPassedIn(
+  node: EngineNode,
+  style: Record<string, unknown>,
+  merged: Record<string, unknown>,
+): Set<string> | undefined {
+  // A view hidden or clipped away commits its paint as hiding sets it, whatever its own style says:
+  // `visibility: hidden` and a view held unseen (UNSEEN), or `clip` (CLIPPED_AWAY), each of which
+  // turns its touches off too. Equal to its style once, it is still not its style's.
+  if (merged['pointerEvents'] === 'none') return undefined;
+  const over = setOver(node);
+  // Paint its parent hands it, `paintOn`, is the parent's: the root's too, which is not
+  // reconciled as other parents are, so nothing merges this view again for it (`repaint`).
+  const handed = node.parent?.paintsOn === node;
+  let passed: Set<string> | undefined;
+  for (const key of PATCHED_PAINT) {
+    const value = style[key];
+    if (value === undefined || over.has(key) || (handed && PAINT_KEYS.includes(key))) continue;
+    const committed = key === 'transform' ? boundTransformList(node, value) : value;
+    if (committed !== undefined && merged[key] === committed) (passed ??= new Set()).add(key);
+  }
+  return passed;
+}
+
+/**
+ * The keys committed over a node's own style: an `!important` rule's, and a component's
+ * `styleOverride`'s. Equal to the style's once, such a value is still not the style's.
+ */
+function setOver(node: EngineNode): ReadonlySet<string> {
+  const important = node.styleCache?.important;
+  const override = node.props[STYLE_OVERRIDE];
+  if (!override) return important ?? NO_KEYS_SET;
+  return new Set([...(important ?? []), ...Object.keys(flattenStyle(override, {}))]);
+}
+
+const NO_KEYS_SET: ReadonlySet<string> = new Set();
+
+/** The list a bound transform was last read as, where `text` is what it was read from. */
+function boundTransformList(node: EngineNode, text: unknown): unknown[] | undefined {
+  const bound = node.boundTransform;
+  return bound !== undefined && bound.text === text ? bound.list : undefined;
+}
+
+/** A paint value as a commit holds it, or undefined for one only a merge can read. */
+function patchedValue(node: EngineNode, key: string, value: unknown): unknown {
+  if (key === 'opacity') return typeof value === 'number' ? value : undefined;
+  if (key !== 'transform') return value;
+  if (typeof value !== 'string') return undefined;
+  const list = boundTransformList(node, value) ?? transformList(value);
+  if (list) node.boundTransform = { text: value, list };
+  return list;
+}
+
 function hiddenOutOfFlow(props: Record<string, unknown>): void {
   if (props['display'] === 'none') props['position'] = 'absolute';
 }
@@ -6062,7 +6156,7 @@ function wasOrIsEmptyWithout(node: EngineNode, moved: EngineNode): boolean {
  * child's own moved, and what it paints may have.
  */
 function repaint(node: EngineNode): void {
-  if (node.paintsOn?.parent === node) node.paintsOn.propsDirty = true;
+  if (node.paintsOn?.parent === node) dirtyProps(node.paintsOn);
 }
 
 /** A sixtieth of a second: how far apart the frames native is given for an animation are. */
@@ -6309,7 +6403,7 @@ function noteTouches(node: EngineNode, style: StyleCache | null): void {
   const within = takesTouches(node, value, prop);
   if (within === !!node.touchWithin) return;
   node.touchWithin = within;
-  if (value === 'none') node.propsDirty = true;
+  if (value === 'none') dirtyProps(node);
 }
 
 const hasClasses = (node: EngineNode, names: readonly string[]): boolean =>
@@ -6710,6 +6804,8 @@ const ENGINE_NODE_FIELDS = {
   composedTransform: true,
   bornIn: true,
   boundTransform: true,
+  paintPassed: true,
+  paintPatch: true,
   claimed: true,
   componentHost: true,
   nativeView: true,
@@ -7208,6 +7304,16 @@ function composeTransform(
  * that has gone away has to be sent explicitly as `null`. Sending the whole prop object would
  * silently keep removed props alive.
  */
+/** Whether two sets of props hold the same values, an object by what is in it. */
+function sameProps(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every(
+    (key) =>
+      key in b && (Object.is(a[key], b[key]) || JSON.stringify(a[key]) === JSON.stringify(b[key])),
+  );
+}
+
 function diffProps(
   prev: Record<string, unknown>,
   next: Record<string, unknown>,
@@ -9449,9 +9555,15 @@ export class Engine implements HostEngine {
         this.askedBy(key ?? 'style', value);
       }
     }
+    // A declaration of paint alone, on a node nothing else changed on since it was committed, can
+    // be patched into what it committed: see `patchedPaint`.
+    // Noted before the marking, which leaves it: a listener the marking calls (`onDirty`) may
+    // change the node, and what it changes clears the patch as any other change does.
+    keepPaintPatch(node, paintPatchWith(node, key));
     // As `setProp` restyles for a new style object: a child that takes one of its values, an
     // `inherit`, follows the one changed in place too.
-    this.markProps(node, this.inlineReachesStyle(node) || node.styleCache?.heirs === true);
+    const heirs = this.inlineReachesStyle(node) || node.styleCache?.heirs === true;
+    this.markProps(node, heirs, true, Boolean(node.paintPatch));
     this.markParagraph(node);
   }
 
@@ -9578,8 +9690,11 @@ export class Engine implements HostEngine {
 
   // --- dirty marking ----------------------------------------------------
 
-  private markProps(node: EngineNode, affectsStyle = true, beside = true): void {
+  /** `patched`: the change is one `paintPatch` already notes, which the marking leaves. */
+  private markProps(node: EngineNode, affectsStyle = true, beside = true, patched = false): void {
+    // `dirtyProps`, written out: this runs for every change to every node.
     node.propsDirty = true;
+    if (node.paintPatch && !patched) node.paintPatch = false;
     // Classes, `nativeID` and anything else a selector can read live in props, so any of them
     // changing can change what this node matches, and through it what its whole subtree does.
     // Marking only when it can is what keeps an animated `[style]` from re-cascading everything
@@ -10040,7 +10155,7 @@ export class Engine implements HostEngine {
     const sent = this.rootsSent;
     this.paintedInstead = false;
     this.noteAnimating();
-    this.commitAsAsked();
+    this.paintedInBatch(() => this.commitAsAsked());
     if (this.paintedOnly(sent)) {
       this.reportTokens();
       return false;
@@ -11097,7 +11212,7 @@ export class Engine implements HostEngine {
     if (holds && display != null) return;
     node.lined = holds || undefined;
     node.defaultStyle = holds ? { ...rest, display: 'inline-block' } : rest;
-    node.propsDirty = true;
+    dirtyProps(node);
   }
 
   /**
@@ -11109,7 +11224,7 @@ export class Engine implements HostEngine {
     const boxed = LAYS_OUT_ITSELF.has(readStyle(node, 'display') as string) || undefined;
     if (boxed === node.boxed) return;
     node.boxed = boxed;
-    node.propsDirty = true;
+    dirtyProps(node);
   }
 
   /** Give an element that is inline in a browser the display it has for what it holds now. */
@@ -11119,7 +11234,7 @@ export class Engine implements HostEngine {
     this.flowStyles.clear();
     if (node.defaultStyle?.['display'] === display) return;
     node.defaultStyle = { ...node.defaultStyle, display };
-    node.propsDirty = true;
+    dirtyProps(node);
   }
 
   /** Whether a box holds a block-level box in its flow, through any box that is only inline. */
@@ -11248,7 +11363,7 @@ export class Engine implements HostEngine {
    * children when it turns between a row and a column. See `autoMinimum`.
    */
   private reminimum(node: EngineNode): void {
-    if (node.autoMin) node.propsDirty = true;
+    if (node.autoMin) dirtyProps(node);
     const row = isRow(node);
     if (node.row !== undefined && node.row !== row) {
       this.touch(node.childList.filter((child) => child.nodeKind === 'element'));
@@ -11733,7 +11848,7 @@ export class Engine implements HostEngine {
     if (this.topOf(node) !== this.root) {
       this.holds.delete(node);
       // Merged again if it comes back, without the height it had here.
-      if (node.heldAt) node.propsDirty = true;
+      if (node.heldAt) dirtyProps(node);
       node.heldAt = undefined;
       return false;
     }
@@ -12418,10 +12533,10 @@ export class Engine implements HostEngine {
     if (follows) return;
     // Every item is merged again, and so is one that has just stopped being an item.
     for (const child of new Set([...(node.grid?.members ?? []), ...members])) {
-      child.propsDirty = true;
+      dirtyProps(child);
     }
     for (const child of members) child.gridIn = node;
-    node.propsDirty = true;
+    dirtyProps(node);
     if (grid) this.restartGrid(node, members);
     else this.ungrid(node);
   }
@@ -12558,7 +12673,7 @@ export class Engine implements HostEngine {
   /** Have these nodes merged again in the next commit, without asking the host for one. */
   private touch(nodes: Iterable<EngineNode>): void {
     for (const node of nodes) {
-      node.propsDirty = true;
+      dirtyProps(node);
       for (let up = node.parent; up && !up.subtreeDirty; up = up.parent) up.subtreeDirty = true;
     }
   }
@@ -12990,6 +13105,81 @@ export class Engine implements HostEngine {
   }
 
   /**
+   * Note which of a plain view's paint keys the merge just made committed exactly as the element
+   * set them in its own style: nothing over them, no transition or animation of the view's, no
+   * other form of them. A later change of only those is patched in (`patchedPaint`).
+   */
+  private notePaintPassed(
+    node: EngineNode,
+    viewName: string,
+    merged: Record<string, unknown>,
+  ): void {
+    const own = node.props['style'] as Record<string, unknown> | undefined;
+    const passed =
+      setsPaint(own) && viewName === DEFAULT_VIEW && own === node.ownStyle && !this.eases
+        ? paintPassedIn(node, own, merged)
+        : undefined;
+    if (passed || node.paintPassed) node.paintPassed = passed;
+  }
+
+  /**
+   * A plain view's props with the paint set in its own style since its last commit patched in, or
+   * null where they must be merged again. A `[style.opacity]` or `[style.transform]` bound and
+   * changed each frame of an animation driven from JavaScript is the whole change, and merging
+   * every prop again for it was most of a frame's cost. Only where nothing else changed: no class,
+   * no prop, nothing it inherits (`styleChanged`), and each key changed one the last merge passed
+   * through as set (`notePaintPassed`), which a view held unseen or under a finger does not.
+   */
+  private patchedPaint(
+    node: EngineNode,
+    committed: Record<string, unknown>,
+  ): Record<string, unknown> | null {
+    const keys = node.paintPatch;
+    const passed = node.paintPassed;
+    if (!keys || !passed || node.held || this.responders.has(node)) return null;
+    const style = node.props['style'] as Record<string, unknown>;
+    const patched = { ...committed };
+    for (const key of keys) {
+      const value = passed.has(key) ? patchedValue(node, key, style[key]) : undefined;
+      if (value === undefined) return null;
+      // A transform that comes or goes makes or unmakes the box a containing block, which the
+      // merge commits as its position: see `gridLayout`.
+      if (key === 'transform' && given(value) !== given(committed[key])) return null;
+      patched[key] = value;
+    }
+    return this.dev ? this.checkedPatch(node, patched) : patched;
+  }
+
+  /**
+   * In development, the patch against a merge in full, which it must equal: a difference is
+   * reported once, and the merge is committed.
+   */
+  private checkedPatch(
+    node: EngineNode,
+    patched: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const merged = this.mergeProps(node, committedViewName(node));
+    if (sameProps(patched, merged)) return patched;
+    if (!this.patchReported) {
+      this.patchReported = true;
+      console.error(
+        `[angular-native] a patch of ${node.tag}'s paint differs from its props merged again, ` +
+          `which are committed instead. Please report it.\n` +
+          `patched: ${JSON.stringify(patched)}\nmerged: ${JSON.stringify(merged)}`,
+      );
+    }
+    return merged;
+  }
+
+  private patchReported = false;
+
+  /** Run `work`, what it has native paint sent once, at its end: see `NativePainter.batch`. */
+  private paintedInBatch(work: () => void): void {
+    if (this.painter) this.painter.batch(work);
+    else work();
+  }
+
+  /**
    * Exempt from the complexity limit deliberately, as `matchesCompound` is: a flat sequence of
    * steps, each guarded by what it reads, run for every node merged. Moving the guards into calls
    * of their own measured slower in `pnpm bench` and `pnpm bench:tailwind`.
@@ -13106,6 +13296,11 @@ export class Engine implements HostEngine {
       contentAsBorderBox(merged, this.styles.readsRightToLeft(merged));
     }
     keptForPaint(node, merged);
+    // Asked first, without a call: nearly no node merged sets paint in its own style.
+    const ownStyle = node.props['style'] as Record<string, unknown> | undefined;
+    if (node.paintPassed !== undefined || setsPaint(ownStyle)) {
+      this.notePaintPassed(node, viewName, merged);
+    }
     return merged;
   }
 
@@ -13231,7 +13426,7 @@ export class Engine implements HostEngine {
     this.flowStyles.clear();
     if (!before && !after) return;
     node.flow = after;
-    if (before?.plan.kind !== after?.plan.kind) node.propsDirty = true;
+    if (before?.plan.kind !== after?.plan.kind) dirtyProps(node);
     leaveFlow(node, before, after);
     joinFlow(node, before, after);
     this.hang(node, before, after);
@@ -13245,10 +13440,10 @@ export class Engine implements HostEngine {
   private hang(node: EngineNode, before: Flow | undefined, after: Flow | undefined): void {
     if (after) this.liftLines(node, after);
     if (sameHang(before, after)) return;
-    node.propsDirty = true;
+    dirtyProps(node);
     for (const child of node.childList) {
-      if (child.nodeKind !== 'text') child.propsDirty = true;
-      else for (const box of paragraphsOf(child)) box.propsDirty = true;
+      if (child.nodeKind !== 'text') dirtyProps(child);
+      else for (const box of paragraphsOf(child)) dirtyProps(box);
     }
   }
 
@@ -13483,7 +13678,7 @@ export class Engine implements HostEngine {
     const raised = this.raisedBy(node, viewName);
     if (raised === node.raised) return;
     node.raised = raised;
-    node.propsDirty = true;
+    dirtyProps(node);
   }
 
   /**
@@ -13590,7 +13785,7 @@ export class Engine implements HostEngine {
   private refit(container: EngineNode): void {
     for (const child of container.childList) {
       if (child.nodeKind !== 'element') continue;
-      child.propsDirty = true;
+      dirtyProps(child);
       if (containerOf(child) === 'contents') this.refit(child);
     }
   }
@@ -15574,6 +15769,7 @@ export class Engine implements HostEngine {
   private clearFlags(node: EngineNode): void {
     if ((node.propsDirty || node.structureDirty) && this.asked & LAYOUTS) this.noteChanged(node);
     node.propsDirty = false;
+    if (node.paintPatch !== undefined) node.paintPatch = undefined;
     node.structureDirty = false;
     node.subtreeDirty = false;
   }
@@ -15623,7 +15819,10 @@ export class Engine implements HostEngine {
     // would never re-clone. `styleChanged` is the other half of that question. An ancestor that
     // is here only because something beneath it moved has the props it had.
     const propsMoved = node.propsDirty || styleChanged;
-    const props = propsMoved ? this.mergeProps(node, viewName) : previous.props;
+    const props = propsMoved
+      ? (!styleChanged && node.paintPatch && this.patchedPaint(node, previous.props)) ||
+        this.mergeProps(node, viewName)
+      : previous.props;
     const payload = propsMoved ? this.propsPayload(node, previous.props, props) : null;
     if (this.asked & LAYOUTS) this.noteHow(node, payload);
     const childrenChanged = this.childrenMoved(node, childHandles, previous.childHandles);
@@ -16159,7 +16358,7 @@ export class Engine implements HostEngine {
     words.forEach((word, i) => {
       const box = (boxes[i] ??= this.wordBox());
       box.parent = parent;
-      if (truncationMoved(box, parent)) box.propsDirty = true;
+      if (truncationMoved(box, parent)) dirtyProps(box);
       const run = box.childList[0]!;
       if (run.nodeText !== word) this.setText(run, word);
     });
@@ -16198,14 +16397,14 @@ export class Engine implements HostEngine {
     const box = this.boxFor(text, drawnBy);
     box.parent = parent;
     // Merged before the view is, so the view's truncation is read here: see `truncatedAs`.
-    if (truncationMoved(box, parent)) box.propsDirty = true;
+    if (truncationMoved(box, parent)) dirtyProps(box);
     // The text is not under the box in the tree, so a change to it never marked the box.
     if (!this.isClean(text)) {
       box.subtreeDirty = true;
       // An element that says its words as a prop is merged again for them.
-      if (drawnBy !== 'text') box.propsDirty = true;
+      if (drawnBy !== 'text') dirtyProps(box);
       // Nor had it merged again where the text became one word, or stopped being one.
-      if (box.oneWord !== undefined && unbroken(box) !== box.oneWord) box.propsDirty = true;
+      if (box.oneWord !== undefined && unbroken(box) !== box.oneWord) dirtyProps(box);
     }
     return box;
   }
@@ -16469,7 +16668,7 @@ export class Engine implements HostEngine {
       // A node taken out without being destroyed would otherwise come back holding this tag too.
       if (kept.node) kept.node.committed = null;
       child.committed = kept.committed;
-      child.propsDirty = true;
+      dirtyProps(child);
     }
     const handle = this.reconcile(child);
     child.committedUnder = target;

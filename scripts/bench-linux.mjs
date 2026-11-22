@@ -28,6 +28,8 @@
  *   the list scrolls and one of its views changes each frame.
  * - `resizeCommitMs` and `resizeCommitsPerFrame`: the slowest commit, and commits over frames,
  *   while a divider's width changes each frame, as a drag changes it.
+ * - `animationCommitsPerFrame`: commits over frames while a CSS animation turns and fades views,
+ *   which native plays through React Native's animated module with no commit a frame.
  * - `extraWindowMb`: the growth of the host's proportional set size from opening four more
  *   windows, over four.
  * The slowest commit the host logs on the notes bundle is reported, not judged: its budget is
@@ -281,11 +283,16 @@ export function workloadMetrics({ events, steps, pss, windows }) {
   const scrollFrames = within('scroll', 'frame');
   const resizeCommits = within('resize', 'commit');
   const resizeFrames = within('resize', 'frame');
+  const animationCommits = within('animate', 'commit');
+  const animationFrames = within('animate', 'frame');
   return {
     mountMs: slowest(within('mount', 'commit')),
     scrollFrameMs: scrollFrames.length ? median(scrollFrames) : null,
     resizeCommitMs: slowest(resizeCommits),
     resizeCommitsPerFrame: resizeFrames.length ? resizeCommits.length / resizeFrames.length : null,
+    animationCommitsPerFrame: animationFrames.length
+      ? animationCommits.length / animationFrames.length
+      : null,
     extraWindowMb:
       steps['window']?.failed || pss.before === null || pss.after === null || !(windows > 0)
         ? null

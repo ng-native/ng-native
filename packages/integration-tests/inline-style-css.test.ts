@@ -888,6 +888,34 @@ export class MathRefused {
     }
   });
 
+  it('counts no bracket in quotes as one left open, past a quote escaped in them', async () => {
+    const FAMILIES = ['"Fo(o"', '"Fo\\"(o"', "'Fo(o'"];
+    const views = FAMILIES.map(
+      (_, i) =>
+        `<view nativeID="f${i}"><text nativeID="t${i}" [style.fontFamily]="rows[${i}]">x</text></view>`,
+    ).join('');
+    const mod = await build(
+      'quoted-bracket',
+      `
+import { Component } from '@angular/core';
+import { Text } from '../components/src/text.ts';
+import { View } from '../components/src/view.ts';
+@Component({
+  selector: 'x-quoted-bracket',
+  imports: [Text, View],
+  template: '${views}',
+})
+export class QuotedBracket {
+  readonly rows = ${JSON.stringify(FAMILIES)};
+}
+`,
+    );
+    const { fabric } = await render(mod['QuotedBracket'] as Type<unknown>);
+    const family = (i: number) => styleOf(fabric, `t${i}`, ['fontFamily'])['fontFamily'];
+    // A bracket counted in quotes would be closed after them, and the family would keep them.
+    assert.deepEqual([0, 1, 2].map(family), ['Fo(o', 'Fo"(o', 'Fo(o']);
+  });
+
   it('drops a transform CSS refuses', async () => {
     const REFUSED = [
       'scale(calc(1px + 1px))',
@@ -903,6 +931,8 @@ export class MathRefused {
       // A bracket left open is closed where the value ends, as Chrome closes it, so the one left
       // open here is the math's.
       'translateX(calc(1px + 2)',
+      // A call it cannot read before one whose math it refuses: the refusal is still said.
+      'scale(2px) rotate(calc(2px + 2px))',
     ];
     const views = REFUSED.map(
       (_, i) => `<view nativeID="r${i}" [style.transform]="rows[${i}]"></view>`,
@@ -934,6 +964,7 @@ export class MathTransform {
       assert.ok(said('translateX(calc(1px + 2))'), warnings.join('\n'));
       assert.ok(said('scale(calc(1px + 1px))'), warnings.join('\n'));
       assert.ok(said('translateX(calc(1deg + 1deg))'), warnings.join('\n'));
+      assert.ok(said('scale(2px) rotate(calc(2px + 2px))'), warnings.join('\n'));
       assert.ok(!said('translateX(calc(50% + 1px))'), 'Chrome reads it: nothing to refuse');
       assert.ok(!said('scale(1em)'), 'not a math function');
     } finally {

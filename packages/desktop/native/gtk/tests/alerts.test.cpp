@@ -16,6 +16,8 @@
 
 namespace {
 
+void buttonsIn(GtkWidget *root, std::vector<GtkWidget *> &out);
+
 using Answer = std::tuple<int, std::string, std::string>;
 
 ngn::AlertRequest saveRequest() {
@@ -72,8 +74,28 @@ TEST_CASE("a prompt's fields reach the answer, and an alert closed with no respo
   answer.reset();
   ngn::gtk::showAlert(saveRequest(), [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, nullptr);
   gtk_window_destroy(GTK_WINDOW(ngn::gtk::shownAlert()));
+  ngn::testing::runUntil([&] { return answer.has_value(); });
   REQUIRE(answer);
   CHECK(std::get<0>(*answer) == 2);
+}
+
+TEST_CASE("a prompt destroyed with no response answers at once, with what its fields held") {
+  // As its window goes: by the next idle the dialog has let go of its fields, which the answer
+  // reads, so it is answered as it is destroyed.
+  REQUIRE(ngn::testing::gtkReady());
+  ngn::AlertRequest request = saveRequest();
+  request.input = ngn::AlertInput::LoginPassword;
+  request.defaultValue = "ashley";
+  std::optional<Answer> answer;
+  ngn::gtk::showAlert(request, [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, nullptr);
+  GtkWidget *alert = ngn::gtk::shownAlert();
+  REQUIRE(alert);
+  GtkWidget *extra = adw_message_dialog_get_extra_child(ADW_MESSAGE_DIALOG(alert));
+  REQUIRE(extra);
+  gtk_editable_set_text(GTK_EDITABLE(gtk_widget_get_next_sibling(gtk_widget_get_first_child(extra))), "secret");
+  gtk_window_destroy(GTK_WINDOW(alert));
+  REQUIRE(answer);
+  CHECK(*answer == Answer{2, "ashley", "secret"});
 }
 
 TEST_CASE("an alert over a window is an AdwAlertDialog in it on libadwaita 1.5, else a dialog over it") {
@@ -98,6 +120,95 @@ TEST_CASE("an alert over a window is an AdwAlertDialog in it on libadwaita 1.5, 
   ngn::gtk::respondToAlert(alert, "b2");
   REQUIRE(answer);
   CHECK(std::get<0>(*answer) == 2);
+}
+
+TEST_CASE("an alert with no cancel button stays until a button answers it, as Escape presses nothing") {
+  REQUIRE(ngn::testing::gtkReady());
+  ngn::testing::MountedViews views(true, 400, 300);
+  ngn::AlertRequest request;
+  request.title = "Saved";
+  request.buttons = {{"OK"}};
+  std::optional<Answer> answer;
+  ngn::gtk::showAlert(request, [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, GTK_WINDOW(views.window));
+  GtkWidget *alert = ngn::gtk::shownAlert();
+  REQUIRE(alert);
+  if (std::string(G_OBJECT_TYPE_NAME(alert)) != "AdwAlertDialog") {
+    MESSAGE("skipped: an AdwMessageDialog below libadwaita 1.5 closes on Escape with its close response");
+    ngn::gtk::respondToAlert(alert, "b0");
+    return;
+  }
+  // What Escape does: an AdwDialog's close, which one that cannot close refuses.
+  CHECK_FALSE(ngn::gtk::adwFunction<gboolean (*)(GtkWidget *)>("adw_dialog_close")(alert));
+  for (int i = 0; i < 20; i++) {
+    g_main_context_iteration(nullptr, FALSE);
+  }
+  CHECK_FALSE(answer);
+  CHECK(ngn::gtk::shownAlert() == alert);
+  ngn::gtk::respondToAlert(alert, "b0");
+  REQUIRE(answer);
+  CHECK(std::get<0>(*answer) == 0);
+}
+
+TEST_CASE("an alert with no cancel button closes when its own button is clicked") {
+  REQUIRE(ngn::testing::gtkReady());
+  ngn::testing::MountedViews views(true, 400, 300);
+  ngn::AlertRequest request;
+  request.title = "Saved";
+  request.buttons = {{"OK"}};
+  std::optional<Answer> answer;
+  ngn::gtk::showAlert(request, [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, GTK_WINDOW(views.window));
+  GtkWidget *alert = ngn::gtk::shownAlert();
+  REQUIRE(alert);
+  ngn::testing::runUntil([&] { return gtk_widget_get_mapped(alert); });
+  std::vector<GtkWidget *> found;
+  buttonsIn(alert, found);
+  REQUIRE(found.size() == 1);
+  // Shown: libadwaita maps the dialog a frame before its sheet opens, which a click before then
+  // finds closed already.
+  ngn::testing::runUntil([&] { return gtk_widget_get_mapped(found[0]); });
+  // As a person clicks it: the dialog's own button, not `respondToAlert`, which closes it by force.
+  g_signal_emit_by_name(found[0], "clicked");
+  ngn::testing::runUntil([&] { return answer.has_value() && ngn::gtk::shownAlert() == nullptr; });
+  REQUIRE(answer);
+  CHECK(std::get<0>(*answer) == 0);
+  CHECK(ngn::gtk::shownAlert() == nullptr);
+}
+
+TEST_CASE("a button clicked with animations off answers as itself, though libadwaita closes before it responds") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkSettings *settings = gtk_settings_get_default();
+  gboolean animations = TRUE;
+  g_object_get(settings, "gtk-enable-animations", &animations, nullptr);
+  g_object_set(settings, "gtk-enable-animations", FALSE, nullptr);
+  struct Restore {
+    GtkSettings *settings;
+    gboolean animations;
+    ~Restore() {
+      g_object_set(settings, "gtk-enable-animations", animations, nullptr);
+    }
+  } restore{settings, animations};
+  ngn::testing::MountedViews views(true, 400, 300);
+  std::optional<Answer> answer;
+  ngn::gtk::showAlert(saveRequest(), [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, GTK_WINDOW(views.window));
+  GtkWidget *alert = ngn::gtk::shownAlert();
+  REQUIRE(alert);
+  ngn::testing::runUntil([&] { return gtk_widget_get_mapped(alert); });
+  // Save, clicked as a person clicks it (Return on the focused button does the same).
+  GtkWidget *save = nullptr;
+  std::vector<GtkWidget *> found;
+  buttonsIn(alert, found);
+  for (GtkWidget *button : found) {
+    const char *label = gtk_button_get_label(GTK_BUTTON(button));
+    if (label && std::string(label) == "Save") {
+      save = button;
+    }
+  }
+  REQUIRE(save);
+  // Shown, as above: a click on a sheet not yet open closes nothing, so nothing closes first.
+  ngn::testing::runUntil([&] { return gtk_widget_get_mapped(save); });
+  g_signal_emit_by_name(save, "clicked");
+  ngn::testing::runUntil([&] { return answer.has_value(); });
+  CHECK(std::get<0>(*answer) == 0);
 }
 
 namespace {

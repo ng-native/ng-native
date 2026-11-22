@@ -732,11 +732,19 @@ int main(int argc, char *argv[]) {
   std::string caches = settings.test ? settings.test->caches() : joined(g_get_user_cache_dir(), appId);
   g_mkdir_with_parents(caches.c_str(), 0700);
   // Another app's copy reaches Clipboard's listeners once its text has been read.
-  auto system = ngn::gtk::makeSystem(appId, appData, [](int64_t count) {
-    if (gHost.state) {
-      gHost.state->clipboardChangeCount.set(count);
-    }
-  });
+  auto system = ngn::gtk::makeSystem(
+      appId, appData,
+      [](int64_t count) {
+        if (gHost.state) {
+          gHost.state->clipboardChangeCount.set(count);
+        }
+      },
+      // Appearance and prefers-color-scheme follow the desktop's scheme as it changes.
+      [](const std::string &scheme) {
+        if (gHost.state) {
+          gHost.state->colorScheme.set(scheme);
+        }
+      });
   // A sidebar's collapsed state autosaves among the app's preferences, as window frames do.
   gHost.backend->splitViews().readPreference = [system](const std::string &key) { return system->preference(key); };
   gHost.backend->splitViews().writePreference = [system](const std::string &key, const folly::dynamic &value) {
@@ -747,6 +755,8 @@ int main(int argc, char *argv[]) {
   gHost.state = std::move(watched.state);
   gHost.accessibility = std::move(watched.accessibility);
   gHost.state->metrics.set(windowMetrics(width, height));
+  // The scheme the app starts in: the desktop's, which HostState would otherwise leave light.
+  gHost.state->colorScheme.set(system->colorScheme());
   if (!settings.initialUrl.empty()) {
     gHost.state->setInitialUrl(settings.initialUrl);
   }
@@ -844,6 +854,7 @@ int main(int argc, char *argv[]) {
             }
           },
   }, gHost.application, menuPlacement);
+  gHost.windows->appName = settings.title;
   auto windowHost = std::make_shared<ngn::WindowHost>(gHost.windows, system);
   gHost.windows->setHost(windowHost);
   // A second launch, or the session bus: activate raises the app, and open hands it links and

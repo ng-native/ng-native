@@ -51,6 +51,11 @@ class SplitViews {
   void place(SurfaceId surfaceId, Tag split, bool window);
   // A view was inserted into `parent`: a pane of a placed split view goes into its page.
   void inserted(Tag parent, Tag child);
+  // `child` was taken out of `parent`: a sidebar it leaves is titled by the rows that stay, and a
+  // split whose sidebar it was titles its content by nothing.
+  void removed(Tag parent, Tag child);
+  // A view in a sidebar gained or lost lists of its own: the content takes the sidebar's title.
+  void retitleSidebarsHolding(Tag parent);
   // A sidebar's props changed: its widths and whether the app has it collapsed.
   void propsChanged(Tag tag);
   // A view went.
@@ -161,6 +166,9 @@ class SplitViews {
   // Saves the collapsed state under the sidebar's autosaveName.
   void autosave(const Split &s);
   void fill(Tag parent, Lists &l, size_t index);
+  // The content page's title, which its header bar shows: the label of `row`, selected in a list
+  // `within` a sidebar, or none. A tabs host titles its own (showTabList).
+  void titleContent(GtkWidget *within, GtkListBoxRow *row);
   // Builds `parent`'s lists afresh, rows and all.
   void rebuild(Tag parent, const std::vector<SourceList> &lists);
   // Selects the row list `index` has selected, without building it again.

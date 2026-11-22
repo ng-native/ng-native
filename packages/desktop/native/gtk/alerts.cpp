@@ -126,6 +126,22 @@ void answer(GtkWidget *dialog, const char *response) {
   pending->done(index, textOf(pending->field), textOf(pending->password));
 }
 
+// An alert that refuses Escape (`can-close` false, with no cancel button) refuses its own buttons'
+// close too: libadwaita's AdwAlertDialog closes before it responds, and that close keeps the
+// property. Once a button has answered, it is closed by force, as a pressed button closes it.
+void closeRefused(GtkWidget *dialog) {
+  if (!g_object_class_find_property(G_OBJECT_GET_CLASS(dialog), "can-close")) {
+    return;
+  }
+  gboolean canClose = TRUE;
+  g_object_get(dialog, "can-close", &canClose, nullptr);
+  if (!canClose) {
+    if (const auto &api = alertDialogApi(); api.close) {
+      api.close(dialog);
+    }
+  }
+}
+
 } // namespace
 
 GtkWindow *activeWindow() {
@@ -176,6 +192,11 @@ void showAlert(const AlertRequest &request, std::function<void(int, std::string,
   if (inWindow) {
     api.setDefault(dialog, returnId.empty() ? nullptr : returnId.c_str());
     api.setClose(dialog, escapeId.c_str());
+    // With no cancel button Escape presses nothing, as on macOS: closed with no answer, the app's
+    // Alert callback would never run, and a Dialogs promise never settle.
+    if (layout.escapeIndex < 0) {
+      g_object_set(dialog, "can-close", FALSE, nullptr);
+    }
     if (extra) {
       api.setExtra(dialog, extra);
     }
@@ -188,14 +209,34 @@ void showAlert(const AlertRequest &request, std::function<void(int, std::string,
     gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
   }
   g_object_set_data_full(G_OBJECT(dialog), "ngn-alert", pending, [](gpointer p) { delete static_cast<Pending *>(p); });
-  g_signal_connect(dialog, "response", G_CALLBACK(+[](GtkWidget *d, const char *response, gpointer) { answer(d, response); }), nullptr);
-  // The answer arrives however it goes, even closed with no response.
-  g_signal_connect(dialog, inWindow ? "closed" : "destroy", G_CALLBACK(+[](GtkWidget *d, gpointer) {
-    answer(d, "close");
-    if (gLast == d) {
-      gLast = nullptr;
-    }
+  g_signal_connect(dialog, "response", G_CALLBACK(+[](GtkWidget *d, const char *response, gpointer) {
+    answer(d, response);
+    closeRefused(d);
   }), nullptr);
+  // The answer arrives however it goes, even closed with no response. Over a window, after the
+  // closing call returns: libadwaita's AdwAlertDialog closes before it emits a clicked button's
+  // response, and with no close animation (animations off, as with reduced motion) "closed" comes
+  // first, so answering at once would answer the cancel button for a click on any other.
+  if (inWindow) {
+    g_signal_connect(dialog, "closed", G_CALLBACK(+[](GtkWidget *d, gpointer) {
+      if (gLast == d) {
+        gLast = nullptr;
+      }
+      g_idle_add_full(G_PRIORITY_HIGH, +[](gpointer data) -> gboolean {
+        answer(GTK_WIDGET(data), "close");
+        return G_SOURCE_REMOVE;
+      }, g_object_ref(d), g_object_unref);
+    }), nullptr);
+  } else {
+    // A message dialog responds before it goes, and lets go of its fields, which the answer
+    // reads, once it is destroyed: it is answered as it is.
+    g_signal_connect(dialog, "destroy", G_CALLBACK(+[](GtkWidget *d, gpointer) {
+      if (gLast == d) {
+        gLast = nullptr;
+      }
+      answer(d, "close");
+    }), nullptr);
+  }
   gLast = dialog;
   if (inWindow) {
     api.present(dialog, GTK_WIDGET(parent));

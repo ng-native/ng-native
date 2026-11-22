@@ -137,6 +137,11 @@ while IFS= read -r arg; do
   launcher_args+=("$arg")
 done < <("$here/compiler-launcher.sh" "${NGN_COMPILER_LAUNCHER:-}")
 
+compiler_args=()
+while IFS= read -r arg; do
+  compiler_args+=("$arg")
+done < <("$here/compilers.sh")
+
 # RelWithDebInfo's flags, with or without -g, set either way: CMake keeps a -D in the build
 # directory's cache, so a build with debug info after one without would otherwise go without too.
 # Hermes builds as Release, which has none.
@@ -187,6 +192,8 @@ BUILD="${build_dir:-$host_dir/$variant-$arch_key-$config}"
 # One build at a time in it (build-lock.sh), held until this script and the ninja it runs end.
 . "$here/build-lock.sh"
 lock_build "$BUILD"
+# Configured with GCC before the build named clang, it starts over (reset-for-compilers.sh).
+"$here/reset-for-compilers.sh" "$BUILD" ${compiler_args[@]+"${compiler_args[@]}"}
 cmake --log-level=WARNING -G Ninja -S "$native_dir" -B "$BUILD" \
   -DCMAKE_BUILD_TYPE="$config" \
   -DCMAKE_OSX_ARCHITECTURES="$archs" \
@@ -197,6 +204,7 @@ cmake --log-level=WARNING -G Ninja -S "$native_dir" -B "$BUILD" \
   -DNGN_LIBRARIES="$library_dirs" \
   -DNGN_TESTS="$tests" \
   "${link_args[@]}" \
+  ${compiler_args[@]+"${compiler_args[@]}"} \
   ${launcher_args[@]+"${launcher_args[@]}"} \
   ${flags_args[@]+"${flags_args[@]}"} \
   ${hermes_args[@]+"${hermes_args[@]}"} >&2

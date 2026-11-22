@@ -15,10 +15,19 @@ import { compileFixture } from './compile.ts';
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+/**
+ * Node's own warnings, `(node:123) DeprecationWarning: …`: a warning Node raised while the suite's
+ * hook was put in place is written later, through the console a test may be watching.
+ */
+const NODE_WARNING = /^\(node:\d+\) /;
+
 async function capture(run: () => Promise<void>): Promise<string[]> {
   const reports: string[] = [];
   const original = console.error;
-  console.error = (...args: unknown[]) => reports.push(args.map(String).join(' '));
+  console.error = (...args: unknown[]) => {
+    const report = args.map(String).join(' ');
+    if (!NODE_WARNING.test(report)) reports.push(report);
+  };
   try {
     await run();
   } finally {

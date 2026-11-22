@@ -41,6 +41,25 @@ PangoContext *threadContext() {
     pango_cairo_context_set_font_options(c, options);
     cairo_font_options_destroy(options);
     pango_context_set_round_glyph_positions(c, FALSE);
+    // Neutral, so each paragraph takes its direction from its own text (auto_dir), and Pango never
+    // swaps a left or right alignment for a paragraph that runs the other way from the context's:
+    // layoutText aligns by the layout's direction itself.
+    pango_context_set_base_dir(c, PANGO_DIRECTION_NEUTRAL);
+    return c;
+  }();
+  return context;
+}
+
+// The context a justified paragraph is laid out in: threadContext's, with a left-to-right base. A
+// justified paragraph's lines fill the width but its last, which follows the paragraph's own
+// direction, as AppKit's does (text-layout.mm): aligned left, Pango swaps it to the right for a
+// paragraph that runs right to left.
+PangoContext *justifiedContext() {
+  thread_local PangoContext *context = [] {
+    PangoContext *c = pango_font_map_create_context(pango_cairo_font_map_get_default());
+    pango_cairo_context_set_font_options(c, pango_cairo_context_get_font_options(threadContext()));
+    pango_context_set_round_glyph_positions(c, FALSE);
+    pango_context_set_base_dir(c, PANGO_DIRECTION_LTR);
     return c;
   }();
   return context;
@@ -132,11 +151,21 @@ PangoFontDescription *fontOf(const TextAttributes &a) {
 TextLayout layoutText(const AttributedString &text, const ParagraphAttributes &paragraph, Float maxWidth, LineHeights lineHeights) {
   bool pangoLineHeight = lineHeights == LineHeights::Auto && pangoHasLineHeight();
   TextLayout result;
-  result.layout = pango_layout_new(threadContext());
+  // The paragraph's alignment, its first run's that names one, as the runs are read below.
+  std::optional<TextAlignment> named;
+  for (const auto &fragment : text.getFragments()) {
+    if (!fragment.isAttachment() && fragment.textAttributes.alignment) {
+      named = fragment.textAttributes.alignment;
+      break;
+    }
+  }
+  bool justified = named == TextAlignment::Justified;
+  result.layout = pango_layout_new(justified ? justifiedContext() : threadContext());
   PangoLayout *layout = result.layout;
   std::string utf8;
   PangoAttrList *attrs = pango_attr_list_new();
   std::optional<TextAlignment> alignment;
+  std::optional<LayoutDirection> layoutDirection;
   // The paragraph's line height, the tallest any run asks for.
   double lineHeight = 0;
   for (const auto &fragment : text.getFragments()) {
@@ -170,6 +199,9 @@ TextLayout layoutText(const AttributedString &text, const ParagraphAttributes &p
     if (!alignment && a.alignment) {
       alignment = a.alignment;
     }
+    if (!layoutDirection && a.layoutDirection) {
+      layoutDirection = a.layoutDirection;
+    }
   }
   pango_layout_set_text(layout, utf8.c_str(), static_cast<int>(utf8.size()));
   pango_layout_set_attributes(layout, attrs);
@@ -178,12 +210,22 @@ TextLayout layoutText(const AttributedString &text, const ParagraphAttributes &p
     pango_layout_set_width(layout, static_cast<int>(maxWidth * PANGO_SCALE));
     pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
   }
+  // Aligned by the layout's direction, whatever the script's, as AppKit's ctAlignment and iOS do:
+  // natural and left are the layout's start, right and end its end. The context's neutral base
+  // (threadContext) keeps Pango from swapping them for a right-to-left paragraph.
+  bool rightToLeft = layoutDirection == LayoutDirection::RightToLeft;
+  PangoAlignment start = rightToLeft ? PANGO_ALIGN_RIGHT : PANGO_ALIGN_LEFT;
+  PangoAlignment end = rightToLeft ? PANGO_ALIGN_LEFT : PANGO_ALIGN_RIGHT;
   switch (alignment.value_or(TextAlignment::Natural)) {
     case TextAlignment::Center: pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER); break;
     case TextAlignment::Right:
-    case TextAlignment::End: pango_layout_set_alignment(layout, PANGO_ALIGN_RIGHT); break;
-    case TextAlignment::Justified: pango_layout_set_justify(layout, TRUE); break;
-    default: pango_layout_set_auto_dir(layout, TRUE); break;
+    case TextAlignment::End: pango_layout_set_alignment(layout, end); break;
+    case TextAlignment::Justified:
+      // Left, which justifiedContext's base swaps for a right-to-left paragraph's last line.
+      pango_layout_set_alignment(layout, PANGO_ALIGN_LEFT);
+      pango_layout_set_justify(layout, TRUE);
+      break;
+    default: pango_layout_set_alignment(layout, start); break;
   }
   if (paragraph.maximumNumberOfLines > 0) {
     pango_layout_set_height(layout, -paragraph.maximumNumberOfLines);

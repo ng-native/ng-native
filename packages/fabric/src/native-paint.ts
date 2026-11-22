@@ -291,7 +291,29 @@ export class NativePainter {
     for (const node of graph.nodes) API.dropAnimatedNode(node);
   }
 
+  /**
+   * Run `work`, sending native what it painted once, at its end: a commit paints every view an
+   * animation driven from JavaScript moves, and each batch is a task of native's own, which React
+   * Native's C++ module runs on the UI thread, one a view where they were sent one a view.
+   */
+  batch<T>(work: () => T): T {
+    this.batching += 1;
+    try {
+      return work();
+    } finally {
+      this.batching -= 1;
+      if (this.batching === 0 && this.unsent) {
+        this.unsent = false;
+        this.native.API.flushQueue?.();
+      }
+    }
+  }
+
+  private batching = 0;
+  private unsent = false;
+
   private flush(): void {
-    this.native.API.flushQueue?.();
+    if (this.batching > 0) this.unsent = true;
+    else this.native.API.flushQueue?.();
   }
 }

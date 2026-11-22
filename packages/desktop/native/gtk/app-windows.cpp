@@ -129,6 +129,10 @@ bool GtkWindows::fillsScreen(GtkWindow *window) {
 GtkWindows::GtkWindows(Hooks hooks, GtkApplication *application, MenuPlacement menus)
     : hooks_(std::move(hooks)), application_(application), menus_(menus) {}
 
+const char *GtkWindows::titleFor(const std::string &title) const {
+  return (title.empty() ? appName : title).c_str();
+}
+
 GtkWindows::~GtkWindows() {
   // Handlers first, which call back into these, then the windows still open.
   auto open = std::exchange(windows_, {});
@@ -173,7 +177,7 @@ void GtkWindows::open(SurfaceId surface, const WindowRequest &request, const Win
   int width = static_cast<int>(std::lround(placement.frame.width > 0 ? placement.frame.width : request.width.value_or(kDefaultWindowWidth)));
   int height = static_cast<int>(std::lround(placement.frame.height > 0 ? placement.frame.height : request.height.value_or(kDefaultWindowHeight)));
   GtkWidget *window = adw_application_window_new(application_);
-  gtk_window_set_title(GTK_WINDOW(window), request.title.c_str());
+  gtk_window_set_title(GTK_WINDOW(window), titleFor(request.title));
   gtk_window_set_default_size(GTK_WINDOW(window), width, height);
   gtk_window_set_resizable(GTK_WINDOW(window), request.resizable);
   // Back as it was saved: at its size, and maximised or full screen. GTK places it.
@@ -402,7 +406,7 @@ void GtkWindows::focusWindow(SurfaceId surface) {
 void GtkWindows::setWindowTitle(SurfaceId surface, const std::string &title) {
   onMainContext([this, surface, title] {
     if (GtkWidget *w = window(surface)) {
-      gtk_window_set_title(GTK_WINDOW(w), title.c_str());
+      gtk_window_set_title(GTK_WINDOW(w), titleFor(title));
     }
   });
 }

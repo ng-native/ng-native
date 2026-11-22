@@ -37,6 +37,8 @@ class Runtime;
 
 namespace ngn {
 
+class AnimatedFrameLoop;
+
 // The OS's HTTP and WebSocket clients, which Networking, WebSocket and the dev server use.
 struct NetworkClients {
   std::shared_ptr<Http> http;
@@ -151,7 +153,10 @@ class Runtime {
   // False once the destructor has run, so a shutdown whose reload `done` destroyed the runtime
   // stops before it touches it again.
   std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
+  void closeAnimatedFrames();
   std::unique_ptr<facebook::react::ReactHost> host_;
+  // The frames host_'s animated module renders on, closed before host_ goes: see closeHost.
+  std::shared_ptr<AnimatedFrameLoop> animatedFrames_;
   struct Surface {
     std::string moduleName;
     SurfaceMetrics metrics;

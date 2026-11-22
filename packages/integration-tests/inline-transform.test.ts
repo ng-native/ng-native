@@ -26,6 +26,30 @@ it('commits no length to measure from a style set as a whole', () => {
   }
 });
 
+it('drops a length where a number or an angle goes, as Chrome does, and reads one where it goes', () => {
+  const committed = (transform: string) => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const node: EngineNode = engine.createElement('view');
+    engine.setProp(node, 'style', { transform });
+    engine.appendChild(engine.root, node);
+    engine.commit();
+    const style = fabric.committed[0]!.props['style'] as Record<string, unknown> | undefined;
+    return style?.['transform'] ?? fabric.committed[0]!.props['transform'];
+  };
+  for (const transform of [
+    'scale(2px)',
+    'scaleX(2PX)',
+    'rotate(2px)',
+    'skewX(2px)',
+    'matrix(1px, 0, 0, 1, 0, 0)',
+  ]) {
+    assert.equal(committed(transform), undefined, transform);
+  }
+  assert.deepEqual(committed('scale(2)'), [{ scale: 2 }]);
+  assert.deepEqual(committed('translateX(2px)'), [{ translateX: 2 }]);
+});
+
 describe('a transform bound on an element', () => {
   let transform: (id: string) => unknown;
 
@@ -52,6 +76,13 @@ describe('a transform bound on an element', () => {
       'zero-z-unit',
       'one-of-three',
       'two-of-three',
+      'unspaced',
+      'separators',
+      'math',
+      'fractions',
+      'empty-argument',
+      'left-open',
+      'spelt',
     ];
     const props = Object.fromEntries(ids.map((id) => [id, screen.getByTestId(id).props]));
     transform = (id) => props[id]!['transform'];
@@ -75,6 +106,36 @@ describe('a transform bound on an element', () => {
     assert.deepEqual(transform('zero-z-unit'), [{ translateX: 4 }, { translateY: 8 }]);
   });
 
+  it('reads functions and arguments however they are spaced and separated', () => {
+    assert.deepEqual(transform('unspaced'), [
+      { translateX: 4 },
+      { translateY: 8 },
+      { rotate: '90deg' },
+    ]);
+    assert.deepEqual(transform('separators'), [{ translateX: 4 }, { translateY: 8 }, { scale: 2 }]);
+    assert.deepEqual(transform('fractions'), [{ translateX: -0.5 }, { rotate: '.5turn' }]);
+  });
+
+  it('reads a number with a sign, an exponent or its unit in capitals as the number', () => {
+    assert.deepEqual(transform('spelt'), [{ translateX: 4 }, { translateY: 10 }, { scale: 0.1 }]);
+  });
+
+  it('reads a math function in an argument beside a plain one', () => {
+    assert.deepEqual(transform('math'), [
+      { translateX: 4 },
+      { translateY: 8 },
+      { rotate: '90deg' },
+    ]);
+  });
+
+  it('closes a bracket the value leaves open, as Chrome closes it', () => {
+    assert.deepEqual(transform('left-open'), [
+      { translateX: 4 },
+      { translateY: 8 },
+      { rotate: '90deg' },
+    ]);
+  });
+
   it('reads a function name in any case', () => {
     assert.deepEqual(transform('upper'), [{ rotate: '90deg' }]);
     assert.deepEqual(transform('mixed'), [{ translateX: 4 }]);
@@ -95,6 +156,7 @@ describe('a transform bound on an element', () => {
     'along-z',
     'one-of-three',
     'two-of-three',
+    'empty-argument',
   ]) {
     it(`leaves the rule's transform where it cannot read ${id}`, () => {
       assert.deepEqual(transform(id), transform('class-only'));
