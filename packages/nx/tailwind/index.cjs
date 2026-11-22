@@ -339,10 +339,12 @@ function writesTheSheet({ ts }, call) {
   const options = call.arguments[1];
   if (options === undefined) return true;
   if (!ts.isObjectLiteralExpression(options)) return false;
+  // By the key's value, `'output'` too; a computed key may be it.
   return options.properties.every(
     (property) =>
       (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)) &&
-      property.name.getText() !== 'output',
+      (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) &&
+      property.name.text !== 'output',
   );
 }
 
@@ -439,7 +441,8 @@ function wrapMetroConfig(tree, root) {
     return false;
   }
   const found = activeExport(config);
-  const call = found && wrapperCall(found);
+  // Not where `withTailwind` or `require` is the config's own: what it calls may not be the package.
+  const call = found && !found.foreign && wrapperCall(found);
   if (call) {
     if (writesTheSheet(found, call)) return true;
     byHand(

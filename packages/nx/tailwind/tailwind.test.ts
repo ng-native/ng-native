@@ -409,6 +409,8 @@ describe('Tailwind 4, by default', () => {
 
   for (const [what, options] of [
     ['an output of its own', "{ input: './src/app.css', output: '.angular-native/custom.js' }"],
+    ['a quoted output', "{ input: './src/app.css', 'output': '.angular-native/custom.js' }"],
+    ['a computed key', "{ input: './src/app.css', ['out' + 'put']: '.angular-native/custom.js' }"],
     ['options it cannot read', 'options'],
     ['options spread from elsewhere', "{ input: './src/app.css', ...options }"],
   ] as const) {
@@ -486,6 +488,20 @@ describe('Tailwind 4, by default', () => {
     await generate(tree, {});
     const config = read(tree, 'apps/mobile/metro.config.js');
     assert.match(config, /^'use strict';\nconst \{ withTailwind \} = require/);
+  });
+
+  it('imports no sheet for a call read off a require the config rebinds', async () => {
+    const tree = await integrated();
+    const config = [
+      "const { getDefaultConfig } = require('expo/metro-config');",
+      'require = () => ({ withTailwind: (config) => config });',
+      "module.exports = require('@ng-native/tailwind/config.cjs').withTailwind(getDefaultConfig(__dirname));",
+      '',
+    ].join('\n');
+    tree.write('apps/mobile/metro.config.js', config);
+    await generate(tree, {});
+    assert.equal(read(tree, 'apps/mobile/metro.config.js'), config);
+    assert.doesNotMatch(read(tree, 'apps/mobile/src/main.ts'), /app\.tailwind\.js/);
   });
 
   it("leaves an export that calls the package's withTailwind off its require as it is", async () => {
