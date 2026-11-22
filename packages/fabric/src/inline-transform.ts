@@ -182,9 +182,8 @@ function readCalls(
   reader: (name: string, raw: string) => Argument | undefined = argument,
 ): { name: string; args: Argument[] }[] | undefined {
   const calls: { name: string; args: Argument[] }[] = [];
-  let flat = true;
-  // A call it cannot read is no transform, but the ones after it are still read: a refusal of
-  // their math is said (`transformMathRefused`).
+  // A call it cannot read, or one along a third axis a view has not, is no transform, but the
+  // ones after it are still read: a refusal of their math is said (`transformMathRefused`).
   let readable = true;
   const cursor = { text: value, at: 0 };
   for (;;) {
@@ -197,14 +196,10 @@ function readCalls(
     if (end === -1) return undefined;
     const args = argumentsRead(name, argumentsIn(value.slice(cursor.at, end)), reader);
     cursor.at = end + 1;
-    if (!args) {
-      readable = false;
-      continue;
-    }
-    if (name in THREE_D && !onAView(name, args)) flat = false;
-    calls.push({ name, args });
+    if (!args || (name in THREE_D && !onAView(name, args))) readable = false;
+    else calls.push({ name, args });
   }
-  return readable && calls.length && flat ? calls : undefined;
+  return readable && calls.length ? calls : undefined;
 }
 
 /** Whether an argument is a math function CSS refuses here: of no type, or not the function's. */
