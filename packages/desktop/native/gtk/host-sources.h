@@ -20,8 +20,9 @@ namespace ngn::gtk {
 // clipboard asynchronously and System does not, so the system keeps its text as it changes:
 // `clipboardChanged` hears the new change count once another app's text has been read, on the main
 // context. With no display, the clipboard is the app's own, in memory. `colorSchemeChanged` hears
-// what colorScheme() answers whenever libadwaita's dark changes: the desktop's scheme, through the
-// settings portal, or the app's override; on the main context.
+// the scheme GTK draws whenever libadwaita's dark changes: the desktop's, through the settings
+// portal, or an override as it is applied; on the main context. While a later override still
+// waits to apply, colorScheme() already answers that one.
 std::shared_ptr<System> makeSystem(const std::string &appId, const std::string &appDataDirectory,
                                    std::function<void(int64_t count)> clipboardChanged = {},
                                    std::function<void(const std::string &scheme)> colorSchemeChanged = {});

@@ -289,3 +289,28 @@ describe('paint bound on a view and changed alone, in a release build', () => {
     }
   });
 });
+
+describe('paint bound on a view its parent paints its own background on', () => {
+  // Never patched: the parent, reconciled before it on its way, has it merged again (`repaint`).
+  it("keeps the parent's background, which the merge paints over the view's own", () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { dev: false });
+    const parent = engine.createElement('view');
+    engine.setProp(parent, 'style', { backgroundColor: 'red' });
+    const child = engine.createElement('view');
+    // Its own the same as the parent's at first, so the merge commits what its style sets.
+    const own: Record<string, unknown> = { backgroundColor: 'red' };
+    child.ownStyle = own;
+    engine.setProp(child, 'style', own);
+    engine.appendChild(parent, child);
+    engine.appendChild(engine.root, parent);
+    engine.paintOn(parent, child);
+    engine.commit();
+    const painted = () => fabric.committed[0]!.children[0]!.props['backgroundColor'];
+    assert.equal(painted(), 'red');
+    own['backgroundColor'] = 'blue';
+    engine.styleChanged(child, 'backgroundColor');
+    engine.commit();
+    assert.equal(painted(), 'red', "the parent's, as a merge paints it");
+  });
+});
