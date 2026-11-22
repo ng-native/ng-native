@@ -118,9 +118,12 @@ class GtkSystem final : public System {
         colorSchemeChanged_(std::move(colorSchemeChanged)) {
     g_signal_connect(adw_style_manager_get_default(), "notify::dark", G_CALLBACK(+[](GObject *, GParamSpec *, gpointer data) {
       auto *self = static_cast<GtkSystem *>(data);
-      self->scheme_.systemChanged(systemScheme());
+      std::string drawn = systemScheme();
+      self->scheme_.systemChanged(drawn);
+      // What GTK draws now, which is what the app sees: not the newest override, which may still
+      // wait on the main context behind the one being applied.
       if (self->colorSchemeChanged_) {
-        self->colorSchemeChanged_(self->scheme_.current());
+        self->colorSchemeChanged_(drawn);
       }
     }), this);
     if (GdkDisplay *display = gdk_display_get_default()) {

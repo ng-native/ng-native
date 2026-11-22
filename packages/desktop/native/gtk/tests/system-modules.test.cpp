@@ -232,6 +232,33 @@ TEST_CASE("the colour scheme is the desktop's, heard as it changes, and the app'
   CHECK(system->colorScheme() == "light");
 }
 
+TEST_CASE("the scheme heard as GTK changes is the one it applied, not one the app asked for after") {
+  REQUIRE(ngn::testing::gtkReady());
+  AdwStyleManager *styles = adw_style_manager_get_default();
+  struct Restore {
+    AdwStyleManager *styles;
+    ~Restore() {
+      adw_style_manager_set_color_scheme(styles, ADW_COLOR_SCHEME_DEFAULT);
+    }
+  } restore{styles};
+  adw_style_manager_set_color_scheme(styles, ADW_COLOR_SCHEME_FORCE_LIGHT);
+  // Each scheme heard, with whether GTK drew dark as it was heard.
+  std::vector<std::pair<std::string, bool>> heard;
+  auto system = ngn::gtk::makeSystem("ngn.scheme.test", g_get_tmp_dir(), {}, [&](const std::string &scheme) {
+    heard.emplace_back(scheme, adw_style_manager_get_dark(styles));
+  });
+  // Two asked for before either is applied: dark, then light again.
+  int applied = 0;
+  system->setColorScheme("dark", [&](const std::string &) { applied++; });
+  system->setColorScheme("light", [&](const std::string &) { applied++; });
+  ngn::testing::runUntil([&] { return applied == 2; });
+  REQUIRE_FALSE(heard.empty());
+  for (const auto &[scheme, dark] : heard) {
+    CAPTURE(scheme);
+    CHECK(scheme == (dark ? "dark" : "light"));
+  }
+}
+
 TEST_CASE("The clipboard is GDK's: the app's text is there at once, and another app's arrives as a change") {
   REQUIRE(ngn::testing::gtkReady());
   std::vector<int64_t> changes;
