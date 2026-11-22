@@ -103,7 +103,7 @@ jobs:
 
       # Keyed by the pins the compiles read, so a bump of any starts a fresh set; a near miss
       # restores the latest, which still holds every file the change did not reach.
-      - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+      - uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
         with:
           key: desktop-core-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
           restore-keys: desktop-core-${{ runner.os }}-${{ runner.arch }}-
@@ -367,7 +367,7 @@ jobs:
       # React Native's renderer is most of a cold build. A build restored from here
       # recompiles only the files whose inputs changed; the key names the pins, and a near miss
       # restores the latest set.
-      - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+      - uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
         with:
           key: desktop-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/fetch-hermes.sh', 'pnpm-lock.yaml') }}
           restore-keys: desktop-host-${{ runner.os }}-${{ runner.arch }}-

@@ -4,8 +4,8 @@
     {
       "reactNative": "0.88.0",
       "flavour": "debug",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.25.0/ng-native-desktop-host-0.25.0-rn-0.88.0-macos-universal-debug.tar.gz",
-      "sha256": "ed27065ecb02b16a533ae73ad894e1ef398ee88219ed72cc441e223de6a46022",
+      "url": "https://github.com/ng-native/ng-native/releases/download/v0.26.0/ng-native-desktop-host-0.26.0-rn-0.88.0-macos-universal-debug.tar.gz",
+      "sha256": "ff2af29a2d7046f7d5d0e4176c3f9c8e2be05e2bda57ea15c29cede2c0b494de",
       "libraries": {
         "react-native-screens": "4.30.0",
         "react-native-safe-area-context": "5.10.1",
@@ -13,13 +13,13 @@
         "react-native-worklets": "0.13.0",
         "react-native-reanimated": "4.7.1"
       },
-      "inputs": "f891f249fcb9d7dea347f359361aefac1ff8b381aa2c216274f40c0e00942749"
+      "inputs": "a511221639ad9e0f0ce29a96aa32839dd251f5cfae6f74e8c8cf819ce25898c9"
     },
     {
       "reactNative": "0.88.0",
       "flavour": "release",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.25.0/ng-native-desktop-host-0.25.0-rn-0.88.0-macos-universal.tar.gz",
-      "sha256": "bc1fd2540661e89eaf8f346522d197909c35f55d237bde52c0ab76bceab6cae9",
+      "url": "https://github.com/ng-native/ng-native/releases/download/v0.26.0/ng-native-desktop-host-0.26.0-rn-0.88.0-macos-universal.tar.gz",
+      "sha256": "ade1562cdc5409e4099eb38640f8d52b20be7254d115e2d069896d2f2d78f518",
       "libraries": {
         "react-native-screens": "4.30.0",
         "react-native-safe-area-context": "5.10.1",
@@ -27,7 +27,7 @@
         "react-native-worklets": "0.13.0",
         "react-native-reanimated": "4.7.1"
       },
-      "inputs": "8176fcd27ee569b08a235f090a03d5de22625039cf48e904245b5248316abe4a"
+      "inputs": "689a371456085b1c3a8af2c7ab254db1db115e13063f1d0b81da6c6e23908080"
     }
   ]
 }

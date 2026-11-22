@@ -30,6 +30,8 @@
  * one. A file it cannot follow is left alone, with a warning saying what to add by hand.
  */
 const path = require('node:path').posix;
+const vm = require('node:vm');
+const { typescript } = require('@ng-native/migrate/move-imports.cjs');
 const {
   addDependenciesToPackageJson,
   formatFiles,
@@ -119,31 +121,414 @@ function byHand(file, what) {
   logger.warn(`Could not update ${file}: ${what}`);
 }
 
+/** Whether `node` is `module.exports`, spelt with a dot or `module['exports']`. */
+function isModuleExports(ts, node) {
+  const target = ts.isPropertyAccessExpression(node)
+    ? node.name.text
+    : ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression)
+      ? node.argumentExpression.text
+      : undefined;
+  return (
+    target === 'exports' && ts.isIdentifier(node.expression) && node.expression.text === 'module'
+  );
+}
+
+/**
+ * A Metro config's export: its one top-level `module.exports = <expression>` statement, with the
+ * parser it was read with, or null where this cannot tell which export Metro runs.
+ *
+ * Read with TypeScript's parser, not as text: the export is the one top-level
+ * `module.exports = <expression>` statement, however many lines a formatter splits it over (the
+ * generated app's, since it went into withDeviceTests too), and whatever comments, strings or
+ * function bodies hold. One kept in a comment is not it, nor is a comma statement that goes on
+ * past the export. Where there is not exactly one, or no TypeScript to read it with, it is left to
+ * be done by hand. Nothing is run.
+ */
+function activeExport(config) {
+  let ts;
+  try {
+    ts = typescript();
+  } catch {
+    return null;
+  }
+  const source = ts.createSourceFile(
+    'metro.config.js',
+    config,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.JS,
+  );
+  const isExport = (statement) =>
+    ts.isExpressionStatement(statement) &&
+    ts.isBinaryExpression(statement.expression) &&
+    statement.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    isModuleExports(ts, statement.expression.left);
+  const exports = source.statements.filter(isExport);
+  if (exports.length !== 1) return null;
+  const statement = exports[0];
+  const above = source.statements.filter((one) => one.end <= statement.getStart(source));
+  return {
+    ts,
+    source,
+    statement,
+    ...namesOfWithTailwind(ts, source.statements),
+    declarations: declarationsOf(ts, above),
+  };
+}
+
+/**
+ * The variables declared at the top above the export, by name, with what each starts as and
+ * whether it is a `const`, which nothing can rebind.
+ */
+function declarationsOf(ts, statements) {
+  const declarations = new Map();
+  for (const statement of statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    const { declarationList } = statement;
+    const constant = (declarationList.flags & ts.NodeFlags.Const) !== 0;
+    for (const { name, initializer } of declarationList.declarations) {
+      if (ts.isIdentifier(name) && initializer) {
+        declarations.set(name.text, { initializer, constant });
+      }
+    }
+  }
+  return declarations;
+}
+
+function requiresTailwindConfig(ts, node) {
+  return (
+    node !== undefined &&
+    ts.isCallExpression(node) &&
+    node.expression.getText() === 'require' &&
+    node.arguments.length === 1 &&
+    ts.isStringLiteral(node.arguments[0]) &&
+    node.arguments[0].text === '@ng-native/tailwind/config.cjs'
+  );
+}
+
+/**
+ * The names the package's `withTailwind` is called by in a config: its own, and any it is bound to
+ * at the top, `tw` of `const { withTailwind: tw } = require('@ng-native/tailwind/config.cjs')`, with
+ * whether `withTailwind` is bound at the top to anything else, or the package's is bound by a
+ * `let` or `var` (`foreign`). One destructured from anything else is not the one that builds the
+ * sheet, and nor is a `withTailwind` of the config's own, which leaves it out.
+ */
+function namesOfWithTailwind(ts, statements) {
+  const found = { names: new Set(), namespaces: new Set(), foreign: false };
+  for (const statement of statements) {
+    if (declaresOwnWithTailwind(ts, statement) || rebindsRequire(ts, statement))
+      found.foreign = true;
+    if (!ts.isVariableStatement(statement)) continue;
+    // A `let` or `var` may be bound to something else later: which it calls is not certain.
+    const constant = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0;
+    for (const declaration of statement.declarationList.declarations) {
+      noteDeclaration(ts, declaration, constant, found);
+    }
+  }
+  if (statements.some((statement) => writesInto(ts, statement, found.namespaces))) {
+    found.foreign = true;
+  }
+  if (!found.foreign) found.names.add('withTailwind');
+  return found;
+}
+
+/**
+ * What one top-level declaration binds of the package, into `found`: the names its `withTailwind`
+ * is called by, and the namespaces it is called off, `const tailwind = require('…')`, which calls
+ * it as `tailwind.withTailwind`. A `let` or `var` of either, or a `withTailwind` of the config's
+ * own, makes what the config calls uncertain (`foreign`).
+ */
+function noteDeclaration(ts, { name, initializer }, constant, found) {
+  const packages = packageBindings(ts, name, initializer);
+  const namespace = ts.isIdentifier(name) && requiresTailwindConfig(ts, initializer);
+  if (!constant && (packages.length || namespace)) found.foreign = true;
+  if (constant) for (const bound of packages) found.names.add(bound);
+  if (constant && namespace) found.namespaces.add(name.text);
+  if (binds(ts, name) && !packages.includes('withTailwind')) found.foreign = true;
+}
+
+/**
+ * Whether a statement writes a property of one of the package's namespaces, anywhere in it:
+ * `tailwind.withTailwind = …` makes what it calls the config's own.
+ */
+function writesInto(ts, statement, namespaces) {
+  if (!namespaces.size) return false;
+  const writes = (node) => {
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+      (ts.isPropertyAccessExpression(node.left) || ts.isElementAccessExpression(node.left)) &&
+      namespaceOf(ts, node.left.expression, namespaces)
+    ) {
+      return true;
+    }
+    return Boolean(ts.forEachChild(node, (child) => writes(child) || undefined));
+  };
+  return writes(statement);
+}
+
+/** Whether `node` is one of the package's namespaces, in parentheses or not. */
+function namespaceOf(ts, node, namespaces) {
+  let inner = node;
+  while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
+  return ts.isIdentifier(inner) && namespaces.has(inner.text);
+}
+
+/**
+ * Whether a statement binds `require` to something of the config's own, declared or assigned at the
+ * top: what it then loads may not be the package.
+ */
+function rebindsRequire(ts, statement) {
+  if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) {
+    return statement.name?.text === 'require';
+  }
+  if (ts.isVariableStatement(statement)) {
+    return statement.declarationList.declarations.some(({ name }) =>
+      bindsName(ts, name, 'require'),
+    );
+  }
+  const { expression } = ts.isExpressionStatement(statement) ? statement : {};
+  return (
+    expression !== undefined &&
+    ts.isBinaryExpression(expression) &&
+    expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    ts.isIdentifier(expression.left) &&
+    expression.left.text === 'require'
+  );
+}
+
+/** Whether a statement is a function or class of the config's own named `withTailwind`. */
+function declaresOwnWithTailwind(ts, statement) {
+  return (
+    (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) &&
+    statement.name?.text === 'withTailwind'
+  );
+}
+
+/**
+ * The names a declaration binds the package's `withTailwind` to:
+ * `const { withTailwind: tw } = require('@ng-native/tailwind/config.cjs')` binds `tw`, and
+ * `const withTailwind = require('@ng-native/tailwind/config.cjs').withTailwind` binds
+ * `withTailwind`.
+ */
+function packageBindings(ts, name, initializer) {
+  if (ts.isIdentifier(name)) return readsWithTailwind(ts, initializer) ? [name.text] : [];
+  if (!ts.isObjectBindingPattern(name) || !requiresTailwindConfig(ts, initializer)) return [];
+  return (
+    name.elements
+      .filter((element) => {
+        // `'withTailwind': tw` names it in quotes, which its text keeps.
+        const key = element.propertyName ?? element.name;
+        return (ts.isIdentifier(key) || ts.isStringLiteral(key)) && key.text === 'withTailwind';
+      })
+      // `{ ...withTailwind }` binds an object of the rest, not the function.
+      .filter((element) => element.dotDotDotToken === undefined && ts.isIdentifier(element.name))
+      .map((element) => element.name.text)
+  );
+}
+
+/** Whether `node` reads `withTailwind` off the package's require, `require('…').withTailwind`. */
+function readsWithTailwind(ts, node) {
+  return (
+    node !== undefined &&
+    ts.isPropertyAccessExpression(node) &&
+    node.name.text === 'withTailwind' &&
+    requiresTailwindConfig(ts, node.expression)
+  );
+}
+
+/** Whether a call's callee is the package's `withTailwind`: a name bound to it, or read off it. */
+function callsTheWrapper({ ts, names, namespaces }, call) {
+  // `(withTailwind)(config)` calls it too.
+  let callee = call.expression;
+  while (ts.isParenthesizedExpression(callee)) callee = callee.expression;
+  if (ts.isIdentifier(callee)) return names.has(callee.text);
+  // `tailwind.withTailwind`, `tailwind['withTailwind']` or across lines, off the package's namespace.
+  const property = ts.isPropertyAccessExpression(callee)
+    ? callee.name.text
+    : ts.isElementAccessExpression(callee) && ts.isStringLiteralLike(callee.argumentExpression)
+      ? callee.argumentExpression.text
+      : undefined;
+  if (property !== 'withTailwind') return false;
+  return (
+    namespaceOf(ts, callee.expression, namespaces) || requiresTailwindConfig(ts, callee.expression)
+  );
+}
+
+/**
+ * The `withTailwind` call the export certainly runs, which builds the sheet, or null: it is one, or
+ * reaches one through the arguments of the calls it is made of, as
+ * `withDeviceTests(withTailwind(config))` does, or through a `const` above it that starts as one. A
+ * comment or string naming it does not, nor a call in a branch, a function, an optional call, a
+ * `let` that may be rebound or anything else that may not run.
+ */
+function wrapperCall(found) {
+  const { ts, statement, declarations } = found;
+  const seen = new Set();
+  const runs = (node) => {
+    if (ts.isParenthesizedExpression(node)) return runs(node.expression);
+    if (ts.isIdentifier(node)) {
+      const declared = declarations.get(node.text);
+      if (!declared?.constant || seen.has(node.text)) return null;
+      seen.add(node.text);
+      return runs(declared.initializer);
+    }
+    // An optional call, `wrap?.(x)`, runs neither itself nor its arguments where `wrap` is missing.
+    if (!ts.isCallExpression(node) || ts.isOptionalChain(node)) return null;
+    if (callsTheWrapper(found, node)) return node;
+    for (const argument of node.arguments) {
+      const call = runs(argument);
+      if (call) return call;
+    }
+    return null;
+  };
+  return runs(statement.expression.right);
+}
+
+/**
+ * Whether a `withTailwind` call writes the sheet `src/main.ts` imports, `app.tailwind.js`: its
+ * options are an object that names no `output` of its own. Options read from elsewhere, or spread
+ * from it, may name one.
+ */
+function writesTheSheet({ ts }, call) {
+  // A spread is all the arguments, the options among them.
+  if (call.arguments.some((argument) => ts.isSpreadElement(argument))) return false;
+  const options = call.arguments[1];
+  if (options === undefined) return true;
+  if (!ts.isObjectLiteralExpression(options)) return false;
+  // By the key's value, `'output'` too; a computed key may be it.
+  return options.properties.every(
+    (property) =>
+      (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)) &&
+      (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) &&
+      property.name.text !== 'output',
+  );
+}
+
+/**
+ * Whether a declaration's name binds `withTailwind` itself: `withTailwind`, or `{ withTailwind }`,
+ * and not `{ withTailwind: tw }`, which binds `tw`.
+ */
+function binds(ts, name) {
+  return bindsName(ts, name, 'withTailwind');
+}
+
+/** Whether a declaration's name binds `bound`, itself or in a pattern. */
+function bindsName(ts, name, bound) {
+  if (ts.isIdentifier(name)) return name.text === bound;
+  if (!ts.isObjectBindingPattern(name) && !ts.isArrayBindingPattern(name)) return false;
+  return name.elements.some(
+    (element) => !ts.isOmittedExpression(element) && bindsName(ts, element.name, bound),
+  );
+}
+
+/**
+ * Whether the config calls `withTailwind` anywhere, run or not: in its export, in what a variable
+ * starts as, or in a statement of its own, which builds a sheet as the export is left as it is. A
+ * comment or a string naming it does not count.
+ */
+function namesWithTailwind(found) {
+  const { ts, source } = found;
+  const calls = (node) =>
+    (ts.isCallExpression(node) && callsTheWrapper(found, node)) ||
+    Boolean(ts.forEachChild(node, (child) => calls(child) || undefined));
+  return calls(source);
+}
+
+/** The config with the active export wrapped in `withTailwind`, or null where it would not parse. */
+function wrappedConfig(config, { ts, source, statement }) {
+  const expression = statement.expression.right.getText(source);
+  // After the last require above the export, which the wrapped export needs defined by then.
+  // Once: a config that requires withTailwind already, and never calls it, keeps its own.
+  const above = source.statements.filter((one) => one.end <= statement.getStart(source));
+  const declared = above.some(
+    (one) =>
+      ts.isVariableStatement(one) &&
+      one.declarationList.declarations.some((declaration) => binds(ts, declaration.name)),
+  );
+  const required = declared
+    ? ''
+    : "\nconst { withTailwind } = require('@ng-native/tailwind/config.cjs');";
+  const last = source.statements
+    .filter((one) => one.end <= statement.getStart(source) && ts.isVariableStatement(one))
+    .filter((one) => /\brequire\(/.test(one.getText(source)))
+    .at(-1);
+  // With none, after the directives that open the file: a `'use strict'` after it is no directive.
+  let prologue = 0;
+  for (const one of source.statements) {
+    if (!ts.isExpressionStatement(one) || !ts.isStringLiteral(one.expression)) break;
+    prologue = one.end;
+  }
+  const at = last ? last.end : prologue;
+  const wrapped =
+    config.slice(0, at) +
+    required +
+    config.slice(at, statement.getStart(source)) +
+    `module.exports = withTailwind(${expression}, {\n  input: './src/styles.css',\n});` +
+    config.slice(statement.end);
+  return parses(wrapped) ? wrapped : null;
+}
+
+/** Whether `code` parses as a script, without running it. */
+function parses(code) {
+  try {
+    new vm.Script(code);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Wrap the app's Metro config in `withTailwind`, which builds the sheet `src/main.ts` imports.
+ * True once it is wrapped, now or before; false where it says what to add by hand.
+ */
 function wrapMetroConfig(tree, root) {
   const file = joinPathFragments(root, 'metro.config.js');
   const config = tree.read(file, 'utf-8');
-  if (config === null) return byHand(file, 'it does not exist.');
-  if (config.includes('withTailwind')) return;
-  const exported = /^module\.exports = (.+);$/m.exec(config);
-  if (!exported) {
-    return byHand(
-      file,
-      "wrap its export in withTailwind(config, { input: './src/styles.css' }), from " +
-        "'@ng-native/tailwind/config.cjs'.",
-    );
+  if (config === null) {
+    byHand(file, 'it does not exist.');
+    return false;
   }
-  const requires = [...config.matchAll(/^const .+ = require\(.+\);$/gm)];
-  const last = requires.at(-1);
-  const at = last ? last.index + last[0].length : 0;
-  const required = "\nconst { withTailwind } = require('@ng-native/tailwind/config.cjs');";
-  const withRequire = config.slice(0, at) + required + config.slice(at);
-  tree.write(
-    file,
-    withRequire.replace(
-      exported[0],
-      `module.exports = withTailwind(${exported[1]}, {\n  input: './src/styles.css',\n});`,
-    ),
-  );
+  const found = activeExport(config);
+  // Not where `withTailwind` or `require` is the config's own: what it calls may not be the package.
+  const call = found && !found.foreign && wrapperCall(found);
+  if (call) {
+    if (writesTheSheet(found, call)) return true;
+    byHand(
+      joinPathFragments(root, 'src/main.ts'),
+      `import the sheet ${file}'s withTailwind writes and pass it to mount as { globalStyles }.`,
+    );
+    return false;
+  }
+  // One that calls it only where it may not run is left as it is: its own call may name another
+  // input, which a wrapper of this one's would override. So is one with a withTailwind of its own,
+  // which this cannot call the package's by.
+  const wrapped =
+    found && !found.foreign && !namesWithTailwind(found) && wrappedConfig(config, found);
+  if (!wrapped) {
+    byHand(
+      file,
+      "wrap its export in withTailwind(config, { input: './src/styles.css' }) from " +
+        "'@ng-native/tailwind/config.cjs', bound under another name where the file has a " +
+        `withTailwind of its own, then import tailwind from '${SHEET}' in src/main.ts and pass ` +
+        'it to mount as { globalStyles: tailwind }.',
+    );
+    return false;
+  }
+  tree.write(file, wrapped);
+  return true;
+}
+
+/**
+ * Build the sheet from Metro's config, mount the app with it, and have its typecheck build it
+ * first. The sheet is imported only where something builds it, Metro's config once wrapped: an
+ * import of a sheet that never exists fails the app's typecheck and its bundle.
+ */
+function useTheSheet(tree, name, app) {
+  if (wrapMetroConfig(tree, app.root)) passGlobalStyles(tree, app.root);
+  prepareForTheSheet(tree, name, app);
 }
 
 function passGlobalStyles(tree, root) {
@@ -605,9 +990,7 @@ async function tailwind(tree, options) {
         libraries.map((library) => libraryTheme(tree, library)),
       );
     }
-    wrapMetroConfig(tree, app.root);
-    passGlobalStyles(tree, app.root);
-    prepareForTheSheet(tree, options.project, app);
+    useTheSheet(tree, options.project, app);
   }
   if (vite) setUpWeb(tree, app.root, vite, version, libraries, device);
   if (version === 3 && libraries.length) allowPresets(tree);

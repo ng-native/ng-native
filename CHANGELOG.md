@@ -1,3 +1,96 @@
+## 0.26.0 (2026-11-22)
+
+### 🚀 Features
+
+- `vitest --project ios` and `vitest --project android` start Metro, build the app's development build, boot the simulator or emulator and launch the app themselves, as `--project macos` starts the desktop host, so device tests run with one command locally and on CI. ([#1715](https://github.com/ng-native/ng-native/pull/1715))
+
+  The build is made the first time and kept in `node_modules/.cache/ng-native-device-tests` by the project's native fingerprint (`@expo/fingerprint`), so later runs take seconds and a CI job can cache it. `deviceTests({ device })` names the simulator (`iPhone 17 Pro`) or emulator (its AVD name), booted when it is not running; without it a run uses one that is running, or the newest iPhone or first emulator. Each launch starts the app with no data of an earlier one: reinstalled on a simulator, its data cleared on an emulator.
+
+  Before, an iOS or Android project waited for an app opened by hand, loading from a Metro started by hand. `deviceTests({ launch: false })` keeps that. A macOS run also starts its own Metro now, on a free port, instead of loading from the one on `RCT_METRO_PORT` or 8081; `deviceTests({ metroPort })` points a launched app at a Metro of your own.
+
+  An app the pool launches, on any OS, has ten minutes to connect by default instead of 60 seconds, since the desktop host builds itself on its first run; one that exits still fails the run at once, and stopping Vitest during a build stops the build.
+
+  A device project gives each test 30 seconds unless its config sets `testTimeout`, since a first render on a simulator just booted, as on CI, can take several, and a run prints what it is doing (booting, building, installing, waiting for Metro) with how long each took.
+
+  A project with no `ios` or `android` folder is prebuilt for the build, with its `app.json`, `app.config.*` and `package.json` put back afterwards, so a test run leaves no change in the project's sources beyond the generated folder.
+
+
+### 🩹 Fixes
+
+- A desktop host built from source builds in one directory at a time: a second `ng-native-desktop` command that builds the same host waits for the first, printing that it is waiting, instead of building beside it and leaving its build log corrupt, which made the next build recompile hundreds of objects with nothing changed. ([#1719](https://github.com/ng-native/ng-native/pull/1719))
+- CSS animations played natively that end in the same frame now share one commit, rather than each committing the whole tree as it ends. ([#1717](https://github.com/ng-native/ng-native/pull/1717), [#1714](https://github.com/ng-native/ng-native/issues/1714))
+
+  Where the platform drives the engine, an animation's end marks its view and the next frame commits it, so a list of labels fading in together costs one commit as they finish. An engine with no host to schedule a frame still commits as each one ends.
+
+- `<virtual-list>` and `<section-list>` now render ahead of a fast scroll, and take a `velocityLead` input that sets how far. ([#1669](https://github.com/ng-native/ng-native/pull/1669))
+
+  While the list scrolls, the window reaches past the viewport in the direction of the scroll by about the distance the list covers in `velocityLead` milliseconds (500 by default) at its recent speed, in steps of a quarter viewport and up to three viewports, so a fling lands on rows already drawn. The reach drops back as the scroll slows, and 200ms after the last scroll event. The first scroll event after a `scrollToIndex`, `scrollToOffset` or `scrollToEnd` call does not count toward the speed. Later events do, including those of an animated scroll. More rows are rendered during a fast scroll than before. `velocityLead` of 0 keeps the previous window.
+
+- Where native moves sticky rows, a jump with `scrollToIndex` past a sticky row now pins the row it lands under at once, rather than at the next scroll, and leaves no gap where a plain row took the slot of a sticky one: a sticky row's slot now goes only to another sticky row. ([#1652](https://github.com/ng-native/ng-native/pull/1652))
+- `<virtual-list>` and `<section-list>` no longer mark the screen holding them for change detection on every scroll event. ([#1671](https://github.com/ng-native/ng-native/pull/1671))
+
+  The list used to listen for scroll events as an Angular host listener, which marks the list and every view above it for checking on each event, so a fling checked the whole screen every frame. Now a scroll event checks only what its signals change: the window when rows come and go, and sticky rows while one is pinned. A `(scroll)` or `(endReached)` handler bound in a template still runs and still updates its view. A plain field written outside Angular's events that only showed up because the list scrolled now waits for the next change detection, as it does anywhere else in a zoneless app.
+
+- `<virtual-list>` lays items out in columns with `[virtualListNumColumns]`, as `FlatList`'s `numColumns` does, spaced by `[virtualListColumnGap]`. ([#1653](https://github.com/ng-native/ng-native/pull/1653))
+
+  A line is as tall as its tallest item, a sticky row takes a line to itself, and the first column is on the right in a right-to-left layout. Columns apply to a vertical list with `itemHeight`.
+
+- Device tests can compare what the app drew with a reference screenshot: `await expect(node).toMatchScreenshot('name')` captures a node, a region of the window or `screen` (the whole window) on an iOS simulator or an Android emulator (Android 8 or later), and compares it with `__screenshots__/<test file>/<name>-<platform>.png` beside the test. A missing reference is recorded, except on CI; `-u` records them all again. A pixel fails the match when a channel moves by more than one step of 255, the most an iOS simulator varies between runs, unless `comparatorOptions` (`channelTolerance`, where 0 is exact, `threshold`, `allowedMismatchedPixels`, `allowedMismatchedPixelRatio`) say otherwise, in `deviceTests({ screenshots })` for the project or in the call. ([#1715](https://github.com/ng-native/ng-native/pull/1715))
+
+  The capture comes from a native module in `@ng-native/testing`: the development build a test run makes has it, and a development build made by hand before the upgrade needs rebuilding once. Expo Go and macOS do not have it, and a screenshot there fails with a message saying so.
+
+- An app's engine in `@ng-native/platform` is let go when the app is destroyed, as when Android recreates the activity after the font or display size changes, rather than kept for the rest of the app's life. ([#1706](https://github.com/ng-native/ng-native/pull/1706))
+
+  The old engine stayed joined to the runtime's shared event dispatcher, so it kept itself, its root and every view it had committed, and it was handed the events that have no target in place of the app that replaced it. It now leaves the dispatcher, cancels the frame and the timers it had asked for, and stops the animations and transitions native was playing for it, whose end callbacks native would otherwise go on holding, along with what native painted for it and the scroll-driven animations (`animation-timeline: scroll()`) it drove.
+
+  A closed window's engine does the same.
+
+  The dispatcher in `@ng-native/fabric` no longer keeps the first engine that joined it once that engine has left.
+
+- `releaseOnDestroy` in `@ng-native/components` and `@ng-native/components/reanimated` wraps a function a worklet calls back, such as a `scheduleOnRN` target, so that native code keeping the worklet does not keep the component too. ([#1707](https://github.com/ng-native/ng-native/pull/1707))
+
+  react-native-worklets keeps such a function from native code after the gesture is detached, so one that reached its component kept the component and its view tree for the rest of the app's life. The function `releaseOnDestroy` returns calls the one it was given until the component, or the `DestroyRef` passed to it, is destroyed, and then does nothing.
+
+  The stand-in document that `mount` in `@ng-native/platform` gives Angular no longer keeps the last app reachable after it is destroyed, so a component that a `render()` in `@ng-native/testing` has unmounted can be garbage-collected, with its engine and fake Fabric.
+
+- `@ng-native/device` exports `OS_NAMES`, the OSes Angular Native runs on, and `OsName`, the type of one of them. The `OS` token, `ShortcutOs`, `TestOs` in `@ng-native/testing` and `ModulePlatform` in `@ng-native/expo` are that type, so the next OS is added in one place. ([#1556](https://github.com/ng-native/ng-native/pull/1556))
+
+  An OS the host reports that is not in `OS_NAMES` is now an error that names it, where `OS` and the keyboard shortcuts used to read it as iOS. In a test, an `NG_NATIVE_TEST_OS` or a Vitest preset `os` outside the list fails the same way rather than testing as iOS. iOS, Android, macOS and the web host answer as before.
+
+- `nx g @ng-native/nx:tailwind` can now wrap an app's Metro config in `withTailwind` when its one `module.exports` spans more than one line, as a newly generated app's does once it is formatted. Before, it warned it could not update `metro.config.js` and still added the `app.tailwind.js` import to `src/main.ts`, so the app's typecheck and bundle failed on a sheet nothing built. Where it cannot wrap the config, it now leaves `src/main.ts` as it is too, and its warning names both steps to take by hand. A config that exports a `const` already wrapped in `withTailwind` is left as it is, and one with a `withTailwind` of its own is left to be wrapped by hand. ([#1726](https://github.com/ng-native/ng-native/pull/1726))
+- The macOS desktop host no longer requests a react-native-svg `<image>` again on each redraw after its request failed or its data was not an image, so a broken image stays blank while the app runs, as in a browser. ([#1691](https://github.com/ng-native/ng-native/pull/1691))
+
+  An `<image>` with a path that the file boundary refused is still checked on each draw.
+
+- The macOS desktop host draws an `<image>` with a `tintColor` as its picture's shape filled with that colour, as React Native iOS does, where it drew the picture unchanged. ([#1695](https://github.com/ng-native/ng-native/pull/1695))
+- The macOS desktop host tiles an image with `resizeMode: 'repeat'` from the top left corner at its pixel size divided by its source's `scale`, as React Native iOS does, where it stretched the image to fill its box. ([#1692](https://github.com/ng-native/ng-native/pull/1692))
+- The macOS desktop host draws a view's `filter` (every function but `drop-shadow()`, applied in order over the view and its children) and `mix-blend-mode`, which it drew as nothing, so the macOS build keeps those filter functions where it dropped all but `brightness()` and `opacity()` with a warning. ([#1697](https://github.com/ng-native/ng-native/pull/1697))
+
+  A `filter` that holds a `drop-shadow()`, in a macOS build or in a rule that can apply on macOS, is still dropped whole with a warning, now naming macOS: use `box-shadow`, or scope the rule to Android with a `.platform-android` ancestor.
+
+- Device tests can check one visual thing at a time and turn animations off: `toHaveStyle`, `toHaveSize`, `toBeWithin` and `toHaveColorAt` read what the engine committed, where native laid a node out and what it drew at a point, and `setAnimations(false)` (or `deviceTests({ animations: false })`) stops the engine's CSS transitions and `@keyframes`, UIKit's view animations on iOS and Android's animators. ([#1718](https://github.com/ng-native/ng-native/pull/1718))
+
+  `toHaveStyle` compares colours as hex, `rgb()` or `rgba()` with numbers, `hsl()`, `hwb()`, a name or the integer native is given, lengths in points, and a shorthand the engine commits as its parts (`borderRadius`, `borderWidth`, `borderColor`, `padding`, `margin`) by each part. `toHaveColorAt` samples a capture of the window on iOS, or Android 8 (API 26) or later, within one step of 255 on each channel by default, and `colorsAt` gives the colours themselves.
+
+  With animations off, from the next change on, a transition lands on its new value, a finite animation ends within two frames on its last frame where its fill mode keeps it, and one that repeats forever is not played, while one already running ends the next time its node is restyled; `Engine` takes the same as a `motion: 'off'` option and `setMotion()`. On Android the OS can refuse the animator scale, and `setAnimations` then resolves `false`.
+
+- An app a device run relaunched, after the one before it exited or stopped answering, is now sent Vitest's start, with its config, before any file, where before its first file failed with `Cannot read property 'viteModuleRunner' of undefined`. ([#1721](https://github.com/ng-native/ng-native/pull/1721))
+- When an app a device run launched never connects to the pool, because it exits first or the connection times out, the failure now includes the last lines of the Metro the run started, and on an iOS simulator the last lines the app printed too, so it says where the app stopped. ([#1720](https://github.com/ng-native/ng-native/pull/1720))
+- New phone apps from `@ng-native/template`, `nx g @ng-native/nx:application` and `ng generate @ng-native/schematics:application` (without `--desktopOnly`) come set up for tests inside the running app on iOS and Android: `npx vitest --project ios` or `--project android` runs `src/app/app.device.ts` on a simulator or emulator with nothing to add. ([#1716](https://github.com/ng-native/ng-native/pull/1716))
+
+  Their `metro.config.js` wraps the config in `withDeviceTests`, `src/main.ts` starts the test host when Metro is started for the tests, following rotation, the theme and reduced motion as the app does, and `vitest.config.mts` has `node`, `ios` and `android` projects (a desktop-only app keeps its `macos` ones), with `npm test` and the generated `test` target running `node` alone. Their `.gitignore` ignores the `-actual.png` and `-diff.png` a failed screenshot comparison writes under `__screenshots__`. `startDeviceTests({ mount })` also takes a function that returns the mount options, which it calls each time it mounts, so the sizes and theme the options read are the device's at that mount, as after Android recreates the activity. An existing app can add the same as https://ng-native.com/packages/testing/in-app-tests#set-up describes.
+
+  `nx g @ng-native/nx:tailwind` and `nx g @ng-native/nx:nativescript` add the Tailwind sheet and `provideNativeScript()` to the object an app's `mountOptions()` returns, which the template's `src/main.ts` now mounts with as the desktop template's already did, where before they asked for it to be added by hand. `nx g @ng-native/nx:nativescript` now reads `src/main.ts` with TypeScript's parser (5.9 or 6, as `@ng-native/migrate` does), so it adds to the `providers` list the options object itself has, not one in a comment, a string or a nested object, whatever comments, strings or regular expressions the options hold.
+
+- The desktop host's core, Hermes and runtime build on Linux, with no backend yet: `native/scripts/build.sh --backend none --runtime` builds Hermes over a pinned static ICU 77.1 and the runtime half, and runs their tests with `--test`. ([#1555](https://github.com/ng-native/ng-native/pull/1555))
+
+  On macOS, a host built from source builds Hermes again once after the upgrade, since the record of what a cached Hermes was built for has moved to a new file.
+
+### ❤️ Thank You
+
+- Ashley Hunter
+- Dor Peled
+
 ## 0.25.0 (2026-11-19)
 
 ### 🩹 Fixes

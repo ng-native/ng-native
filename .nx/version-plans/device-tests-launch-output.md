@@ -1,5 +1,0 @@
----
-__default__: patch
----
-
-When an app a device run launched never connects to the pool, because it exits first or the connection times out, the failure now includes the last lines of the Metro the run started, and on an iOS simulator the last lines the app printed too, so it says where the app stopped.
