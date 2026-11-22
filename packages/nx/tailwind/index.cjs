@@ -152,7 +152,27 @@ function activeExport(config) {
     statement.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
     statement.expression.left.getText(source) === 'module.exports';
   const exports = source.statements.filter(isExport);
-  return exports.length === 1 ? { ts, source, statement: exports[0] } : null;
+  if (exports.length !== 1) return null;
+  return { ts, source, statement: exports[0], names: namesOfWithTailwind(ts, source.statements) };
+}
+
+/**
+ * The names `withTailwind` is called by in a config: its own, and any it is bound to at the top,
+ * `tw` of `const { withTailwind: tw } = require(...)`.
+ */
+function namesOfWithTailwind(ts, statements) {
+  const names = new Set(['withTailwind']);
+  for (const statement of statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const { name } of statement.declarationList.declarations) {
+      if (!ts.isObjectBindingPattern(name)) continue;
+      for (const element of name.elements) {
+        const key = (element.propertyName ?? element.name).getText();
+        if (key === 'withTailwind' && ts.isIdentifier(element.name)) names.add(element.name.text);
+      }
+    }
+  }
+  return names;
 }
 
 /**
@@ -161,12 +181,12 @@ function activeExport(config) {
  * `withDeviceTests(withTailwind(config))` does. A comment or string naming it does not, nor a call
  * in a branch, a function, an optional call or anything else that may not run.
  */
-function callsWithTailwind({ ts, source, statement }) {
+function callsWithTailwind({ ts, source, statement, names }) {
   const runs = (node) => {
     if (ts.isParenthesizedExpression(node)) return runs(node.expression);
     // An optional call, `wrap?.(x)`, runs neither itself nor its arguments where `wrap` is missing.
     if (!ts.isCallExpression(node) || ts.isOptionalChain(node)) return false;
-    return node.expression.getText(source) === 'withTailwind' || node.arguments.some(runs);
+    return names.has(node.expression.getText(source)) || node.arguments.some(runs);
   };
   return runs(statement.expression.right);
 }
@@ -187,9 +207,9 @@ function binds(ts, name) {
  * Whether the export calls `withTailwind` anywhere in its expression, run or not: a comment or a
  * string naming it does not count.
  */
-function namesWithTailwind({ ts, source, statement }) {
+function namesWithTailwind({ ts, source, statement, names }) {
   const calls = (node) =>
-    (ts.isCallExpression(node) && node.expression.getText(source) === 'withTailwind') ||
+    (ts.isCallExpression(node) && names.has(node.expression.getText(source))) ||
     Boolean(ts.forEachChild(node, (child) => calls(child) || undefined));
   return calls(statement.expression.right);
 }

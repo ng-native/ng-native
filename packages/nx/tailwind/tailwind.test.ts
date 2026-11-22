@@ -283,6 +283,21 @@ describe('Tailwind 4, by default', () => {
     }
   });
 
+  it('leaves an export that calls withTailwind under another name as it is', async () => {
+    const tree = await integrated();
+    const config = [
+      "const { getDefaultConfig } = require('expo/metro-config');",
+      "const { withTailwind: tw } = require('@ng-native/tailwind/config.cjs');",
+      "module.exports = tw(getDefaultConfig(__dirname), { input: './src/app.css' });",
+      '',
+    ].join('\n');
+    tree.write('apps/mobile/metro.config.js', config);
+    await generate(tree, {});
+    // Wrapped again, the default input's sheet would overwrite the one its own input builds.
+    assert.equal(read(tree, 'apps/mobile/metro.config.js'), config);
+    assert.match(read(tree, 'apps/mobile/src/main.ts'), /app\.tailwind\.js/);
+  });
+
   it('wraps an export beside a withTailwind required under another name', async () => {
     const tree = await integrated();
     tree.write(
