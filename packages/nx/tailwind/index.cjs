@@ -170,7 +170,18 @@ function callsWithTailwind({ ts, source, statement }) {
 function wrappedConfig(config, { ts, source, statement }) {
   const expression = statement.expression.right.getText(source);
   // After the last require above the export, which the wrapped export needs defined by then.
-  const required = "\nconst { withTailwind } = require('@ng-native/tailwind/config.cjs');";
+  // Once: a config that requires withTailwind already, and never calls it, keeps its own.
+  const above = source.statements.filter((one) => one.end <= statement.getStart(source));
+  const declared = above.some(
+    (one) =>
+      ts.isVariableStatement(one) &&
+      one.declarationList.declarations.some((declaration) =>
+        /\bwithTailwind\b/.test(declaration.name.getText(source)),
+      ),
+  );
+  const required = declared
+    ? ''
+    : "\nconst { withTailwind } = require('@ng-native/tailwind/config.cjs');";
   const last = source.statements
     .filter((one) => one.end <= statement.getStart(source) && ts.isVariableStatement(one))
     .filter((one) => /\brequire\(/.test(one.getText(source)))

@@ -229,6 +229,26 @@ describe('Tailwind 4, by default', () => {
     );
   });
 
+  it('wraps an export beside a withTailwind required but never called, requiring it once', async () => {
+    const tree = await integrated();
+    tree.write(
+      'apps/mobile/metro.config.js',
+      [
+        "const { getDefaultConfig } = require('expo/metro-config');",
+        "const { withTailwind } = require('@ng-native/tailwind/config.cjs');",
+        'const config = getDefaultConfig(__dirname);',
+        'module.exports = config;',
+        '',
+      ].join('\n'),
+    );
+    await generate(tree, {});
+    const config = read(tree, 'apps/mobile/metro.config.js');
+    assert.doesNotThrow(() => new vm.Script(config), `not JavaScript:\n${config}`);
+    assert.equal(config.split("require('@ng-native/tailwind/config.cjs')").length, 2, config);
+    assert.match(config, /^module\.exports = withTailwind\(config, \{$/m);
+    assert.match(read(tree, 'apps/mobile/src/main.ts'), /app\.tailwind\.js/);
+  });
+
   it('leaves an export that already calls withTailwind as it is', async () => {
     const tree = await integrated();
     const config = [
