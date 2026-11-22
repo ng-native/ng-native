@@ -188,6 +188,29 @@ describe('Tailwind 4, by default', () => {
     );
   });
 
+  it('wraps the whole of an export with statements of its own, not up to its first', async () => {
+    const tree = await integrated();
+    tree.write(
+      'apps/mobile/metro.config.js',
+      [
+        "const { getDefaultConfig } = require('expo/metro-config');",
+        '',
+        'module.exports = (() => {',
+        '  const config = getDefaultConfig(__dirname);',
+        '  return config;',
+        '})();',
+        '',
+      ].join('\n'),
+    );
+    await generate(tree, {});
+    const config = read(tree, 'apps/mobile/metro.config.js');
+    assert.doesNotThrow(() => new vm.Script(config), `not JavaScript:\n${config}`);
+    assert.match(
+      config,
+      /module\.exports = withTailwind\(\(\(\) => \{\n {2}const config = getDefaultConfig\(__dirname\);\n {2}return config;\n\}\)\(\), \{\n {2}input: '\.\/src\/styles\.css',\n\}\);/,
+    );
+  });
+
   it('passes the generated sheet to mount as the global stylesheet', async () => {
     const tree = await integrated();
     await generate(tree, {});

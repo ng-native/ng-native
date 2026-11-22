@@ -30,6 +30,7 @@
  * one. A file it cannot follow is left alone, with a warning saying what to add by hand.
  */
 const path = require('node:path').posix;
+const vm = require('node:vm');
 const {
   addDependenciesToPackageJson,
   formatFiles,
@@ -120,6 +121,37 @@ function byHand(file, what) {
 }
 
 /**
+ * A Metro config's `module.exports = <expression>;` statement and its expression, or null where it
+ * has none this can wrap. The expression may span lines, as a formatter splits one longer than a
+ * line, the generated app's among them since it went into withDeviceTests too. It runs to the first
+ * line-ending `;` at which it parses whole: one inside it, in a function body, is not its end.
+ */
+function exportOf(config) {
+  const start = /^module\.exports = /m.exec(config);
+  if (!start) return null;
+  const from = start.index + start[0].length;
+  const ends = /;[ \t]*$/gm;
+  ends.lastIndex = from;
+  for (let end = ends.exec(config); end; end = ends.exec(config)) {
+    const expression = config.slice(from, end.index);
+    if (parsesAsExpression(expression)) {
+      return [config.slice(start.index, end.index + 1), expression];
+    }
+  }
+  return null;
+}
+
+/** Whether `text` is one whole JavaScript expression, without running it. */
+function parsesAsExpression(text) {
+  try {
+    new vm.Script(`(${text}\n)`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Wrap the app's Metro config in `withTailwind`, which builds the sheet `src/main.ts` imports.
  * True once it is wrapped, now or before; false where it says what to add by hand.
  */
@@ -131,9 +163,7 @@ function wrapMetroConfig(tree, root) {
     return false;
   }
   if (config.includes('withTailwind')) return true;
-  // To the `;` that ends a line: a formatter splits an export longer than a line, as it does the
-  // generated app's since it went into withDeviceTests too.
-  const exported = /^module\.exports = ([\s\S]+?);[ \t]*$/m.exec(config);
+  const exported = exportOf(config);
   if (!exported) {
     byHand(
       file,
