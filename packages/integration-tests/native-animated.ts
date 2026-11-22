@@ -1,6 +1,45 @@
 /** A stand-in for React Native's animated module that records what it is asked to build. */
 import type { NativeAnimated } from '@ng-native/fabric';
 
+/**
+ * The keys React Native's C++ animated module reads from each node's config and each animation's,
+ * by type (`ReactCommon/react/renderer/animated`). It reads them with `folly::dynamic`'s throwing
+ * lookup, so a config missing one ends the app on a desktop host, which runs that module, where
+ * iOS's Objective-C module reads it as absent and goes on.
+ */
+const READS: Readonly<Record<string, readonly string[]>> = {
+  value: ['value', 'offset'],
+  interpolation: ['inputRange', 'outputRange', 'outputType', 'extrapolateLeft', 'extrapolateRight'],
+  addition: ['input'],
+  subtraction: ['input'],
+  multiplication: ['input'],
+  division: ['input'],
+  modulus: ['input', 'modulus'],
+  diffclamp: ['input', 'min', 'max'],
+  round: ['input', 'nearest'],
+  color: ['r', 'g', 'b', 'a'],
+  style: ['style'],
+  props: ['props'],
+  object: ['value'],
+  transform: ['transforms'],
+  tracking: ['animationId', 'toValue', 'value', 'animationConfig'],
+  frames: ['frames', 'toValue'],
+  spring: ['stiffness', 'damping', 'mass', 'initialVelocity', 'overshootClamping'],
+  decay: ['deceleration', 'velocity'],
+};
+
+/** Throws, as the C++ module does, for a config it has no type for or that misses a key it reads. */
+function readable(config: unknown): void {
+  const { type } = config as { type?: string };
+  const keys = type === undefined ? undefined : READS[type];
+  if (!keys) throw new Error(`React Native's C++ animated module has no ${String(type)}`);
+  for (const key of keys) {
+    if (!(key in (config as object))) {
+      throw new Error(`couldn't find key ${key} in a ${type} config: ${JSON.stringify(config)}`);
+    }
+  }
+}
+
 export function recorder() {
   let next = 1;
   const calls: [string, ...unknown[]][] = [];
@@ -15,6 +54,7 @@ export function recorder() {
     generateNewAnimationId: () => next++,
     API: {
       startAnimatingNode: (id, node, config, end) => {
+        readable(config);
         calls.push(['start', id, node, config]);
         ends.set(id, end);
       },
@@ -22,7 +62,10 @@ export function recorder() {
         calls.push(['stop', id]);
         ends.delete(id);
       },
-      createAnimatedNode: record('create'),
+      createAnimatedNode: (...args: unknown[]) => {
+        readable(args[1]);
+        calls.push(['create', ...args]);
+      },
       connectAnimatedNodes: record('connect'),
       disconnectAnimatedNodes: record('disconnect'),
       connectAnimatedNodeToView: record('toView'),

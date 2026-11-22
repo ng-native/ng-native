@@ -237,6 +237,7 @@ describe('the Linux budget', () => {
       scrollFrameMs: 10,
       resizeCommitMs: 8,
       resizeCommitsPerFrame: 1,
+      animationCommitsPerFrame: 0.1,
       extraWindowMb: 20,
     });
     const { ok, results } = macos.judge({}, budget);
@@ -281,6 +282,7 @@ describe('the workload metrics', () => {
     mount: { from: 100, to: 200 },
     scroll: { from: 200, to: 300 },
     resize: { from: 300, to: 400 },
+    animate: { from: 400, to: 500 },
   };
   const pss = { before: 100, after: 118.5 };
 
@@ -302,7 +304,12 @@ describe('the workload metrics', () => {
         event('frame', 3, 335),
         event('frame', 3, 355),
         event('frame', 3, 375),
-        event('commit', 60, 450), // after the last step
+        event('commit', 1, 410), // the commit that starts the animation
+        event('frame', 2, 420),
+        event('frame', 2, 440),
+        event('frame', 2, 460),
+        event('frame', 2, 480),
+        event('commit', 60, 550), // after the last step
       ],
       steps,
       pss,
@@ -313,6 +320,7 @@ describe('the workload metrics', () => {
       scrollFrameMs: 6,
       resizeCommitMs: 7.5,
       resizeCommitsPerFrame: 0.75,
+      animationCommitsPerFrame: 0.25,
       extraWindowMb: 4.625,
     });
   });
@@ -360,6 +368,7 @@ describe('the workload metrics', () => {
       scrollFrameMs: null,
       resizeCommitMs: null,
       resizeCommitsPerFrame: null,
+      animationCommitsPerFrame: null,
       extraWindowMb: null,
     });
     // Commits with no frame between them are not a ratio.
@@ -538,6 +547,7 @@ describe('measuring the workload', { skip: process.platform !== 'linux' }, () =>
         'mount|[ngn] commit 4 ms|[ngn] commit 11.5 ms',
         'scroll|[ngn] frame 2 ms|[ngn] frame 8 ms|[ngn] frame 4 ms',
         'resize|[ngn] commit 3 ms|[ngn] frame 1 ms|[ngn] commit 6 ms|[ngn] frame 1 ms',
+        'animate|[ngn] commit 2 ms|[ngn] frame 1 ms|[ngn] frame 1 ms|[ngn] frame 1 ms|[ngn] frame 1 ms',
         'window',
       ]),
       await freePort(),
@@ -546,6 +556,7 @@ describe('measuring the workload', { skip: process.platform !== 'linux' }, () =>
     assert.equal(metrics['scrollFrameMs'], 4);
     assert.equal(metrics['resizeCommitMs'], 6);
     assert.equal(metrics['resizeCommitsPerFrame'], 1);
+    assert.equal(metrics['animationCommitsPerFrame'], 0.25);
     // The stand-in does not grow, but its memory was sampled at both ends of the window step.
     assert.ok(metrics['extraWindowMb'] !== null && Math.abs(metrics['extraWindowMb']!) < 5);
   });

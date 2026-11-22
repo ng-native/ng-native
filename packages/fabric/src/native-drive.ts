@@ -532,6 +532,9 @@ export class NativeScrollDriver {
       type: 'interpolation',
       inputRange: [...range.input],
       outputRange: [...range.output],
+      // Numbers: React Native's C++ module, which a desktop host runs, reads the type and stops
+      // the app without it. iOS's reads it as absent.
+      outputType: 'number',
       extrapolateLeft: 'clamp',
       extrapolateRight: 'clamp',
     });
@@ -640,6 +643,9 @@ export class NativeScrollDriver {
       type: 'interpolation',
       inputRange: [...range.input],
       outputRange: [...range.output],
+      // Numbers: React Native's C++ module, which a desktop host runs, reads the type and stops
+      // the app without it. iOS's reads it as absent.
+      outputType: 'number',
       extrapolateLeft: 'clamp',
       extrapolateRight: 'clamp',
     });

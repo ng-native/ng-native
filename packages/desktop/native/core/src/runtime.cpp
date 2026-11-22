@@ -1,5 +1,6 @@
 #include "ngn/runtime.h"
 
+#include "ngn/animated-frame-loop.h"
 #include "ngn/host-reload.h"
 #include "ngn/worklet-host.h"
 #include "red-box-errors.h"
@@ -33,6 +34,13 @@ namespace {
 class FeatureFlags final : public ReactNativeFeatureFlagsDefaults {
  public:
   bool enableBridgelessArchitecture() override {
+    return true;
+  }
+  // The animated module is React Native's C++ one (createHost), which keeps the shadow tree in step
+  // with what it animates. The flag also names the module JavaScript asks for: without it, a bundle
+  // that resolves React Native's iOS files asks for iOS's NativeAnimatedTurboModule, finds none, and
+  // every animation runs from JavaScript.
+  bool cxxNativeAnimatedEnabled() override {
     return true;
   }
 };
@@ -154,7 +162,9 @@ void Runtime::createHost() {
       std::make_shared<DevUI>(onDebuggerPaused, onDebuggerResumed),
       modules_->providers(),
       nullptr,
-      nullptr,
+      // React Native's animated module, on the host's frames: Animated's native driver, and the
+      // engine's native paint and the animations it hands native, play without a commit a frame.
+      animatedNodesManagerProvider(std::make_shared<AnimatedFrameLoop>(workletHost().frames)),
       devServer_ ? ReactInstance::BindingsInstallFunc([this](jsi::Runtime &runtime) { installErrorListener(runtime); })
                  : nullptr);
   // React Native's own reloads (DevSettings, the dev server's, the debugger's) come here instead

@@ -47,6 +47,7 @@ describe('a view driven by a scroll on the native side', () => {
       type: 'interpolation',
       inputRange: [100, 300],
       outputRange: [0, 200],
+      outputType: 'number',
       extrapolateLeft: 'clamp',
       extrapolateRight: 'clamp',
     });

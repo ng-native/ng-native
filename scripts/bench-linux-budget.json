@@ -10,6 +10,7 @@
     "scrollFrameMs": 10,
     "resizeCommitMs": 8,
     "resizeCommitsPerFrame": 1,
+    "animationCommitsPerFrame": 0.1,
     "extraWindowMb": 20
   },
   "waivers": [

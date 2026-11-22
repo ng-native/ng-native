@@ -83,6 +83,7 @@ add_library(ngn_core STATIC
     core/src/accent-colors.cpp
     core/src/accessibility.cpp
     core/src/aria-role.cpp
+    core/src/animated-frame-loop.cpp
     core/src/animation-frames.cpp
     core/src/app-menus.cpp
     core/src/app-windows.cpp
