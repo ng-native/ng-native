@@ -28,8 +28,12 @@ declare const require: (id: string) => unknown;
 const reactNative = (): ReactNative => require('react-native') as ReactNative;
 
 export interface DeviceTestsOptions {
-  /** What the app passes `mount()` as its options: providers, global styles, asset resolution. */
-  mount?: Parameters<typeof mount>[3];
+  /**
+   * What the app passes `mount()` as its options: providers, global styles, asset resolution. A
+   * function is called at each mount, so the conditions it reads (size, theme) are the device's
+   * then, as when Android recreates the activity, not when the entry loaded.
+   */
+  mount?: MountOptions | (() => MountOptions);
   /**
    * The pool's URL. Default: port 51730 on the machine running Vitest, which an iOS simulator
    * reaches at 127.0.0.1 and an Android emulator at 10.0.2.2.
@@ -56,17 +60,25 @@ class DeviceTestHost {
   readonly status = signal('Waiting for Vitest');
 }
 
+type MountOptions = NonNullable<Parameters<typeof mount>[3]>;
+
+const mountOptions = (given: DeviceTestsOptions['mount']): MountOptions =>
+  typeof given === 'function' ? given() : (given ?? {});
+
 /** Register the app's runnable as the device test host. Call it instead of the app's own. */
 export function startDeviceTests(options: DeviceTestsOptions = {}): void {
-  const { AppRegistry, Platform } = reactNative();
-  const url =
-    options.url ?? `http://${Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1'}:${DEFAULT_PORT}`;
+  const { AppRegistry } = reactNative();
   AppRegistry.registerRunnable('main', ({ rootTag }) => {
     const recorder = record(getFabricUIManager());
-    const app = mount(Number(rootTag), DeviceTestHost, recorder.fabric, options.mount ?? {});
+    const app = mount(
+      Number(rootTag),
+      DeviceTestHost,
+      recorder.fabric,
+      mountOptions(options.mount),
+    );
     options.onMount?.(app);
-    void rootComponent(app).then((host) => {
-      setHarness({ app, recorder, slot: () => host.slot() });
+    void Promise.all([rootComponent(app), poolUrl(options.url)]).then(([host, url]) => {
+      setHarness({ app, recorder, slot: () => host.slot(), pool: { url, session } });
       void serve(url, (status) => {
         host.status.set(status);
         app.applicationRef.tick();
@@ -146,19 +158,45 @@ async function serve(url: string, status: (text: string) => void): Promise<void>
 }
 
 /**
+ * Where the pool is: `url` when given; or at the host the app loads its bundle from, on the port
+ * that host's Metro says the pool started it for (`withDeviceTests` answers
+ * `/ng-native/device-tests`); or else port 51730 on the machine running Vitest, which an iOS
+ * simulator reaches at 127.0.0.1 and an Android emulator at 10.0.2.2.
+ */
+async function poolUrl(url: string | undefined): Promise<string> {
+  if (url) return url;
+  const fallback = `http://${reactNative().Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1'}:${DEFAULT_PORT}`;
+  const metro = /^https?:\/\/[^/]+/.exec(scriptUrl())?.[0];
+  if (!metro) return fallback;
+  try {
+    const response = await fetch(`${metro}/ng-native/device-tests`);
+    const { port } = (await response.json()) as { port?: number | null };
+    return port ? `${metro.replace(/:\d+$/, '')}:${port}` : fallback;
+  } catch {
+    // A Metro without `withDeviceTests` answers nothing to ask.
+    return fallback;
+  }
+}
+
+/** The URL the app's own bundle came from. */
+function scriptUrl(): string {
+  const constants = (
+    reactNative().NativeModules['SourceCode'] as
+      { getConstants?: () => { scriptURL?: string } } | undefined
+  )?.getConstants?.();
+  return constants?.scriptURL ?? '';
+}
+
+/**
  * What the app tells the pool with each poll: who it is, where its own bundle came from, and which
  * modules it has, with a hash of each one a pool sent it, so the pool sends only what is missing
  * or has changed.
  */
 function poll(reply: unknown) {
-  const { NativeModules, Platform } = reactNative();
-  const constants = (
-    NativeModules['SourceCode'] as { getConstants?: () => { scriptURL?: string } } | undefined
-  )?.getConstants?.();
   return {
     session,
-    platform: Platform.OS,
-    script: constants?.scriptURL ?? '',
+    platform: reactNative().Platform.OS,
+    script: scriptUrl(),
     defined: [...modules().keys()],
     hashes: Object.fromEntries(hashes),
     reply,

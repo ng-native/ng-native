@@ -65,16 +65,16 @@ is left as it is, with a warning naming the two to decide.
 
 ## The targets
 
-| Command                 | From           | What runs                                                       |
-| ----------------------- | -------------- | --------------------------------------------------------------- |
-| `nx start mobile`       | `project.json` | `expo start`, and `serve` likewise                              |
-| `nx run mobile:run-ios` | `@nx/expo`     | `expo run:ios`, and `run-android` likewise                      |
-| `nx export mobile`      | `@nx/expo`     | `expo export`; `--platform ios` for one platform                |
-| `nx prebuild mobile`    | `@nx/expo`     | `expo prebuild`                                                 |
-| `nx build mobile`       | `@nx/expo`     | an EAS build, on Expo's machines                                |
-| `nx test mobile`        | `project.json` | `vitest run`, through [`@ng-native/testing`](/packages/testing) |
-| `nx typecheck mobile`   | `project.json` | `ngc --noEmit`, which checks the templates as well as the code  |
-| `nx lint mobile`        | `project.json` | `eslint .`, with `--linter=eslint` only                         |
+| Command                 | From           | What runs                                                      |
+| ----------------------- | -------------- | -------------------------------------------------------------- |
+| `nx start mobile`       | `project.json` | `expo start`, and `serve` likewise                             |
+| `nx run mobile:run-ios` | `@nx/expo`     | `expo run:ios`, and `run-android` likewise                     |
+| `nx export mobile`      | `@nx/expo`     | `expo export`; `--platform ios` for one platform               |
+| `nx prebuild mobile`    | `@nx/expo`     | `expo prebuild`                                                |
+| `nx build mobile`       | `@nx/expo`     | an EAS build, on Expo's machines                               |
+| `nx test mobile`        | `project.json` | `vitest run --project node`, the tests that run in Node        |
+| `nx typecheck mobile`   | `project.json` | `ngc --noEmit`, which checks the templates as well as the code |
+| `nx lint mobile`        | `project.json` | `eslint .`, with `--linter=eslint` only                        |
 
 `typecheck` and `test` are the two `@nx/expo` does not provide. Expo's `tsconfig` sets `noEmit`, and
 `@nx/js` disables its own inferred `typecheck` for a project that does, so the generator writes one.
@@ -125,17 +125,20 @@ first app keeps the ones `@nx/expo` infers. An Expo app whose `start` is inferre
 
 ## The files
 
-The app is the template's: `src/app/app.ts`, `src/main.ts` and `src/app/app.test.ts` as they are,
-and an `app.json` named for the project. Its `app.json` names `ios` and `android` as the platforms,
-because Expo adds `web` whenever `react-dom` resolves, and Nx always installs one. Its `.gitignore`
-ignores the `ios/` and `android/` projects `expo prebuild` writes and the `.angular-native/`
-Tailwind generates, as the template's does. Three files differ, each because of something Nx does:
+The app is the template's: `src/app/app.ts`, `src/main.ts`, `src/app/app.test.ts` and
+`src/app/app.device.ts` as they are, and an `app.json` named for the project. Its `app.json` names
+`ios` and `android` as the platforms, because Expo adds `web` whenever `react-dom` resolves, and Nx
+always installs one. Its `.gitignore` ignores the `ios/` and `android/` projects `expo prebuild`
+writes, the `.angular-native/` Tailwind generates, and the `-actual.png` and `-diff.png` a failed
+screenshot comparison writes under `__screenshots__`, as the template's does. Three files differ,
+each because of something Nx does:
 
-- **`metro.config.js`** applies the preset around `withNxMetro`, from `@nx/expo`, which resolves
-  the workspace's libraries and watches them. Without it, Metro cannot follow a tsconfig path alias
-  and reports `Cannot resolve @org/ui`. The preset goes on the outside so its resolver can wrap
-  Nx's: a library written for TypeScript's module resolution imports `./lib/ui.js` for a `ui.ts`,
-  and the preset resolves that to the `.ts` file, as TypeScript does.
+- **`metro.config.js`** applies the preset, and the template's `withDeviceTests` around it, around
+  `withNxMetro`, from `@nx/expo`, which resolves the workspace's libraries and watches them.
+  Without it, Metro cannot follow a tsconfig path alias and reports `Cannot resolve @org/ui`. The
+  preset goes on the outside so its resolver can wrap Nx's: a library written for TypeScript's
+  module resolution imports `./lib/ui.js` for a `ui.ts`, and the preset resolves that to the `.ts`
+  file, as TypeScript does.
 - **`tsconfig.json`**, in a workspace with a `tsconfig.base.json`, extends it after Expo's, which
   is where the path aliases are, and puts back the Expo settings the workspace's base overrides.
   With package-manager workspaces it does so only when that file has a `paths` list: the
@@ -144,6 +147,13 @@ Tailwind generates, as the template's does. Three files differ, each because of 
   path aliases, since Vitest does not read them from tsconfig either, and adds
   `vite-tsconfig-paths` for it if the workspace has none, as Nx 24 does for its own Vite configs.
   The `angular-monorepo` preset does not, and a library generated after the app is the usual case.
+
+Its `vitest.config.mts` has three projects, as the template's does: `node`, in Node, which the
+`test` target runs alone, and `ios` and `android`, which run `src/**/*.device.ts`
+[inside the app](/packages/testing/in-app-tests) and start Metro, build the app and open it on a
+simulator or emulator themselves. `src/app/app.device.ts` is the example: run
+`npx vitest --project ios` in the app's folder. The first run builds the app, which needs Xcode or
+the Android SDK.
 
 ## Where the dependencies go
 
@@ -215,8 +225,8 @@ own library generator without its tests: `@nx/angular:library`, with the options
 it, including the defaults in `nx.json`, or `@nx/js:library` with no bundler in the TypeScript
 preset. In place of the tests it writes:
 
-- the app's `vitest.config.mts`, whose `ngNative()` renders on the fake Fabric in Node, and a
-  `test` target that runs it once, as the app's does;
+- a `vitest.config.mts` with the app's Node project alone, whose `ngNative()` renders on the fake
+  Fabric in Node, and a `test` target that runs it once;
 - a `tsconfig.spec.json` for the tests, referenced from the library's `tsconfig.json`;
 - a component built from `<view>` and `<text>`, where the generator put its own, and a `.test.ts`
   beside it that renders it.
@@ -378,14 +388,11 @@ EAS targets, which build for iOS and Android, are left out too, until
 
 Its `vitest.config.mts` has four projects: `node-macos` and `node-linux`, in Node, which its `test`
 target runs alone (`vitest run --project node-macos --project node-linux`), and `macos` and
-`linux`, which run `src/**/*.device.ts` inside the app and open it. `src/app/app.device.ts` is the
-example, and its
-`metro.config.js` adds the in-app tests only when Metro starts with `EXPO_PUBLIC_DEVICE_TESTS=1`:
-run `EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start` in the app's folder, then
-`npx vitest --project macos` (on a Mac) or `npx vitest --project linux` (in GTK, on Linux or on a
-Mac in a
-container) there. `nx g @ng-native/nx:init --desktopOnly`, the generator
-`nx add` runs, makes it the default of every app generated in the workspace, in `nx.json`.
+`linux`, which run `src/**/*.device.ts` inside the app and start Metro and open it.
+`src/app/app.device.ts` is the example: run `npx vitest --project macos` (on a Mac) or
+`npx vitest --project linux` (in GTK, on Linux or on a Mac in a container) in the app's folder.
+`nx g @ng-native/nx:init --desktopOnly`, the generator `nx add` runs, makes it the default of
+every app generated in the workspace, in `nx.json`.
 
 `--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`; it defaults to
 `com.<scope>.<name>`, from the workspace's npm scope and the app's name with anything but letters

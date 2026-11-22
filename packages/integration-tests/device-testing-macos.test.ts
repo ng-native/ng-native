@@ -130,6 +130,7 @@ async function setup(options: { crash?: boolean } = {}) {
   const pool = devicePool({
     port,
     platform: 'macos',
+    metroPort: 8099,
     launch,
     connectTimeout: 10_000,
     appTimeout: 5000,
@@ -226,6 +227,7 @@ describe('the macOS launcher', () => {
       const pool = devicePool({
         port: await freePort(),
         platform: 'macos',
+        metroPort: 8099,
         connectTimeout: 5000,
         launch: macosLauncher({
           command: process.execPath,
@@ -243,12 +245,15 @@ describe('the macOS launcher', () => {
   });
 
   it('names the test environment from the request', () => {
-    assert.deepEqual(testEnvironment({ port: 1, runId: 'r', stateDir: '/s' }), {
-      NGN_TESTS: '1',
-      NGN_STATE_DIR: '/s',
-      NGN_RUN_ID: 'r',
-      NGN_TESTS_FAKE_SYSTEM_UI: '1',
-    });
+    assert.deepEqual(
+      testEnvironment({ port: 1, runId: 'r', stateDir: '/s', projectRoot: '/p', metroPort: 2 }),
+      {
+        NGN_TESTS: '1',
+        NGN_STATE_DIR: '/s',
+        NGN_RUN_ID: 'r',
+        NGN_TESTS_FAKE_SYSTEM_UI: '1',
+      },
+    );
   });
 });
 
@@ -282,16 +287,31 @@ describe('finding the crash report', () => {
 });
 
 describe('the macos Vitest project', () => {
-  const configOf = (options: Parameters<typeof deviceTests>[0]) =>
+  const configOf = (options: Parameters<typeof deviceTests>[0], user: object = {}) =>
     (
-      deviceTests(options).config as (config: object) => {
+      deviceTests(options).config as unknown as (config: object) => {
         test: {
           name: string;
           pool: { name: string };
+          testTimeout: number;
           resolveSnapshotPath?: (path: string, extension: string) => string;
         };
       }
-    )({ root: tmpdir() }).test;
+    )({ root: tmpdir(), ...user }).test;
+
+  it("hands the app's runner the project's animations setting, on unless it says off", () => {
+    const provide = (options: Parameters<typeof deviceTests>[0]) =>
+      (configOf(options) as unknown as { provide: { ngNativeAnimations: boolean } }).provide;
+    assert.deepEqual(provide({ platform: 'ios' }), { ngNativeAnimations: true });
+    assert.deepEqual(provide({ platform: 'ios', animations: false }), {
+      ngNativeAnimations: false,
+    });
+  });
+
+  it('gives a test 30 seconds, for a first render on a device just booted, unless the project says', () => {
+    assert.equal(configOf({ platform: 'ios' }).testTimeout, 30_000);
+    assert.equal(configOf({ platform: 'ios' }, { test: { testTimeout: 5000 } }).testTimeout, 5000);
+  });
 
   it('is named for its platform, so vitest --project macos selects it', () => {
     assert.equal(configOf({ platform: 'macos' }).name, 'macos');

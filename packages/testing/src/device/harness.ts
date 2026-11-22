@@ -11,6 +11,8 @@ export interface Harness {
   app: MountResult;
   slot(): ViewContainerRef;
   recorder: ReturnType<typeof record>;
+  /** The pool this app talks to, and the session it is to the pool. */
+  pool: { url: string; session: string };
 }
 
 let current: Harness | null = null;

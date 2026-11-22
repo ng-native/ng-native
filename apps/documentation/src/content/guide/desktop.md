@@ -83,10 +83,9 @@ An app from the desktop template, or from the generators' desktop-only option, h
 project for each OS in Node and one for each inside the app. `node-macos` and `node-linux` run in
 Node, and are what `npm test` (`vitest run --project node-macos --project node-linux`) and the
 app's `test` target run. `macos` runs `src/**/*.device.ts`, such as `src/app/app.device.ts`,
-inside the app on real AppKit views, and opens the app itself; `linux` does the same in GTK (see
-[Test Linux from a Mac](/guide/desktop-linux#test-linux-from-a-mac)):
+inside the app on real AppKit views, and starts Metro and opens the app itself; `linux` does the
+same in GTK (see [Test Linux from a Mac](/guide/desktop-linux#test-linux-from-a-mac)):
 
 ```sh
-EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start   # in one terminal
 npx vitest --project macos
 ```

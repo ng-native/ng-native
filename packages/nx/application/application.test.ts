@@ -97,8 +97,29 @@ describe('in an integrated workspace', () => {
     const tree = integrated();
     await generate(tree, { directory: 'apps/mobile' });
     const main = tree.read('apps/mobile/src/main.ts', 'utf-8')!;
-    assert.match(main, /^ {2}const stopWatching = watchConditions\(app\.engine\);$/m);
-    assert.match(main, /^ {2}app\.applicationRef\.onDestroy\(stopWatching\);$/m);
+    assert.match(main, /^ {4}const stopWatching = watchConditions\(app\.engine\);$/m);
+    assert.match(main, /^ {4}app\.applicationRef\.onDestroy\(stopWatching\);$/m);
+  });
+
+  it('sets the app up for in-app tests on iOS and Android, as the template is', async () => {
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    const read = (file: string) => tree.read(`apps/mobile/${file}`, 'utf-8')!;
+    // Without withDeviceTests a dev bundle follows main.ts's dead branch into the test host, and
+    // Vitest behind it.
+    assert.match(read('metro.config.js'), /withDeviceTests\(withAngularNative\(withNxMetro\(/);
+    assert.match(
+      read('src/main.ts'),
+      /startDeviceTests\(\{\s*mount: mountOptions,\s*\/\/[^\n]*\n\s*onMount: \(app\) => \{\s*const stopWatching = watchConditions\(app\.engine\);\s*app\.applicationRef\.onDestroy\(stopWatching\);/,
+      'the test host follows the conditions as the app does',
+    );
+    const config = read('vitest.config.mts');
+    assert.match(config, /ngNative\(\)\], test: \{ name: 'node' \}/);
+    assert.match(config, /deviceTests\(\{ platform: 'ios' \}\)/);
+    assert.match(config, /deviceTests\(\{ platform: 'android' \}\)/);
+    assert.equal(read('src/app/app.device.ts'), native.sourceFile('src/app/app.device.ts'));
+    assert.match(read('.gitignore'), /^\*\*\/__screenshots__\/\*\*\/\*-actual\.png$/m);
+    assert.match(read('.gitignore'), /^\*\*\/__screenshots__\/\*\*\/\*-diff\.png$/m);
   });
 
   it('puts a safe-area-provider above its safe-area-view, which has no insets without one', async () => {
@@ -131,7 +152,8 @@ describe('in an integrated workspace', () => {
       project.targets?.typecheck?.options.command,
       'node metro.config.js && ngc -p tsconfig.json --noEmit',
     );
-    assert.equal(project.targets?.test?.options.command, 'vitest run');
+    // The Node project alone: the ios and android projects build and open the app.
+    assert.equal(project.targets?.test?.options.command, 'vitest run --project node');
     assert.equal(project.targets?.test?.options.cwd, 'apps/mobile');
   });
 
@@ -1237,17 +1259,14 @@ describe('with --desktopOnly', () => {
     assert.equal(inferred['install'], undefined, "a mobile app's are inferred");
   });
 
-  it("bundles with the desktop template's Metro config, which keeps the in-app tests out", async () => {
+  it("bundles with the template's Metro config, which keeps the in-app tests out", async () => {
     // Without withDeviceTests a dev bundle follows main.ts's dead branch into the test host, and
     // Vitest behind it.
     const tree = pnpmWorkspace();
     await generate(tree, { directory: 'apps/desktop', desktopOnly: true });
     const metro = tree.read('apps/desktop/metro.config.js', 'utf-8');
-    assert.equal(metro, native.DESKTOP_METRO_CONFIG);
+    assert.equal(metro, native.METRO_CONFIG);
     assert.match(metro!, /withDeviceTests\(withAngularNative\(withNxMetro\(/);
-    const phone = pnpmWorkspace();
-    await generate(phone, { directory: 'apps/mobile' });
-    assert.equal(phone.read('apps/mobile/metro.config.js', 'utf-8'), native.METRO_CONFIG);
   });
 
   it("writes the desktop template's in-app test, for the macos Vitest project to run", async () => {
@@ -1257,9 +1276,7 @@ describe('with --desktopOnly', () => {
       tree.read('apps/desktop/src/app/app.device.ts', 'utf-8'),
       native.sourceFile('src/app/app.device.ts', true),
     );
-    const phone = pnpmWorkspace();
-    await generate(phone, { directory: 'apps/mobile' });
-    assert.equal(phone.exists('apps/mobile/src/app/app.device.ts'), false);
+    assert.match(tree.read('apps/desktop/src/app/app.device.ts', 'utf-8')!, /'macos'/);
   });
 
   it("tests in Node alone, as the desktop template's npm test does", async () => {

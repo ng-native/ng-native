@@ -1043,13 +1043,30 @@ export class NativeRendererFactory implements RendererFactory2 {
   };
 
   private schedule(): void {
-    if (this.frame) return;
+    if (this.frame || this.disposed) return;
     // `requestAnimationFrame` is a global in React Native. The fallback is for Node, where the
     // suite drives `advanceTransitions` itself and this never runs.
-    const request =
-      globalThis.requestAnimationFrame ??
-      ((callback: FrameRequestCallback) => setTimeout(() => callback(Date.now()), 16));
-    this.frame = request(this.pump) as unknown as number;
+    if (globalThis.requestAnimationFrame) {
+      this.frame = globalThis.requestAnimationFrame(this.pump);
+      this.cancelFrame = globalThis.cancelAnimationFrame;
+    } else {
+      this.frame = setTimeout(() => this.pump(), 16) as unknown as number;
+      this.cancelFrame = (id) => clearTimeout(id);
+    }
+  }
+
+  /** How the frame asked for is called off: the API it was asked of. */
+  private cancelFrame: ((id: number) => void) | undefined;
+  private disposed = false;
+
+  /**
+   * The app on this factory's surface has gone: the frame it asked for is called off, and it asks
+   * for no other, so a destroyed engine is not committed again.
+   */
+  dispose(): void {
+    this.disposed = true;
+    if (this.frame) this.cancelFrame?.(this.frame);
+    this.frame = 0;
   }
 
   /**
@@ -1097,7 +1114,7 @@ export class NativeRendererFactory implements RendererFactory2 {
     this.settling = true;
     queueMicrotask(() => {
       this.settling = false;
-      if (!this.engine.pending) return;
+      if (this.disposed || !this.engine.pending) return;
       this.commit();
       if (this.engine.animating) this.schedule();
     });
@@ -1459,6 +1476,36 @@ function startWindowRoot(
 }
 
 /**
+ * The document Angular is given in place of a DOM.
+ *
+ * `getElementById` is what `TransferState` calls, and `TransferState` is what `resource()` reaches
+ * for the moment one is created. Without it every resource in an app throws
+ * `doc.getElementById is not a function` before its loader has run - which is a long way from
+ * anything a stylesheet does, and is why the stub is not as thin as it looks.
+ *
+ * `implementation` is what the i18n runtime parses the cases of a plural or select with. It asks
+ * Angular's own `getDocument()` rather than the injector, which answers the global `document`
+ * the Metro polyfills define for animations until it is told of this one.
+ *
+ * Made out here rather than in `mount`, and that is load-bearing: Angular keeps the document it is
+ * given in a variable of its own until the next mount replaces it, and a function made inside
+ * `mount` shares the scope of every other closure `mount` makes, `componentRef` and the engine
+ * among them. A stub made there kept the last app whole after it was destroyed.
+ */
+function createDocumentStub() {
+  return {
+    head: undefined,
+    body: undefined,
+    getElementById: findNoElement,
+    implementation: inertImplementation,
+  };
+}
+
+function findNoElement(): null {
+  return null;
+}
+
+/**
  * Mounts each window's root on its own surface, for `AppWindows`. A window has its own engine and
  * renderer factory, given to its root through an element injector rather than the app's
  * environment injector, so a page an outlet creates in the window finds them by walking up from
@@ -1556,7 +1603,8 @@ function windowMounter(
         stopFonts();
         stopSettled();
         (elementInjector as Partial<{ destroy(): void }>).destroy?.();
-        engine.leaveEvents();
+        factory.dispose();
+        engine.dispose();
       };
       let componentRef: ComponentRef<unknown>;
       try {
@@ -1637,20 +1685,7 @@ export function mount(
   installDateParse(engine.dev);
   const factory = new NativeRendererFactory(engine);
   engine.setOnDirty(factory.commitSoon);
-  // `getElementById` is what `TransferState` calls, and `TransferState` is what `resource()`
-  // reaches for the moment one is created. Without it every resource in an app throws
-  // `doc.getElementById is not a function` before its loader has run - which is a long way from
-  // anything a stylesheet does, and is why the stub is not as thin as it looks.
-  //
-  // `implementation` is what the i18n runtime parses the cases of a plural or select with. It asks
-  // Angular's own `getDocument()` rather than the injector, which answers the global `document`
-  // the Metro polyfills define for animations until it is told of this one.
-  const documentStub = {
-    head: undefined,
-    body: undefined,
-    getElementById: () => null,
-    implementation: inertImplementation,
-  };
+  const documentStub = createDocumentStub();
   setDocument(documentStub as unknown as Document);
 
   // Parent the app injector to the platform injector, exactly as `internalCreateApplication`
@@ -1711,10 +1746,19 @@ export function mount(
   // On an OS with windows the app lives on this surface, which the host never shows, and the root
   // component is the main window's, which `AppWindows` opens. Closing a window then never ends
   // the app.
+  // The app's engine goes with the app. The runtime's event dispatcher outlives every surface on
+  // it, and an engine still joined to it, after Android recreated the activity, kept itself and
+  // every node it had committed, and took the events that have no target.
+  const applicationRef = injector.get(ApplicationRef);
+  applicationRef.onDestroy(() => {
+    factory.dispose();
+    engine.dispose();
+  });
+
   const windows = injector.get(AppWindows);
   if (windows.available()) {
     windows.launch(component, inputs, bindings);
-    return windowedResult(windows, injector.get(ApplicationRef), factory, engine);
+    return windowedResult(windows, applicationRef, factory, engine);
   }
 
   // No `hostElement`, so Angular creates the host from the selector as it does any other
@@ -1738,7 +1782,6 @@ export function mount(
 
   for (const [name, value] of Object.entries(inputs)) componentRef.setInput(name, value);
 
-  const applicationRef = injector.get(ApplicationRef);
   // The app goes with the surface it is on, which Fabric stops when, among others, Android
   // recreates the activity: see `surface-stop.ts`. What its destroy throws goes to its own
   // `ErrorHandler`, looked up while the app can still answer, rather than into Fabric's call.

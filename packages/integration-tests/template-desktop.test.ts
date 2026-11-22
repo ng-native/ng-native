@@ -19,6 +19,7 @@ const SHARED = [
   'CLAUDE.md',
   'LICENSE',
   'gitignore',
+  'metro.config.js',
   'tsconfig.json',
   'assets/icon.png',
 ];
@@ -89,7 +90,9 @@ describe('the desktop template', () => {
     assert.match(read(desktop, 'AGENTS.md').toString('utf8'), /vitest --project linux/);
     assert.match(readme, /npm run linux/);
     assert.match(readme, /`node-macos` and `node-linux`/);
-    assert.match(readme, /EXPO_PUBLIC_DEVICE_TESTS=1/);
+    // The project starts Metro for the tests itself: nothing to start in another terminal.
+    assert.match(readme, /starts\s+Metro and opens the app itself/);
+    assert.doesNotMatch(readme, /EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start/);
   });
 
   it("wraps Metro's config for the in-app tests, and starts the test host for them in main.ts", () => {
@@ -99,7 +102,10 @@ describe('the desktop template', () => {
     );
     const main = read(desktop, 'src/main.ts').toString('utf8');
     assert.match(main, /if \(process\.env\.EXPO_PUBLIC_DEVICE_TESTS\) \{/);
-    assert.match(main, /startDeviceTests\(\{ mount: mountOptions\(\) \}\)/);
+    assert.match(
+      main,
+      /startDeviceTests\(\{\s*mount: mountOptions,\s*\/\/[^\n]*\n\s*onMount: \(app\) => \{\s*const stopWatching = watchConditions\(app\.engine\);\s*app\.applicationRef\.onDestroy\(stopWatching\);/,
+    );
     // The mobile template's app mounts the same options, so the two stay alike where they can.
     assert.match(main, /AppRegistry\.registerRunnable\('main'/);
   });
@@ -114,8 +120,8 @@ describe('the desktop template', () => {
 
   it('has an in-app test beside the Node one', () => {
     const test = read(desktop, 'src/app/app.device.ts').toString('utf8');
-    // Passes on either desktop host, since both projects run it.
-    assert.match(test, /\['macos', 'linux'\]\)\.toContain\(Platform\.OS\)/);
+    // Passes on each host a project runs it on: both desktops, and iOS or Android once added.
+    assert.match(test, /\['macos', 'linux', 'ios', 'android'\]\)\.toContain\(Platform\.OS\)/);
   });
 
   it('sizes its starter screen for a desktop on Linux as on macOS', () => {

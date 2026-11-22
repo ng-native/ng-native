@@ -19,8 +19,8 @@ npm start           # Metro, the dev server the app loads from
 npm run macos       # on a Mac: builds the desktop host (the first time) and opens the app from Metro
 npm run linux       # on Linux: the same, in GTK
 npm test            # Vitest, in Node against a fake native layer: no app window needed
-npx vitest --project macos   # tests in src/**/*.device.ts, inside the running app; needs
-                             # EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start in another terminal
+npx vitest --project macos   # tests in src/**/*.device.ts, inside the running app, which it
+                             # starts, with its own Metro
 npx vitest --project linux   # the same in GTK: on Linux, or on a Mac in the ngn-el9 container
 npm run typecheck
 npm run package     # the .app on a Mac, an app folder and .tar.gz on Linux
@@ -91,6 +91,11 @@ change; both are fast.
 `getByText` or `getByTestId` (which matches `nativeID` and `testID`), and act with
 `userEvent.setup().press(...)` or `.type(...)`, all from `@ng-native/testing`. Tests run in Node
 with no simulator, so write one alongside a change.
+
+A file under `src` ending in `.device.ts` runs inside the running app instead, on real native views, from
+`@ng-native/testing/device`: `npx vitest --project` with an OS the app's `vitest.config.mts` has a
+project for (`ios`, `android` or `macos`), from the app's directory. The first run builds the app,
+which needs Xcode or the Android SDK, and takes some minutes; later runs take seconds.
 
 A service that depends on the platform injects `OS` and `OS_VERSION` from `@ng-native/device`
 rather than importing `Platform` from `react-native`, which a test cannot load. A test provides

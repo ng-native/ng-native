@@ -1,6 +1,7 @@
 /**
- * How a pool starts the app it runs tests in, where it can: a Mac app is a process the pool opens,
- * unlike a simulator, which a person has open.
+ * How a pool starts the app it runs tests in: the desktop host on a Mac (`macosLauncher()`), and a
+ * development build on an iOS simulator (`iosSimulatorLauncher()`) or an Android emulator
+ * (`androidEmulatorLauncher()`).
  *
  * ## What the desktop host must do (the contract `macosLauncher()` relies on)
  *
@@ -42,6 +43,12 @@ export interface LaunchRequest {
   runId: string;
   /** A new empty directory for this launch's state. */
   stateDir: string;
+  /** The Vitest project's root, whose app is launched. */
+  projectRoot: string;
+  /** The port of the Metro the pool started for the run, which the app loads its bundle from. */
+  metroPort: number;
+  /** Aborted as the run stops: a launch still building or booting gives up. */
+  signal?: AbortSignal;
 }
 
 /** An app a launcher started. */
@@ -50,6 +57,8 @@ export interface LaunchedApp {
   readonly exited: Promise<string>;
   /** End the app if it is running, and remove the state it was given. */
   stop(): Promise<void>;
+  /** The last lines the app printed, for a failure to say where it stopped. */
+  output?(): string;
 }
 
 export interface AppLauncher {

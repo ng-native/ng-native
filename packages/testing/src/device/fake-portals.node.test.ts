@@ -363,7 +363,13 @@ describe('linuxLauncher with the fake system UI', { skip }, () => {
           FAKE_CALLS: JSON.stringify(['FileChooser.OpenFile']),
         },
       });
-      const app = await launcher.start({ port: 1, runId: 'fake-ui', stateDir });
+      const app = await launcher.start({
+        port: 1,
+        metroPort: 8081,
+        projectRoot: stateDir,
+        runId: 'fake-ui',
+        stateDir,
+      });
       try {
         assert.equal(await app.exited, 'status 0');
         const logged = readFileSync(path.join(stateDir, 'portals', 'calls.jsonl'), 'utf8');

@@ -44,7 +44,7 @@ function targets(root, name, lint = false, desktopOnly = false) {
       : { 'run-ios': expo('run:ios'), 'run-android': expo('run:android') }),
     test: {
       builder: '@ng-native/schematics:vitest',
-      options: desktopOnly ? { project: native.DESKTOP_TEST_PROJECTS } : {},
+      options: { project: desktopOnly ? native.DESKTOP_TEST_PROJECTS : native.TEST_PROJECT },
     },
     typecheck: { builder: '@ng-native/schematics:typecheck', options: {} },
     // With `--linter=eslint`, angular-eslint's builder, which `ng lint` runs, with the project's
@@ -142,9 +142,6 @@ function commands(name, lint, desktopOnly) {
 function writeFiles(tree, root, name, bundleIdentifier, lint, desktopOnly) {
   for (const file of native.SOURCE_FILES) {
     tree.create(path.join(root, file), native.sourceFile(file, desktopOnly));
-  }
-  for (const file of desktopOnly ? native.DESKTOP_ONLY_FILES : []) {
-    tree.create(path.join(root, file), native.sourceFile(file, true));
   }
   const platforms = desktopOnly ? native.DESKTOP_OSES : undefined;
   tree.create(path.join(root, 'app.json'), native.appJson(name, bundleIdentifier, platforms));

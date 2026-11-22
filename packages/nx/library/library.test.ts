@@ -166,10 +166,14 @@ describe('in a workspace with @nx/angular', () => {
     assert.equal(tree.read(`${folder}/ui.test.ts`, 'utf-8'), testSource('Ui', 'ui', 'ui works'));
   });
 
-  it("writes the app's Vitest config, with Nx's path aliases", async () => {
+  it("writes the app's Node Vitest project alone, with Nx's path aliases", async () => {
     const tree = integrated();
     await generate(tree, { directory: 'packages/ui' });
-    assert.equal(tree.read('packages/ui/vitest.config.mts', 'utf-8'), native.vitestConfig(true));
+    const config = tree.read('packages/ui/vitest.config.mts', 'utf-8')!;
+    assert.equal(config, native.vitestConfig(true, 'library'));
+    assert.match(config, /plugins: \[tsconfigPaths\(\), ngNative\(\)\],/);
+    // A library has no app for the in-app tests' projects to build and open.
+    assert.doesNotMatch(config, /deviceTests/);
   });
 
   it("adds a test target that runs Vitest once, as the app's does", async () => {
@@ -327,7 +331,9 @@ describe('in the TypeScript preset', () => {
   it("writes the template's Vitest config, with no path aliases to resolve", async () => {
     const tree = tsPreset();
     await generate(tree, { directory: 'packages/ui' });
-    assert.equal(tree.read('packages/ui/vitest.config.mts', 'utf-8'), native.vitestConfig(false));
+    const config = tree.read('packages/ui/vitest.config.mts', 'utf-8')!;
+    assert.equal(config, native.vitestConfig(false, 'library'));
+    assert.doesNotMatch(config, /deviceTests|tsconfigPaths/);
     assert.equal(readJson(tree, 'package.json').devDependencies['vite-tsconfig-paths'], undefined);
   });
 

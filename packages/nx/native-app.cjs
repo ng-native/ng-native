@@ -49,14 +49,18 @@ const expoCompanions = {
 const TYPECHECK = 'node metro.config.js && ngc -p tsconfig.json --noEmit';
 
 /** The template's files, copied verbatim into the new app. */
-const SOURCE_FILES = ['src/app/app.ts', 'src/main.ts', 'src/app/app.test.ts'];
+const SOURCE_FILES = [
+  'src/app/app.ts',
+  'src/main.ts',
+  'src/app/app.test.ts',
+  'src/app/app.device.ts',
+];
 
 /**
- * The desktop template's files that differ from the template's, or that it alone has, which a
- * desktop-only app takes from `files/desktop/`: its starter screen, the screen's Node test and
- * in-app test, the entry file that starts the in-app tests, and the Vitest config with a project
- * for each. Its `AGENTS.md` comes from there too, through `agentsFile`, and its Metro config is
- * `DESKTOP_METRO_CONFIG`.
+ * The desktop template's files that differ from the template's, which a desktop-only app takes
+ * from `files/desktop/`: its starter screen, the screen's Node test and in-app test, the entry file
+ * that starts the in-app tests, and the Vitest config with its macOS projects. Its `AGENTS.md`
+ * comes from there too, through `agentsFile`. Its Metro config is the template's, `METRO_CONFIG`.
  */
 const DESKTOP_SOURCE_FILES = [
   'src/app/app.ts',
@@ -66,8 +70,11 @@ const DESKTOP_SOURCE_FILES = [
   'vitest.config.mts',
 ];
 
-/** The desktop template's files a desktop-only app has and a mobile one does not. */
-const DESKTOP_ONLY_FILES = ['src/app/app.device.ts'];
+/**
+ * The template's Vitest project that runs in Node, which `test` runs alone: its `ios` and `android`
+ * projects build and open the app.
+ */
+const TEST = 'vitest run --project node';
 
 /**
  * The desktop template's Vitest projects that run in Node, one for each OS, which `test` runs
@@ -101,25 +108,13 @@ function agentsFile(commands, desktopOnly = false) {
   );
 }
 
-const METRO_CONFIG = `const { withNxMetro } = require('@nx/expo');
-const { getDefaultConfig } = require('expo/metro-config');
-const { withAngularNative } = require('@ng-native/metro/config.cjs');
-
-// withNxMetro resolves the workspace's libraries, through its tsconfig path aliases or its package
-// manager's links, and watches them. withAngularNative registers the transformer that compiles
-// Angular ahead of time, compiles each component's CSS into the sheet the engine reads, and adds
-// the polyfills Angular needs before \`@angular/core\` is first evaluated. It goes on the outside,
-// so its resolver can wrap Nx's: a library's \`./lib/ui.js\` import has to find \`ui.ts\`.
-module.exports = withAngularNative(withNxMetro(getDefaultConfig(__dirname)));
-`;
-
 /**
- * The desktop template's Metro config, around `withNxMetro` as `METRO_CONFIG` is. `withDeviceTests`
- * resolves the in-app tests' host to nothing unless Metro starts with `EXPO_PUBLIC_DEVICE_TESTS`
- * set: a development bundle still bundles what a dead branch of `main.ts` requires, and Vitest
- * with it.
+ * The template's Metro config, around `withNxMetro`, for a mobile app and a desktop-only one alike.
+ * `withDeviceTests` resolves the in-app tests' host to nothing unless Metro starts with
+ * `EXPO_PUBLIC_DEVICE_TESTS` set: a development bundle still bundles what a dead branch of
+ * `main.ts` requires, and Vitest with it.
  */
-const DESKTOP_METRO_CONFIG = `const { withNxMetro } = require('@nx/expo');
+const METRO_CONFIG = `const { withNxMetro } = require('@nx/expo');
 const { getDefaultConfig } = require('expo/metro-config');
 const { withAngularNative } = require('@ng-native/metro/config.cjs');
 const { withDeviceTests } = require('@ng-native/testing/device/metro');
@@ -133,6 +128,14 @@ const { withDeviceTests } = require('@ng-native/testing/device/metro');
 // that run inside the app.
 module.exports = withDeviceTests(withAngularNative(withNxMetro(getDefaultConfig(__dirname))));
 `;
+
+/**
+ * Where the options `mount` is given open in an app's `src/main.ts`, and the indent of their first
+ * line: an object literal in the `mount(...)` call, as an older app writes them, or the object
+ * `mountOptions()` returns, which the template's app and its in-app tests both mount with. A
+ * generator adds a provider or the Tailwind sheet there.
+ */
+const MOUNT_OPTIONS = /(\bmount\([^\n]*\{\n|\bmountOptions = \(\) => \(\{\n)([ \t]*)/;
 
 /**
  * @param {string | undefined} workspaceBase the workspace's `tsconfig.base.json`, relative to the
@@ -210,26 +213,48 @@ function typecheckTsconfig() {
 }
 
 /**
- * @param {boolean} withPaths whether to resolve the workspace's tsconfig path aliases
- * @param {boolean} [desktopOnly] the desktop template's config, with its Node and in-app projects
+ * A library's Vitest config: the app's Node project alone, since a library has no app of its own
+ * for in-app tests to run in.
  */
-function vitestConfig(withPaths, desktopOnly = false) {
-  const template = readFileSync(
-    path.join(__dirname, 'files', ...(desktopOnly ? ['desktop'] : []), 'vitest.config.mts'),
-    'utf8',
-  );
-  if (!withPaths) return template;
-  return template
-    .replace(
-      "import { defineConfig } from 'vitest/config';",
-      "import tsconfigPaths from 'vite-tsconfig-paths';\n" +
+const LIBRARY_VITEST_CONFIG = `import { ngNative } from '@ng-native/testing/vitest';
+import { defineConfig } from 'vitest/config';
+
+// Compiles Angular for the tests the way Metro compiles it for the app. Tests run in Node against
+// a fake of the native side: no simulator, no device.
+export default defineConfig({
+  plugins: [ngNative()],
+});
+`;
+
+/**
+ * @param {boolean} withPaths whether to resolve the workspace's tsconfig path aliases
+ * @param {'app' | 'desktop' | 'library'} [variant] the template's config, with its Node, iOS and
+ *   Android projects; the desktop template's, with a project for each desktop OS; or a library's, Node alone
+ */
+function vitestConfig(withPaths, variant = 'app') {
+  const config =
+    variant === 'library'
+      ? LIBRARY_VITEST_CONFIG
+      : readFileSync(
+          path.join(
+            __dirname,
+            'files',
+            ...(variant === 'desktop' ? ['desktop'] : []),
+            'vitest.config.mts',
+          ),
+          'utf8',
+        );
+  if (!withPaths) return config;
+  return (
+    config
+      .replace(
         "import { defineConfig } from 'vitest/config';",
-    )
-    .replace('plugins: [ngNative()],', 'plugins: [tsconfigPaths(), ngNative()],')
-    .replaceAll(
-      /plugins: \[ngNative\(\{ os: '(\w+)' \}\)\]/g,
-      "plugins: [tsconfigPaths(), ngNative({ os: '$1' })]",
-    );
+        "import tsconfigPaths from 'vite-tsconfig-paths';\n" +
+          "import { defineConfig } from 'vitest/config';",
+      )
+      // Each project's: the phone template's one in Node, the desktop template's one for each OS.
+      .replaceAll('plugins: [ngNative(', 'plugins: [tsconfigPaths(), ngNative(')
+  );
 }
 
 /**
@@ -270,12 +295,12 @@ module.exports = {
   ...shared,
   SOURCE_FILES,
   DESKTOP_SOURCE_FILES,
-  DESKTOP_ONLY_FILES,
+  TEST,
   DESKTOP_TEST,
   sourceFile,
   agentsFile,
   METRO_CONFIG,
-  DESKTOP_METRO_CONFIG,
+  MOUNT_OPTIONS,
   TYPECHECK,
   TYPECHECK_ONE_COPY,
   WITH_ENTRY_POINTS,

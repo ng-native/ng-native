@@ -56,6 +56,7 @@ export {
   type WorkletScrollSpec,
   type WorkletStyleSpec,
 } from './worklets.ts';
+export { releaseOnDestroy } from './release-on-destroy.ts';
 
 /**
  * A value both runtimes can see. Reanimated's own `useSharedValue` is this plus a React ref, and

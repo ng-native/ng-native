@@ -189,6 +189,9 @@ fi
 variant="$backend"
 [ "$backend" = "none" ] && [ "$runtime" = 1 ] && variant=none-runtime
 BUILD="${build_dir:-$host_dir/$variant-$arch_key-$config}"
+# One build at a time in it (build-lock.sh), held until this script and the ninja it runs end.
+. "$here/build-lock.sh"
+lock_build "$BUILD"
 cmake --log-level=WARNING -G Ninja -S "$native_dir" -B "$BUILD" \
   -DCMAKE_BUILD_TYPE="$config" \
   -DCMAKE_OSX_ARCHITECTURES="$archs" \
@@ -203,7 +206,11 @@ cmake --log-level=WARNING -G Ninja -S "$native_dir" -B "$BUILD" \
   ${launcher_args[@]+"${launcher_args[@]}"} \
   ${flags_args[@]+"${flags_args[@]}"} \
   ${hermes_args[@]+"${hermes_args[@]}"} >&2
-nice -n 10 cmake --build "$BUILD" -j "$JOBS" >&2
+# Ninja itself, as CMake chose it, rather than through `cmake --build`: CMake starts its build tool
+# with none of this shell's descriptors, so a ninja left running after a killed `cmake --build`
+# would build on without the lock. Started from here it holds descriptor 7 until it ends.
+ninja=$(sed -n 's/^CMAKE_MAKE_PROGRAM:[A-Z]*=//p' "$BUILD/CMakeCache.txt")
+nice -n 10 "${ninja:-ninja}" -C "$BUILD" -j "$JOBS" >&2
 if [ "$run_tests" = 1 ]; then
   "$BUILD/ngn_core_tests" >&2
   # Hermes and the runtime half, which a build with the runtime has.

@@ -6,8 +6,10 @@ summary: Vitest or node:test, what the compile step does, and what to do when a 
 # Setup
 
 An app generated from the template is set up already: it has `vitest.config.mts`, a `test` script
-and an example test, `app.test.ts`, and `npm test` runs it. The rest of this page is for adding the
-same to an app that does not have it, and for when a test will not load.
+and an example test, `app.test.ts`, and `npm test` runs it. It is set up for
+[tests inside the running app](/packages/testing/in-app-tests) too, with an example,
+`app.device.ts`, that `npx vitest --project ios` runs on a simulator. The rest of this page is for
+adding the Node tests to an app that does not have them, and for when a test will not load.
 
 ## Vitest
 
@@ -19,7 +21,7 @@ npm install --save-dev @ng-native/testing vitest
 
 Add `ngNative()` to a `vitest.config.mts` at the root of the app - `.mts` because an Expo app's
 `package.json` is not `"type": "module"`, and Vite warns on every run about an ESM config it has to
-load as CommonJS. This is the template's, verbatim:
+load as CommonJS. This is the template's Node project, on its own:
 
 ```ts
 import { ngNative } from '@ng-native/testing/vitest';

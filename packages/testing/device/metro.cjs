@@ -43,8 +43,23 @@ function withDeviceTests(config) {
   if (coverage) {
     process.env.NG_NATIVE_DEVICE_TESTS_TRANSFORMER = config.transformer?.babelTransformerPath;
   }
+  // The pool's port, when the pool started this Metro (see the pool's `metro-server.ts`): the app's
+  // test host asks for it, since a package in node_modules gets no EXPO_PUBLIC_ variable inlined.
+  const poolPort = Number(process.env.NG_NATIVE_DEVICE_TESTS_POOL_PORT) || null;
+  const enhance = config.server?.enhanceMiddleware;
   return {
     ...config,
+    server: {
+      ...config.server,
+      enhanceMiddleware: (middleware, server) => {
+        const next = enhance ? enhance(middleware, server) : middleware;
+        return (request, response, rest) => {
+          if (request.url !== '/ng-native/device-tests') return next(request, response, rest);
+          response.setHeader('content-type', 'application/json');
+          response.end(JSON.stringify({ port: poolPort }));
+        };
+      },
+    },
     transformer: {
       ...config.transformer,
       dynamicDepsInPackages: 'throwAtRuntime',
