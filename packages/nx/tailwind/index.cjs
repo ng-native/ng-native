@@ -157,15 +157,27 @@ function activeExport(config) {
 }
 
 /**
- * The names `withTailwind` is called by in a config: its own, and any it is bound to at the top,
- * `tw` of `const { withTailwind: tw } = require(...)`.
+ * The names `withTailwind` is called by in a config: its own, and any the package's is bound to at
+ * the top, `tw` of `const { withTailwind: tw } = require('@ng-native/tailwind/config.cjs')`. One
+ * destructured from anything else is not the one that builds the sheet.
  */
+function requiresTailwindConfig(ts, node) {
+  return (
+    node !== undefined &&
+    ts.isCallExpression(node) &&
+    node.expression.getText() === 'require' &&
+    node.arguments.length === 1 &&
+    ts.isStringLiteral(node.arguments[0]) &&
+    node.arguments[0].text === '@ng-native/tailwind/config.cjs'
+  );
+}
+
 function namesOfWithTailwind(ts, statements) {
   const names = new Set(['withTailwind']);
   for (const statement of statements) {
     if (!ts.isVariableStatement(statement)) continue;
-    for (const { name } of statement.declarationList.declarations) {
-      if (!ts.isObjectBindingPattern(name)) continue;
+    for (const { name, initializer } of statement.declarationList.declarations) {
+      if (!ts.isObjectBindingPattern(name) || !requiresTailwindConfig(ts, initializer)) continue;
       for (const element of name.elements) {
         const key = (element.propertyName ?? element.name).getText();
         if (key === 'withTailwind' && ts.isIdentifier(element.name)) names.add(element.name.text);

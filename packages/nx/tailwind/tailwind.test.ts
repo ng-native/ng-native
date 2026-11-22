@@ -298,6 +298,24 @@ describe('Tailwind 4, by default', () => {
     assert.match(read(tree, 'apps/mobile/src/main.ts'), /app\.tailwind\.js/);
   });
 
+  it("takes no other withTailwind than the package's for the one that builds the sheet", async () => {
+    const tree = await integrated();
+    tree.write(
+      'apps/mobile/metro.config.js',
+      [
+        "const { getDefaultConfig } = require('expo/metro-config');",
+        'const { withTailwind: tw } = { withTailwind: (config) => config };',
+        'module.exports = tw(getDefaultConfig(__dirname));',
+        '',
+      ].join('\n'),
+    );
+    await generate(tree, {});
+    assert.match(
+      read(tree, 'apps/mobile/metro.config.js'),
+      /^module\.exports = withTailwind\(tw\(getDefaultConfig\(__dirname\)\), \{$/m,
+    );
+  });
+
   it('wraps an export beside a withTailwind required under another name', async () => {
     const tree = await integrated();
     tree.write(
