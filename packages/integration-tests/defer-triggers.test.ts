@@ -22,6 +22,20 @@ import {
 } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
+/**
+ * Node's own warnings, `(node:123) DeprecationWarning: …`: a warning Node raised while the suite's
+ * hook was put in place is written later, through the console a test may be watching.
+ */
+const NODE_WARNING = /^\(node:\d+\) /;
+
+/** What was written, but for Node's own warnings. */
+const appended =
+  (into: string[]) =>
+  (...args: unknown[]) => {
+    const text = args.map(String).join(' ');
+    if (!NODE_WARNING.test(text)) into.push(text);
+  };
+
 describe('@defer on a DOM trigger', () => {
   let mod: Record<string, unknown>;
   const errors: string[] = [];
@@ -30,8 +44,8 @@ describe('@defer on a DOM trigger', () => {
 
   before(async () => {
     mod = await compileFixture('fixtures/defer-triggers.ts');
-    console.error = (...args: unknown[]) => errors.push(args.map(String).join(' '));
-    console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
+    console.error = appended(errors);
+    console.warn = appended(warnings);
   });
 
   after(() => {
