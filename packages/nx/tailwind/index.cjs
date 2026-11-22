@@ -122,8 +122,8 @@ function byHand(file, what) {
 }
 
 /**
- * A Metro config with its export wrapped in `withTailwind`, or null where this cannot tell which
- * export to wrap.
+ * A Metro config's export: its one top-level `module.exports = <expression>` statement, with the
+ * parser it was read with, or null where this cannot tell which export Metro runs.
  *
  * Read with TypeScript's parser, not as text: the export is the one top-level
  * `module.exports = <expression>` statement, however many lines a formatter splits it over (the
@@ -132,7 +132,7 @@ function byHand(file, what) {
  * past the export. Where there is not exactly one, or no TypeScript to read it with, it is left to
  * be done by hand. Nothing is run.
  */
-function wrappedConfig(config) {
+function activeExport(config) {
   let ts;
   try {
     ts = typescript();
@@ -152,8 +152,22 @@ function wrappedConfig(config) {
     statement.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
     statement.expression.left.getText(source) === 'module.exports';
   const exports = source.statements.filter(isExport);
-  if (exports.length !== 1) return null;
-  const [statement] = exports;
+  return exports.length === 1 ? { ts, source, statement: exports[0] } : null;
+}
+
+/**
+ * Whether the export's own expression calls `withTailwind`, which builds the sheet: a comment or a
+ * string naming it is not that.
+ */
+function callsWithTailwind({ ts, source, statement }) {
+  const calls = (node) =>
+    (ts.isCallExpression(node) && node.expression.getText(source) === 'withTailwind') ||
+    Boolean(ts.forEachChild(node, (child) => calls(child) || undefined));
+  return calls(statement.expression.right);
+}
+
+/** The config with the active export wrapped in `withTailwind`, or null where it would not parse. */
+function wrappedConfig(config, { ts, source, statement }) {
   const expression = statement.expression.right.getText(source);
   // After the last require above the export, which the wrapped export needs defined by then.
   const required = "\nconst { withTailwind } = require('@ng-native/tailwind/config.cjs');";
@@ -192,8 +206,9 @@ function wrapMetroConfig(tree, root) {
     byHand(file, 'it does not exist.');
     return false;
   }
-  if (config.includes('withTailwind')) return true;
-  const wrapped = wrappedConfig(config);
+  const found = activeExport(config);
+  if (found && callsWithTailwind(found)) return true;
+  const wrapped = found && wrappedConfig(config, found);
   if (!wrapped) {
     byHand(
       file,

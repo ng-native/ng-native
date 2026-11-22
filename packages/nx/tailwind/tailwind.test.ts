@@ -211,6 +211,38 @@ describe('Tailwind 4, by default', () => {
     );
   });
 
+  it('wraps an export that only a comment names withTailwind beside', async () => {
+    const tree = await integrated();
+    tree.write(
+      'apps/mobile/metro.config.js',
+      [
+        "const { getDefaultConfig } = require('expo/metro-config');",
+        '// Add withTailwind later.',
+        'module.exports = getDefaultConfig(__dirname);',
+        '',
+      ].join('\n'),
+    );
+    await generate(tree, {});
+    assert.match(
+      read(tree, 'apps/mobile/metro.config.js'),
+      /^module\.exports = withTailwind\(getDefaultConfig\(__dirname\), \{$/m,
+    );
+  });
+
+  it('leaves an export that already calls withTailwind as it is', async () => {
+    const tree = await integrated();
+    const config = [
+      "const { getDefaultConfig } = require('expo/metro-config');",
+      "const { withTailwind } = require('@ng-native/tailwind/config.cjs');",
+      "module.exports = withTailwind(getDefaultConfig(__dirname), { input: './src/styles.css' });",
+      '',
+    ].join('\n');
+    tree.write('apps/mobile/metro.config.js', config);
+    await generate(tree, {});
+    assert.equal(read(tree, 'apps/mobile/metro.config.js'), config);
+    assert.match(read(tree, 'apps/mobile/src/main.ts'), /app\.tailwind\.js/);
+  });
+
   it('wraps the export Metro runs, not an old one kept in a comment', async () => {
     const tree = await integrated();
     const commented = ['/*', 'module.exports = getDefaultConfig(', '  __dirname,', ');', '*/'];
