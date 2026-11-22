@@ -119,18 +119,28 @@ function byHand(file, what) {
   logger.warn(`Could not update ${file}: ${what}`);
 }
 
+/**
+ * Wrap the app's Metro config in `withTailwind`, which builds the sheet `src/main.ts` imports.
+ * True once it is wrapped, now or before; false where it says what to add by hand.
+ */
 function wrapMetroConfig(tree, root) {
   const file = joinPathFragments(root, 'metro.config.js');
   const config = tree.read(file, 'utf-8');
-  if (config === null) return byHand(file, 'it does not exist.');
-  if (config.includes('withTailwind')) return;
-  const exported = /^module\.exports = (.+);$/m.exec(config);
+  if (config === null) {
+    byHand(file, 'it does not exist.');
+    return false;
+  }
+  if (config.includes('withTailwind')) return true;
+  // To the `;` that ends a line: a formatter splits an export longer than a line, as it does the
+  // generated app's since it went into withDeviceTests too.
+  const exported = /^module\.exports = ([\s\S]+?);[ \t]*$/m.exec(config);
   if (!exported) {
-    return byHand(
+    byHand(
       file,
       "wrap its export in withTailwind(config, { input: './src/styles.css' }), from " +
         "'@ng-native/tailwind/config.cjs'.",
     );
+    return false;
   }
   const requires = [...config.matchAll(/^const .+ = require\(.+\);$/gm)];
   const last = requires.at(-1);
@@ -144,6 +154,17 @@ function wrapMetroConfig(tree, root) {
       `module.exports = withTailwind(${exported[1]}, {\n  input: './src/styles.css',\n});`,
     ),
   );
+  return true;
+}
+
+/**
+ * Build the sheet from Metro's config, mount the app with it, and have its typecheck build it
+ * first. The sheet is imported only where something builds it, Metro's config once wrapped: an
+ * import of a sheet that never exists fails the app's typecheck and its bundle.
+ */
+function useTheSheet(tree, name, app) {
+  if (wrapMetroConfig(tree, app.root)) passGlobalStyles(tree, app.root);
+  prepareForTheSheet(tree, name, app);
 }
 
 function passGlobalStyles(tree, root) {
@@ -605,9 +626,7 @@ async function tailwind(tree, options) {
         libraries.map((library) => libraryTheme(tree, library)),
       );
     }
-    wrapMetroConfig(tree, app.root);
-    passGlobalStyles(tree, app.root);
-    prepareForTheSheet(tree, options.project, app);
+    useTheSheet(tree, options.project, app);
   }
   if (vite) setUpWeb(tree, app.root, vite, version, libraries, device);
   if (version === 3 && libraries.length) allowPresets(tree);

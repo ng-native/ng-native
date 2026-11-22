@@ -163,6 +163,31 @@ describe('Tailwind 4, by default', () => {
     );
   });
 
+  it('wraps a Metro config whose export the formatter split over lines', async () => {
+    // As `nx g @ng-native/nx:app` writes it once Prettier has formatted it: the export is longer
+    // than a line since it went into withDeviceTests too.
+    const tree = await integrated();
+    const formatted = [
+      "const { withNxMetro } = require('@nx/expo');",
+      "const { getDefaultConfig } = require('expo/metro-config');",
+      "const { withAngularNative } = require('@ng-native/metro/config.cjs');",
+      "const { withDeviceTests } = require('@ng-native/testing/device/metro');",
+      '',
+      'module.exports = withDeviceTests(',
+      '  withAngularNative(withNxMetro(getDefaultConfig(__dirname))),',
+      ');',
+      '',
+    ].join('\n');
+    tree.write('apps/mobile/metro.config.js', formatted);
+    await generate(tree, {});
+    const config = read(tree, 'apps/mobile/metro.config.js');
+    assert.doesNotThrow(() => new vm.Script(config), `not JavaScript:\n${config}`);
+    assert.match(
+      config,
+      /module\.exports = withTailwind\(withDeviceTests\(\n {2}withAngularNative\(withNxMetro\(getDefaultConfig\(__dirname\)\)\),\n\), \{\n {2}input: '\.\/src\/styles\.css',\n\}\);/,
+    );
+  });
+
   it('passes the generated sheet to mount as the global stylesheet', async () => {
     const tree = await integrated();
     await generate(tree, {});
@@ -599,9 +624,12 @@ describe('its options', () => {
 });
 
 describe('an app whose files it cannot follow', () => {
-  it('says what to add by hand rather than guessing', async () => {
+  it('says what to add by hand rather than guessing, and imports no sheet nothing builds', async () => {
     const tree = await integrated();
-    tree.write('apps/mobile/metro.config.js', 'module.exports = makeConfig(\n  __dirname,\n);\n');
+    const config =
+      'const config = makeConfig(__dirname);\nObject.assign(module.exports, config);\n';
+    tree.write('apps/mobile/metro.config.js', config);
+    const main = read(tree, 'apps/mobile/src/main.ts');
     const warnings: string[] = [];
     const { logger } = require('@nx/devkit') as typeof import('@nx/devkit');
     const warn = logger.warn;
@@ -611,10 +639,9 @@ describe('an app whose files it cannot follow', () => {
     } finally {
       logger.warn = warn;
     }
-    assert.equal(
-      read(tree, 'apps/mobile/metro.config.js'),
-      'module.exports = makeConfig(\n  __dirname,\n);\n',
-    );
+    assert.equal(read(tree, 'apps/mobile/metro.config.js'), config);
+    // Its typecheck would fail on an import of a sheet that only withTailwind builds.
+    assert.equal(read(tree, 'apps/mobile/src/main.ts'), main);
     assert.ok(
       warnings.some((message) => /withTailwind/.test(message)),
       warnings.join('\n'),
