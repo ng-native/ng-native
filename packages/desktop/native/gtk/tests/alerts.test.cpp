@@ -138,7 +138,7 @@ TEST_CASE("an alert with no cancel button stays until a button answers it, as Es
     return;
   }
   // What Escape does: an AdwDialog's close, which one that cannot close refuses.
-  ngn::gtk::adwFunction<void (*)(GtkWidget *)>("adw_dialog_close")(alert);
+  CHECK_FALSE(ngn::gtk::adwFunction<gboolean (*)(GtkWidget *)>("adw_dialog_close")(alert));
   for (int i = 0; i < 20; i++) {
     g_main_context_iteration(nullptr, FALSE);
   }

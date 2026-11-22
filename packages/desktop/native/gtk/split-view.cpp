@@ -535,8 +535,8 @@ void SplitViews::removed(Tag parent, Tag child) {
     backend_.hooks.containerRoot(child, false);
     s.sidebar = -1;
     NGN_PANE_SLOT(s.sidebarSlot)->pane = -1;
-    return;
   }
+  // And a split whose sidebar holds this one, nested: its rows may have titled that content too.
   retitleSidebarsHolding(parent);
 }
 

@@ -192,6 +192,8 @@ BUILD="${build_dir:-$host_dir/$variant-$arch_key-$config}"
 # One build at a time in it (build-lock.sh), held until this script and the ninja it runs end.
 . "$here/build-lock.sh"
 lock_build "$BUILD"
+# Configured with GCC before the build named clang, it starts over (reset-for-compilers.sh).
+"$here/reset-for-compilers.sh" "$BUILD" ${compiler_args[@]+"${compiler_args[@]}"}
 cmake --log-level=WARNING -G Ninja -S "$native_dir" -B "$BUILD" \
   -DCMAKE_BUILD_TYPE="$config" \
   -DCMAKE_OSX_ARCHITECTURES="$archs" \

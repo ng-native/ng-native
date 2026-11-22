@@ -579,6 +579,36 @@ TEST_CASE("a view holding a sidebar list that joins a sidebar already in its spl
   CHECK(std::string(adw_navigation_page_get_title(page)) == "Inbox");
 }
 
+TEST_CASE("a split in another's sidebar that loses its own sidebar takes its row's title off the outer content") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views{true, 800, 500};
+  auto outer = view(2, "NgNativeSplitView", nullptr, {{0, 0}, {800, 500}});
+  auto sidebar = view(3, "NgNativeSidebar", sidebarProps(false), {{0, 0}, {300, 500}});
+  auto content = view(4, "NgNativeSplitContent", nullptr, {{300, 0}, {500, 500}});
+  auto inner = view(10, "NgNativeSplitView", nullptr, {{0, 0}, {300, 500}});
+  auto innerSidebar = view(11, "NgNativeSidebar", sidebarProps(false), {{0, 0}, {150, 500}});
+  auto innerContent = view(14, "NgNativeSplitContent", nullptr, {{150, 0}, {150, 500}});
+  auto section = view(12, "NgNativeSidebarSection", parsedProps<ngn::SidebarSectionComponentDescriptor>(dynamic::object()), {{0, 0}, {150, 28}});
+  auto row = view(13, "NgNativeSidebarItem", item("Inner", true), {{0, 0}, {150, 28}});
+  ShadowViewMutationList created;
+  for (const auto *v : {&outer, &sidebar, &content, &inner, &innerSidebar, &innerContent, &section, &row}) {
+    created.push_back(ShadowViewMutation::CreateMutation(*v));
+  }
+  views.mount(std::move(created));
+  views.mount({ShadowViewMutation::InsertMutation(MountedViews::kSurface, outer, 0), ShadowViewMutation::InsertMutation(2, sidebar, 0),
+               ShadowViewMutation::InsertMutation(2, content, 1), ShadowViewMutation::InsertMutation(3, inner, 0),
+               ShadowViewMutation::InsertMutation(10, innerSidebar, 0), ShadowViewMutation::InsertMutation(10, innerContent, 1),
+               ShadowViewMutation::InsertMutation(11, section, 0), ShadowViewMutation::InsertMutation(12, row, 0)});
+  auto &splits = views.backend->splitViews();
+  REQUIRE(splits.splitWidget(2));
+  REQUIRE(splits.splitWidget(10));
+  auto *page = adw_navigation_split_view_get_content(ADW_NAVIGATION_SPLIT_VIEW(splits.splitWidget(2)));
+  // The inner sidebar's row is in the outer sidebar too, so it titles the outer content.
+  REQUIRE(std::string(adw_navigation_page_get_title(page)) == "Inner");
+  views.mount({ShadowViewMutation::RemoveMutation(10, innerSidebar, 0)});
+  CHECK(std::string(adw_navigation_page_get_title(page)).empty());
+}
+
 TEST_CASE("a tabs host is a split view whose sidebar lists its tabs and whose content shows the chosen one") {
   REQUIRE(ngn::testing::gtkReady());
   TabsGlue glue;

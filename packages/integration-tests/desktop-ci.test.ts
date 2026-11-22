@@ -6,7 +6,15 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -133,6 +141,62 @@ describe('the compiler launcher of the desktop build', () => {
       assert.match(script, /compiler-launcher\.sh" "\$\{NGN_COMPILER_LAUNCHER:-\}"/, name);
       assert.match(script, /\$\{launcher_args\[@\]\+"\$\{launcher_args\[@\]\}"\}/, name);
     }
+  });
+});
+
+describe('a build directory configured with another compiler', () => {
+  // CMake starts a directory over when its compiler changes, without the -D's it was given, so
+  // RN_DIR and the rest come out empty: the build clears it first.
+  const reset = (cached: string | undefined, args: string[]) => {
+    const dir = mkdtempSync(join(tmpdir(), 'ngn-compilers-'));
+    try {
+      mkdirSync(join(dir, 'CMakeFiles'));
+      writeFileSync(
+        join(dir, 'CMakeCache.txt'),
+        cached === undefined
+          ? 'RN_DIR:PATH=/rn\n'
+          : `RN_DIR:PATH=/rn\nCMAKE_CXX_COMPILER:FILEPATH=${cached}\n`,
+      );
+      const run = spawnSync(
+        'bash',
+        [fileURLToPath(new URL('reset-for-compilers.sh', scripts)), dir, ...args],
+        {
+          encoding: 'utf8',
+        },
+      );
+      assert.equal(run.status, 0, run.stderr);
+      return {
+        cache: existsSync(join(dir, 'CMakeCache.txt')),
+        files: existsSync(join(dir, 'CMakeFiles')),
+      };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it('is cleared when it was configured with GCC and clang is asked for', () => {
+    assert.deepEqual(reset('/usr/bin/c++', ['-DCMAKE_CXX_COMPILER=clang++']), {
+      cache: false,
+      files: false,
+    });
+  });
+
+  it('is kept when it was configured with the compiler asked for', () => {
+    assert.deepEqual(reset('/usr/bin/clang++', ['-DCMAKE_CXX_COMPILER=clang++']), {
+      cache: true,
+      files: true,
+    });
+  });
+
+  it('is kept when no compiler is asked for, CC and CXX being the caller', () => {
+    assert.deepEqual(reset('/usr/bin/c++', []), { cache: true, files: true });
+  });
+
+  it('is kept when it names no compiler yet', () => {
+    assert.deepEqual(reset(undefined, ['-DCMAKE_CXX_COMPILER=clang++']), {
+      cache: true,
+      files: true,
+    });
   });
 });
 
