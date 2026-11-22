@@ -184,6 +184,8 @@ export function record(real: FabricUIManager) {
       );
     },
     /** A committed view's window frame, or null when it is gone or native has not laid it out. */
+    /** The view's record in the latest commit, or undefined once it is no longer committed. */
+    current: (reactTag: number): RecordedNode | undefined => find(reactTag, committed()),
     measure(reactTag: number): Frame | null {
       const recorded = find(reactTag, committed());
       const node = recorded && nodes.get(recorded);

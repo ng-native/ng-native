@@ -47,7 +47,7 @@ export interface LinuxLauncherOptions {
   args?: readonly string[];
   /** The bundle the host loads. Default: the dev server's Linux bundle on `metroPort`. */
   bundle?: string;
-  /** The Metro port the default bundle is loaded from. Default `RCT_METRO_PORT`, or 8081. */
+  /** The Metro port the default bundle is loaded from. Default: the Metro the pool started. */
   metroPort?: number;
   /**
    * Where the host's windows go. Default `inherit` where `DISPLAY` or `WAYLAND_DISPLAY` is set and
@@ -292,8 +292,12 @@ export function desktopCliHost(
   return host;
 }
 
-/** The host, the bundle and where they run, from the options and the environment. */
-function resolveLaunch(options: LinuxLauncherOptions, env: Environment) {
+/**
+ * The host, the bundle and where they run, from the options, the launch and the environment. The
+ * Metro is the one the pool started for the run (`request.metroPort`) unless `metroPort` names
+ * another, as the macOS launcher takes it.
+ */
+function resolveLaunch(options: LinuxLauncherOptions, request: LaunchRequest, env: Environment) {
   const given = options.host ?? env['NGN_DESKTOP_HOST'];
   if (!given) {
     throw new Error(
@@ -301,7 +305,7 @@ function resolveLaunch(options: LinuxLauncherOptions, env: Environment) {
         'gtk/ngn-linux) or set NGN_DESKTOP_HOST.',
     );
   }
-  const metroPort = options.metroPort ?? Number(env['RCT_METRO_PORT'] ?? 8081);
+  const metroPort = options.metroPort ?? request.metroPort;
   const bundle = options.bundle ?? linuxBundleUrl(metroPort);
   const image = options.container ?? (process.platform === 'linux' ? false : imageNamed(env));
   return {
@@ -358,7 +362,7 @@ export function linuxLaunchCommand(
   request: LaunchRequest,
   env: Environment = process.env,
 ): LinuxLaunch {
-  const resolved = resolveLaunch(options, env);
+  const resolved = resolveLaunch(options, request, env);
   const { host, metroPort, image, display } = resolved;
   const { bundle, hostArgs } = hostCommand(options, request, resolved);
   const fakeSystemUi = options.fakeSystemUi ?? true;

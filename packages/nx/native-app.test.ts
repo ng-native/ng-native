@@ -57,7 +57,7 @@ describe('the generated app', () => {
   });
 
   it("resolves the aliases in each of the desktop template's Node projects, macos and linux", () => {
-    const config = native.vitestConfig(true, true);
+    const config = native.vitestConfig(true, 'desktop');
     for (const os of ['macos', 'linux']) {
       assert.match(
         config,
@@ -68,15 +68,32 @@ describe('the generated app', () => {
     assert.doesNotMatch(config, /plugins: \[ngNative\(/);
   });
 
-  it("applies the template's Metro preset around withNxMetro, so it can wrap Nx's resolver", () => {
+  it("applies the template's Metro config around withNxMetro, so it can wrap Nx's resolver", () => {
     assert.match(
       native.METRO_CONFIG,
-      /module\.exports = withAngularNative\(withNxMetro\(getDefaultConfig\(__dirname\)\)\);/,
+      /module\.exports = withDeviceTests\(withAngularNative\(withNxMetro\(getDefaultConfig\(__dirname\)\)\)\);/,
     );
-    assert.match(
-      templateFile('metro.config.js'),
-      /withAngularNative\(getDefaultConfig\(__dirname\)\)/,
-    );
+    // The two differ only by Nx's resolver.
+    const code = (text: string) =>
+      text.split('\n').filter((line: string) => line && !line.startsWith('//'));
+    const withoutNx = native.METRO_CONFIG.replace(
+      "const { withNxMetro } = require('@nx/expo');\n",
+      '',
+    ).replace('withNxMetro(getDefaultConfig(__dirname))', 'getDefaultConfig(__dirname)');
+    assert.deepEqual(code(withoutNx), code(templateFile('metro.config.js')));
+  });
+
+  it("names the template's Node Vitest project for the test target, which runs it alone", () => {
+    assert.equal(native.TEST, manifest.scripts.test);
+    assert.match(templateFile('vitest.config.mts'), /test: \{ name: 'node' \}/);
+  });
+
+  it('finds the options mount is given, in an object of their own or in the call', () => {
+    const own = native.MOUNT_OPTIONS.exec(templateFile('src/main.ts'));
+    assert.equal(own?.[1], 'mountOptions = () => ({\n');
+    assert.equal(own?.[2], '  ');
+    const inline = native.MOUNT_OPTIONS.exec('mount(1, App, fabric, {\n    processColor,\n});');
+    assert.equal(inline?.[2], '    ');
   });
 
   it("uses the template's tsconfig when there is no workspace base to extend", () => {
@@ -220,22 +237,12 @@ describe('the generated desktop-only app', () => {
     });
   }
 
-  it("applies the desktop template's Metro config around withNxMetro, as the template's", () => {
-    // The two differ only by Nx's resolver, which the mobile app's config wraps the same way.
-    const withoutNx = native.DESKTOP_METRO_CONFIG.replace(
-      "const { withNxMetro } = require('@nx/expo');\n",
-      '',
-    ).replace('withNxMetro(getDefaultConfig(__dirname))', 'getDefaultConfig(__dirname)');
-    const code = (text: string) =>
-      text.split('\n').filter((line: string) => line && !line.startsWith('//'));
-    assert.deepEqual(code(withoutNx), code(desktopFile('metro.config.js')));
-    assert.deepEqual(
-      code(native.METRO_CONFIG.replace("const { withNxMetro } = require('@nx/expo');\n", '')).map(
-        (line: string) =>
-          line.replace('withNxMetro(getDefaultConfig(__dirname))', 'getDefaultConfig(__dirname)'),
-      ),
-      code(templateFile('metro.config.js')),
-    );
+  it("bundles with the template's Metro config, which the desktop template shares", () => {
+    assert.equal(desktopFile('metro.config.js'), templateFile('metro.config.js'));
+  });
+
+  it("names the desktop template's Node Vitest project for the test target", () => {
+    assert.equal(native.DESKTOP_TEST, JSON.parse(desktopFile('package.json')).scripts.test);
   });
 
   it("installs the desktop template's dependencies, at its versions", () => {

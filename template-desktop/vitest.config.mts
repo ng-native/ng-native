@@ -4,9 +4,9 @@ import { defineConfig } from 'vitest/config';
 
 // Four projects. `node-macos` and `node-linux` compile Angular for the tests the way Metro
 // compiles it for the app and run them in Node against a fake of the native side: no app window.
-// `macos` and `linux` run the `*.device.ts` files inside the running app, which they open
-// themselves: `macos` on this Mac, `linux` in GTK, on Linux or in the ngn-el9 container on a Mac.
-// Start Metro with EXPO_PUBLIC_DEVICE_TESTS=1 first. `npm test` runs the two Node projects alone.
+// `macos` and `linux` run the `*.device.ts` files inside the running app, starting Metro and the
+// app themselves: `macos` on this Mac, `linux` in GTK, on Linux or in the ngn-el9 container on a
+// Mac. `npm test` runs the two Node projects alone.
 export default defineConfig({
   test: {
     projects: [

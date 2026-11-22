@@ -118,6 +118,7 @@ async function setup(options: { crash?: boolean } = {}) {
   const pool = devicePool({
     port,
     platform: 'linux',
+    metroPort: 8099,
     launch,
     connectTimeout: 10_000,
     appTimeout: 5000,
@@ -255,7 +256,13 @@ setInterval(() => {}, 1000);`,
         container: false,
         fakeSystemUi: false,
         env: { PIDS: pids },
-      }).start({ port: 1, runId: 'stubborn', stateDir: join(dir, 'state') });
+      }).start({
+        port: 1,
+        metroPort: 8099,
+        projectRoot: '/p',
+        runId: 'stubborn',
+        stateDir: join(dir, 'state'),
+      });
       for (let i = 0; i < 100 && !existsSync(pids); i++) await wait(50);
       const [host, grandchild] = readFileSync(pids, 'utf8').split(' ').map(Number) as [
         number,
@@ -277,6 +284,7 @@ setInterval(() => {}, 1000);`,
       const pool = devicePool({
         port: await freePort(),
         platform: 'linux',
+        metroPort: 8099,
         connectTimeout: 5000,
         launch: linuxLauncher({
           host: process.execPath,
@@ -296,7 +304,12 @@ setInterval(() => {}, 1000);`,
 
   it('asks for the host when none is given', () => {
     assert.throws(
-      () => linuxLaunchCommand({}, { port: 1, runId: 'r', stateDir: '/s' }, {}),
+      () =>
+        linuxLaunchCommand(
+          {},
+          { port: 1, metroPort: 8099, projectRoot: '/p', runId: 'r', stateDir: '/s' },
+          {},
+        ),
       /needs the Linux desktop host: pass `host`.*or set NGN_DESKTOP_HOST/,
     );
   });
@@ -354,7 +367,13 @@ setInterval(() => {}, 1000);`,
 });
 
 describe('the Linux launch from another OS', () => {
-  const runRequest = { port: 51730, runId: 'r-1', stateDir: '/var/folders/x/state' };
+  const runRequest = {
+    port: 51730,
+    metroPort: 8099,
+    projectRoot: '/p',
+    runId: 'r-1',
+    stateDir: '/var/folders/x/state',
+  };
 
   it('runs the host in the AlmaLinux 9 image, on a display of its own, forwarding the pool and Metro', () => {
     const launch = linuxLaunchCommand(
@@ -530,9 +549,13 @@ describe('the linux Vitest project', () => {
     process.env['PATH'] = `${bin}${delimiter}${savedPath}`;
     try {
       const { pool } = (
-        deviceTests({ platform: 'linux', port: await freePort(), connectTimeout: 500 }).config as (
-          config: object,
-        ) => { test: { pool: ReturnType<typeof devicePool> } }
+        deviceTests({
+          platform: 'linux',
+          port: await freePort(),
+          // Metro runs elsewhere: what this asks of is the host.
+          metroPort: 8099,
+          connectTimeout: 500,
+        }).config as (config: object) => { test: { pool: ReturnType<typeof devicePool> } }
       )({ root: app }).test;
       const worker = pool.createPoolWorker({ project: { config: { root: app } } } as never);
       await assert.rejects(worker.start());
@@ -567,9 +590,13 @@ describe('the linux Vitest project', () => {
     const dir = mkdtempSync(join(tmpdir(), 'linux-pool-'));
     try {
       const { pool } = (
-        deviceTests({ platform: 'linux', port: await freePort(), connectTimeout: 1000 }).config as (
-          config: object,
-        ) => { test: { pool: ReturnType<typeof devicePool> } }
+        deviceTests({
+          platform: 'linux',
+          port: await freePort(),
+          // Metro runs elsewhere: what this asks of is the host.
+          metroPort: 8099,
+          connectTimeout: 1000,
+        }).config as (config: object) => { test: { pool: ReturnType<typeof devicePool> } }
       )({ root: dir }).test;
       const worker = pool.createPoolWorker({ project: { config: { root: dir } } } as never);
       // The launcher asks the desktop CLI for the host, which has none for an empty folder, where a

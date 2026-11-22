@@ -17,11 +17,10 @@ npm run package -- --format dmg   # a signed, notarised .dmg; --format mas for t
 npm run package -- --os linux --format deb   # a .deb; --format app, rpm or flatpak too
 ```
 
-To run tests inside the app, on real native views, start Metro for them and run the `macos` or
-`linux` Vitest project, which opens the app itself (`src/app/app.device.ts` is the example):
+To run tests inside the app, on real native views, run the `macos` or `linux` Vitest project,
+which starts Metro and opens the app itself (`src/app/app.device.ts` is the example):
 
 ```sh
-EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start
 npx vitest --project macos   # on a Mac, in AppKit
 npx vitest --project linux   # in GTK: on Linux, or on a Mac in the ngn-el9 container
 ```

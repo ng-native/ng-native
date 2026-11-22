@@ -18,7 +18,13 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import { CRASH_MARKER, linuxLaunchCommand, linuxLauncher } from './linux-launcher.ts';
 
-const request = { port: 1234, runId: 'abc', stateDir: '/unused' };
+const request = {
+  port: 1234,
+  metroPort: 8081,
+  projectRoot: '/unused',
+  runId: 'abc',
+  stateDir: '/unused',
+};
 
 describe('linuxLaunchCommand in a container', () => {
   it('resolves a relative bundle against cwd, for the mount and for the host', () => {
@@ -73,6 +79,17 @@ describe('linuxLaunchCommand in a container', () => {
     assert.match(script('http://localhost:8081/main.bundle'), / 1234 8081 &\n/);
     assert.match(script('http://192.168.1.2:9090/main.bundle'), / 1234 8081 &\n/);
   });
+
+  it('loads the Linux bundle of the Metro the pool started, unless metroPort names another', () => {
+    const launch = (metroPort?: number) =>
+      linuxLaunchCommand(
+        { host: '/home/u/build/gtk/ngn-linux', container: false, display: 'inherit', metroPort },
+        { ...request, metroPort: 8090 },
+        {},
+      ).args.join(' ');
+    assert.match(launch(), /127\.0\.0\.1:8090\//);
+    assert.match(launch(8095), /127\.0\.0\.1:8095\//);
+  });
 });
 
 describe('linuxLauncher crashReport', () => {
@@ -91,7 +108,13 @@ describe('linuxLauncher crashReport', () => {
       fakeSystemUi: false,
       display: 'inherit',
     });
-    const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir });
+    const app = await launcher.start({
+      port: 1,
+      metroPort: 8081,
+      projectRoot: stateDir,
+      runId: 'crash-test',
+      stateDir,
+    });
     try {
       assert.equal(await app.exited, 'status 3');
       assert.match((await launcher.crashReport?.(0)) ?? '', /the last line/);
@@ -119,7 +142,13 @@ describe('linuxLauncher crashReport', () => {
       fakeSystemUi: false,
       display: 'inherit',
     });
-    const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir });
+    const app = await launcher.start({
+      port: 1,
+      metroPort: 8081,
+      projectRoot: stateDir,
+      runId: 'crash-test',
+      stateDir,
+    });
     try {
       assert.equal(await app.exited, 'status 3');
       assert.match((await launcher.crashReport?.(0)) ?? '', /fatal detail/);
@@ -193,7 +222,13 @@ describe('linuxLauncher stop', () => {
       display: 'inherit',
       stopGraceMs: 300,
     });
-    const app = await launcher.start({ port: 1, runId: 'stop-test', stateDir });
+    const app = await launcher.start({
+      port: 1,
+      metroPort: 8081,
+      projectRoot: stateDir,
+      runId: 'stop-test',
+      stateDir,
+    });
     let pids: number[] = [];
     try {
       for (let i = 0; i < 100 && !existsSync(pidFile); i++) {
@@ -256,7 +291,13 @@ describe('linuxLauncher stop', () => {
         rmSync(groupFile, { force: true });
         const stateDir = path.join(dir, `state-${launch}`);
         mkdirSync(stateDir);
-        const app = await launcher.start({ port: 1, runId: `hop-test-${launch}`, stateDir });
+        const app = await launcher.start({
+          port: 1,
+          metroPort: 8081,
+          projectRoot: stateDir,
+          runId: `hop-test-${launch}`,
+          stateDir,
+        });
         let group = 0;
         try {
           for (let i = 0; i < 100 && !readFileIfAny(groupFile); i++) {
@@ -306,7 +347,7 @@ describe('linuxLauncher stop', () => {
         const scenario = `
           const { linuxLauncher } = await import(${JSON.stringify(new URL('./linux-launcher.ts', import.meta.url).href)});
           const launcher = linuxLauncher({ host: ${JSON.stringify(host)}, container: false, fakeSystemUi: false, display: 'inherit', stopGraceMs: 300 });
-          const app = await launcher.start({ port: 1, runId: 'reaper', stateDir: ${JSON.stringify(path.join(dir, 'state'))} });
+          const app = await launcher.start({ port: 1, metroPort: 8081, projectRoot: ${JSON.stringify(dir)}, runId: 'reaper', stateDir: ${JSON.stringify(path.join(dir, 'state'))} });
           await new Promise((resolve) => setTimeout(resolve, 500));
           const stopped = app.stop().then(() => 'stopped');
           const hung = new Promise((resolve) => setTimeout(() => resolve('hung'), 5000));
@@ -359,7 +400,13 @@ describe('linuxLauncher crashReport', () => {
         fakeSystemUi: false,
         display: 'inherit',
       });
-      const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir: dir });
+      const app = await launcher.start({
+        port: 1,
+        metroPort: 8081,
+        projectRoot: dir,
+        runId: 'crash-test',
+        stateDir: dir,
+      });
       try {
         await app.exited;
         assert.equal(
@@ -399,7 +446,13 @@ describe('linuxLauncher crashReport', () => {
         fakeSystemUi: false,
         display: 'inherit',
       });
-      const app = await launcher.start({ port: 1, runId: 'crash-test', stateDir: dir });
+      const app = await launcher.start({
+        port: 1,
+        metroPort: 8081,
+        projectRoot: dir,
+        runId: 'crash-test',
+        stateDir: dir,
+      });
       try {
         await app.exited;
         let report = '';

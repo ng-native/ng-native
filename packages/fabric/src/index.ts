@@ -101,6 +101,7 @@ export {
   type ViewNameNode,
   type WindowFrame,
   isTouchPointer,
+  isColorProp,
 } from './engine.ts';
 export { reportUnboundFormsInput, type NamedHostNode } from './forms-inputs.ts';
 export { HostEngine, type HostNode, type Settling } from './host.ts';

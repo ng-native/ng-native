@@ -22,6 +22,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
+import { PNG } from 'pngjs';
 import { dependents, modulesOf, scriptOf } from '@ng-native/testing/device/bundle-modules';
 import { mockedSpecifiers } from '@ng-native/testing/device/mocks';
 import { devicePool } from '@ng-native/testing/device/pool';
@@ -123,7 +124,7 @@ async function setup(options: Parameters<typeof devicePool>[0] = {}) {
   const metroPort = (metro.address() as { port: number }).port;
 
   const port = options.port ?? (await freePort());
-  const pool = devicePool({ connectTimeout: 2000, ...options, port, serverRoot: root });
+  const pool = devicePool({ connectTimeout: 2000, metroPort, ...options, port, serverRoot: root });
   // The stand-in apps' requests, which the pool may hold open: aborted when the test is done, or
   // they would keep the test process running.
   const requests = new AbortController();
@@ -166,7 +167,10 @@ async function setup(options: Parameters<typeof devicePool>[0] = {}) {
 }
 
 /** A launcher whose apps a test ends by hand, as their processes would. */
-function fakeLauncher(crashReport?: () => string | undefined | Promise<string | undefined>) {
+function fakeLauncher(
+  crashReport?: () => string | undefined | Promise<string | undefined>,
+  output?: () => string,
+) {
   const launches: { exit: (how: string) => void; stopped: boolean }[] = [];
   const launch = {
     start: () => {
@@ -179,6 +183,7 @@ function fakeLauncher(crashReport?: () => string | undefined | Promise<string | 
         stop: async () => {
           launched.stopped = true;
         },
+        ...(output && { output }),
       };
     },
     ...(crashReport && { crashReport }),
@@ -410,6 +415,103 @@ describe('the device pool', () => {
       symlinkSync(tmpdir(), linked);
       await refused({ op: 'write', path: join(linked, 'escape.snap'), content: '' });
       await refused({ op: 'read', path: snap }, run.app('stranger'));
+    } finally {
+      await run.done();
+    }
+  });
+
+  it("compares screenshots for the app it runs, under the project's options, in the files it sent", async () => {
+    const run = await setup({ screenshots: { comparatorOptions: { allowedMismatchedPixels: 1 } } });
+    try {
+      const { worker } = run.worker();
+      const starting = worker.start();
+      const phone = run.app('one');
+      const first = phone.poll();
+      await starting;
+      const test = join(run.root, 'src/a.device.ts');
+      worker.send(request('run', { files: [{ filepath: test }] }) as never);
+      await first;
+      const shot = (changed: number[]) => {
+        const image = new PNG({ width: 2, height: 2 });
+        for (let i = 0; i < 4; i++)
+          image.data.set([changed.includes(i) ? 255 : 0, 0, 0, 255], i * 4);
+        return PNG.sync.write(image).toString('base64');
+      };
+      const compare = (png: string, from = phone, file = test) =>
+        from.post('/screenshot', { file, name: 'card', png, update: 'new', platform: 'android' });
+      const recorded = await compare(shot([]));
+      assert.equal(recorded.result.pass, true);
+      assert.equal(
+        recorded.result.reference,
+        join(run.root, 'src/__screenshots__/a.device.ts/card-ios.png'),
+        "the app's own platform, whatever the request says",
+      );
+      assert.equal(existsSync(recorded.result.reference), true);
+      assert.equal((await compare(shot([0]))).result.pass, true, 'the project allows one pixel');
+      assert.equal((await compare(shot([0, 1]))).result.pass, false);
+      assert.match(
+        (await compare(shot([]), phone, join(run.root, 'src/dep.ts'))).error,
+        /Not a test file/,
+      );
+      assert.match((await compare(shot([]), run.app('stranger'))).error, /Not a test file/);
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('keeps no screenshot for an app that says it is a platform a file name cannot be made from', async () => {
+    const run = await setup();
+    try {
+      const { worker } = run.worker();
+      const starting = worker.start();
+      const app = run.app('odd', 'x/../../../../tmp/escape');
+      const first = app.poll();
+      await starting;
+      const test = join(run.root, 'src/a.device.ts');
+      worker.send(request('run', { files: [{ filepath: test }] }) as never);
+      await first;
+      const image = new PNG({ width: 1, height: 1 });
+      const answer = await app.post('/screenshot', {
+        file: test,
+        name: 'card',
+        png: PNG.sync.write(image).toString('base64'),
+        update: 'all',
+      });
+      assert.match(answer.error, /Not a platform screenshots are kept for/);
+    } finally {
+      await run.done();
+    }
+  });
+
+  it("samples a capture's colours at points, at the device's pixel ratio, for the app it runs", async () => {
+    const run = await setup();
+    try {
+      const { worker } = run.worker();
+      const starting = worker.start();
+      const phone = run.app('one');
+      void phone.poll().catch(() => {});
+      await starting;
+      // 4 x 2 pixels at 2x: 2 x 1 points, the right point red.
+      const image = new PNG({ width: 4, height: 2 });
+      for (let i = 0; i < 8; i++)
+        image.data.set(i % 4 >= 2 ? [255, 0, 0, 255] : [0, 0, 255, 128], i * 4);
+      const png = PNG.sync.write(image).toString('base64');
+      const answer = await phone.post('/colors', {
+        png,
+        points: [
+          { x: 0.5, y: 0.5 },
+          { x: 1.5, y: 0.5 },
+        ],
+        scale: 2,
+      });
+      assert.deepEqual(answer.result, [
+        [0, 0, 255, 128 / 255],
+        [255, 0, 0, 1],
+      ]);
+      const outside = await phone.post('/colors', { png, points: [{ x: 2, y: 0 }], scale: 2 });
+      assert.match(outside.error, /outside the capture, 2 x 1 points/);
+      const stranger = await run.app('stranger').post('/colors', { png, points: [], scale: 2 });
+      assert.match(stranger.error, /Not an app a worker has/);
     } finally {
       await run.done();
     }
@@ -658,6 +760,216 @@ describe('the device pool', () => {
       b.worker.send(request('cancel') as never);
       const asked = await Promise.race([two, wait(1000).then(() => ({ type: 'nothing' }))]);
       assert.equal(asked?.type, 'cancel', 'the app B launched, not the one A was stopping');
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('relaunches an app lost after it was sent start, and answers the run that waited behind it', async () => {
+    const { launch, launches } = fakeLauncher();
+    const run = await setup({ launch, appTimeout: 300 });
+    try {
+      const { worker, messages } = run.worker();
+      const starting = worker.start();
+      worker.send(request('start', { config: { root: run.root } }) as never);
+      const asked = await run.app('one').poll();
+      await starting;
+      assert.equal(asked?.type, 'start');
+      // A run Vitest sends meanwhile waits behind start; then the app goes quiet, as a crash would.
+      worker.send(
+        request('run', { files: [{ filepath: join(run.root, 'src/a.device.ts') }] }) as never,
+      );
+      await wait(900);
+      assert.equal(launches.length, 2, 'one new app, for the files that remain');
+      const types = messages.map((message) => (message as { type?: string }).type);
+      assert.deepEqual(
+        types.filter((type) => type === 'started'),
+        ['started'],
+        'Vitest hears started once',
+      );
+      const finished = messages.find(
+        (message) => (message as { type?: string }).type === 'testfileFinished',
+      ) as { error?: Error } | undefined;
+      assert.match(String(finished?.error?.message), /^Not run: The app stopped answering/);
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('sends start again to the app it relaunches, before any file, and Vitest hears it once', async () => {
+    const { launch, launches } = fakeLauncher();
+    const run = await setup({ launch });
+    try {
+      const { worker, messages } = run.worker();
+      const starting = worker.start();
+      const config = { root: run.root };
+      worker.send(request('start', { config }) as never);
+      const first = run.app('one');
+      const asked = await first.poll();
+      assert.equal(asked?.type, 'start');
+      await starting;
+      // Started, then its process ends with nothing owed, as an app that crashes between files.
+      // A poll carrying the reply returns only once the pool has read it: with the next request,
+      // a cancel sent for the purpose. The cancel is answered too, so nothing stays owed, and its
+      // answer reaching Vitest shows the pool has read that as well.
+      const answer = async (app: ReturnType<typeof run.app>, deviceRequest: unknown) => {
+        const next = app.poll({
+          reply: { __vitest_worker_response__: true, type: 'started', deviceRequest },
+        });
+        worker.send(request('cancel') as never);
+        const cancel = await next;
+        assert.equal(cancel?.type, 'cancel');
+        const before = messages.length;
+        void app
+          .poll({
+            reply: {
+              __vitest_worker_response__: true,
+              type: 'cancelled',
+              deviceRequest: cancel.deviceRequest,
+            },
+          })
+          .catch(() => {});
+        const read = () =>
+          messages
+            .slice(before)
+            .some((message) => (message as { type?: string }).type === 'cancelled');
+        for (let waited = 0; waited < 2000 && !read(); waited += 10) await wait(10);
+        assert.ok(read(), 'the answer to cancel reached Vitest');
+      };
+      await answer(first, asked.deviceRequest);
+      launches[0]!.exit('signal SIGKILL');
+      for (let waited = 0; waited < 2000 && launches.length < 2; waited += 10) await wait(10);
+      assert.equal(launches.length, 2, 'a new app for the files to come');
+      const replacement = run.app('two');
+      const second = await Promise.race([
+        replacement.poll(),
+        wait(2000).then(() => ({ type: 'nothing' })),
+      ]);
+      assert.equal(second?.type, 'start', 'the new app is told the config before any file');
+      assert.deepEqual((second as { context?: unknown }).context, { config });
+      // Its own started is the pool's, not Vitest's: Vitest has had one.
+      await answer(replacement, second.deviceRequest);
+      const types = messages.map((message) => (message as { type?: string }).type);
+      assert.deepEqual(
+        types.filter((type) => type === 'started'),
+        ['started'],
+        'Vitest hears started once',
+      );
+      assert.ok(!types.includes('testfileFinished'), 'nothing was owed when the app exited');
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('sends start once to an app it relaunched before Vitest sent start', async () => {
+    const { launch, launches } = fakeLauncher();
+    const run = await setup({ launch });
+    try {
+      const { worker, messages } = run.worker();
+      const starting = worker.start();
+      void run
+        .app('one')
+        .poll()
+        .catch(() => {});
+      await starting;
+      // Gone before Vitest's start, which then arrives while the replacement connects.
+      launches[0]!.exit('signal SIGKILL');
+      await wait(20);
+      worker.send(request('start', { config: { root: run.root } }) as never);
+      const replacement = run.app('two');
+      const first = await replacement.poll();
+      assert.equal(first?.type, 'start');
+      const next = await Promise.race([
+        replacement.poll({
+          reply: {
+            __vitest_worker_response__: true,
+            type: 'started',
+            deviceRequest: first.deviceRequest,
+          },
+        }),
+        wait(500).then(() => ({ type: 'nothing' })),
+      ]);
+      assert.equal(next?.type, 'nothing', 'no second start');
+      const types = messages.map((message) => (message as { type?: string }).type);
+      assert.deepEqual(
+        types.filter((type) => type === 'started'),
+        ['started'],
+      );
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('says the app it launched did not connect, not to open one by hand', async () => {
+    const { launch } = fakeLauncher();
+    const run = await setup({ launch, connectTimeout: 100 });
+    try {
+      await assert.rejects(run.worker().worker.start(), /app the pool launched did not connect/);
+    } finally {
+      await run.done();
+    }
+  });
+
+  it("ends a launched app's failure to connect with the last of what it printed", async () => {
+    const { launch } = fakeLauncher(undefined, () => 'Loading from Metro...\nStill waiting');
+    const run = await setup({ launch, connectTimeout: 100 });
+    try {
+      await assert.rejects(
+        run.worker().worker.start(),
+        /did not connect[^]*The app's last output:\nLoading from Metro\.\.\.\nStill waiting$/,
+      );
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('ends the failure of a launched app that exits before it connects with what it printed', async () => {
+    const { launch, launches } = fakeLauncher(undefined, () => 'Unhandled JS Exception');
+    const run = await setup({ launch });
+    try {
+      const starting = run.worker().worker.start();
+      await wait(20);
+      launches[0]!.exit('status 1');
+      await assert.rejects(
+        starting,
+        /exited before it connected \(status 1\)\.\n\nThe app's last output:\nUnhandled JS Exception/,
+      );
+    } finally {
+      await run.done();
+    }
+  });
+
+  it('answers start itself while the app it launches has yet to connect, and only once', async () => {
+    const { launch } = fakeLauncher();
+    const run = await setup({ launch });
+    try {
+      const { worker, messages } = run.worker();
+      const starting = worker.start();
+      worker.send(request('start', { config: { root: run.root } }) as never);
+      await wait(20);
+      assert.deepEqual(
+        messages.map((message) => (message as { type?: string }).type),
+        ['started'],
+        'before any app has connected',
+      );
+      const phone = run.app('one');
+      const asked = await phone.poll();
+      await starting;
+      assert.equal(asked?.type, 'start', 'the app still gets the request, with its config');
+      void phone
+        .poll({
+          reply: {
+            __vitest_worker_response__: true,
+            type: 'started',
+            deviceRequest: asked.deviceRequest,
+          },
+        })
+        .catch(() => {});
+      await wait(50);
+      assert.equal(
+        messages.filter((message) => (message as { type?: string }).type === 'started').length,
+        1,
+      );
     } finally {
       await run.done();
     }

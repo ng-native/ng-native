@@ -171,3 +171,4 @@ export {
   type WorkletStyleSpec,
   type WorkletTarget,
 } from './worklets.ts';
+export { releaseOnDestroy } from './release-on-destroy.ts';

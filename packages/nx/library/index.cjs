@@ -315,7 +315,10 @@ async function library(tree, options) {
   replaceComponent(tree, project, file);
 
   const aliases = hasPathAliases(tree, usesWorkspaces(tree));
-  tree.write(joinPathFragments(directory, 'vitest.config.mts'), native.vitestConfig(aliases));
+  tree.write(
+    joinPathFragments(directory, 'vitest.config.mts'),
+    native.vitestConfig(aliases, 'library'),
+  );
   writeSpecConfig(tree, directory, angular);
   if (!angular) importWithTsExtensions(tree, directory);
   if (!angular) writeTypecheckConfig(tree, directory);

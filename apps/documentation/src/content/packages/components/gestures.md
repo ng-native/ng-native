@@ -199,6 +199,38 @@ Writing `this.x.value = ...` directly inside the callback above would close over
 whole component, every signal and the injector along with it - rather than the one shared value
 that matters, which is why `x` is pulled into a local first.
 
+## A function a worklet calls back must not reach the component
+
+A function a worklet closes over, such as the one it hands to `scheduleOnRN` from
+`react-native-worklets`, goes to the UI thread as a remote function, and the library keeps it from
+native code for good: detaching the gesture, or destroying the component, does not release it. If
+that function reaches the component, the component is never collected, nor its view tree, nor
+anything it holds, and every visit to the screen keeps another one.
+
+A local does not help here as it does above. Hermes keeps the whole scope a function was made in,
+not only the names it uses, so `() => removed.emit()` written in the constructor keeps the
+constructor's `this` as well as `removed`. Pass the function through `releaseOnDestroy` instead. It
+returns one that calls yours until the component is destroyed, and then holds nothing:
+
+```ts
+import { Gesture } from 'react-native-gesture-handler';
+import { scheduleOnRN } from 'react-native-worklets';
+import { releaseOnDestroy } from '@ng-native/components/reanimated';
+
+constructor() {
+  const removed = this.removed;
+  const remove = releaseOnDestroy(() => removed.emit());
+  this.pan = Gesture.Pan().onEnd(() => {
+    'worklet';
+    scheduleOnRN(remove);
+  });
+}
+```
+
+It takes a `DestroyRef` as its second argument where it is called outside an injection context,
+for a service or a function of its own. The same goes for any other function a worklet calls back
+on the JavaScript thread, such as `runOnJS`'s.
+
 <!-- api: NativeGesture -->
 
 <!-- api: GestureRoot -->

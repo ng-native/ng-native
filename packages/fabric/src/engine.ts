@@ -6887,6 +6887,13 @@ export interface EngineOptions {
    */
   now?: () => number;
   /**
+   * `off`: every transition and `@keyframes` animation takes no time, as one of no duration does
+   * in CSS. A transition lands on its new value, a finite animation ends within two frames (on its
+   * last frame where its fill mode keeps it), and one that repeats forever is not played. For a
+   * test that reads or captures where a change ends. Default `on`; see `setMotion`.
+   */
+  motion?: 'on' | 'off';
+  /**
    * Called when the tree goes from clean to dirty. The host uses it to schedule a commit for a
    * change that arrives outside change detection, which is where Angular's animation queue puts
    * the classes for `animate.enter` and `animate.leave`.
@@ -6919,7 +6926,7 @@ const IS_COLOR_PROP = /color(android)?$/i;
 const STATE_COLOR_PROPS = new Set(['trackColorForTrue', 'trackColorForFalse']);
 /** Answers per key name, once: the regex ran for every prop of every node in every commit. */
 const colorProps = new Map<string, boolean>();
-function isColorProp(key: string): boolean {
+export function isColorProp(key: string): boolean {
   let answer = colorProps.get(key);
   if (answer === undefined) {
     colorProps.set(
@@ -7589,6 +7596,8 @@ export class Engine implements HostEngine {
   readonly dev: boolean;
   /** The clock transitions and animations run on, which a script reads where one has got to. */
   readonly now: () => number;
+  /** See `EngineOptions.motion`. */
+  private motion: 'on' | 'off' = 'on';
   private onDirty: (() => void) | undefined;
   private onError: ((error: unknown, topLevelType: string) => void) | undefined;
   /** Nodes with at least one transition in flight, so a frame walks those and nothing else. */
@@ -7672,6 +7681,7 @@ export class Engine implements HostEngine {
         this.reportPlatformColour(name, props, on);
     }
     this.now = options.now ?? (() => globalThis.performance?.now?.() ?? Date.now());
+    this.setMotion(options.motion);
     this.onDirty = options.onDirty;
     this.onError = options.onError;
     this.registerSheet(options.globalStyles);
@@ -9985,6 +9995,18 @@ export class Engine implements HostEngine {
    * optimisation.
    */
   commit(): boolean {
+    try {
+      const committed = this.commitChanges();
+      this.setEndedOwned();
+      return committed;
+    } finally {
+      // A commit on a disposed engine, or one a listener disposed it during, can have handed
+      // native an animation, a transition or a move to lay out: each is taken back at once.
+      if (this.disposed) this.letGoNative();
+    }
+  }
+
+  private commitChanges(): boolean {
     if (this.removedSinceCommit.size) {
       // A box that went can have made room for any other: see `heldIn`.
       this.changesHeld = false;
@@ -13739,7 +13761,7 @@ export class Engine implements HostEngine {
    * own frames, which is what lets an element animate in without differing from anything.
    */
   private animated(node: EngineNode, props: Record<string, unknown>): Record<string, unknown> {
-    const spec = animationOf(props);
+    const spec = this.timed(animationOf(props));
 
     // One played by a scroll that is no longer asked for, whatever is asked for instead.
     if (node.scrolled && !spec?.timeline) this.stopScrolled(node);
@@ -13973,11 +13995,28 @@ export class Engine implements HostEngine {
     const end = running.start + spec.duration * (spec.iterations ?? 1);
     native.stop();
     this.advancePlayer(node, Math.max(this.now(), end));
-    this.commit();
-    // The commit sets only what it changed, and the style the view rests at can be the frame it
-    // was committed with as it played: native has drawn it elsewhere since.
-    const committed = node.committed;
-    if (node.owned && committed) this.setOwned(node, RESET_OWNED, committed.props);
+    this.endedSinceCommit.add(node);
+    // A host commits what is marked once a frame, so animations that end together share a
+    // commit. Without one, nothing else would commit it.
+    if (!this.onDirty) this.commit();
+  }
+
+  /** Each node whose native animation has ended since the last commit. */
+  private readonly endedSinceCommit = new Set<EngineNode>();
+
+  /**
+   * The commit sets only what it changed, and the style a view rests at can be the frame it was
+   * committed with as its animation played: native has drawn it elsewhere since.
+   */
+  private setEndedOwned(): void {
+    if (!this.endedSinceCommit.size) return;
+    const ended = [...this.endedSinceCommit];
+    this.endedSinceCommit.clear();
+    for (const node of ended) {
+      // Not one whose view has gone since, which native set nothing on.
+      const committed = node.committed;
+      if (node.owned && committed) this.setOwned(node, RESET_OWNED, committed.props);
+    }
   }
 
   /** Take an animation back from native, which stops it there. The caller plays it on, or not. */
@@ -14309,9 +14348,39 @@ export class Engine implements HostEngine {
     );
   }
 
+  /**
+   * Turn motion off or back on: see `EngineOptions.motion`. It holds for each node from its next
+   * commit of its style. One whose animation the engine plays in JavaScript is recommitted every
+   * frame, so takes it at once; one native plays, or a node at rest, takes it when it is next
+   * restyled. Then a finite animation lands on its end, and one that repeats forever is cancelled.
+   */
+  setMotion(motion: 'on' | 'off' = 'on'): void {
+    this.motion = motion;
+  }
+
+  /** A `@keyframes` animation as motion has it: as written, or taking no time. */
+  private timed(spec: AnimationSpec | undefined): AnimationSpec | undefined {
+    if (!spec || this.motion === 'on') return spec;
+    // One that repeats forever has no end to show: not played, so the resting style shows.
+    if (spec.iterations === null || spec.iterations === Infinity) return undefined;
+    // Not held paused either: one that takes no time ends, and its animationend fires.
+    return { ...spec, duration: 0, delay: 0, paused: false };
+  }
+
+  /** A node's transitions as motion has them: as written, or taking no time. */
+  private timedTransitions(
+    spec: Record<string, TransitionSpec> | undefined,
+  ): Record<string, TransitionSpec> | undefined {
+    if (!spec || this.motion === 'on') return spec;
+    const still: Record<string, TransitionSpec> = {};
+    for (const [key, timing] of Object.entries(spec))
+      still[key] = { ...timing, duration: 0, delay: 0 };
+    return still;
+  }
+
   private transitioned(node: EngineNode, props: Record<string, unknown>): Record<string, unknown> {
     this.unseenTransitions(node);
-    const spec = transitionSpec(props);
+    const spec = this.timedTransitions(transitionSpec(props));
     if (!spec && !node.transitions) return props;
     if (spec) keepForTransition(node, props, spec);
 
@@ -14563,11 +14632,22 @@ export class Engine implements HostEngine {
       nothing,
     );
     for (const { node, key, eased } of laying) {
-      if (eased.laid) setTimeout(() => this.endLaid(node, key, eased), duration);
+      if (eased.laid) this.whenLaid(() => this.endLaid(node, key, eased), duration);
     }
     for (const { node, running } of played) {
-      if (running.laid) setTimeout(() => this.endLaidPlayed(node, running), duration);
+      if (running.laid) this.whenLaid(() => this.endLaidPlayed(node, running), duration);
     }
+  }
+
+  /** The end of each move native is laying out, which `dispose` calls off. */
+  private readonly laidTimers = new Set<ReturnType<typeof setTimeout>>();
+
+  private whenLaid(end: () => void, duration: number): void {
+    const timer = setTimeout(() => {
+      this.laidTimers.delete(timer);
+      end();
+    }, duration);
+    this.laidTimers.add(timer);
   }
 
   /** A transition native laid out has had its time: it is where it ends, and says so. */
@@ -15139,6 +15219,7 @@ export class Engine implements HostEngine {
 
   /** Bring every view native paints up to date in the shadow tree, once they are left alone. */
   private quietLater(): void {
+    if (this.disposed) return;
     if (this.quietTimer !== null) clearTimeout(this.quietTimer);
     this.quietTimer = setTimeout(() => {
       this.quietTimer = null;
@@ -17057,7 +17138,7 @@ export class Engine implements HostEngine {
    * handler, and a second engine's would take the first one's events. See `event-dispatcher.ts`.
    */
   private registerEventHandler(): void {
-    if (this.eventsRegistered) return;
+    if (this.eventsRegistered || this.disposed) return;
     this.eventsRegistered = true;
     this.leave = joinEvents(this.fabric, this);
   }
@@ -17072,6 +17153,38 @@ export class Engine implements HostEngine {
     this.leave?.();
     this.leave = null;
     this.eventsRegistered = false;
+  }
+
+  /** Whether the surface has gone: see `dispose`. */
+  private disposed = false;
+
+  /**
+   * The surface has gone for good: leave the shared event dispatcher, and schedule nothing more.
+   * An engine the dispatcher still held took every event with no target, and kept itself, its
+   * root and every node with a committed handle alive with it.
+   */
+  dispose(): void {
+    this.disposed = true;
+    this.leaveEvents();
+    if (this.quietTimer !== null) clearTimeout(this.quietTimer);
+    this.quietTimer = null;
+    this.letGoNative();
+  }
+
+  /**
+   * Stop what native plays and lays out for the engine. Native keeps what it calls as each
+   * animation it plays ends, and that reaches the engine: an infinite one never ends, and
+   * destroying the views does not stop it.
+   */
+  private letGoNative(): void {
+    for (const timer of this.laidTimers) clearTimeout(timer);
+    this.laidTimers.clear();
+    for (const node of [...this.playedNatively]) this.stopNative(node, node.playing!);
+    for (const node of [...this.easedNatively]) this.stopEased(node);
+    for (const node of [...this.paintedNodes]) this.stopPainting(node);
+    for (const nodes of [...this.scrollTimelines.values()]) {
+      for (const node of [...nodes]) this.stopScrolled(node);
+    }
   }
 
   /**

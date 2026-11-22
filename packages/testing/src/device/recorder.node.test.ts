@@ -15,6 +15,20 @@ function commit(fabric: ReturnType<typeof record>['fabric'], rootTag: number, no
 }
 
 describe('the device recorder', () => {
+  it("gives a view's props as last committed, and nothing once it is gone", () => {
+    const recorder = record(createFakeFabric());
+    const { fabric } = recorder;
+    recorder.fabric.registerEventHandler!(() => {});
+    const view = fabric.createNode(2, 'RCTView', 1, { opacity: 1 }, {});
+    commit(fabric, 1, [view]);
+    const kept = recorder.current(2)!;
+    commit(fabric, 1, [fabric.cloneNodeWithNewProps(view, { opacity: 0.5 })]);
+    assert.equal(kept.props['opacity'], 1, 'the record a test kept is of the earlier commit');
+    assert.equal(recorder.current(2)!.props['opacity'], 0.5);
+    commit(fabric, 1, []);
+    assert.equal(recorder.current(2), undefined);
+  });
+
   it("keeps each window's views, as each surface commits", () => {
     const recorder = record(createFakeFabric());
     const { fabric } = recorder;

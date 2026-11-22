@@ -20,6 +20,7 @@ const {
   readJson,
 } = require('@nx/devkit');
 const native = require('../native-app.cjs');
+const { typescript } = require('@ng-native/migrate/move-imports.cjs');
 const { usesWorkspaces } = require('../application/workspaces.cjs');
 
 // The iOS SDK's types ship with the runtime; Android's are a package of their own.
@@ -49,14 +50,69 @@ function addPlugin(tree, root) {
   tree.write(file, `${JSON.stringify(config, null, 2)}\n`);
 }
 
-/** Where the `mount(...)` call's parentheses close, counting brackets; -1 if they never do. */
-function callEnd(source, open) {
-  let depth = 0;
-  for (let at = open; at < source.length; at++) {
-    if ('([{'.includes(source[at])) depth++;
-    else if (')]}'.includes(source[at]) && --depth === 0) return at;
+/**
+ * The object the app's `mount(...)` call is given in main.ts: inline, as an older app passes it,
+ * or what the file's `mountOptions = () => ({ ... })` returns, for `mount(..., mountOptions())`. Found by TypeScript's parser,
+ * so a comment, string or regular expression in it reads as what it is.
+ */
+function mountOptionsObject(ts, file) {
+  const options = mountCall(ts, file)?.arguments[3];
+  if (!options) return null;
+  if (ts.isObjectLiteralExpression(options)) return options;
+  // `mountOptions()`: the object the file's own factory of that name returns.
+  if (!ts.isCallExpression(options) || !ts.isIdentifier(options.expression)) return null;
+  const name = options.expression.text;
+  for (const statement of file.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      const returned = returnedBy(ts, declaration, name);
+      if (returned) return returned;
+    }
   }
-  return -1;
+  return null;
+}
+
+/** The app's `mount(...)` call: the first in the file, as the app's entry has one. */
+function mountCall(ts, file) {
+  const visit = (node) =>
+    (ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'mount' &&
+      node) ||
+    ts.forEachChild(node, visit);
+  return visit(file);
+}
+
+/** The object `const <name> = () => ({ ... })` returns, when `declaration` is that. */
+function returnedBy(ts, declaration, name) {
+  const { name: declared, initializer } = declaration;
+  if (!ts.isIdentifier(declared) || declared.text !== name) return null;
+  if (!initializer || !ts.isArrowFunction(initializer)) return null;
+  let body = initializer.body;
+  while (ts.isParenthesizedExpression(body)) body = body.expression;
+  return ts.isObjectLiteralExpression(body) ? body : null;
+}
+
+/** Where to add `provideNativeScript()` to `options`, and what: null for a file to edit by hand. */
+function providerEdit(ts, file, options) {
+  const named = options.properties.filter(
+    (property) =>
+      property.name && ts.isIdentifier(property.name) && property.name.text === 'providers',
+  );
+  const own = named.at(-1);
+  if (own) {
+    // A list to add to; anything else (a variable, a spread) is the app's to change.
+    const list = ts.isPropertyAssignment(own) ? own.initializer : null;
+    return list && ts.isArrayLiteralExpression(list)
+      ? { at: list.getStart(file) + 1, text: `${PROVIDER}, ` }
+      : null;
+  }
+  // First, straight after the brace: before any comment that heads the first property.
+  const first = options.properties[0];
+  if (!first) return null;
+  const start = first.getStart(file);
+  const indent = /[ \t]*$/.exec(file.text.slice(file.text.lastIndexOf('\n', start) + 1, start))[0];
+  return { at: options.getStart(file) + 1, text: `\n${indent}providers: [${PROVIDER}],` };
 }
 
 const IMPORTED =
@@ -68,30 +124,23 @@ function addProvider(tree, root) {
   if (main === null) return byHand(file, 'it does not exist.');
   if (main.includes(PROVIDER)) return;
   const imports = [...main.matchAll(/^import .+;$/gm)];
-  const options = /(\bmount\([^\n]*\{\n)([ \t]*)/.exec(main);
-  const open = options ? options.index + options[0].indexOf('(') : -1;
-  const end = options ? callEnd(main, open) : -1;
-  if (!imports.length || end < 0) {
+  let edit = null;
+  try {
+    const ts = typescript();
+    const source = ts.createSourceFile(file, main, ts.ScriptTarget.Latest, true);
+    const options = mountOptionsObject(ts, source);
+    edit = options && providerEdit(ts, source, options);
+  } catch {
+    // No TypeScript with a JavaScript API (TypeScript 7): the same as a file it cannot follow.
+  }
+  if (!imports.length || !edit) {
     return byHand(
       file,
       `import { provideNativeScript } from '@ng-native/nativescript' and add ${PROVIDER} to the ` +
         'providers mount is given.',
     );
   }
-  // Only a providers list inside the call: one elsewhere in the file is not the app's.
-  const call = main.slice(open, end);
-  const listed = /(\bproviders:\s*\[)/.exec(call);
-  // A second providers key would replace the app's own, so one that is not a list is left alone.
-  if (!listed && /\bproviders\s*[:,}]/.test(call)) {
-    return byHand(file, `add ${PROVIDER} to the providers mount is given.`);
-  }
-  const edited = listed
-    ? call.replace(listed[0], `${listed[1]}${PROVIDER}, `)
-    : call.replace(
-        options[0].slice(options[0].indexOf('(')),
-        (found) => `${found}${options[2]}providers: [${PROVIDER}],\n${options[2]}`,
-      );
-  const updated = main.slice(0, open) + edited + main.slice(end);
+  const updated = main.slice(0, edit.at) + edit.text + main.slice(edit.at);
   if (IMPORTED.test(updated)) return tree.write(file, updated);
   const last = imports.at(-1);
   const at = updated.indexOf(last[0]) + last[0].length;

@@ -22,11 +22,13 @@ a workspace around it, [the template](/guide/getting-started) is still the short
 ## What it adds
 
 The files are the template's, copied as they are: `src/app/app.ts`, `src/main.ts`,
-`src/app/app.test.ts`, `metro.config.js`, `tsconfig.json` and `vitest.config.mts`, plus an
-`app.json` named for the project, a small `package.json` for Expo, and a `.gitignore` that ignores
-the `ios/` and `android/` projects `expo prebuild` writes and the `.angular-native/` Tailwind
-generates, as the template's does. The dependencies go in the workspace's root `package.json`,
-beside Angular's, and `ng add` installs them. A version the workspace already has is left alone.
+`src/app/app.test.ts`, `src/app/app.device.ts`, `metro.config.js`, `tsconfig.json` and
+`vitest.config.mts`, plus an `app.json` named for the project, a small `package.json` for Expo, and
+a `.gitignore` that ignores the `ios/` and `android/` projects `expo prebuild` writes, the
+`.angular-native/` Tailwind generates, and the `-actual.png` and `-diff.png` a failed screenshot
+comparison writes under `__screenshots__`, as the template's does. The dependencies go in the
+workspace's root `package.json`, beside Angular's, and `ng add` installs them. A version the
+workspace already has is left alone.
 
 The project's own `package.json` is never installed from. Expo reads `main` from it to find the
 entry file, and it also lists every dependency the app has at the root's ranges. Expo links the
@@ -41,15 +43,15 @@ in [Metro](/packages/metro), and the project's `angular.json` entry is what conn
 
 ## The targets
 
-| Command                     | What runs                                                        |
-| --------------------------- | ---------------------------------------------------------------- |
-| `ng serve native`           | `expo start`. Takes `--port` and `--clear`.                      |
-| `ng build native`           | `expo export`, for every platform, into `dist/native`.           |
-| `ng test native`            | `vitest run`, through [`@ng-native/testing`](/packages/testing). |
-| `ng run native:run-ios`     | `expo run:ios`: a development build on a simulator.              |
-| `ng run native:run-android` | `expo run:android`.                                              |
-| `ng run native:typecheck`   | `ngc --noEmit`, which checks the templates as well as the code.  |
-| `ng lint native`            | ESLint, with `--linter=eslint` only.                             |
+| Command                     | What runs                                                       |
+| --------------------------- | --------------------------------------------------------------- |
+| `ng serve native`           | `expo start`. Takes `--port` and `--clear`.                     |
+| `ng build native`           | `expo export`, for every platform, into `dist/native`.          |
+| `ng test native`            | `vitest run --project node`: the tests that run in Node.        |
+| `ng run native:run-ios`     | `expo run:ios`: a development build on a simulator.             |
+| `ng run native:run-android` | `expo run:android`.                                             |
+| `ng run native:typecheck`   | `ngc --noEmit`, which checks the templates as well as the code. |
+| `ng lint native`            | ESLint, with `--linter=eslint` only.                            |
 
 Each but `lint` is an Expo, Vitest or `ngc` command run in the project's directory, by the package's
 three builders, `@ng-native/schematics:expo`, `@ng-native/schematics:vitest` and
@@ -63,6 +65,13 @@ for every project that has one. A plain `ng build` and `ng serve` still mean the
 build and runs them against a DOM, and a native test renders onto the fake Fabric instead,
 compiled by the same transform Metro uses. The Vitest builder's options are `watch`, `filter`
 (only the test files whose path contains it) and `project` (only the Vitest project of that name).
+
+The app's `vitest.config.mts` has three projects, as the template's does: `node`, in Node, which
+the `test` target runs alone (`"options": { "project": "node" }`), and `ios` and `android`, which
+run `src/**/*.device.ts` [inside the app](/packages/testing/in-app-tests) and start Metro, build the
+app and open it on a simulator or emulator themselves. `src/app/app.device.ts` is the example: run
+`npx vitest --project ios` in the project's folder. The first run builds the app, which needs Xcode
+or the Android SDK.
 
 `ng run native:typecheck` loads `metro.config.js` before `ngc`, as the template's `typecheck`
 script does, so that once [Tailwind](/packages/tailwind) is added, the sheet `src/main.ts` imports
@@ -175,12 +184,10 @@ place of `run-ios` and `run-android`. `ng add` and
 `ng generate @ng-native/schematics:application` both take it. Its `vitest.config.mts` has four
 projects: `node-macos` and `node-linux`, in Node, which its `test` target runs alone through the
 Vitest builder's `project` option (`"options": { "project": ["node-macos", "node-linux"] }`), and
-`macos` and `linux`, which run `src/**/*.device.ts` inside the app and open it.
-`src/app/app.device.ts` is the example, and its
-`metro.config.js` adds the in-app tests only when Metro starts with `EXPO_PUBLIC_DEVICE_TESTS=1`:
-run `EXPO_PUBLIC_DEVICE_TESTS=1 npx expo start` in the project's folder, then
-`npx vitest --project macos` (on a Mac) or `npx vitest --project linux` (in GTK, on Linux or on a
-Mac in a container) there.
+`macos` and `linux`, which run `src/**/*.device.ts` inside the app and start Metro and open it.
+`src/app/app.device.ts` is the example: run `npx vitest --project macos` (on a Mac) or
+`npx vitest --project linux` (in GTK, on Linux or on a Mac in a container) in the project's
+folder.
 
 `--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`. It defaults to
 `com.<scope>.<name>`, from the npm scope of the root `package.json`'s name and the app's name with

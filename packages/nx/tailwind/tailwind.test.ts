@@ -159,7 +159,7 @@ describe('Tailwind 4, by default', () => {
     );
     assert.match(
       config,
-      /module\.exports = withTailwind\(withAngularNative\(withNxMetro\(getDefaultConfig\(__dirname\)\)\), \{\n {2}input: '\.\/src\/styles\.css',\n\}\);/,
+      /module\.exports = withTailwind\(withDeviceTests\(withAngularNative\(withNxMetro\(getDefaultConfig\(__dirname\)\)\)\), \{\n {2}input: '\.\/src\/styles\.css',\n\}\);/,
     );
   });
 
@@ -168,9 +168,29 @@ describe('Tailwind 4, by default', () => {
     await generate(tree, {});
     const main = read(tree, 'apps/mobile/src/main.ts');
     assert.match(main, /^import tailwind from '\.\.\/\.angular-native\/app\.tailwind\.js';$/m);
+    // In the options the app and its in-app tests both mount with.
+    assert.match(main, /const mountOptions = \(\) => \(\{\n {2}globalStyles: tailwind,\n/);
+  });
+
+  it("passes it in an older app's mount call, which takes its options inline", async () => {
+    const tree = await integrated();
+    tree.write(
+      'apps/mobile/src/main.ts',
+      [
+        "import { mount } from '@ng-native/platform';",
+        '',
+        "AppRegistry.registerRunnable('main', ({ rootTag }) => {",
+        '  mount(Number(rootTag), App, getFabricUIManager(), {',
+        '    processColor,',
+        '  });',
+        '});',
+        '',
+      ].join('\n'),
+    );
+    await generate(tree, {});
     assert.match(
-      main,
-      /mount\(Number\(rootTag\), App, getFabricUIManager\(\), \{\n {4}globalStyles: tailwind,\n/,
+      read(tree, 'apps/mobile/src/main.ts'),
+      /mount\(Number\(rootTag\), App, getFabricUIManager\(\), \{\n {4}globalStyles: tailwind,\n {4}processColor,/,
     );
   });
 
