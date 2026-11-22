@@ -16,6 +16,8 @@
 
 namespace {
 
+void buttonsIn(GtkWidget *root, std::vector<GtkWidget *> &out);
+
 using Answer = std::tuple<int, std::string, std::string>;
 
 ngn::AlertRequest saveRequest() {
@@ -72,6 +74,7 @@ TEST_CASE("a prompt's fields reach the answer, and an alert closed with no respo
   answer.reset();
   ngn::gtk::showAlert(saveRequest(), [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, nullptr);
   gtk_window_destroy(GTK_WINDOW(ngn::gtk::shownAlert()));
+  ngn::testing::runUntil([&] { return answer.has_value(); });
   REQUIRE(answer);
   CHECK(std::get<0>(*answer) == 2);
 }
@@ -124,6 +127,41 @@ TEST_CASE("an alert with no cancel button stays until a button answers it, as Es
   CHECK(ngn::gtk::shownAlert() == alert);
   ngn::gtk::respondToAlert(alert, "b0");
   REQUIRE(answer);
+  CHECK(std::get<0>(*answer) == 0);
+}
+
+TEST_CASE("a button clicked with animations off answers as itself, though libadwaita closes before it responds") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkSettings *settings = gtk_settings_get_default();
+  gboolean animations = TRUE;
+  g_object_get(settings, "gtk-enable-animations", &animations, nullptr);
+  g_object_set(settings, "gtk-enable-animations", FALSE, nullptr);
+  struct Restore {
+    GtkSettings *settings;
+    gboolean animations;
+    ~Restore() {
+      g_object_set(settings, "gtk-enable-animations", animations, nullptr);
+    }
+  } restore{settings, animations};
+  ngn::testing::MountedViews views(true, 400, 300);
+  std::optional<Answer> answer;
+  ngn::gtk::showAlert(saveRequest(), [&](int i, std::string t, std::string p) { answer = Answer{i, t, p}; }, GTK_WINDOW(views.window));
+  GtkWidget *alert = ngn::gtk::shownAlert();
+  REQUIRE(alert);
+  ngn::testing::runUntil([&] { return gtk_widget_get_mapped(alert); });
+  // Save, clicked as a person clicks it (Return on the focused button does the same).
+  GtkWidget *save = nullptr;
+  std::vector<GtkWidget *> found;
+  buttonsIn(alert, found);
+  for (GtkWidget *button : found) {
+    const char *label = gtk_button_get_label(GTK_BUTTON(button));
+    if (label && std::string(label) == "Save") {
+      save = button;
+    }
+  }
+  REQUIRE(save);
+  g_signal_emit_by_name(save, "clicked");
+  ngn::testing::runUntil([&] { return answer.has_value(); });
   CHECK(std::get<0>(*answer) == 0);
 }
 
