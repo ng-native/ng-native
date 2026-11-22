@@ -509,6 +509,35 @@ describe('Tailwind 4, by default', () => {
     assert.doesNotMatch(read(tree, 'apps/mobile/src/main.ts'), /app\.tailwind\.js/);
   });
 
+  it("leaves an export that calls withTailwind off a const bound to the package's require as it is", async () => {
+    const tree = await integrated();
+    const config = [
+      "const { getDefaultConfig } = require('expo/metro-config');",
+      "const tailwind = require('@ng-native/tailwind/config.cjs');",
+      "module.exports = tailwind.withTailwind(getDefaultConfig(__dirname), { input: './src/app.css' });",
+      '',
+    ].join('\n');
+    tree.write('apps/mobile/metro.config.js', config);
+    await generate(tree, {});
+    // Wrapped again, the default input's sheet would overwrite the one its own input builds.
+    assert.equal(read(tree, 'apps/mobile/metro.config.js'), config);
+    assert.match(read(tree, 'apps/mobile/src/main.ts'), /app\.tailwind\.js/);
+  });
+
+  it("leaves a config whose let holds the package's require to be wrapped by hand", async () => {
+    const tree = await integrated();
+    const config = [
+      "const { getDefaultConfig } = require('expo/metro-config');",
+      "let tailwind = require('@ng-native/tailwind/config.cjs');",
+      "module.exports = tailwind.withTailwind(getDefaultConfig(__dirname), { input: './src/app.css' });",
+      '',
+    ].join('\n');
+    tree.write('apps/mobile/metro.config.js', config);
+    await generate(tree, {});
+    assert.equal(read(tree, 'apps/mobile/metro.config.js'), config);
+    assert.doesNotMatch(read(tree, 'apps/mobile/src/main.ts'), /app\.tailwind\.js/);
+  });
+
   it('leaves an export that calls withTailwind in parentheses as it is', async () => {
     const tree = await integrated();
     const config = [

@@ -267,10 +267,15 @@ function declaresOwnWithTailwind(ts, statement) {
  * The names a declaration binds the package's `withTailwind` to:
  * `const { withTailwind: tw } = require('@ng-native/tailwind/config.cjs')` binds `tw`, and
  * `const withTailwind = require('@ng-native/tailwind/config.cjs').withTailwind` binds
- * `withTailwind`.
+ * `withTailwind`, and `const tailwind = require('@ng-native/tailwind/config.cjs')` calls it by
+ * `tailwind.withTailwind`.
  */
 function packageBindings(ts, name, initializer) {
-  if (ts.isIdentifier(name)) return readsWithTailwind(ts, initializer) ? [name.text] : [];
+  if (ts.isIdentifier(name)) {
+    if (readsWithTailwind(ts, initializer)) return [name.text];
+    // The package itself, `const tailwind = require('…')`, calls it as `tailwind.withTailwind`.
+    return requiresTailwindConfig(ts, initializer) ? [`${name.text}.withTailwind`] : [];
+  }
   if (!ts.isObjectBindingPattern(name) || !requiresTailwindConfig(ts, initializer)) return [];
   return (
     name.elements
