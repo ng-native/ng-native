@@ -4,7 +4,7 @@
     {
       "reactNative": "0.88.0",
       "flavour": "debug",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.26.0/ng-native-desktop-host-0.26.0-rn-0.88.0-macos-universal-debug.tar.gz",
+      "url": "https://github.com/ng-native/ng-native/releases/download/v0.26.1/ng-native-desktop-host-0.26.1-rn-0.88.0-macos-universal-debug.tar.gz",
       "sha256": "ff2af29a2d7046f7d5d0e4176c3f9c8e2be05e2bda57ea15c29cede2c0b494de",
       "libraries": {
         "react-native-screens": "4.30.0",
@@ -18,7 +18,7 @@
     {
       "reactNative": "0.88.0",
       "flavour": "release",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.26.0/ng-native-desktop-host-0.26.0-rn-0.88.0-macos-universal.tar.gz",
+      "url": "https://github.com/ng-native/ng-native/releases/download/v0.26.1/ng-native-desktop-host-0.26.1-rn-0.88.0-macos-universal.tar.gz",
       "sha256": "ade1562cdc5409e4099eb38640f8d52b20be7254d115e2d069896d2f2d78f518",
       "libraries": {
         "react-native-screens": "4.30.0",
