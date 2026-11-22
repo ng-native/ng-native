@@ -51,6 +51,8 @@ class SplitViews {
   void place(SurfaceId surfaceId, Tag split, bool window);
   // A view was inserted into `parent`: a pane of a placed split view goes into its page.
   void inserted(Tag parent, Tag child);
+  // A view was taken out of `parent`: a sidebar it leaves is titled by the rows that stay.
+  void removed(Tag parent);
   // A sidebar's props changed: its widths and whether the app has it collapsed.
   void propsChanged(Tag tag);
   // A view went.

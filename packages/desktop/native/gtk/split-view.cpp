@@ -519,6 +519,21 @@ void SplitViews::inserted(Tag parent, Tag child) {
   }
 }
 
+void SplitViews::removed(Tag parent) {
+  GtkWidget *from = backend_.view(parent);
+  if (!from) {
+    return;
+  }
+  // The view's lists, under a view of its own in the sidebar, went with it: the content is titled
+  // by what the sidebar still holds, or by nothing.
+  for (const auto &[tag, s] : splits_) {
+    GtkWidget *pane = s.sidebar >= 0 ? backend_.view(s.sidebar) : nullptr;
+    if (!s.tabs && pane && (from == pane || gtk_widget_is_ancestor(from, pane))) {
+      titleContent(pane, nullptr);
+    }
+  }
+}
+
 std::optional<Tag> SplitViews::splitOf(Tag pane) const {
   for (const auto &[tag, s] : splits_) {
     if (s.sidebar == pane || s.content == pane) {

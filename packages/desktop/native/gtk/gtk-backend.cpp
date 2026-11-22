@@ -376,12 +376,13 @@ void GtkBackend::insertChild(SurfaceId surfaceId, Tag parent, Tag child, int ind
   splitViews_->inserted(parent, child);
 }
 
-void GtkBackend::removeChild(SurfaceId, Tag, Tag child, int) {
+void GtkBackend::removeChild(SurfaceId, Tag parent, Tag child, int) {
   modals_->unmounted(child);
   unhostView(child);
   if (auto c = views_.find(child); c != views_.end()) {
     unparentStayingHidden(c->second);
   }
+  splitViews_->removed(parent);
 }
 
 void GtkBackend::updateProps(const ShadowView &view) {

@@ -513,6 +513,10 @@ TEST_CASE("a sidebar whose list sits in a view of its own titles the content as 
   REQUIRE(views.backend->splitViews().lists(7).size() == 1);
   auto *page = adw_navigation_split_view_get_content(ADW_NAVIGATION_SPLIT_VIEW(views.backend->splitViews().splitWidget(2)));
   CHECK(std::string(adw_navigation_page_get_title(page)) == "Inbox");
+
+  // The wrapper taken out of the sidebar takes its rows, and the title they gave, with it.
+  views.mount({ShadowViewMutation::RemoveMutation(3, wrapper, 0)});
+  CHECK(std::string(adw_navigation_page_get_title(page)).empty());
 }
 
 TEST_CASE("a tabs host is a split view whose sidebar lists its tabs and whose content shows the chosen one") {
