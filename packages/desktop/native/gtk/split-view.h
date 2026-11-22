@@ -54,6 +54,8 @@ class SplitViews {
   // `child` was taken out of `parent`: a sidebar it leaves is titled by the rows that stay, and a
   // split whose sidebar it was titles its content by nothing.
   void removed(Tag parent, Tag child);
+  // A view in a sidebar gained or lost lists of its own: the content takes the sidebar's title.
+  void retitleSidebarsHolding(Tag parent);
   // A sidebar's props changed: its widths and whether the app has it collapsed.
   void propsChanged(Tag tag);
   // A view went.

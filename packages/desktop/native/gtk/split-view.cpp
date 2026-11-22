@@ -509,7 +509,11 @@ void SplitViews::inserted(Tag parent, Tag child) {
     }
     return;
   }
-  if (it == splits_.end() || !d || (d->component != SidebarComponentName && d->component != SplitContentComponentName)) {
+  if (it == splits_.end()) {
+    retitleSidebarsHolding(parent);
+    return;
+  }
+  if (!d || (d->component != SidebarComponentName && d->component != SplitContentComponentName)) {
     return;
   }
   host(it->second, child);
@@ -520,17 +524,25 @@ void SplitViews::inserted(Tag parent, Tag child) {
 }
 
 void SplitViews::removed(Tag parent, Tag child) {
-  // The sidebar out of its split, kept for another place: no row of it titles this content.
+  // The sidebar out of its split, kept for another place: no row of it titles this content, and
+  // nothing it selects after does. `host` makes it the split's again, put back.
   if (auto it = splits_.find(parent); it != splits_.end() && !it->second.tabs && it->second.sidebar == child) {
-    adw_navigation_page_set_title(adw_navigation_split_view_get_content(ADW_NAVIGATION_SPLIT_VIEW(it->second.view)), "");
+    Split &s = it->second;
+    adw_navigation_page_set_title(adw_navigation_split_view_get_content(ADW_NAVIGATION_SPLIT_VIEW(s.view)), "");
+    s.sidebar = -1;
+    NGN_PANE_SLOT(s.sidebarSlot)->pane = -1;
     return;
   }
+  retitleSidebarsHolding(parent);
+}
+
+void SplitViews::retitleSidebarsHolding(Tag parent) {
   GtkWidget *from = backend_.view(parent);
   if (!from) {
     return;
   }
-  // The view's lists, under a view of its own in the sidebar, went with it: the content is titled
-  // by what the sidebar still holds, or by nothing.
+  // Lists under a view of their own in a sidebar came or went with it: the content is titled by
+  // what the sidebar holds now, or by nothing.
   for (const auto &[tag, s] : splits_) {
     GtkWidget *pane = s.sidebar >= 0 ? backend_.view(s.sidebar) : nullptr;
     if (!s.tabs && pane && (from == pane || gtk_widget_is_ancestor(from, pane))) {

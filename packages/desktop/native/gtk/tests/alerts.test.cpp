@@ -163,6 +163,9 @@ TEST_CASE("an alert with no cancel button closes when its own button is clicked"
   std::vector<GtkWidget *> found;
   buttonsIn(alert, found);
   REQUIRE(found.size() == 1);
+  // Shown: libadwaita maps the dialog a frame before its sheet opens, which a click before then
+  // finds closed already.
+  ngn::testing::runUntil([&] { return gtk_widget_get_mapped(found[0]); });
   // As a person clicks it: the dialog's own button, not `respondToAlert`, which closes it by force.
   g_signal_emit_by_name(found[0], "clicked");
   ngn::testing::runUntil([&] { return answer.has_value() && ngn::gtk::shownAlert() == nullptr; });
@@ -201,6 +204,8 @@ TEST_CASE("a button clicked with animations off answers as itself, though libadw
     }
   }
   REQUIRE(save);
+  // Shown, as above: a click on a sheet not yet open closes nothing, so nothing closes first.
+  ngn::testing::runUntil([&] { return gtk_widget_get_mapped(save); });
   g_signal_emit_by_name(save, "clicked");
   ngn::testing::runUntil([&] { return answer.has_value(); });
   CHECK(std::get<0>(*answer) == 0);
