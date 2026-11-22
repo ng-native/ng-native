@@ -156,6 +156,27 @@ Once `@ng-native/desktop` is out, finish with **Re-run failed jobs** on the same
 `prebuilt.json` names that run's desktop hosts by SHA-256, a new run builds others, and the release
 job stops rather than attach archives the published package would refuse.
 
+### The release App
+
+`main` takes changes only through pull requests. The one exception is the `Release <version>`
+commit, which the release job pushes with a token from the `ng-native-release` GitHub App, the
+only actor the "Protect main" ruleset lets bypass that rule. The App has `contents: write` on this
+repository and nothing else. Its client ID is the `RELEASE_APP_CLIENT_ID` variable and its private
+key the `RELEASE_APP_PRIVATE_KEY` secret, both on the `release` environment, which only `main` can
+use. A dry run runs outside that environment and never asks for the token.
+
+The token step comes after publishing, so a missing or revoked key, an App uninstalled from the
+repository, or an App dropped from the ruleset's bypass list fails the run with the packages
+already on npm and no tag, GitHub release or docs deploy. Fix the cause, then **Re-run failed
+jobs**, as for any failure after publishing:
+
+- **Missing or revoked key:** generate a new private key on the App's settings page (organization
+  settings, Developer settings, GitHub Apps) and store it with
+  `gh secret set RELEASE_APP_PRIVATE_KEY --env release < key.pem`, then delete the file.
+- **App not installed:** install it on this repository only, from the same page.
+- **Push rejected by the ruleset:** add the App back as a bypass actor of "Protect main", in the
+  repository's Settings, Rules.
+
 ## Checking distribution locally
 
 `node scripts/verify-publish.mjs` publishes everything to a local Verdaccio, generates an app with

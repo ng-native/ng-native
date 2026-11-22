@@ -209,12 +209,19 @@ jobs:
     needs: [validate, native, verify, generators, storybook, desktop-host]
     if: github.ref == 'refs/heads/main' || inputs.dry_run
     runs-on: ubuntu-latest
+    # The `release` environment holds the GitHub App that pushes the release commit to `main`, and
+    # only `main` may use it. A dry run pushes nothing and can start from any branch, so it runs
+    # outside it.
+    environment: ${{ !inputs.dry_run && 'release' || '' }}
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          # The push below authenticates as the GitHub App instead: a stored GITHUB_TOKEN header
+          # would be sent in its place.
+          persist-credentials: false
 
       - uses: ./.github/actions/setup
         with:
@@ -323,9 +330,23 @@ jobs:
             npm publish "$tarball" "$DRY_RUN" --access public --tag '${{ steps.version.outputs.tag }}'
           done
 
+      # `main` takes changes only through pull requests, and this App is the one actor its ruleset
+      # lets push directly. Made here, not at the start of the job: the token lasts an hour.
+      - name: Token for the push
+        id: push-token
+        if: ${{ !inputs.dry_run }}
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Push the version commit and tag
         if: ${{ !inputs.dry_run }}
+        env:
+          TOKEN: ${{ steps.push-token.outputs.token }}
         run: |
+          git remote set-url origin "https://x-access-token:$TOKEN@github.com/$GITHUB_REPOSITORY.git"
           # Pull requests can merge while a release runs. Replay the release commit on top of them
           # and tag where it lands. A rebase conflict (a merge that touched a version, the
           # changelog or a migrations.json) fails the step rather than guessing.
