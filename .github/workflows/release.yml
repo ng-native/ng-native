@@ -298,6 +298,7 @@ jobs:
           # The release commit goes out only under its tag, never onto `main`, so `main` still has
           # the version plans earlier releases consumed: every plan the last release was made from
           # is dropped here. And the last release's prebuilt.json, which the hosts below go into.
+          set -o pipefail
           git ls-tree --name-only "$PREVIOUS^" .nx/version-plans/ |
             xargs -r git rm -q --ignore-unmatch --
           git show "$PREVIOUS:packages/desktop/prebuilt.json" > packages/desktop/prebuilt.json

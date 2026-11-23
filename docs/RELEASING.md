@@ -14,10 +14,10 @@ one version. `.github/workflows/release.yml` does it, run by hand from the Actio
    through OIDC and no npm token is stored anywhere. The first release must be above `0.0.1`:
    `0.1.0`, or a `minor` bump.
 
-A release never commits to `main`, so `main` can take pull requests alone. Its `Release <version>` commit
-is reachable only from the `v<version>` tag, so the versions in each `package.json` on `main` are
-not the released ones: the last release is the highest tag, and its notes are on the repository's
-Releases page.
+A release never commits to `main`, so `main` can take pull requests alone. Its `Release <version>`
+commit is reachable only from the `v<version>` tag, so the versions in each `package.json` on `main`
+are not the released ones: the last release is the highest tag, and its notes are on the
+repository's Releases page.
 
 ## Adding a package
 
@@ -65,7 +65,8 @@ A virtual list recycles its rows when a template tracks them by slot.
 the bump for a breaking change under `0.x`, and `patch` for anything else. Each release turns the
 plans added since the last release into its notes on the Releases page, so the notes say what the
 plans said, not what the commit messages did. Released plans stay on `main`, where the next release
-skips every one that was there when the last was made; a pull request can delete them at any time. Refactors, tests and docs need no plan.
+skips every one that was there when the last was made; a pull request can delete them at any time.
+Refactors, tests and docs need no plan.
 
 ## Breaking changes and migrations
 
@@ -134,12 +135,12 @@ that page states, builds it with `storybook build` and checks it in Chromium. On
 pass, it runs the same gate CI does, then:
 
 - `nx release version` writes the version to every package and the template, in the runner's
-  checkout. The bump starts from the highest `v<version>` tag, not from the versions on `main`. The `sync-app-versions`
-  migration in `packages/nx/migrations.json` and `packages/schematics/migrations.json` moves to the
-  same version, so `nx migrate` and `ng update` run it on every upgrade. Every other migration keeps
-  the version of the release that brought it. The plans the last release was made from are
-  dropped, and `nx release changelog` turns the rest into this release's notes, then commits all of
-  it as `Release <version>` and tags it `v<version>`.
+  checkout. The bump starts from the highest `v<version>` tag, not from the versions on `main`. The
+  `sync-app-versions` migration in `packages/nx/migrations.json` and
+  `packages/schematics/migrations.json` moves to the same version, so `nx migrate` and `ng update`
+  run it on every upgrade. Every other migration keeps the version of the release that brought it.
+  The plans the last release was made from are dropped, and `nx release changelog` turns the rest
+  into this release's notes, then commits all of it as `Release <version>` and tags it `v<version>`.
 - The `desktop-host` job, on two macOS runners beside the others, builds the prebuilt desktop
   hosts, debug and release ([docs/desktop-host.md](desktop-host.md#publishing-a-prebuilt-host)),
   and the release job writes each one's SHA-256 into the last release's

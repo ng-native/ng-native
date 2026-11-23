@@ -27,8 +27,8 @@ Anything else that is project-internal goes in `docs/`.
 
 Version plans in `.nx/version-plans/` are the exception: they take no heading and are not wrapped,
 since `nx release changelog` turns each body into a bullet of the release's notes under its own
-heading, and the first line becomes the bullet. [RELEASING.md](./RELEASING.md#describing-changes) gives their
-format.
+heading, and the first line becomes the bullet. [RELEASING.md](./RELEASING.md#describing-changes)
+gives their format.
 
 - Prettier formats it (`pnpm format`, checked by `pnpm format:check`): 100 columns.
 - One `#` heading, first in the file (after front matter, where a file has it). Headings go down one
