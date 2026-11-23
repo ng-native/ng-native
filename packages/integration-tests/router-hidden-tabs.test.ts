@@ -12,6 +12,7 @@ import { afterEach, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { Router, type Routes } from '@angular/router';
 import { cleanup, fireEvent, render, screen, settle, userEvent, within } from '@ng-native/testing';
+import { registerExpoUiViews } from '@ng-native/expo';
 import { provideNativeRouter } from '../router/src/provide-native-router.ts';
 import { compileFixture } from './compile.ts';
 
@@ -115,6 +116,22 @@ describe('a press on a screen nobody can see', () => {
     await userEvent.type(field, 'hi');
     await userEvent.clear(field);
     assert.equal(typed.length, before);
+  });
+
+  it('cancels a touch held on a tab that goes out of sight before it lifts', async () => {
+    registerExpoUiViews('ios');
+    const flipped = mod['flipped'] as boolean[];
+    const router = await open('ios');
+    const before = pressed();
+    for (const id of ['count', 'wifi']) {
+      const held = userEvent.longPress(screen.getByTestId(id), { duration: 20 });
+      await router.navigateByUrl('/library');
+      await held;
+      await router.navigateByUrl('/home');
+      await screen.findByTestId(id);
+    }
+    assert.equal(pressed(), before);
+    assert.deepEqual(flipped, []);
   });
 
   it('does nothing on a screen a push covers, and reaches it again once the push is popped', async () => {

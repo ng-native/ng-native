@@ -245,9 +245,12 @@ committed: one that is `none` or `box-none` itself, or one under a view that is 
 `ui-bottom-sheet`'s content and the items in its bar are not counted, since the sheet takes its
 own touches on a device. Nor is one on a screen nobody can see, which a query finds only with
 `{ includeHiddenElements: true }`: a screen of a native stack another covers, or a tab behind the
-selected one. A node hidden only from accessibility still takes a press, as React Native Testing
-Library presses it. Nothing is sent and nothing is thrown, so a test asserts on what did not
-happen: the handler never ran. Any other event by name is sent as before.
+selected one. A `ui-bottom-sheet`'s content presented from such a screen still takes a press, as it
+shows in a window of its own. A node hidden only from accessibility still takes a press, as React
+Native Testing Library presses it. Nothing is sent and nothing is thrown, so a test asserts on what
+did not happen: the handler never ran. A `userEvent.press` or `userEvent.longPress` whose screen
+goes out of sight while the finger is down ends with `topTouchCancel` in place of the release, so
+nothing is pressed or flipped. Any other event by name is sent as before.
 
 A press on a `<ui-button>` ends with the event its native button sends, `topButtonPress` on iOS
 and `topButtonPressed` on Android, so its `(buttonPress)` runs. On iOS one that SwiftUI's

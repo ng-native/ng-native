@@ -236,7 +236,10 @@ async function hold(node: FakeFabricNode, duration: number): Promise<void> {
   emit(node, 'topTouchStart', touch(node, 'start'));
   await settle();
   if (duration) await sleep(duration);
-  release(node);
+  // A screen covered or a tab left while the finger is down takes the view out of the window,
+  // which cancels its touch: no press, and no flip of a button or switch.
+  if (touchable(node)) release(node);
+  else emit(node, 'topTouchCancel', touch(node, 'end'));
   await settle();
 }
 
