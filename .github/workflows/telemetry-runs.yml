@@ -1,0 +1,63 @@
+name: CI run telemetry
+
+# Sends the workflow runs that finished since the last successful scheduled run to Coralogix in one
+# batch through scripts/ci-telemetry.mjs, instead of a runner job for every finished run. A run that
+# fails sends nothing, so the next one covers its window. Closed pull requests go out from
+# telemetry.yml. A manual run with `since` or `until` sends that window again and can send a run twice.
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      since:
+        description: Send runs that finished after this time (ISO 8601). Default is the last successful scheduled run.
+        required: false
+      until:
+        description: Send runs that finished up to this time (ISO 8601). Default is now.
+        required: false
+      dry_run:
+        description: Print what would be sent and send nothing.
+        type: boolean
+        default: false
+
+permissions:
+  actions: read
+  contents: read
+
+# One at a time, and never cancelled halfway through a send: the next run reads the last successful
+# one to find where to start.
+concurrency:
+  group: ci-run-telemetry
+  cancel-in-progress: false
+
+jobs:
+  send:
+    if: github.repository == 'ng-native/ng-native'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: |
+            scripts/ci-telemetry.mjs
+            .nvmrc
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CORALOGIX_SEND_DATA_KEY: ${{ secrets.CORALOGIX_SEND_DATA_KEY }}
+          CORALOGIX_INGRESS: ${{ vars.CORALOGIX_INGRESS }}
+          TELEMETRY_WORKFLOW: telemetry-runs.yml
+          SINCE: ${{ inputs.since }}
+          UNTIL: ${{ inputs.until }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=()
+          [ -z "$SINCE" ] || args+=("--since=$SINCE")
+          [ -z "$UNTIL" ] || args+=("--until=$UNTIL")
+          [ "$DRY_RUN" != true ] || args+=(--dry-run)
+          node scripts/ci-telemetry.mjs runs "${args[@]}"
