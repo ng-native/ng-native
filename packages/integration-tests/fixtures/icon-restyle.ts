@@ -23,9 +23,16 @@ const titled =
   imports: [NgIcon, View],
   template: `
     <view style="color: rgb(1, 2, 3); font-size: 18px">
-      <ng-icon nativeID="outline" [svg]="outline" [size]="size()" [color]="colour()" />
+      <ng-icon
+        nativeID="outline"
+        [svg]="outline"
+        [size]="size()"
+        [color]="colour()"
+        [strokeWidth]="weight()"
+      />
       <ng-icon nativeID="faded" [svg]="faded" />
       <ng-icon nativeID="titled" [svg]="titled" />
+      <ng-icon nativeID="swapped" [svg]="swapped()" />
     </view>
   `,
 })
@@ -35,4 +42,6 @@ export class IconRestyle {
   readonly titled = titled;
   readonly size = signal(24);
   readonly colour = signal('#ff9f0a');
+  readonly weight = signal<number | undefined>(undefined);
+  readonly swapped = signal(outline);
 }

@@ -14,6 +14,8 @@ import { compileFixture } from './compile.ts';
 interface Host {
   size: WritableSignal<number>;
   colour: WritableSignal<string>;
+  weight: WritableSignal<number | undefined>;
+  swapped: WritableSignal<string>;
 }
 
 const flatten = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
@@ -116,5 +118,52 @@ describe("an icon's root paint", () => {
     assert.deepEqual(rect.props['fill'], { type: 0, payload: 'red' });
     assert.notEqual(rect.props['width'], '24px', "the root's size is not the rect's");
     assert.notEqual(rect.props['height'], '24px');
+  });
+});
+
+describe('an icon drawn again', () => {
+  it('takes a new stroke width, where another icon drawing the same markup keeps its own', async () => {
+    const { fabric, instance } = await render(Fixture);
+    const widths = (id: string) =>
+      icon(fabric, id).children.map((shape) => shape.props['strokeWidth']);
+    assert.deepEqual(widths('swapped'), ['1.5', '3']);
+    instance.weight.set(2);
+    await settle();
+    assert.deepEqual(widths('outline'), ['2', '3']);
+    instance.swapped.set(`${instance.swapped()} `);
+    await settle();
+    assert.deepEqual(widths('swapped'), ['1.5', '3'], "not the other icon's width");
+    instance.weight.set(undefined);
+    await settle();
+    assert.deepEqual(widths('outline'), ['1.5', '3']);
+  });
+
+  it('clears the viewBox when the markup it draws has none', async () => {
+    const { fabric, instance } = await render(Fixture);
+    assert.equal(icon(fabric, 'swapped').props['vbWidth'], 24);
+    instance.swapped.set('<svg><path d="M1 1L2 2"/></svg>');
+    await settle();
+    const view = icon(fabric, 'swapped');
+    assert.deepEqual(
+      ['minX', 'minY', 'vbWidth', 'vbHeight', 'align', 'meetOrSlice'].map(
+        (prop) => view.props[prop] ?? null,
+      ),
+      [null, null, null, null, null, null],
+    );
+    assert.equal(view.children.length, 1, 'and draws the new markup');
+  });
+
+  it("translates its colours with the app's own processColor, not one an earlier app cached", async () => {
+    const fill = async (prefix: string) => {
+      const { fabric } = await render(Fixture, {
+        processColor: (value) => `${prefix}:${String(value)}`,
+      });
+      const [rect] = icon(fabric, 'titled').children as [FakeFabricNode];
+      const paint = rect.props['fill'] as { payload: unknown };
+      cleanup();
+      return paint.payload;
+    };
+    assert.equal(await fill('first'), 'first:red');
+    assert.equal(await fill('second'), 'second:red');
   });
 });

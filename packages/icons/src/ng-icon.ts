@@ -87,7 +87,12 @@ interface Drawing {
    * that are shapes and groups. A view fewer per icon, which is a fifth of an outline set's.
    */
   readonly paint: SvgNode | null;
+  /** The view's `viewBox` props, which a drawing with none leaves unset. */
+  readonly viewBox: Readonly<Record<string, unknown>>;
 }
+
+/** The props `viewBoxProps` sets, each written on every draw so a drawing with none clears them. */
+const VIEW_BOX = ['minX', 'minY', 'vbWidth', 'vbHeight', 'align', 'meetOrSlice'] as const;
 
 /** The root attributes a child takes as its own when the group carrying them goes. */
 const HANDED_DOWN: ReadonlySet<string> = new Set([
@@ -111,11 +116,31 @@ const SHAPES: ReadonlySet<string> = new Set([
 const drawings = new Map<string, Drawing | null>();
 const MAX_DRAWINGS = 500;
 
+/** An element's attributes, with what its root hands down, and the native props they make. */
+interface Translation {
+  readonly engine: unknown;
+  readonly strokeWidth: unknown;
+  readonly attrs: Readonly<Record<string, string>>;
+  readonly props: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * The last translation of each element, which a list of icons drawing the same few names reuses.
+ * An element belongs to one drawing, so what its root hands it is the same each time. Kept with
+ * its own drawing, and for one stroke width and engine at a time.
+ */
+const translations = new WeakMap<SvgNode, Translation>();
+
 function drawingOf(markup: string): Drawing | null {
   let drawing = drawings.get(markup);
   if (drawing !== undefined) return drawing;
   const root = parseSvg(markup);
-  drawing = root && { root, selfContained: selfContained(root), paint: paintOf(root) };
+  drawing = root && {
+    root,
+    selfContained: selfContained(root),
+    paint: paintOf(root),
+    viewBox: viewBoxProps(root.attrs['viewBox']),
+  };
   if (drawings.size >= MAX_DRAWINGS) drawings.clear();
   drawings.set(markup, drawing);
   return drawing;
@@ -222,12 +247,6 @@ function settled(result: unknown): Promise<string | undefined> {
     '[style.color]': 'color()',
     '[bbWidth]': 'box()',
     '[bbHeight]': 'box()',
-    '[minX]': 'viewBox().minX',
-    '[minY]': 'viewBox().minY',
-    '[vbWidth]': 'viewBox().vbWidth',
-    '[vbHeight]': 'viewBox().vbHeight',
-    '[align]': 'viewBox().align',
-    '[meetOrSlice]': 'viewBox().meetOrSlice',
     '[accessible]': 'label() !== undefined',
     '[accessibilityRole]': "label() === undefined ? undefined : 'image'",
     '[accessibilityLabel]': 'label()',
@@ -243,8 +262,6 @@ export class NgIcon {
   private readonly config = inject(NgIconConfigToken, { optional: true }) ?? {};
   /** `provideNgIconLoader`: where an icon no `provideIcons` has comes from. */
   private readonly loader = inject(NgIconLoaderToken, { optional: true });
-  /** `withCaching()`: what the loader already answered, so it is asked once per name. */
-  private readonly cache = inject(NgIconCacheToken, { optional: true });
   private readonly injector = inject(Injector);
   private readonly errors = inject(ErrorHandler);
   /** A static `aria-label`, which labels the icon as `accessibilityLabel` does. */
@@ -316,8 +333,6 @@ export class NgIcon {
     return markup === undefined ? null : drawingOf(markup);
   });
 
-  protected readonly viewBox = computed(() => viewBoxProps(this.drawing()?.root.attrs['viewBox']));
-
   constructor() {
     // Before the first shape is created, which is before this component's own commit.
     registerSvgComponents();
@@ -329,7 +344,8 @@ export class NgIcon {
     // The shapes are created rather than templated: an icon's tree is data, and a template that
     // could express it would be a component per tag with a recursive switch between them.
     effect(() => this.draw());
-    effect(() => this.load());
+    // The loader is fixed for the icon's life: with none, an icon has nothing to ask.
+    if (this.loader) effect(() => this.load());
   }
 
   /** The icon `provideIcons` has under this name, the nearest one first. */
@@ -360,20 +376,23 @@ export class NgIcon {
 
   /** The loader's answer for a name, through the `withCaching()` cache when there is one. */
   private async request(loader: NgIconLoader, name: string): Promise<string | undefined> {
-    const cached = this.cache?.get(name);
+    // `withCaching()`: what the loader already answered, so it is asked once per name. Looked up
+    // here, so an icon with no loader does not pay for it.
+    const cache = this.injector.get(NgIconCacheToken, null);
+    const cached = cache?.get(name);
     if (cached !== undefined) return cached;
     // Untracked, so a signal the loader reads does not ask it again when that signal changes.
     const answer = settled(
       untracked(() => runInInjectionContext(this.injector, () => loader(name))),
     );
-    this.cache?.set(name, answer as Promise<string>);
+    cache?.set(name, answer as Promise<string>);
     try {
       const svg = await answer;
-      if (svg !== undefined) this.cache?.set(name, svg);
+      if (svg !== undefined) cache?.set(name, svg);
       return svg;
     } catch (error) {
       // Not kept, so the next icon with this name asks again.
-      this.cache?.delete(name);
+      cache?.delete(name);
       throw error;
     }
   }
@@ -389,6 +408,8 @@ export class NgIcon {
   private draw(): void {
     const drawing = this.drawing();
     for (const child of [...this.host.childList]) this.renderer.removeChild(this.host, child);
+    // Here rather than as six host bindings: they change only with the drawing.
+    for (const prop of VIEW_BOX) this.renderer.setProperty(this.host, prop, drawing?.viewBox[prop]);
     if (!drawing) return;
     const { root, paint, selfContained } = drawing;
 
@@ -467,6 +488,25 @@ export class NgIcon {
     return node.tag === 'text' || node.tag === 'tspan' ? { ...props, ...textProps(attrs) } : props;
   }
 
+  /**
+   * What the root hands down, under what the element says itself, and the props that makes. A
+   * gradient reads the `color` input, so it is translated each time.
+   */
+  private translate(node: SvgNode, inherited?: Record<string, string>): Translation {
+    const strokeWidth = this.strokeWidth();
+    const last = translations.get(node);
+    if (last?.engine === this.engine && last.strokeWidth === strokeWidth) return last;
+    const attrs = { ...inherited, ...this.attributes(node) };
+    const translation = {
+      engine: this.engine,
+      strokeWidth,
+      attrs,
+      props: this.propsOf(node, attrs),
+    };
+    if (!isGradient(node.tag)) translations.set(node, translation);
+    return translation;
+  }
+
   private create(
     element: string,
     node: SvgNode,
@@ -478,15 +518,15 @@ export class NgIcon {
     // the engine reports every shape as an element whose component was forgotten.
     claimHost(shape);
     if (selfContained) shape.outsideCascade = true;
-    // What the root hands down, under what the element says itself.
-    const attrs = { ...inherited, ...this.attributes(node) };
-    const props = this.propsOf(node, attrs);
+    const { attrs, props: translated } = this.translate(node, inherited);
+    let props = translated;
     // A paint that reads a custom property is settled by the cascade, with the tokens in scope
     // for the shape, and follows them. It stays in `propList`, which says the shape has one.
     const cascade = this.engine as Partial<Pick<Engine, 'setBoundStyle'>>;
     for (const paint of PAINT) {
       if (!isTokenPaint(attrs[paint]) || !cascade.setBoundStyle?.(shape, paint, attrs[paint]))
         continue;
+      props = { ...props };
       delete props[paint];
     }
     for (const [prop, value] of Object.entries(props)) {
