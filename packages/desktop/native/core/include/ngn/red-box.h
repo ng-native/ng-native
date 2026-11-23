@@ -116,6 +116,8 @@ class RedBox {
   // Each kept error's number, beside it: a symbolication finds its error by number, whatever was
   // pushed out or reported since it was asked for.
   std::vector<uint64_t> serials_;
+  // Whether each kept error's symbolication has answered, so an error made fatal after it logs it.
+  std::vector<bool> symbolicated_;
   uint64_t nextSerial_{0};
   // Bumped by each clear, so a symbolication that answers after one is dropped.
   uint64_t generation_{0};

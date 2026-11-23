@@ -336,3 +336,49 @@ TEST_CASE("a fatal error's symbolicated stack goes to the log, a soft one's does
       "TypeError: undefined cannot be used as a constructor\n"
       "    at <global> (/app/src/app/shared.ts:3:14)");
 }
+
+TEST_CASE("a fatal error on show stays on show when it is the oldest and the box is full") {
+  Fixture f;
+  // The box keeps 50: the 51st error pushes out the oldest after the fatal error, not the fatal one.
+  f.box.report(error("cause", true));
+  for (int i = 0; i < 50; i++) {
+    f.box.report(error("after " + std::to_string(i)));
+  }
+  CHECK(f.box.count() == 50);
+  CHECK(f.backend->shown.back().error.message == "cause");
+  CHECK(f.backend->shown.back().index == 0);
+  // "after 0" made way, and the box still keeps the 50 most recent after it.
+  f.box.step(1);
+  CHECK(f.backend->shown.back().error.message == "after 1");
+  f.box.step(100);
+  CHECK(f.backend->shown.back().error.message == "after 49");
+}
+
+TEST_CASE("an error symbolicated while soft goes to the log when the same message makes it fatal") {
+  Fixture f;
+  std::vector<std::string> logged;
+  f.box.log = [&](const std::string &text) { logged.push_back(text); };
+  f.box.report(error("boom"));
+  REQUIRE(f.http->sent.size() == 1);
+  answer(*f.http->sent[0], R"({"stack": [{"methodName": "load", "file": "/app/src/main.ts", "lineNumber": 7, "column": 2}]})");
+  CHECK(logged.empty());
+  f.box.report(error("boom", true));
+  REQUIRE(logged.size() == 1);
+  CHECK(logged[0] == "boom\n    at load (/app/src/main.ts:7:2)");
+  // Made fatal again, or reported again, it is not logged twice.
+  f.box.report(error("boom", true));
+  CHECK(logged.size() == 1);
+}
+
+TEST_CASE("an error made fatal before its symbolication answers is logged once, when it answers") {
+  Fixture f;
+  std::vector<std::string> logged;
+  f.box.log = [&](const std::string &text) { logged.push_back(text); };
+  f.box.report(error("boom"));
+  f.box.report(error("boom", true));
+  CHECK(logged.empty());
+  REQUIRE(f.http->sent.size() == 1);
+  answer(*f.http->sent[0], R"({"stack": [{"methodName": "load", "file": "/app/src/main.ts", "lineNumber": 7, "column": 2}]})");
+  REQUIRE(logged.size() == 1);
+  CHECK(logged[0] == "boom\n    at load (/app/src/main.ts:7:2)");
+}

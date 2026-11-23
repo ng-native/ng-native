@@ -189,26 +189,37 @@ void RedBox::report(JsError error) {
     if (!holdsFatal()) {
       selected_ = errors_.size() - 1;
     }
-    // Taken before the show lets the lock go.
+    if (stack) {
+      symbolicated_.back() = false;
+    }
+    // Taken before the show lets the lock go. Made fatal after its symbolication answered, its
+    // stack goes to the log now; made fatal before, the answer logs it.
     uint64_t serial = serials_.back();
     JsError copy = kept;
+    std::string logged = fatal && symbolicated_.back() ? symbolicatedText(kept) : std::string{};
     showLocked(lock);
     if (stack) {
       symbolicate(serial, copy);
+    }
+    lock.unlock();
+    if (!logged.empty() && log) {
+      log(logged);
     }
     return;
   }
   bool hold = holdsFatal();
   if (errors_.size() == kKept) {
-    errors_.erase(errors_.begin());
-    serials_.erase(serials_.begin());
-    // The error on show moved down a place, unless it was the one pushed out.
-    hold = hold && selected_ > 0;
-    selected_ = hold ? selected_ - 1 : selected_;
+    // The oldest error makes way, or the one after it when the oldest is the fatal error on show.
+    size_t out = hold && selected_ == 0 ? 1 : 0;
+    errors_.erase(errors_.begin() + static_cast<long>(out));
+    serials_.erase(serials_.begin() + static_cast<long>(out));
+    symbolicated_.erase(symbolicated_.begin() + static_cast<long>(out));
+    selected_ = out < selected_ ? selected_ - 1 : selected_;
   }
   errors_.push_back(error);
   uint64_t serial = nextSerial_++;
   serials_.push_back(serial);
+  symbolicated_.push_back(false);
   if (!hold) {
     selected_ = errors_.size() - 1;
   }
@@ -249,6 +260,7 @@ void RedBox::dismiss() {
   std::unique_lock lock(mutex_);
   errors_.clear();
   serials_.clear();
+  symbolicated_.clear();
   ++generation_;
   std::vector<std::unique_ptr<HttpTask>> tasks;
   tasks.swap(tasks_);
@@ -329,6 +341,7 @@ void RedBox::symbolicate(uint64_t serial, const JsError &error) {
     }
     size_t index = static_cast<size_t>(found - serials_.begin());
     errors_[index].stack = std::move(frames);
+    symbolicated_[index] = true;
     std::string logged = errors_[index].fatal ? symbolicatedText(errors_[index]) : std::string{};
     if (showing_ && selected_ == index) {
       showLocked(lock);
