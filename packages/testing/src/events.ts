@@ -15,8 +15,9 @@
  */
 import { desktopUserEvent, noteFocus, type DesktopUserEvent } from './desktop-events.ts';
 import { currentOf, ownerOf, settle } from './render.ts';
-import { expoUiButtonDisabled, expoUiButtonPress, isExpoUiButton } from './expo-ui-button.ts';
-import { flatten, isSearchBar, isTextInput, withParents } from './queries.ts';
+import { expoUiDisabled, expoUiButtonPress, isExpoUiButton } from './expo-ui-button.ts';
+import { expoUiToggleFlip } from './expo-ui-toggle.ts';
+import { covered, flatten, isSearchBar, isTextInput, withParents } from './queries.ts';
 import type { FakeFabricNode } from './test-utils.ts';
 
 /** A payload as a handler would see it (`{ nativeEvent }`), or the native event itself. */
@@ -54,6 +55,8 @@ function touch(node: FakeFabricNode, phase: 'start' | 'end'): Record<string, unk
 /**
  * Whether a finger could reach the node, by RNTL's reading of `pointerEvents` on the node as last
  * committed: not when it is `none` or `box-none` itself, nor under a `none` or `box-only` view.
+ * Nor on a screen out of the window, which a query finds only with `includeHiddenElements`: one a
+ * native stack covers, or a tab behind the selected one.
  *
  * The walk stops at a view committed with `layoutRoot`: `@expo/ui`'s view host for content
  * presented in its own window, a sheet's or a popover's, which takes its content's touches itself,
@@ -65,6 +68,7 @@ function touchable(node: FakeFabricNode): boolean {
   let blocking = 'box-none';
   for (let at: FakeFabricNode | null = currentOf(node) ?? node; at; at = at.parent ?? null) {
     if (at.props['layoutRoot'] === true || /ExpoUI_BottomSheetView$/.test(at.viewName)) return true;
+    if (covered(at)) return false;
     const pointerEvents = at.props['pointerEvents'];
     if (pointerEvents === 'none' || pointerEvents === blocking) return false;
     blocking = 'box-only';
@@ -103,14 +107,14 @@ function changeText(field: FakeFabricNode, text: string): void {
 }
 
 /**
- * The finger lifting: the touch's end, and on `@expo/ui`'s button the press SwiftUI or Compose
- * fires for it, and on a native button the press AppKit or UIKit fires, which a disabled one does
- * not.
+ * The finger lifting: the touch's end, and on `@expo/ui`'s button or switch the press or flip
+ * SwiftUI or Compose fires for it, and on a native button or switch the press or flip AppKit,
+ * UIKit or Android fires, which a disabled one does not.
  */
 function release(node: FakeFabricNode): void {
   emit(node, 'topTouchEnd', touch(node, 'end'));
   const current = currentOf(node) ?? node;
-  if (isExpoUiButton(current) && !expoUiButtonDisabled(current)) emit(node, expoUiButtonPress());
+  if (isExpoUiButton(current) && !expoUiDisabled(current)) emit(node, expoUiButtonPress());
   // NSButton and UIButton send their own press, which a disabled one does not.
   if (current.viewName === 'NgNativeButton' && current.props['enabled'] !== false) {
     emit(node, 'topButtonPress', {});
@@ -122,6 +126,8 @@ function release(node: FakeFabricNode): void {
   if (isSwitch(current) && current.props['disabled'] !== true) {
     emit(node, 'topChange', { value: current.props['value'] !== true });
   }
+  const flip = expoUiToggleFlip(current);
+  if (flip) emit(node, ...flip);
 }
 
 /** A `<switch>`, under either of the names the platforms commit it by. */

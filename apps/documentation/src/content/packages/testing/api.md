@@ -192,7 +192,9 @@ item, so a query does not find those either. A screen of a native stack is hidde
 is pushed over it, or presented over it as a `fullScreenModal` or `containedModal`, as the stack
 shows the top one on a device. On Android a `modal`, what `present()` shows by default, and a
 `pageSheet` hide it too, as Android shows them full screen. A sheet or a transparent modal leaves
-the screen under it showing, and found, and so do a `modal` and a `pageSheet` on iOS. A query
+the screen under it showing, and found, and so do a `modal` and a `pageSheet` on iOS. Under a
+`<native-tabs-outlet>`, what a tab behind the selected one holds is hidden, as the tab bar shows
+only the selected tab; the `<native-tab>` itself, its item in the bar, is still found. A query
 `within` a view on a hidden screen finds nothing either.
 
 A node a query returns has `parent`: the node it is under as of that query, and `null` at the top.
@@ -241,7 +243,10 @@ could not reach, as React Native Testing Library decides it from `pointerEvents`
 committed: one that is `none` or `box-none` itself, or one under a view that is `none` or
 `box-only`. `pointer-events: none` in CSS commits as the same prop. Views above a
 `ui-bottom-sheet`'s content and the items in its bar are not counted, since the sheet takes its
-own touches on a device. Nothing is sent and nothing is thrown, so a test asserts on what did not
+own touches on a device. Nor is one on a screen nobody can see, which a query finds only with
+`{ includeHiddenElements: true }`: a screen of a native stack another covers, or a tab behind the
+selected one. A node hidden only from accessibility still takes a press, as React Native Testing
+Library presses it. Nothing is sent and nothing is thrown, so a test asserts on what did not
 happen: the handler never ran. Any other event by name is sent as before.
 
 A press on a `<ui-button>` ends with the event its native button sends, `topButtonPress` on iOS
@@ -253,6 +258,12 @@ switch sends on iOS, Android and macOS, the opposite of the `checked` value last
 `(checkedChange)` and a bound `[(checked)]` or form field see the new value. A disabled switch sends
 none. To set a switch to a given value instead, send the event yourself:
 `fireEvent(node, 'change', { value: false })`.
+
+A press on a `<ui-toggle>` flips it too: on iOS and macOS it ends with SwiftUI's `topIsOnChange`
+`{ isOn }`, the opposite of the `isOn` it was given, or, with none, of what the press before it
+switched it to; on Android with Compose's `topCheckedChange` `{ value }`, the opposite of the value
+it shows. Either way its `(isOnChange)` runs. On iOS and macOS one that SwiftUI's `disabled`
+modifier turns off sends none.
 
 ### `userEvent`
 
@@ -277,8 +288,8 @@ returns the same four methods, and they can be called on `userEvent` directly to
 holds for `duration` milliseconds, 500 by default, which is React Native's long-press delay.
 `type` and `clear` go to the text field at or under `node`, and do nothing at all if it has
 `editable` set to `false`: a disabled or read-only field takes no input. `press`, `longPress`,
-`type` and `clear` also do nothing on a node `pointerEvents` keeps a finger from, as
-`fireEvent.press` does.
+`type` and `clear` also do nothing on a node `pointerEvents` keeps a finger from, or on a screen
+nobody can see, as `fireEvent.press` does.
 
 ### Event sequences
 

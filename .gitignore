@@ -15,6 +15,9 @@ packages/*/android/build/
 # Scratch directories the Tailwind wiring test makes, inside the workspace because the CLI
 # resolves its imports from the input file's directory.
 packages/integration-tests/.tailwind-test-*
+# And the modules the library-styles test loads, there so they resolve `@angular/core` as the app
+# does. A run killed before its `after` hook leaves one behind.
+packages/integration-tests/.library-styles-*
 .verdaccio/
 # Vitest browser mode writes a screenshot of the page beside every failing browser test here.
 # Useful while fixing one, meaningless a commit later.

@@ -13,7 +13,7 @@
 import { isTextInputView, nativePlatform, textContentProp } from '@ng-native/fabric';
 import type { FakeFabricNode } from './test-utils.ts';
 import { waitFor, type WaitForOptions } from './wait-for.ts';
-import { expoUiButtonDisabled, expoUiButtonName, isExpoUiButton } from './expo-ui-button.ts';
+import { expoUiDisabled, expoUiButtonName, isExpoUiButton } from './expo-ui-button.ts';
 
 /** What a query matches against: a whole string (normalised), or a RegExp tested against it. */
 export type Matcher = string | RegExp;
@@ -82,7 +82,7 @@ const rolesOf = (node: FakeFabricNode): unknown[] =>
  */
 function stateOf(node: FakeFabricNode, state: State): boolean | 'mixed' | undefined {
   if (state === 'disabled' && isTextInput(node) && node.props['editable'] === false) return true;
-  if (state === 'disabled' && isExpoUiButton(node) && expoUiButtonDisabled(node)) return true;
+  if (state === 'disabled' && isExpoUiButton(node) && expoUiDisabled(node)) return true;
   if (!has(node, state)) return undefined;
   const value = (node.props['accessibilityState'] as Record<string, unknown> | undefined)?.[state];
   return value === true || value === false || value === 'mixed' ? value : UNSET[state];
@@ -200,7 +200,7 @@ const COVERING_ON_ANDROID: ReadonlySet<unknown> = new Set([...COVERING, 'modal',
  * Whether a node is a screen of a native stack under one that covers it. The stack shows its last
  * screen and hides those below it, which stay mounted to keep their state.
  */
-function covered(node: FakeFabricNode): boolean {
+function coveredInStack(node: FakeFabricNode): boolean {
   const stack = node.parent;
   if (stack?.viewName !== 'RNSScreenStack') return false;
   const covering = nativePlatform() === 'android' ? COVERING_ON_ANDROID : COVERING;
@@ -208,11 +208,37 @@ function covered(node: FakeFabricNode): boolean {
   return above.some((screen) => covering.has(screen.props['stackPresentation']));
 }
 
-/** Every node someone using the app could see or reach. */
+const TABS_HOSTS: ReadonlySet<unknown> = new Set(['RNSTabsHostIOS', 'RNSTabsHostAndroid']);
+
+/**
+ * Whether a node is a tab of a native tab bar other than the one it shows. The host shows the tab
+ * the app last asked for with `navStateRequest`, and keeps the others mounted out of the window:
+ * UIKit's tab bar controller and Android's fragment container hold only the selected tab's view,
+ * and the desktop host neither draws nor hits the rest. Until the app asks, no tab holds a page.
+ */
+function unselectedTab(node: FakeFabricNode): boolean {
+  const host = node.parent;
+  if (!host || !TABS_HOSTS.has(host.viewName)) return false;
+  const request = host.props['navStateRequest'] as { selectedScreenKey?: unknown } | undefined;
+  return node.props['screenKey'] !== request?.selectedScreenKey;
+}
+
+/**
+ * Whether a node is a screen something in front keeps out of sight and out of reach: a screen a
+ * native stack covers, or a tab a tab bar is not showing.
+ */
+export const covered = (node: FakeFabricNode): boolean =>
+  coveredInStack(node) || unselectedTab(node);
+
+/**
+ * Every node someone using the app could see or reach. A tab behind the selected one is still an
+ * item in the bar, whose props are the item's, and only what it holds is out of the window.
+ */
 const reachable = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
-  nodes.flatMap((node) =>
-    hides(node) || covered(node) ? [] : [node, ...reachable(node.children)],
-  );
+  nodes.flatMap((node) => {
+    if (hides(node) || coveredInStack(node)) return [];
+    return unselectedTab(node) ? [node] : [node, ...reachable(node.children)];
+  });
 
 /**
  * Whether a view or a screen above the node hides or covers it. A walk from the node never visits

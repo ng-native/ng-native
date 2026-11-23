@@ -66,7 +66,9 @@ it, as it does on a device: the home screen stays mounted under it, and a query 
 what is on it, as a screen reader does not reach it. A query given
 `{ includeHiddenElements: true }` finds the screens below too. A screen presented as a sheet or a
 transparent modal leaves the one under it showing, and a query finds both. So does a `modal` or a
-`pageSheet` on iOS, where both are sheets; on Android they cover the screen under them. The
+`pageSheet` on iOS, where both are sheets; on Android they cover the screen under them. Under a
+`<native-tabs-outlet>` a query finds what the selected tab holds and not what the tabs behind it
+hold, which stay mounted to keep their state. A press does nothing on a screen nobody can see. The
 native stack's transition and its navigation bar are drawn by the platform, and a test sees
 neither.
 

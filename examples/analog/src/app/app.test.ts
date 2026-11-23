@@ -58,8 +58,12 @@ const selectedTab = (fabric: FakeFabric) =>
     .selectedScreenKey;
 
 /** The value a feature page shows under its label. */
-function shown(fabric: FakeFabric, label: string): string[] {
-  const card = front(fabric).getByText(label).parent!;
+function shown(
+  fabric: FakeFabric,
+  label: string,
+  options?: { includeHiddenElements?: boolean },
+): string[] {
+  const card = front(fabric).getByText(label, options).parent!;
   return flatten(card.children.slice(1))
     .map((node) => node.props['text'])
     .filter((text): text is string => typeof text === 'string');
@@ -306,7 +310,8 @@ test('a tab layout keeps each tab as it was left while the other is in front', a
   await waitFor(() => expect(selectedTab(fabric)).toBe('/'), asyncWait);
   expect(router.url).toBe('/tabs');
   expect(shown(fabric, 'COUNTER')).toEqual(['2']);
-  expect(shown(fabric, 'LAPS')).toEqual(['1']);
+  // The Laps tab is behind, out of the window, so only a query for hidden elements reaches it.
+  expect(shown(fabric, 'LAPS', { includeHiddenElements: true })).toEqual(['1']);
 });
 
 test('a Markdown page draws its document natively and routes its relative links', async () => {

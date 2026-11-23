@@ -25,10 +25,10 @@ export const expoUiButtonName = (node: FakeFabricNode): string =>
   typeof node.props['label'] === 'string' ? node.props['label'] : drawnText(node);
 
 /**
- * Whether SwiftUI's `disabled` modifier has turned the button off. Compose has no such modifier,
- * and its button draws and takes taps the same with it.
+ * Whether SwiftUI's `disabled` modifier has turned the control off. Compose has no such modifier,
+ * and its controls draw and take taps the same with it.
  */
-export function expoUiButtonDisabled(node: FakeFabricNode): boolean {
+export function expoUiDisabled(node: FakeFabricNode): boolean {
   const modifiers = node.props['modifiers'];
   return (
     nativePlatform() !== 'android' &&
