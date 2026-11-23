@@ -58,8 +58,10 @@ export class PressMenu {
   }
 
   /**
-   * Open the menu under the element now. False when it opened none: it shows no item, the element
-   * has no view yet, or the host draws no press menu.
+   * Ask the host to open the menu under the element now. True once the request is sent, which
+   * does not mean the menu showed: the host draws none for a view it is not showing (no window on
+   * macOS, not mapped on Linux), and does not report that. False when no request is sent: the menu
+   * shows no item, the element has no view yet, or the host draws no press menu.
    */
   open(): boolean {
     const entries = untracked(this.built.sent);

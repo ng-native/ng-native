@@ -124,7 +124,8 @@ not draw it.
 reader's press, or on macOS Space while it has focus. `(press)` does not fire then. The menu is
 written as a context menu's is, and a one-way `[checked]` stays as the app binds it, so a menu of
 choices like this one is a pop-up select. `open()` opens it from code, named in the template with
-`#sort="pressMenu"`, and says whether it opened.
+`#sort="pressMenu"`, and says whether it asked the host to open it: it answers `true` even when the
+host then draws nothing, for an element not on screen.
 
 macOS draws it as a menu under the element, and Linux as a popover menu below it. iOS, Android,
 Expo Go and the web host draw none yet: there a press fires `(press)` as it would without

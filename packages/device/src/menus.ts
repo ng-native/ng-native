@@ -335,7 +335,8 @@ export class Menus {
 
   /**
    * Draw `entries` under the view with tag `view` now. The host sends the item chosen as the
-   * view's `topContextMenuSelect`.
+   * view's `topContextMenuSelect`. It draws nothing for a view it is not showing, and does not say
+   * so.
    */
   popUpMenu(view: number, entries: readonly NativeMenuEntry[]): void {
     this.native?.popUpMenu?.(view, entries);
