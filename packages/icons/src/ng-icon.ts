@@ -96,17 +96,17 @@ const MAX_DRAWINGS = 500;
 
 /** An element's attributes and the native props they make. */
 interface Translation {
-  readonly engine: unknown;
   readonly strokeWidth: unknown;
   readonly attrs: Readonly<Record<string, string>>;
   readonly props: Readonly<Record<string, unknown>>;
 }
 
 /**
- * The last translation of each element, which a list of icons drawing the same few names reuses.
- * Kept with its own drawing, and for one stroke width and engine at a time.
+ * The last translation of each element, which a list of icons drawing the same few names reuses,
+ * for one stroke width at a time. Under the engine that translated it, whose colours it holds: a
+ * drawing outlives the app that first drew it, and must not keep that app's engine.
  */
-const translations = new WeakMap<SvgNode, Translation>();
+const translations = new WeakMap<object, WeakMap<SvgNode, Translation>>();
 
 function drawingOf(markup: string): Drawing | null {
   let drawing = drawings.get(markup);
@@ -440,16 +440,17 @@ export class NgIcon {
    */
   private translate(node: SvgNode): Translation {
     const strokeWidth = this.strokeWidth();
-    const last = translations.get(node);
-    if (last?.engine === this.engine && last.strokeWidth === strokeWidth) return last;
+    let cache = translations.get(this.engine);
+    if (!cache) translations.set(this.engine, (cache = new WeakMap()));
+    const last = cache.get(node);
+    if (last && last.strokeWidth === strokeWidth) return last;
     const attrs = this.attributes(node);
     const translation = {
-      engine: this.engine,
       strokeWidth,
       attrs,
       props: this.propsOf(node, attrs),
     };
-    if (!isGradient(node.tag)) translations.set(node, translation);
+    if (!isGradient(node.tag)) cache.set(node, translation);
     return translation;
   }
 

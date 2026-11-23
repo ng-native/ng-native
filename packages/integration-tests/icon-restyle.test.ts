@@ -6,7 +6,10 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import type { Type, WritableSignal } from '@angular/core';
+import { HostEngine } from '@ng-native/fabric';
 import { cleanup, render, settle, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { resetStyleStats, styleStats } from '../fabric/src/css.ts';
 import { compileFixture } from './compile.ts';
@@ -151,5 +154,20 @@ describe('an icon drawn again', () => {
     };
     assert.equal(await fill('first'), 'first:red');
     assert.equal(await fill('second'), 'second:red');
+  });
+
+  it('lets the engine of an app that closed go, though its drawings stay cached', async () => {
+    setFlagsFromString('--expose-gc');
+    const gc = runInNewContext('gc') as () => void;
+    const engine = await (async () => {
+      const { componentRef } = await render(Fixture);
+      return new WeakRef(componentRef.injector.get(HostEngine) as object);
+    })();
+    cleanup();
+    for (let i = 0; i < 20 && engine.deref(); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      gc();
+    }
+    assert.equal(engine.deref(), undefined);
   });
 });
