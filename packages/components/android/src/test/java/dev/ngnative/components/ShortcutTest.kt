@@ -47,6 +47,9 @@ class ShortcutTest {
   fun namesTheKeysKeyboardEventKeyNamesWithAWord() {
     assertEquals("Insert", Shortcut.nameOf(KeyEvent.KEYCODE_INSERT))
     assertEquals("F12", Shortcut.nameOf(KeyEvent.KEYCODE_F12))
+    assertEquals("F13", Shortcut.nameOf(KeyEvent.KEYCODE_F13))
+    assertEquals("F20", Shortcut.nameOf(KeyEvent.KEYCODE_F20))
+    assertNull(Shortcut.nameOf(KeyEvent.KEYCODE_F21))
     assertEquals("ArrowLeft", Shortcut.nameOf(KeyEvent.KEYCODE_DPAD_LEFT))
     assertNull(Shortcut.nameOf(KeyEvent.KEYCODE_K))
   }
@@ -55,9 +58,11 @@ class ShortcutTest {
   fun showsInTheHelperOnlyAKeyItCanName() {
     assertEquals(KeyEvent.KEYCODE_INSERT, shortcut("Insert").keyCode())
     assertEquals('K', shortcut("k").helperChar())
+    assertEquals(KeyEvent.KEYCODE_F13, shortcut("F13").keyCode())
+    assertEquals(KeyEvent.KEYCODE_F20, shortcut("F20").keyCode())
     // No key code, and not one character: a wrong letter would be worse than no row.
-    assertNull(shortcut("F13").keyCode())
-    assertNull(shortcut("F13").helperChar())
+    assertNull(shortcut("Help").keyCode())
+    assertNull(shortcut("Help").helperChar())
   }
 
   @Test

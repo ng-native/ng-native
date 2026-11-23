@@ -67,8 +67,9 @@ and `up` are not names:
 - `F1` to `F12`
 
 Those work on every OS. A few more are named on some: `Insert` on Android and Linux, `F13` to `F20`
-in a macOS menu, and `Pause`, `ScrollLock` and `ContextMenu` on Android. A name the list does not
-have throws when the shortcut is read, with the name it is probably a misspelling of.
+on macOS, Linux and Android 16 and later (UIKit names no key past `F12`, and older Android has no
+key code for them), and `Pause`, `ScrollLock` and `ContextMenu` on Android. A name the list does
+not have throws when the shortcut is read, with the name it is probably a misspelling of.
 
 On Android a shortcut works from a hardware keyboard once it has a modifier (Ctrl, Alt, Shift or
 Meta), and Meta-/ lists it in the Keyboard Shortcuts helper by its `shortcutLabel`, under the app's

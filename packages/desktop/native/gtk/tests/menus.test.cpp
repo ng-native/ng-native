@@ -18,6 +18,7 @@
 #include <new>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #ifdef GDK_WINDOWING_X11
@@ -82,6 +83,19 @@ TEST_CASE("Insert is named both ways, and a key GTK has no name for shows no acc
   // Not its first letter, which would show Ctrl+P for a key no press reaches.
   CHECK(ngn::gtk::acceleratorOf({.key = "Pause", .modifiers = ngn::Control}).empty());
   CHECK(ngn::gtk::acceleratorOf({.key = ",", .modifiers = ngn::Control}) == "<Control>comma");
+}
+
+TEST_CASE("F13 to F20 are named both ways, as F1 to F12 are") {
+  REQUIRE(ngn::testing::gtkReady());
+  const std::pair<guint, std::string> keys[] = {
+      {GDK_KEY_F13, "F13"}, {GDK_KEY_F14, "F14"}, {GDK_KEY_F15, "F15"}, {GDK_KEY_F16, "F16"},
+      {GDK_KEY_F17, "F17"}, {GDK_KEY_F18, "F18"}, {GDK_KEY_F19, "F19"}, {GDK_KEY_F20, "F20"},
+  };
+  for (const auto &[keyval, name] : keys) {
+    CAPTURE(name);
+    CHECK(ngn::gtk::chordOf(keyval, GDK_CONTROL_MASK) == ngn::KeyChord{.key = name, .modifiers = ngn::Control});
+    CHECK(ngn::gtk::acceleratorOf({.key = name}) == name);
+  }
 }
 
 TEST_CASE("an item on Command shows no accelerator, as no press on Linux is Command") {

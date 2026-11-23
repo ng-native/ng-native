@@ -89,8 +89,8 @@ internal class Shortcut(
     }
 
     /**
-     * The keys `KeyboardEvent.key` names with a word, by their key code. Android has no key past
-     * F12, so a shortcut on F13 and up never fires here and the helper does not list it.
+     * The keys `KeyboardEvent.key` names with a word, by their key code. F13 to F20 have key codes
+     * from Android 16 (API 36); an older Android sends none for them.
      */
     private val NAMED: Map<Int, String> = buildMap {
       put(KeyEvent.KEYCODE_DPAD_LEFT, "ArrowLeft")
@@ -113,6 +113,7 @@ internal class Shortcut(
       put(KeyEvent.KEYCODE_SCROLL_LOCK, "ScrollLock")
       put(KeyEvent.KEYCODE_MENU, "ContextMenu")
       for (n in 1..12) put(KeyEvent.KEYCODE_F1 + n - 1, "F$n")
+      for (n in 13..20) put(KeyEvent.KEYCODE_F13 + n - 13, "F$n")
     }
 
     /** The key `event` is, as `KeyboardEvent.key` names it, ignoring Shift: `k`, `,`, `Enter`. */

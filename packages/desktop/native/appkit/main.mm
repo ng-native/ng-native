@@ -285,14 +285,7 @@ struct AppKitMenus final : ngn::MenuBackend {
 
 // A key press as the web names it, with the modifiers held.
 ngn::KeyChord chordOf(NSEvent *event) {
-  static NSDictionary<NSNumber *, NSString *> *named = @{
-    @123 : @"ArrowLeft", @124 : @"ArrowRight", @125 : @"ArrowDown", @126 : @"ArrowUp",
-    @36 : @"Enter", @76 : @"Enter", @53 : @"Escape", @51 : @"Backspace", @117 : @"Delete",
-    @48 : @"Tab", @115 : @"Home", @119 : @"End", @116 : @"PageUp", @121 : @"PageDown",
-    @122 : @"F1", @120 : @"F2", @99 : @"F3", @118 : @"F4", @96 : @"F5", @97 : @"F6",
-    @98 : @"F7", @100 : @"F8", @101 : @"F9", @109 : @"F10", @103 : @"F11", @111 : @"F12",
-  };
-  NSString *key = named[@(event.keyCode)];
+  NSString *key = ngn::appkit::keyName(event.keyCode);
   if (key == nil) {
     // Shift still applies, as the web's `key` has it: shift+/ is "?".
     key = event.charactersIgnoringModifiers != nil ? event.charactersIgnoringModifiers : @"";

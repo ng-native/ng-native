@@ -22,7 +22,9 @@ const std::map<std::string, guint> &namedKeys() {
       {"Tab", GDK_KEY_Tab}, {"Insert", GDK_KEY_Insert}, {"Home", GDK_KEY_Home}, {"End", GDK_KEY_End}, {"PageUp", GDK_KEY_Page_Up},
       {"PageDown", GDK_KEY_Page_Down}, {"F1", GDK_KEY_F1}, {"F2", GDK_KEY_F2}, {"F3", GDK_KEY_F3}, {"F4", GDK_KEY_F4},
       {"F5", GDK_KEY_F5}, {"F6", GDK_KEY_F6}, {"F7", GDK_KEY_F7}, {"F8", GDK_KEY_F8}, {"F9", GDK_KEY_F9},
-      {"F10", GDK_KEY_F10}, {"F11", GDK_KEY_F11}, {"F12", GDK_KEY_F12},
+      {"F10", GDK_KEY_F10}, {"F11", GDK_KEY_F11}, {"F12", GDK_KEY_F12}, {"F13", GDK_KEY_F13}, {"F14", GDK_KEY_F14},
+      {"F15", GDK_KEY_F15}, {"F16", GDK_KEY_F16}, {"F17", GDK_KEY_F17}, {"F18", GDK_KEY_F18}, {"F19", GDK_KEY_F19},
+      {"F20", GDK_KEY_F20},
   };
   return keys;
 }

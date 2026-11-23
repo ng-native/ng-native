@@ -23,5 +23,8 @@ NSPoint menuLocationUnder(NSView *view);
 void popUpMenuUnder(NSMenu *menu, NSView *view);
 // The key equivalent AppKit takes for a key the web names ("ArrowLeft", "F5", "Enter", "q").
 NSString *keyEquivalent(const std::string &key);
+// The name the web gives the key with AppKit's `keyCode` ("ArrowLeft", "F13"), or nil for a key the
+// web names by its character.
+NSString *keyName(unsigned short keyCode);
 
 } // namespace ngn::appkit

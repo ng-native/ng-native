@@ -179,6 +179,19 @@ NSString *keyEquivalent(const std::string &key) {
   return @"";
 }
 
+NSString *keyName(unsigned short keyCode) {
+  static NSDictionary<NSNumber *, NSString *> *named = @{
+    @123 : @"ArrowLeft", @124 : @"ArrowRight", @125 : @"ArrowDown", @126 : @"ArrowUp",
+    @36 : @"Enter", @76 : @"Enter", @53 : @"Escape", @51 : @"Backspace", @117 : @"Delete",
+    @48 : @"Tab", @115 : @"Home", @119 : @"End", @116 : @"PageUp", @121 : @"PageDown",
+    @122 : @"F1", @120 : @"F2", @99 : @"F3", @118 : @"F4", @96 : @"F5", @97 : @"F6",
+    @98 : @"F7", @100 : @"F8", @101 : @"F9", @109 : @"F10", @103 : @"F11", @111 : @"F12",
+    @105 : @"F13", @107 : @"F14", @113 : @"F15", @106 : @"F16", @64 : @"F17", @79 : @"F18",
+    @80 : @"F19", @90 : @"F20",
+  };
+  return named[@(keyCode)];
+}
+
 NSMenu *buildMenu(const std::string &title, const std::vector<MenuItem> &items, MenuChosen chosen) {
   NSMenu *menu = [[NSMenu alloc] initWithTitle:string(title)];
   addItems(menu, items, chosen);
