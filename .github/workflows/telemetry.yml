@@ -1,8 +1,9 @@
 name: CI telemetry
 
-# Sends each finished workflow run, and each closed pull request, to Coralogix through
-# scripts/ci-telemetry.mjs. Both triggers run the base branch's copy of the script, never code from
-# a pull request, which is what makes the secret safe to use for runs from forks.
+# Sends each finished run of the workflows listed below, and each closed pull request, to Coralogix
+# through scripts/ci-telemetry.mjs. Both triggers run the script from the base repository's default
+# branch, never code from a pull request, which is what makes the secret safe to use for runs from
+# forks.
 on:
   workflow_run:
     workflows:
@@ -49,9 +50,11 @@ jobs:
           RUN_ID: ${{ github.event.workflow_run.id }}
           RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_CLOSED_AT: ${{ github.event.pull_request.closed_at }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = workflow_run ]; then
             node scripts/ci-telemetry.mjs run "$RUN_ID" "$RUN_ATTEMPT"
           else
-            node scripts/ci-telemetry.mjs pr "$PR_NUMBER"
+            node scripts/ci-telemetry.mjs pr "$PR_NUMBER" --closed-at="$PR_CLOSED_AT" --merged="$PR_MERGED"
           fi

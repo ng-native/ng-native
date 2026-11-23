@@ -16,8 +16,11 @@
  * Usage:
  *
  *   node scripts/ci-telemetry.mjs run <run id> [attempt]
- *   node scripts/ci-telemetry.mjs pr <number>
- *   node scripts/ci-telemetry.mjs run <run id> --dry-run    # print what it would send
+ *   node scripts/ci-telemetry.mjs pr <number> [--closed-at=<time> --merged=<true|false>]
+ *   node scripts/ci-telemetry.mjs run <run id> --dry-run    # print the counts and the first logs, send nothing
+ *
+ * `--closed-at` and `--merged` come from the close event; without them the pull request's current
+ * state is used.
  *
  * Environment: GITHUB_TOKEN (actions and pull requests read), CORALOGIX_SEND_DATA_KEY, and
  * optionally CORALOGIX_INGRESS (https://ingress.eu2.coralogix.com when unset) and GITHUB_REPOSITORY.
@@ -36,48 +39,79 @@ const CODERABBIT = 'coderabbitai';
 const [command, id, ...rest] = process.argv.slice(2);
 const dryRun = rest.includes('--dry-run');
 const attemptArg = rest.find((arg) => /^\d+$/.test(arg));
+const closedAtArg = rest
+  .find((arg) => arg.startsWith('--closed-at='))
+  ?.slice('--closed-at='.length);
+const mergedArg = rest.find((arg) => arg.startsWith('--merged='))?.slice('--merged='.length);
 
 async function main() {
-  if (command === 'run' && /^\d+$/.test(id ?? ''))
-    await sendRun(id, attemptArg ? Number(attemptArg) : undefined);
-  else if (command === 'pr' && /^\d+$/.test(id ?? '')) await sendPullRequest(Number(id));
-  else throw new Error('usage: ci-telemetry.mjs run <run id> [attempt] | pr <number> [--dry-run]');
+  const numeric = /^\d+$/.test(id ?? '');
+  if (command === 'run' && numeric) await sendRun(id, attemptArg);
+  else if (command === 'pr' && numeric) await sendPullRequest(Number(id));
+  else
+    throw new Error(
+      'usage: ci-telemetry.mjs run <run id> [attempt] | pr <number> [--closed-at=<time> --merged=<true|false>] [--dry-run]',
+    );
 }
 
 // ------------------------------------------------------------------------------ workflow runs
 
-async function sendRun(runId, attemptOverride) {
-  const run = await github(`/repos/${REPO}/actions/runs/${runId}`);
-  const attempt = attemptOverride ?? run.run_attempt;
-  const jobs = await githubPages(
-    `/repos/${REPO}/actions/runs/${runId}/attempts/${attempt}/jobs`,
-    'jobs',
+async function sendRun(runId, attemptArg) {
+  // The attempt's own record: the run's top-level one is its latest attempt's, which may already
+  // be a newer re-run by the time this reads it.
+  const run = await github(
+    `/repos/${REPO}/actions/runs/${runId}${attemptArg ? `/attempts/${attemptArg}` : ''}`,
   );
-  // A re-run lists the jobs it carried over from the attempt before, created again but started back
-  // then; those were sent with that attempt and would stretch this one back to its start.
-  const finished = jobs.filter(
+  const attempt = run.run_attempt;
+  const jobs = ranInAttempt(
+    await githubPages(`/repos/${REPO}/actions/runs/${runId}/attempts/${attempt}/jobs`, 'jobs'),
+    attempt,
+  );
+  if (!jobs.length) {
+    console.log(`Run ${runId} attempt ${attempt} has no finished jobs, nothing to send.`);
+    return;
+  }
+
+  const record = runRecord(run, jobs);
+  for (const job of jobs) await addJob(record, job);
+  const points = record.points.filter(([, , , value]) => value !== undefined);
+  console.log(
+    `${run.name} #${runId} attempt ${attempt}: ${record.logs.length} logs, ${record.spans.length} spans, ${points.length} metric points`,
+  );
+  if (dryRun) return printSample(record.logs);
+  await sendLogs(record.logs);
+  await sendOtlp(
+    '/v1/traces',
+    encodeTraces(serviceName(run.name), record.spans),
+    `${record.spans.length} spans`,
+  );
+  await sendOtlp('/v1/metrics', encodeMetrics(points), `${points.length} metric points`);
+}
+
+/**
+ * The finished jobs that ran in this attempt. A re-run also lists the jobs it carried over from the
+ * attempt before, created again but started back then; those were sent with that attempt and would
+ * stretch this one back to its start.
+ */
+function ranInAttempt(jobs, attempt) {
+  return jobs.filter(
     (job) =>
       job.started_at &&
       job.completed_at &&
       !(attempt > 1 && Date.parse(job.started_at) < Date.parse(job.created_at)),
   );
-  if (!finished.length) {
-    console.log(`Run ${runId} attempt ${attempt} has no finished jobs, nothing to send.`);
-    return;
-  }
+}
 
-  const start = earliest(finished.map((job) => job.started_at));
-  const end = latest(finished.map((job) => job.completed_at));
-  const queued = earliest(finished.map((job) => job.created_at ?? job.started_at));
-  const failedJobs = finished.filter((job) => job.conclusion === 'failure');
-  // The run's conclusion is its latest attempt's; an earlier attempt's is read from its jobs.
-  const conclusion =
-    attempt === run.run_attempt && run.conclusion
-      ? run.conclusion
-      : failedJobs.length
-        ? 'failure'
-        : 'cancelled';
-  const url = `${REPO_URL}/actions/runs/${runId}/attempts/${attempt}`;
+/** The run's log, root span and gauges, which each job then adds its own to. */
+function runRecord(run, jobs) {
+  const attempt = run.run_attempt;
+  const start = earliest(jobs.map((job) => job.started_at));
+  const end = latest(jobs.map((job) => job.completed_at));
+  const queued = earliest(jobs.map((job) => job.created_at ?? job.started_at));
+  const failed = jobs.filter((job) => job.conclusion === 'failure').length;
+  const conclusion = run.conclusion ?? (failed ? 'failure' : 'cancelled');
+  const url = `${REPO_URL}/actions/runs/${run.id}/attempts/${attempt}`;
+  const actor = run.triggering_actor?.login ?? run.actor?.login;
   const common = {
     repo: REPO,
     workflow: run.name,
@@ -85,109 +119,117 @@ async function sendRun(runId, attemptOverride) {
     run_attempt: attempt,
     branch: run.head_branch,
     trigger: run.event,
-    actor: run.triggering_actor?.login ?? run.actor?.login,
+    actor,
     url,
   };
-
-  const logs = [
-    {
-      time: end,
-      severity: severityFor(conclusion),
-      subsystem: 'ci',
-      body: {
-        event: 'workflow_run',
-        message: `${run.name} ${conclusion} on ${run.head_branch} in ${minutes(start, end)} min`,
-        conclusion,
-        duration_min: minutes(start, end),
-        queue_min: minutes(queued, start),
-        jobs_total: finished.length,
-        jobs_failed: failedJobs.length,
-        is_rerun: attempt > 1,
-        ...common,
+  const traceId = digest(`run-${run.id}-${attempt}`, 16);
+  const rootId = digest(`root-${run.id}-${attempt}`, 8);
+  return {
+    run,
+    common,
+    traceId,
+    rootId,
+    logs: [
+      {
+        time: end,
+        severity: severityFor(conclusion),
+        subsystem: 'ci',
+        body: {
+          event: 'workflow_run',
+          message: `${run.name} ${conclusion} on ${run.head_branch} in ${minutes(start, end)} min`,
+          conclusion,
+          duration_min: minutes(start, end),
+          queue_min: minutes(queued, start),
+          jobs_total: jobs.length,
+          jobs_failed: failed,
+          is_rerun: attempt > 1,
+          ...common,
+        },
       },
-    },
-  ];
-
-  const traceId = digest(`run-${runId}-${attempt}`, 16);
-  const rootId = digest(`root-${runId}-${attempt}`, 8);
-  const spans = [
-    {
-      traceId,
-      spanId: rootId,
-      name: run.name,
-      start,
-      end,
-      error: conclusion === 'failure',
-      attrs: {
-        'ci.workflow': run.name,
-        'ci.run_id': String(runId),
-        'ci.run_attempt': attempt,
-        'ci.branch': run.head_branch,
-        'ci.trigger': run.event,
-        'ci.conclusion': conclusion,
-        'ci.actor': common.actor,
-        'ci.url': url,
-      },
-    },
-  ];
-  const points = [
-    [
-      'ci_run_duration_minutes',
-      { workflow: run.name, conclusion, branch: run.head_branch },
-      end,
-      minutes(start, end),
     ],
-    ['ci_run_queue_minutes', { workflow: run.name }, end, minutes(queued, start)],
-  ];
+    spans: [
+      {
+        traceId,
+        spanId: rootId,
+        name: run.name,
+        start,
+        end,
+        error: conclusion === 'failure',
+        attrs: {
+          'ci.workflow': run.name,
+          'ci.run_id': String(run.id),
+          'ci.run_attempt': attempt,
+          'ci.branch': run.head_branch,
+          'ci.trigger': run.event,
+          'ci.conclusion': conclusion,
+          'ci.actor': actor,
+          'ci.url': url,
+        },
+      },
+    ],
+    points: [
+      [
+        'ci_run_duration_minutes',
+        { workflow: run.name, conclusion, branch: run.head_branch },
+        end,
+        minutes(start, end),
+      ],
+      ['ci_run_queue_minutes', { workflow: run.name }, end, minutes(queued, start)],
+    ],
+  };
+}
 
-  for (const job of finished) {
-    const runner = (job.labels ?? []).join(',') || 'unknown';
-    const failedStep = job.steps?.find((step) => step.conclusion === 'failure')?.name;
-    const body = {
-      event: 'workflow_job',
-      job: job.name,
-      job_id: job.id,
-      conclusion: job.conclusion,
-      duration_min: minutes(job.started_at, job.completed_at),
-      queue_min: minutes(job.created_at, job.started_at),
-      runner,
-      failed_step: failedStep,
-      ...common,
-      url: `${REPO_URL}/actions/runs/${runId}/job/${job.id}`,
-    };
-    if (job.conclusion === 'failure') {
-      const { summary, excerpt } = failureExcerpt(await jobLog(job.id));
-      Object.assign(body, { error: summary, log_excerpt: excerpt });
-      body.message = `${run.name} › ${job.name} failed${summary ? `: ${summary}` : ''}`;
-    } else {
-      body.message = `${run.name} › ${job.name} ${job.conclusion} in ${body.duration_min} min`;
-    }
-    logs.push({
-      time: job.completed_at,
-      severity: severityFor(job.conclusion),
-      subsystem: 'ci',
-      body,
+async function addJob(record, job) {
+  const { run, common } = record;
+  const runner = (job.labels ?? []).join(',') || 'unknown';
+  const body = {
+    event: 'workflow_job',
+    job: job.name,
+    job_id: job.id,
+    conclusion: job.conclusion,
+    duration_min: minutes(job.started_at, job.completed_at),
+    queue_min: minutes(job.created_at, job.started_at),
+    runner,
+    failed_step: job.steps?.find((step) => step.conclusion === 'failure')?.name,
+    ...common,
+    url: `${REPO_URL}/actions/runs/${run.id}/job/${job.id}`,
+    message: `${run.name} › ${job.name} ${job.conclusion} in ${minutes(job.started_at, job.completed_at)} min`,
+  };
+  if (job.conclusion === 'failure') {
+    const { summary, excerpt } = failureExcerpt(await jobLog(job.id));
+    Object.assign(body, {
+      error: summary,
+      log_excerpt: excerpt,
+      message: `${run.name} › ${job.name} failed${summary ? `: ${summary}` : ''}`,
     });
-    points.push(
-      [
-        'ci_job_duration_minutes',
-        { workflow: run.name, job: job.name, runner, conclusion: job.conclusion },
-        job.completed_at,
-        body.duration_min,
-      ],
-      [
-        'ci_job_queue_wait_minutes',
-        { workflow: run.name, runner },
-        job.completed_at,
-        body.queue_min,
-      ],
-    );
+  }
+  record.logs.push({
+    time: job.completed_at,
+    severity: severityFor(job.conclusion),
+    subsystem: 'ci',
+    body,
+  });
+  record.points.push(
+    [
+      'ci_job_duration_minutes',
+      { workflow: run.name, job: job.name, runner, conclusion: job.conclusion },
+      job.completed_at,
+      body.duration_min,
+    ],
+    [
+      'ci_job_queue_wait_minutes',
+      { workflow: run.name, job: job.name, runner },
+      job.completed_at,
+      body.queue_min,
+    ],
+  );
 
-    const jobSpan = digest(`job-${job.id}`, 8);
-    spans.push({
-      traceId,
+  const jobSpan = digest(`job-${job.id}`, 8);
+  record.spans.push(
+    {
+      traceId: record.traceId,
       spanId: jobSpan,
-      parent: rootId,
+      parent: record.rootId,
       name: job.name,
       start: job.started_at,
       end: job.completed_at,
@@ -199,44 +241,42 @@ async function sendRun(runId, attemptOverride) {
         'ci.conclusion': job.conclusion ?? '',
         'ci.workflow': run.name,
       },
-    });
-    for (const step of job.steps ?? []) {
-      if (!step.started_at || !step.completed_at || step.conclusion === 'skipped') continue;
-      if (Date.parse(step.completed_at) < Date.parse(step.started_at)) continue;
-      spans.push({
-        traceId,
-        spanId: digest(`step-${job.id}-${step.number}`, 8),
-        parent: jobSpan,
-        name: step.name,
-        start: step.started_at,
-        end: step.completed_at,
-        error: step.conclusion === 'failure',
-        attrs: {
-          'ci.step': step.name,
-          'ci.job': job.name,
-          'ci.workflow': run.name,
-          'ci.conclusion': step.conclusion ?? '',
-        },
-      });
-    }
-  }
+    },
+    ...stepSpans(record, job, jobSpan),
+  );
+}
 
-  const service = `ng-native-${run.name
+function stepSpans(record, job, jobSpan) {
+  return (job.steps ?? [])
+    .filter(
+      (step) =>
+        step.started_at &&
+        step.completed_at &&
+        step.conclusion !== 'skipped' &&
+        Date.parse(step.completed_at) >= Date.parse(step.started_at),
+    )
+    .map((step) => ({
+      traceId: record.traceId,
+      spanId: digest(`step-${job.id}-${step.number}`, 8),
+      parent: jobSpan,
+      name: step.name,
+      start: step.started_at,
+      end: step.completed_at,
+      error: step.conclusion === 'failure',
+      attrs: {
+        'ci.step': step.name,
+        'ci.job': job.name,
+        'ci.workflow': record.run.name,
+        'ci.conclusion': step.conclusion ?? '',
+      },
+    }));
+}
+
+function serviceName(workflow) {
+  return `ng-native-${workflow
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')}`;
-  const metricPoints = points.filter(([, , , value]) => value !== undefined);
-  console.log(
-    `${run.name} #${runId} attempt ${attempt}: ${logs.length} logs, ${spans.length} spans, ${metricPoints.length} metric points`,
-  );
-  if (dryRun) return printSample(logs);
-  await sendLogs(logs);
-  await sendOtlp('/v1/traces', encodeTraces(service, spans), `${spans.length} spans`);
-  await sendOtlp(
-    '/v1/metrics',
-    encodeMetrics(metricPoints),
-    `${metricPoints.length} metric points`,
-  );
 }
 
 function severityFor(conclusion) {
@@ -260,9 +300,19 @@ const ERROR_PATTERNS = [
   /Error: .*/,
   /✗ .*/,
   /✖ .*/,
+  /##\[error\](.*)/,
 ];
 
-/** The first error in a job log, and the lines leading up to it rather than the cleanup that ends every log. */
+/**
+ * How much of the error line an excerpt keeps: one line of serialized output can run to many
+ * kilobytes, past what Coralogix parses in a single log.
+ */
+const MAX_ERROR_LINE = 1000;
+
+/**
+ * The earliest error in a job log, and the lines leading up to it rather than the cleanup that ends
+ * every log: at most 2,000 characters before, the error line, and 1,000 after.
+ */
 function failureExcerpt(log) {
   if (!log) return {};
   const text = log
@@ -270,25 +320,15 @@ function failureExcerpt(log) {
     .map((line) => line.replace(/^\d{4}-\d\d-\d\dT[\d:.]+Z ?/, '').replace(/\x1b\[[0-9;]*m/g, ''))
     .filter((line) => line.trim() && !/^##\[(group|endgroup)\]/.test(line))
     .join('\n');
-  let match;
-  for (const pattern of ERROR_PATTERNS) {
-    match = pattern.exec(text);
-    if (match) break;
-  }
-  if (!match) {
-    const marker = /##\[error\](.*)/.exec(text);
-    if (marker)
-      match = Object.assign([marker[1]], {
-        index: marker.index,
-        input: text,
-        length: marker[0].length,
-      });
-  }
-  if (!match) return { excerpt: text.slice(-3000) };
-  const at = match.index;
+  const matches = ERROR_PATTERNS.map((pattern) => pattern.exec(text)).filter(Boolean);
+  if (!matches.length) return { excerpt: text.slice(-3000) };
+  const match = matches.reduce((first, next) => (next.index < first.index ? next : first));
+  const lineEnd = match.index + Math.min(match[0].length, MAX_ERROR_LINE);
   return {
-    summary: match[0].replace('##[error]', '').trim().slice(0, 300),
-    excerpt: text.slice(Math.max(0, at - 2000), at + match[0].length + 1000),
+    summary: (match[1] ?? match[0]).trim().slice(0, 300),
+    excerpt:
+      text.slice(Math.max(0, match.index - 2000), lineEnd) +
+      text.slice(match.index + match[0].length, match.index + match[0].length + 1000),
   };
 }
 
@@ -299,12 +339,15 @@ const PR_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
     pullRequest(number: $number) {
       number title state isDraft createdAt mergedAt closedAt additions deletions changedFiles
       author { login }
-      labels(first: 20) { nodes { name } }
+      labels(first: 100) { totalCount nodes { name } }
       commits { totalCount }
       reviews(first: 100) { totalCount nodes { author { login } state submittedAt } }
       reviewThreads(first: 100) {
         totalCount
-        nodes { isResolved isOutdated path comments(first: 10) { nodes { author { login } createdAt body } } }
+        nodes {
+          isResolved isOutdated path
+          comments(first: 100) { totalCount nodes { author { login } createdAt body } }
+        }
       }
     }
   }
@@ -315,73 +358,83 @@ const CATEGORY =
   /(Functional Correctness|Stability & Availability|Data Integrity & Integration|Maintainability & Code Quality|Performance & Scalability|Security & Privacy|Accessibility)/;
 
 async function sendPullRequest(number) {
+  const pr = await fetchPullRequest(number);
+  const author = pr.author?.login ?? 'ghost';
+  const threads = pr.reviewThreads.nodes.filter(
+    (thread) => thread.comments.nodes[0]?.author?.login === CODERABBIT,
+  );
+  const findings = threads.map((thread) => findingLog(pr, thread, author));
+  const logs = [...findings, pullRequestLog(pr, author, findings)];
+  console.log(`PR #${number}: ${logs.length} logs (${threads.length} CodeRabbit findings)`);
+  if (dryRun) return printSample(logs);
+  await sendLogs(logs);
+}
+
+/** The pull request, failing on any GraphQL error and on any list it could not read in full. */
+async function fetchPullRequest(number) {
   const [owner, name] = REPO.split('/');
   const data = await github('/graphql', { query: PR_QUERY, variables: { owner, name, number } });
+  if (data.errors?.length)
+    throw new Error(`GitHub #${number}: ${JSON.stringify(data.errors).slice(0, 300)}`);
   const pr = data.data?.repository?.pullRequest;
-  if (!pr)
+  if (!pr) throw new Error(`GitHub: no pull request #${number}`);
+  const lists = [
+    pr.labels,
+    pr.reviews,
+    pr.reviewThreads,
+    ...pr.reviewThreads.nodes.map((thread) => thread.comments),
+  ];
+  if (lists.some((list) => list.nodes.length < list.totalCount)) {
     throw new Error(
-      `GitHub: no pull request #${number}: ${JSON.stringify(data.errors ?? data).slice(0, 300)}`,
-    );
-  if (
-    pr.reviews.nodes.length < pr.reviews.totalCount ||
-    pr.reviewThreads.nodes.length < pr.reviewThreads.totalCount
-  ) {
-    throw new Error(
-      `#${number} has more than 100 reviews or review threads; this script reads only the first page.`,
+      `#${number} has more than 100 labels, reviews, threads or replies in a thread; this script reads only the first page.`,
     );
   }
+  return pr;
+}
 
-  const author = pr.author?.login ?? 'ghost';
-  const url = `${REPO_URL}/pull/${number}`;
+function findingLog(pr, thread, author) {
+  const first = thread.comments.nodes[0];
+  const finding = classifyFinding(first.body, thread, author);
+  return {
+    time: first.createdAt,
+    severity: { Critical: 5, Major: 4 }[finding.severity] ?? 3,
+    subsystem: 'code-review',
+    body: {
+      event: 'coderabbit_finding',
+      message: `CodeRabbit ${finding.severity.toLowerCase()}: ${finding.title}`,
+      pr: pr.number,
+      pr_title: pr.title,
+      pr_author: author,
+      path: thread.path ?? '',
+      area: (thread.path ?? '').split('/').slice(0, 2).join('/'),
+      repo: REPO,
+      url: `${REPO_URL}/pull/${pr.number}`,
+      ...finding,
+    },
+  };
+}
+
+function pullRequestLog(pr, author, findings) {
+  const { state, time } = closedState(pr);
   const reviews = pr.reviews.nodes.filter((review) => review.submittedAt);
   const coderabbit = reviews.filter((review) => review.author?.login === CODERABBIT);
   const humans = [...new Set(reviews.map((review) => review.author?.login))]
     .filter((login) => login && login !== CODERABBIT && login !== author)
     .sort();
-  const threads = pr.reviewThreads.nodes.filter(
-    (thread) => thread.comments.nodes[0]?.author?.login === CODERABBIT,
-  );
-
-  const logs = [];
-  const outcomes = {};
-  for (const thread of threads) {
-    const first = thread.comments.nodes[0];
-    const finding = classifyFinding(first.body, thread, author);
-    outcomes[finding.outcome] = (outcomes[finding.outcome] ?? 0) + 1;
-    logs.push({
-      time: first.createdAt,
-      severity: { Critical: 5, Major: 4 }[finding.severity] ?? 3,
-      subsystem: 'code-review',
-      body: {
-        event: 'coderabbit_finding',
-        message: `CodeRabbit ${finding.severity.toLowerCase()}: ${finding.title}`,
-        pr: number,
-        pr_title: pr.title,
-        pr_author: author,
-        path: thread.path ?? '',
-        area: (thread.path ?? '').split('/').slice(0, 2).join('/'),
-        repo: REPO,
-        url,
-        ...finding,
-      },
-    });
-  }
-
   const lastState = coderabbit.at(-1)?.state;
-  const firstReview = coderabbit.length
-    ? earliest(coderabbit.map((review) => review.submittedAt))
-    : undefined;
-  const mergedWithChangesRequested = Boolean(pr.mergedAt) && lastState === 'CHANGES_REQUESTED';
-  logs.push({
-    time: pr.mergedAt ?? pr.closedAt ?? pr.createdAt,
+  const mergedWithChangesRequested = state === 'MERGED' && lastState === 'CHANGES_REQUESTED';
+  const outcomes = Object.groupBy(findings, (finding) => finding.body.outcome);
+  const count = (outcome) => outcomes[outcome]?.length ?? 0;
+  return {
+    time,
     severity: mergedWithChangesRequested ? 4 : 3,
     subsystem: 'pull-requests',
     body: {
       event: 'pull_request',
-      message: `PR #${number} ${pr.state.toLowerCase()}: ${pr.title}`,
-      pr: number,
+      message: `PR #${pr.number} ${state.toLowerCase()}: ${pr.title}`,
+      pr: pr.number,
       title: pr.title,
-      state: pr.state,
+      state,
       author,
       is_draft: pr.isDraft,
       labels: pr.labels.nodes.map((label) => label.name),
@@ -390,83 +443,80 @@ async function sendPullRequest(number) {
       lines_changed: pr.additions + pr.deletions,
       files_changed: pr.changedFiles,
       commits: pr.commits.totalCount,
-      hours_to_merge: pr.mergedAt
-        ? round((Date.parse(pr.mergedAt) - Date.parse(pr.createdAt)) / 3_600_000)
+      hours_to_merge:
+        state === 'MERGED'
+          ? round((Date.parse(time) - Date.parse(pr.createdAt)) / 3_600_000)
+          : undefined,
+      minutes_to_first_coderabbit_review: coderabbit.length
+        ? minutes(pr.createdAt, earliest(coderabbit.map((review) => review.submittedAt)))
         : undefined,
-      minutes_to_first_coderabbit_review: minutes(pr.createdAt, firstReview),
       coderabbit_reviews: coderabbit.length,
       coderabbit_change_requests: coderabbit.filter(
         (review) => review.state === 'CHANGES_REQUESTED',
       ).length,
       coderabbit_last_state: lastState,
-      coderabbit_findings: threads.length,
-      findings_fixed: (outcomes['fixed'] ?? 0) + (outcomes['fixed (inferred)'] ?? 0),
-      findings_dismissed: outcomes['dismissed'] ?? 0,
-      findings_unresolved: outcomes['open'] ?? 0,
+      coderabbit_findings: findings.length,
+      findings_fixed: count('fixed') + count('fixed (inferred)'),
+      findings_dismissed: count('dismissed'),
+      findings_unresolved: count('open'),
       human_reviewers: humans,
       human_reviews: humans.length,
       merged_with_changes_requested: mergedWithChangesRequested,
       repo: REPO,
-      url,
+      url: `${REPO_URL}/pull/${pr.number}`,
     },
-  });
+  };
+}
 
-  console.log(`PR #${number}: ${logs.length} logs (${threads.length} CodeRabbit findings)`);
-  if (dryRun) return printSample(logs);
-  await sendLogs(logs);
+/**
+ * Whether the pull request merged, and when it closed: from the close event when the workflow
+ * passes it, since the pull request may have been reopened since; from GitHub's current state when
+ * run by hand.
+ */
+function closedState(pr) {
+  if (closedAtArg) return { state: mergedArg === 'true' ? 'MERGED' : 'CLOSED', time: closedAtArg };
+  return { state: pr.state, time: pr.mergedAt ?? pr.closedAt ?? pr.createdAt };
 }
 
 /** A CodeRabbit thread's severity, category and title from its first comment, and how it ended. */
 function classifyFinding(body, thread, author) {
   const plain = body.replace(/<[^>]+>/g, '');
   const head = plain.split('\n').slice(0, 4).join(' ');
-  const severity =
-    SEVERITIES.find((label) => new RegExp(`\\b${label}\\b`).test(head)) ?? 'Unlabelled';
-  const effort = head.includes('Heavy lift')
-    ? 'Heavy lift'
-    : head.includes('Quick win')
-      ? 'Quick win'
-      : undefined;
-  const title =
-    [...plain.matchAll(/\*\*([^*\n]{8,200})\*\*/g)]
-      .map((match) => match[1])
-      .find(
-        (text) =>
-          !/Potential issue|Minor|Major|Critical|Quick win|Heavy lift|Correctness|Availability|Integrity|Maintainability|Performance|Security/.test(
-            text,
-          ),
-      ) ?? '';
   const replies = thread.comments.nodes
     .slice(1)
     .filter((comment) => comment.author?.login === author)
     .map((comment) => comment.body)
     .join(' ')
     .toLowerCase();
-
-  let outcome;
-  if (
-    body.toLowerCase().includes('addressed in commit') ||
-    /\bfixed in\b|\bdone in\b/.test(replies)
-  )
-    outcome = 'fixed';
-  else if (
-    /won't|will not|not (going to|changing)|intentional|by design|out of scope|disagree|not a bug|false positive/.test(
-      replies,
-    )
-  )
-    outcome = 'dismissed';
-  else if (thread.isResolved && thread.isOutdated) outcome = 'fixed (inferred)';
-  else if (thread.isResolved) outcome = 'resolved without change';
-  else outcome = 'open';
-
   return {
-    severity,
+    severity: SEVERITIES.find((label) => new RegExp(`\\b${label}\\b`).test(head)) ?? 'Unlabelled',
     category: CATEGORY.exec(head)?.[1] ?? 'Other',
-    effort,
-    title: title.trim(),
-    outcome,
+    effort: ['Heavy lift', 'Quick win'].find((label) => head.includes(label)),
+    title: findingTitle(plain),
+    outcome: findingOutcome(body, thread, replies),
     author_replied: Boolean(replies),
   };
+}
+
+function findingTitle(plain) {
+  const labels =
+    /Potential issue|Minor|Major|Critical|Quick win|Heavy lift|Correctness|Availability|Integrity|Maintainability|Performance|Security/;
+  const bold = [...plain.matchAll(/\*\*([^*\n]{8,200})\*\*/g)].map((match) => match[1]);
+  return (bold.find((text) => !labels.test(text)) ?? '').trim();
+}
+
+/** "Fixed in abc123" counts as a fix; "not fixed in this PR" does not. */
+const FIXED_REPLY = /(?<!\bnot |\bnever |n't )\b(?:fixed|done) in\b/;
+const DISMISSED_REPLY =
+  /won't|will not|not (going to|changing)|intentional|by design|out of scope|disagree|not a bug|false positive/;
+
+function findingOutcome(body, thread, replies) {
+  if (body.toLowerCase().includes('addressed in commit') || FIXED_REPLY.test(replies))
+    return 'fixed';
+  if (DISMISSED_REPLY.test(replies)) return 'dismissed';
+  if (thread.isResolved && thread.isOutdated) return 'fixed (inferred)';
+  if (thread.isResolved) return 'resolved without change';
+  return 'open';
 }
 
 // ------------------------------------------------------------------------------ GitHub
