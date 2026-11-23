@@ -148,6 +148,18 @@ TEST_CASE("painted in one colour, currentColor keeps the opacity of the colour i
                  });
 }
 
+TEST_CASE("painted in one colour, an inherited currentColor takes the colour of the shape that uses it") {
+  auto drawn = drawnOf(
+      R"svg(<svg viewBox="0 0 24 24" fill="currentColor"><rect color="transparent" width="1" height="1"/>)svg"
+      R"svg(<g color="rgba(0, 0, 0, 0.5)"><path d="M0 0H2"/></g><path d="M0 0H3" fill="#ff000080"/></svg>)svg",
+      24, 0xff336699);
+  CHECK(drawn == Lines{
+                     "fill M0,0L1,0L1,1L0,1Z #336699",
+                     "fill M0,0L2,0 #80336699",
+                     "fill M0,0L3,0 #80336699",
+                 });
+}
+
 TEST_CASE("an attribute of many ampersands reads in linear time") {
   std::string many(1000000, '&');
   auto start = std::chrono::steady_clock::now();

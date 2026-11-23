@@ -658,19 +658,17 @@ uint32_t tinted(uint32_t source, uint32_t tint) {
   return (static_cast<uint32_t>(std::lround(alpha * 255)) << 24) | (tint & 0xffffff);
 }
 
-// `node` in `tint`, where `current` is the colour its `currentColor` is as the markup draws it.
-void paint(SvgNode &node, uint32_t tint, uint32_t current) {
+// `node` in `tint`. A `currentColor` stays one, so the drawing resolves it against the tinted
+// `color` of the shape that uses it, which inherits.
+void paint(SvgNode &node, uint32_t tint) {
   auto &e = node.element;
   if (e.color) {
-    current = *e.color;
-    e.color = tinted(current, tint);
+    e.color = tinted(*e.color, tint);
   }
   auto repaint = [&](SvgBrush &brush) {
     using T = SvgBrush::Type;
     if (brush.type == T::Color) {
       brush.argb = tinted(brush.argb, tint);
-    } else if (brush.type == T::CurrentColor) {
-      brush = {.type = T::Color, .argb = tinted(current, tint)};
     } else if (brush.type == T::Ref) {
       brush = {.type = T::Color, .argb = tint};
     }
@@ -678,7 +676,7 @@ void paint(SvgNode &node, uint32_t tint, uint32_t current) {
   repaint(e.fill);
   repaint(e.stroke);
   for (auto &child : node.children) {
-    paint(child, tint, current);
+    paint(child, tint);
   }
 }
 
@@ -725,7 +723,7 @@ std::optional<SvgDocument> parseSvgMarkup(std::string_view markup) {
 
 SvgDocument svgPaintedIn(const SvgDocument &document, uint32_t argb) {
   SvgDocument painted = document;
-  painted.root.element.color = argb;
+  painted.root.element.color = tinted(document.root.element.color.value_or(0xff000000), argb);
   for (auto &child : painted.root.children) {
     // A shape that sets no fill fills black, which would be the one colour not tinted. It is black
     // whatever the `color`, unlike a fill of `currentColor`.
@@ -734,7 +732,7 @@ SvgDocument svgPaintedIn(const SvgDocument &document, uint32_t argb) {
       child.element.fill = {.type = SvgBrush::Type::Color, .argb = 0xff000000};
       list.emplace_back("fill");
     }
-    paint(child, argb, document.root.element.color.value_or(0xff000000));
+    paint(child, argb);
   }
   return painted;
 }
