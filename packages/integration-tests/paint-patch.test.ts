@@ -120,6 +120,16 @@ describe('paint bound on a view and changed alone', () => {
     assert.equal(style('plain')['opacity'], 1);
   });
 
+  it("keeps the UI thread's props over the bound value, ones it once equalled too", async () => {
+    const plain = bench.plain().nativeElement;
+    const engine = plain.engine as unknown as Engine;
+    engine.setUiThreadProps(plain, { opacity: 1 });
+    await detectChanges();
+    bench.opacity.set(0.5);
+    await detectChanges();
+    assert.equal(style('plain')['opacity'], 1);
+  });
+
   it("takes a rule's value back when the bound one is removed", async () => {
     bench.transform.set('translateX(2px)');
     await detectChanges();

@@ -31,7 +31,12 @@
  * them, and re-exporting them here would only add a name to keep in step.
  */
 import { Directive } from '@angular/core';
-import { makeMutable, startMapper, stopMapper } from 'react-native-reanimated';
+import {
+  getStaticFeatureFlag,
+  makeMutable,
+  startMapper,
+  stopMapper,
+} from 'react-native-reanimated';
 /**
  * `updateProps` is what every animated style in Reanimated goes through, and there is no exported
  * equivalent. It is a worklet, so it is called from ours rather than from here.
@@ -45,6 +50,7 @@ import { makeMutable, startMapper, stopMapper } from 'react-native-reanimated';
 const { updateProps } = require('react-native-reanimated/src/updateProps/index.ts') as {
   updateProps(descriptors: object, updates: Record<string, unknown>): void;
 };
+import { settledReader, type SettledSource, type Unprocess } from './settled-updates.ts';
 import { WorkletScrollBase } from './worklet-scroll.ts';
 import { WorkletStyleBase } from './worklet-style.ts';
 import { WORKLETS, type MutableValue, type WorkletBackend } from './worklets.ts';
@@ -67,8 +73,32 @@ export function sharedValue<T>(initial: T): MutableValue<T> {
   return makeMutable(initial);
 }
 
+/**
+ * Not public: what Reanimated's own components read the settled values through, and the inverse
+ * of its processing they render them with, since Reanimated keeps the values as native takes them
+ * and the engine processes a style itself. Required for the reason `updateProps` is, and with no
+ * extension, so that Metro picks the native file: `ReanimatedModule/index.native.ts` over the
+ * browser's `index.ts`, and the collector's `.native.ts` from 4.8.
+ */
+const { ReanimatedModule } = require('react-native-reanimated/src/ReanimatedModule') as {
+  ReanimatedModule: SettledSource;
+};
+const collector = require('react-native-reanimated/src/PropsRegistryGarbageCollector') as Unprocess;
+
+/**
+ * Where Reanimated hands over what its views settled on, as its own React components read it. With
+ * `FORCE_REACT_RENDER_FOR_SETTLED_ANIMATIONS` off it keeps no such record, and with
+ * `USE_ANIMATION_BACKEND` on it applies nothing to a commit, so there is nothing to read. Nor where
+ * it gives no way to turn what it hands over back into a style (before 4.7).
+ */
+const settledUpdates =
+  getStaticFeatureFlag('FORCE_REACT_RENDER_FOR_SETTLED_ANIMATIONS') &&
+  !getStaticFeatureFlag('USE_ANIMATION_BACKEND')
+    ? settledReader(ReanimatedModule, collector)
+    : null;
+
 const backend: WorkletBackend = {
-  bind: (target, style) => {
+  bind: (target, style, settled) => {
     // The shape `updateProps` takes: a `{ value }` holder of descriptors, so that the set of
     // views a style drives can change without the worklet being rebuilt. Ours never does - one
     // directive drives one node - so a plain object is enough.
@@ -78,7 +108,11 @@ const backend: WorkletBackend = {
       'worklet';
       updateProps(descriptors, updater(...values));
     }, values as unknown[]);
-    return () => stopMapper(id);
+    const stopSettling = settledUpdates?.watch(target.tag, settled);
+    return () => {
+      stopMapper(id);
+      stopSettling?.();
+    };
   },
 
   scroll: (target, spec) => {

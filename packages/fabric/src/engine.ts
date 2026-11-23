@@ -1007,6 +1007,8 @@ export interface EngineNode extends HostNode {
   presented?: true;
   /** Committed and not to be seen or touched yet: see `Engine.hold`. */
   held?: true;
+  /** What the UI thread drew the view with and has let go of: see `Engine.setUiThreadProps`. */
+  uiThreadProps?: Readonly<Record<string, unknown>>;
   /** This node's own props changed. */
   propsDirty: boolean;
   /** This node's child list changed. */
@@ -4703,14 +4705,20 @@ function paintPassedIn(
 }
 
 /**
- * The keys committed over a node's own style: an `!important` rule's, and a component's
- * `styleOverride`'s. Equal to the style's once, such a value is still not the style's.
+ * The keys committed over a node's own style: an `!important` rule's, a component's
+ * `styleOverride`'s and the UI thread's (`Engine.setUiThreadProps`). Equal to the style's once,
+ * such a value is still not the style's.
  */
 function setOver(node: EngineNode): ReadonlySet<string> {
   const important = node.styleCache?.important;
   const override = node.props[STYLE_OVERRIDE];
-  if (!override) return important ?? NO_KEYS_SET;
-  return new Set([...(important ?? []), ...Object.keys(flattenStyle(override, {}))]);
+  const drawn = node.uiThreadProps;
+  if (!override && !drawn) return important ?? NO_KEYS_SET;
+  return new Set([
+    ...(important ?? []),
+    ...Object.keys(flattenStyle(override, {})),
+    ...Object.keys(drawn ?? {}),
+  ]);
 }
 
 const NO_KEYS_SET: ReadonlySet<string> = new Set();
@@ -6829,6 +6837,7 @@ const ENGINE_NODE_FIELDS = {
   raised: true,
   presented: true,
   held: true,
+  uiThreadProps: true,
   propsDirty: true,
   structureDirty: true,
   subtreeDirty: true,
@@ -8546,6 +8555,25 @@ export class Engine implements HostEngine {
     if ((node.held === true) === held) return;
     if (held) node.held = true;
     else delete node.held;
+    this.markProps(node, false);
+  }
+
+  /**
+   * Commit `props` on a node's view over everything else it is given, or stop with `null`. Each
+   * call replaces what the one before set.
+   *
+   * What a worklet drew the view with on the UI thread once it has settled there, Reanimated's
+   * `[workletStyle]`. Until then Reanimated applies them to every commit itself, cloning the view
+   * and each ancestor, and it lets the view go once they are in the props the view is committed
+   * with. So they land as Reanimated applied them: last, over a rule marked important, inline
+   * style and a component's override, with no transition easing them and no patch of paint
+   * writing over them. The engine processes them for native as it does a style.
+   */
+  setUiThreadProps(node: EngineNode, props: Readonly<Record<string, unknown>> | null): void {
+    if ((node.uiThreadProps ?? null) === props) return;
+    if (props) node.uiThreadProps = props;
+    else delete node.uiThreadProps;
+    // Read by no selector and inherited by nothing: the node's own props are merged again.
     this.markProps(node, false);
   }
 
@@ -13296,6 +13324,8 @@ export class Engine implements HostEngine {
       contentAsBorderBox(merged, this.styles.readsRightToLeft(merged));
     }
     keptForPaint(node, merged);
+    // Last, over everything the engine worked out, as Reanimated's commit hook applied them.
+    if (node.uiThreadProps !== undefined) Object.assign(merged, node.uiThreadProps);
     // Asked first, without a call: nearly no node merged sets paint in its own style.
     const ownStyle = node.props['style'] as Record<string, unknown> | undefined;
     if (node.paintPassed !== undefined || setsPaint(ownStyle)) {

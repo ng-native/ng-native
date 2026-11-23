@@ -58,6 +58,14 @@ export function startMapper(_worklet: () => void, _inputs?: unknown[]): number {
 
 export function stopMapper(_id: number): void {}
 
+/**
+ * What `@ng-native/components/reanimated` asks before it reads the values Reanimated's views
+ * settled on. Off: with no UI thread there are none to read.
+ */
+export function getStaticFeatureFlag(_name: string): boolean {
+  return false;
+}
+
 export const Extrapolation = { IDENTITY: 'identity', CLAMP: 'clamp', EXTEND: 'extend' } as const;
 type Extrapolate = (typeof Extrapolation)[keyof typeof Extrapolation];
 

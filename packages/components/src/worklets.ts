@@ -107,8 +107,16 @@ export interface WorkletBackend {
   /**
    * Run `style.updater` on the UI runtime whenever one of its values changes, writing what it
    * returns onto `target`. Returns the function that stops it.
+   *
+   * `settled` is handed the props the UI thread has drawn `target` with once they stop changing,
+   * as React Native styles them, for the view's commits to carry: Reanimated lets the view go
+   * once they do. Every prop it has drawn the view with, from this style and any before it.
    */
-  bind(target: WorkletTarget, style: WorkletStyleSpec): () => void;
+  bind(
+    target: WorkletTarget,
+    style: WorkletStyleSpec,
+    settled: (props: Readonly<Record<string, unknown>>) => void,
+  ): () => void;
 
   /**
    * Run `spec.handler` on the UI runtime for every scroll event `target` emits. Returns the

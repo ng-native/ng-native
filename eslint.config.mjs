@@ -226,6 +226,7 @@ export default tseslint.config(
       'packages/integration-tests/native-props.test.ts',
       'packages/integration-tests/native-state.test.ts',
       'packages/integration-tests/web-parity.test.ts',
+      'packages/integration-tests/worklet-settled-updates.test.ts',
       'packages/integration-tests/register-linker.mjs',
       // `@ng-native/web` is `layer:angular` (it depends on nothing but the engine and
       // device capabilities, same as `packages/platform`), and rightly cannot import

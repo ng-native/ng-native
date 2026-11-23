@@ -5,7 +5,8 @@
  * directive hands it a node it can actually write to - a react tag and the shadow node behind it,
  * neither of which exists before the first commit - and that it lets go of the runtime when the
  * style is replaced or the element goes away, because a mapper nobody stopped keeps running on
- * the UI thread for the life of the app.
+ * the UI thread for the life of the app. And that what the UI thread settles on is committed with
+ * the node, which is what lets Reanimated stop re-applying the view to every commit.
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
@@ -21,6 +22,7 @@ const flatten = (n: FakeFabricNode[]): FakeFabricNode[] =>
 interface Binding {
   target: WorkletTarget;
   style: WorkletStyleSpec;
+  settled: (props: Readonly<Record<string, unknown>>) => void;
   stopped: number;
 }
 
@@ -36,8 +38,8 @@ async function boot() {
       {
         provide: WORKLETS,
         useValue: {
-          bind: (target: WorkletTarget, style: WorkletStyleSpec) => {
-            const binding: Binding = { target, style, stopped: 0 };
+          bind: (target: WorkletTarget, style: WorkletStyleSpec, settled: Binding['settled']) => {
+            const binding: Binding = { target, style, settled, stopped: 0 };
             bound.push(binding);
             return () => binding.stopped++;
           },
@@ -91,5 +93,38 @@ describe('worklet style', () => {
     app.componentRef.destroy();
     await settle();
     assert.equal(bound[0]!.stopped, 1);
+  });
+
+  it('commits the props the UI thread settled on with the node', async () => {
+    const { bound, animated } = await boot();
+    bound[0]!.settled({ transform: [{ translateX: 40 }], opacity: 0.5 });
+    await settle();
+    assert.deepEqual(animated().props['transform'], [{ translateX: 40 }]);
+    assert.equal(animated().props['opacity'], 0.5);
+  });
+
+  it('keeps what settled earlier beside what settles later', async () => {
+    const { bound, animated } = await boot();
+    bound[0]!.settled({ transform: [{ translateX: 40 }], opacity: 0.5 });
+    await settle();
+    bound[0]!.settled({ opacity: 0.8 });
+    await settle();
+    assert.deepEqual(animated().props['transform'], [{ translateX: 40 }]);
+    assert.equal(animated().props['opacity'], 0.8);
+  });
+
+  it('keeps them when the style is replaced, as Reanimated keeps what it drew', async () => {
+    const { app, bound, animated } = await boot();
+    const instance = app.componentRef.instance as {
+      style: { set(value: WorkletStyleSpec): void };
+    };
+    bound[0]!.settled({ transform: [{ translateX: 40 }] });
+    await settle();
+    instance.style.set({ values: [], updater: () => ({ opacity: 0.5 }) });
+    await settle();
+    bound[1]!.settled({ opacity: 0.5 });
+    await settle();
+    assert.deepEqual(animated().props['transform'], [{ translateX: 40 }]);
+    assert.equal(animated().props['opacity'], 0.5);
   });
 });

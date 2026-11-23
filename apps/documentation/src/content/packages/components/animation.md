@@ -141,6 +141,12 @@ values in its first argument, and read from the function's own parameters - not 
 so a function that read `this.offset` instead of a passed-in `offset` parameter would try to send
 the entire component along with it.
 
+While a worklet's values are changing, Reanimated applies them to every commit the app makes. About
+a second after they stop changing, `[workletStyle]` commits them with the element's own props and
+Reanimated lets the element go, so a view at rest adds nothing to later commits. They stay over
+everything else the element is styled with, as they did while moving, and no CSS transition eases
+them. On iOS and Android, with Reanimated 4.7 or later and its default feature flags.
+
 In a browser build both directives are inert: the template renders and no worklet runs, and
 `sharedValue` is a plain holder. [What does not carry over](/packages/web/limits) has the details.
 

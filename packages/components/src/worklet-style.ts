@@ -33,6 +33,12 @@ export class WorkletStyleBase {
 
   readonly workletStyle = input.required<WorkletStyleSpec>();
 
+  /**
+   * What the UI thread has drawn the node with and let go of, from every style bound so far: a
+   * replaced style leaves what the one before drew, as Reanimated leaves it on the view.
+   */
+  private drawn: Readonly<Record<string, unknown>> = {};
+
   constructor() {
     // A node has neither a react tag nor a shadow node until it has been committed once, and
     // there is nothing for the UI thread to write to before then.
@@ -43,10 +49,22 @@ export class WorkletStyleBase {
           const tag = this.engine.tagOf(this.node);
           const shadowNode = this.engine.shadowNodeOf(this.node);
           if (tag === null || shadowNode === null) return;
-          onCleanup(this.worklets.bind({ tag, shadowNode }, style));
+          onCleanup(
+            this.worklets.bind({ tag, shadowNode }, style, (props) => this.keepDrawn(props)),
+          );
         },
         { injector: this.injector },
       );
     });
+  }
+
+  /**
+   * Commit what the UI thread settled on with the node, which is what lets Reanimated stop
+   * applying the view to every commit. The commit is the next one the engine makes, for every view
+   * that settled together.
+   */
+  private keepDrawn(props: Readonly<Record<string, unknown>>): void {
+    this.drawn = { ...this.drawn, ...props };
+    this.engine.setUiThreadProps(this.node, this.drawn);
   }
 }
