@@ -4,14 +4,15 @@
 // The runtime hands over every error React Native's error pipeline sees (its ProcessedError, from
 // an exception listener registered before the bundle runs), whether or not LogBox, which draws
 // nothing in an Angular app, takes it. The box shows the newest error with its stack, which the
-// dev server symbolicates (`/symbolicate`) to the app's own sources, and keeps the earlier ones
-// to step through. Dismiss clears them; a reload clears them and hides the box.
+// dev server symbolicates (`/symbolicate`) to the app's own sources, and keeps the others to step
+// through; a fatal error it shows stays until stepped away from, as the errors after it follow
+// from it. Dismiss clears them; a reload clears them and hides the box.
 #pragma once
 
 #include "ngn/network.h"
 
 #include <folly/dynamic.h>
-
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -95,10 +96,17 @@ class RedBox {
   bool showing() const;
   size_t count() const;
 
+  // Where a fatal error goes once the dev server has symbolicated its stack: its message, then a
+  // line for each frame the box lists. The host log by default, which otherwise has React
+  // Native's own copy, with the bundle's lines.
+  std::function<void(const std::string &)> log;
+
  private:
   // Asks for `error`'s stack for the kept error numbered `serial`. Called with the lock held.
   void symbolicate(uint64_t serial, const JsError &error);
   void showLocked(std::unique_lock<std::mutex> &lock);
+  // Whether the box shows a fatal error, which a new error then does not take its place from.
+  bool holdsFatal() const;
 
   std::shared_ptr<RedBoxBackend> backend_;
   std::shared_ptr<Http> http_;

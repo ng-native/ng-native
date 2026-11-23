@@ -276,3 +276,63 @@ TEST_CASE("a symbolication answers the error it was asked for after older errors
   f.box.step(-1);
   CHECK(f.backend->shown.back().error.stack.at(0).methodName == "forError1");
 }
+
+TEST_CASE("a fatal error keeps the box while the errors that follow from it are kept behind it") {
+  Fixture f;
+  // A module that throws as the bundle loads, then AppRegistry finding no app because of it.
+  f.box.report(error("TypeError: undefined cannot be used as a constructor", true));
+  f.box.report(error("soft"));
+  f.box.report(error("Invariant Violation: \"main\" has not been registered", true));
+  CHECK(f.box.count() == 3);
+  CHECK(f.backend->shown.back().error.message == "TypeError: undefined cannot be used as a constructor");
+  CHECK(f.backend->shown.back().index == 0);
+  CHECK(f.backend->shown.back().count == 3);
+  // Stepped away from it, the next error shows as it comes.
+  f.box.step(1);
+  CHECK(f.backend->shown.back().error.message == "soft");
+  f.box.report(error("later"));
+  CHECK(f.backend->shown.back().error.message == "later");
+}
+
+TEST_CASE("a fatal error on show stays on show as the oldest error makes way") {
+  Fixture f;
+  // The box keeps 50: the 51st pushes "soft" out and the fatal error becomes the first kept.
+  f.box.report(error("soft"));
+  f.box.report(error("cause", true));
+  for (int i = 0; i < 49; i++) {
+    f.box.report(error("after " + std::to_string(i)));
+  }
+  CHECK(f.box.count() == 50);
+  CHECK(f.backend->shown.back().error.message == "cause");
+  CHECK(f.backend->shown.back().index == 0);
+}
+
+TEST_CASE("a later error made fatal by the same message again does not take the box") {
+  Fixture f;
+  f.box.report(error("cause", true));
+  f.box.report(error("follows"));
+  f.box.report(error("follows", true));
+  CHECK(f.box.count() == 2);
+  CHECK(f.backend->shown.back().error.message == "cause");
+}
+
+TEST_CASE("a fatal error's symbolicated stack goes to the log, a soft one's does not") {
+  Fixture f;
+  std::vector<std::string> logged;
+  f.box.log = [&](const std::string &text) { logged.push_back(text); };
+  f.box.report(error("TypeError: undefined cannot be used as a constructor", true));
+  f.box.report(error("soft"));
+  REQUIRE(f.http->sent.size() == 2);
+  auto stack = R"({"stack": [
+    {"methodName": "<global>", "file": "/app/src/app/shared.ts", "lineNumber": 3, "column": 14, "collapse": false},
+    {"methodName": "loadModuleImplementation", "file": "/app/node_modules/metro-runtime/src/polyfills/require.js", "lineNumber": 9, "column": 1, "collapse": true}
+  ]})";
+  answer(*f.http->sent[1], stack);
+  CHECK(logged.empty());
+  answer(*f.http->sent[0], stack);
+  REQUIRE(logged.size() == 1);
+  CHECK(
+      logged[0] ==
+      "TypeError: undefined cannot be used as a constructor\n"
+      "    at <global> (/app/src/app/shared.ts:3:14)");
+}
