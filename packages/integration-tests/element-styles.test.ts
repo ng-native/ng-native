@@ -4,7 +4,12 @@
  */
 import assert from 'node:assert/strict';
 import { it } from 'node:test';
-import { ELEMENT_STYLES, ELEMENT_STYLES_CSS, Engine } from '@ng-native/fabric';
+import {
+  ELEMENT_STYLES,
+  ELEMENT_STYLES_CSS,
+  Engine,
+  registerPlatformComponents,
+} from '@ng-native/fabric';
 import { compileCss, createFakeFabric } from '@ng-native/testing';
 
 it('ELEMENT_STYLES is ELEMENT_STYLES_CSS, compiled', () => {
@@ -18,6 +23,7 @@ it('ELEMENT_STYLES is ELEMENT_STYLES_CSS, compiled', () => {
 
 it('draws code in Menlo on a Mac, as on iOS, and in monospace on Linux, as on Android', () => {
   const font = (platform: string) => {
+    registerPlatformComponents(platform);
     const fabric = createFakeFabric();
     const engine = new Engine(fabric, 1);
     engine.addClass(engine.root, `platform-${platform}`);
@@ -29,8 +35,12 @@ it('draws code in Menlo on a Mac, as on iOS, and in monospace on Linux, as on An
       JSON.stringify(fabric.committed, (key, value) => (key === 'parent' ? undefined : value)),
     )?.[1];
   };
-  assert.equal(font('ios'), 'Menlo');
-  assert.equal(font('macos'), 'Menlo');
-  assert.equal(font('android'), 'monospace');
-  assert.equal(font('linux'), 'monospace');
+  try {
+    assert.equal(font('ios'), 'Menlo');
+    assert.equal(font('macos'), 'Menlo');
+    assert.equal(font('android'), 'monospace');
+    assert.equal(font('linux'), 'monospace');
+  } finally {
+    registerPlatformComponents('ios');
+  }
 });

@@ -106,7 +106,13 @@ const PX = /^-?\d*\.?\d+px$/;
 const NUMBER = /^-?\d*\.?\d+$/;
 const REM = /^-?\d*\.?\d+rem$/;
 const styleKey = (name: string): string =>
-  name.includes('-') ? name.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()) : name;
+  name.includes('-')
+    ? (RENAMED_STYLES[name] ?? name.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()))
+    : name;
+/** A property a stylesheet compiles to a prop of another name, by its CSS name. */
+const RENAMED_STYLES: Readonly<Record<string, string>> = {
+  '-webkit-font-smoothing': 'fontSmoothing',
+};
 /**
  * A bare number arrives as a string too, and Yoga wants a number. A `rem` is 16 points, as in a
  * stylesheet, so it needs no font size in scope.
@@ -173,12 +179,15 @@ const BRACKETS = /[()"'\\]/g;
 
 /**
  * A `font-family` is a stack, quoted or not, where native takes one family by name: the first,
- * unquoted, as a stylesheet rule commits it. Left as written, `'Inter-Bold'` names no font.
+ * unquoted, as a stylesheet rule commits it. Left as written, `'Inter-Bold'` names no font. A
+ * `-webkit-font-smoothing` keyword is read in any case, as a rule reads it.
  */
 const declaredValue = (key: string, value: unknown): unknown =>
   key === 'fontFamily' && typeof value === 'string'
     ? (firstFamily(value) ?? value)
-    : (platformColour(key, value) ?? styleValue(key, value));
+    : key === 'fontSmoothing' && typeof value === 'string'
+      ? value.toLowerCase()
+      : (platformColour(key, value) ?? styleValue(key, value));
 
 const COLOUR_KEY = /color$/i;
 

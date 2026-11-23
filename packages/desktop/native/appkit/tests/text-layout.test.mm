@@ -6,6 +6,7 @@
 
 #import <AppKit/AppKit.h>
 
+#include <utility>
 #include <vector>
 
 using namespace facebook::react;
@@ -92,6 +93,24 @@ TEST_CASE("A fragment takes none of the attributes of the fragment before it") {
   CHECK(CFAttributedStringGetAttribute(string, 5, kCTUnderlineStyleAttributeName, nullptr) == nullptr);
   CHECK(CFAttributedStringGetAttribute(string, 5, kCTKernAttributeName, nullptr) == nullptr);
   CFRelease(string);
+}
+
+TEST_CASE("ui-monospace and monospace are the system's monospaced face, as Safari draws ui-monospace") {
+  // The family each name draws in, and whether its glyphs are all one width.
+  auto drawnIn = [](const std::string &family) {
+    auto f = fragment("x");
+    f.textAttributes.fontFamily = family;
+    CFAttributedStringRef string = ngn::makeAttributedString(stringOf({f}));
+    auto font = (CTFontRef)CFAttributedStringGetAttribute(string, 0, kCTFontAttributeName, nullptr);
+    NSString *name = CFBridgingRelease(CTFontCopyFamilyName(font));
+    bool fixed = (CTFontGetSymbolicTraits(font) & kCTFontTraitMonoSpace) != 0;
+    CFRelease(string);
+    return std::make_pair(std::string(name.UTF8String), fixed);
+  };
+  auto system = drawnIn("monospace");
+  CHECK(system.second);
+  CHECK(drawnIn("ui-monospace") == system);
+  CHECK_FALSE(drawnIn("system-ui").second);
 }
 
 TEST_CASE("A fixed line height scales by the font size multiplier, capped as the font size is") {
@@ -380,3 +399,38 @@ TEST_CASE("A centred or right-aligned line reports where the drawing puts it") {
   }
 }
 
+TEST_CASE("-webkit-font-smoothing: antialiased draws thinner than the smoothed default, and none draws no partial pixels") {
+  auto f = fragment("Hamburgefonstiv", 13);
+  auto layout = ngn::layoutText(stringOf({f}), ParagraphAttributes{}, 200);
+  // The ink each draws, black on white at 2x, as a window's context has it: smoothing allowed and on.
+  auto ink = [&](ngn::FontSmoothing smoothing, int *partial) {
+    const int width = 400, height = 60;
+    std::vector<uint8_t> pixels(static_cast<size_t>(width * height * 4), 0);
+    CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CGContextRef context = CGBitmapContextCreate(pixels.data(), width, height, 8, width * 4, space, kCGImageAlphaPremultipliedLast);
+    CGColorSpaceRelease(space);
+    CGContextSetRGBFillColor(context, 1, 1, 1, 1);
+    CGContextFillRect(context, CGRectMake(0, 0, width, height));
+    CGContextTranslateCTM(context, 0, height);
+    CGContextScaleCTM(context, 2, -2);
+    CGContextSetAllowsFontSmoothing(context, true);
+    CGContextSetShouldSmoothFonts(context, true);
+    ngn::drawText(layout, context, CGPointZero, 200, smoothing);
+    CGContextRelease(context);
+    long total = 0;
+    *partial = 0;
+    for (size_t i = 0; i < pixels.size(); i += 4) {
+      total += 255 - pixels[i];
+      *partial += pixels[i] != 0 && pixels[i] != 255;
+    }
+    return total;
+  };
+  int partial = 0;
+  long smoothed = ink(ngn::FontSmoothing::Auto, &partial);
+  CHECK(partial > 0);
+  long antialiased = ink(ngn::FontSmoothing::Antialiased, &partial);
+  CHECK(partial > 0);
+  CHECK(antialiased < smoothed);
+  ink(ngn::FontSmoothing::None, &partial);
+  CHECK(partial == 0);
+}

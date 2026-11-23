@@ -917,6 +917,9 @@ const INHERITED = new Set([
   'textShadowOffset',
   'textShadowRadius',
   'textShadowColor',
+  // `-webkit-font-smoothing`, which an app sets once at its root: see `fontSmoothing` in
+  // engine.ts.
+  'fontSmoothing',
   // `text-wrap` and `word-break`, which CSS inherits, as the paragraph props they are.
   'lineBreakStrategyIOS',
   'textBreakStrategy',

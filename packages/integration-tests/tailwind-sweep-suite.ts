@@ -354,6 +354,7 @@ const CSS_OF: Record<string, string | readonly string[]> = {
   __scale: 'scale',
   resizeMode: 'object-fit',
   selectable: 'user-select',
+  fontSmoothing: '-webkit-font-smoothing',
   touchAction: 'touch-action',
   ellipsizeMode: 'text-overflow',
   lineBreakStrategyIOS: ['text-wrap-style', 'word-break'],

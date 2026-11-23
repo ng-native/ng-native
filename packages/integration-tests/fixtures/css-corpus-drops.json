@@ -305,7 +305,7 @@
   },
   "bulma": {
     "rules": 3457,
-    "dropped": 1566,
+    "dropped": 1562,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -366,6 +366,7 @@
       "flexWrap",
       "fontFamily",
       "fontSize",
+      "fontSmoothing",
       "fontStyle",
       "fontWeight",
       "gridTemplateRows",
@@ -428,12 +429,6 @@
       },
       "--*": {
         "'--*' has a value native cannot express in any form": 23
-      },
-      "-moz-osx-font-smoothing": {
-        "'-moz-osx-font-smoothing' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": 2
-      },
-      "-webkit-font-smoothing": {
-        "'-webkit-font-smoothing' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": 2
       },
       "-webkit-overflow-scrolling": {
         "'-webkit-overflow-scrolling' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": 7

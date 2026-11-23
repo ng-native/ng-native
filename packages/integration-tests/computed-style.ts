@@ -114,6 +114,8 @@ export function ours(style: Style, property: string): unknown {
       return style['numberOfLines'];
     case 'user-select':
       return style['selectable'];
+    case '-webkit-font-smoothing':
+      return style['fontSmoothing'];
     case 'text-overflow':
       return style['ellipsizeMode'];
     case 'text-wrap-style':

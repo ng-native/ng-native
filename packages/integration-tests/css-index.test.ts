@@ -223,7 +223,7 @@ describe('a rule that translated to nothing', () => {
     // browser-only properties this engine drops. Either way what is left is an empty `:root` or
     // `*` rule - no key class, so the bucket every single node is offered.
     const sheet = compileCss(
-      '* { -webkit-font-smoothing: antialiased }\n.p { padding-top: 4px }',
+      '* { -moz-osx-font-smoothing: grayscale }\n.p { padding-top: 4px }',
       'test',
       {
         onUnsupported: () => {},

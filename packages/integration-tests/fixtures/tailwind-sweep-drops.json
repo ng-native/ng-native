@@ -824,12 +824,6 @@
     "-translate-z-[rgb(10,20,30)]",
     "-translate-z-[rgb(10,20,30)]!"
   ],
-  "dropped '-webkit-font-smoothing': '…' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": [
-    "antialiased",
-    "antialiased!",
-    "subpixel-antialiased",
-    "subpixel-antialiased!"
-  ],
   "dropped '-webkit-line-clamp': '…' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": [
     "line-clamp-(--x)",
     "line-clamp-(--x)!",

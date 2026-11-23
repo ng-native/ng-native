@@ -3,6 +3,7 @@
 #include "ngn/desktop-view-props.h"
 
 #include <doctest/doctest.h>
+#include <react/renderer/components/text/ParagraphComponentDescriptor.h>
 
 using namespace facebook::react;
 
@@ -181,4 +182,20 @@ TEST_CASE("a role React Native's Role lacks is kept as written, and is the view'
   auto cleared = p.clone(listbox, folly::dynamic::object("role", nullptr));
   CHECK(ngn::desktopProps(*cleared).role.empty());
   CHECK(ngn::roleName(static_cast<const ViewProps &>(*cleared)).empty());
+}
+
+TEST_CASE("a text's -webkit-font-smoothing is parsed from its keyword, and goes back to auto when unset") {
+  auto context = std::make_shared<const ContextContainer>();
+  ParagraphComponentDescriptor descriptor{{{}, context, nullptr}};
+  PropsParserContext parserContext{1, *context};
+  auto smoothing = [&](const Props::Shared &source, folly::dynamic value) {
+    auto props = descriptor.cloneProps(parserContext, source, RawProps(folly::dynamic::object("fontSmoothing", value)));
+    return std::make_pair(props, ngn::desktopProps(*props).fontSmoothing);
+  };
+  auto [antialiased, first] = smoothing(nullptr, "antialiased");
+  CHECK(first == ngn::FontSmoothing::Antialiased);
+  CHECK(smoothing(nullptr, "none").second == ngn::FontSmoothing::None);
+  CHECK(smoothing(nullptr, "subpixel-antialiased").second == ngn::FontSmoothing::Auto);
+  CHECK(smoothing(nullptr, "auto").second == ngn::FontSmoothing::Auto);
+  CHECK(smoothing(antialiased, nullptr).second == ngn::FontSmoothing::Auto);
 }

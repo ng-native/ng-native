@@ -2,6 +2,7 @@
 // (NGNView, on the main thread), so both break lines the same way.
 #pragma once
 
+#include "ngn/desktop-props.h"
 #include "ngn/fonts.h"
 #include "ngn/text-measurer.h"
 
@@ -45,8 +46,13 @@ TextLayout layoutText(
     const facebook::react::ParagraphAttributes &paragraphAttributes,
     CGFloat maxWidth);
 
-// Draws a layout into a flipped (top-left origin) context at `origin`.
-void drawText(const TextLayout &layout, CGContextRef context, CGPoint origin, CGFloat boxWidth);
+// Draws a layout into a flipped (top-left origin) context at `origin`, smoothed as `smoothing` says.
+void drawText(
+    const TextLayout &layout,
+    CGContextRef context,
+    CGPoint origin,
+    CGFloat boxWidth,
+    FontSmoothing smoothing = FontSmoothing::Auto);
 
 // The core's TextMeasurer, over the same layout the views draw.
 class CoreTextMeasurer final : public TextMeasurer {

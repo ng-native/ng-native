@@ -8,7 +8,12 @@ import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { StyleResolver, type StyleSheet, type StyleTarget } from '@ng-native/fabric';
+import {
+  registerPlatformComponents,
+  StyleResolver,
+  type StyleSheet,
+  type StyleTarget,
+} from '@ng-native/fabric';
 import type { FakeFabric, FakeFabricNode } from '@ng-native/testing';
 
 /**
@@ -92,6 +97,19 @@ export function buildV3(classes: string, app: object = {}, css = ''): string {
 }
 
 /** The props a node was last committed with. */
+/**
+ * `run` on the platform a `platform-*` class among `classes` names, as an app on it is (iOS where
+ * none does), with iOS's back after it.
+ */
+export function onPlatformOf<T>(classes: string, run: () => T): T {
+  registerPlatformComponents(/\bplatform-(\w+)/.exec(classes)?.[1] ?? 'ios');
+  try {
+    return run();
+  } finally {
+    registerPlatformComponents('ios');
+  }
+}
+
 export function committedProps(fabric: FakeFabric, node: unknown): Record<string, unknown> {
   const all = (n: FakeFabricNode): FakeFabricNode[] => [n, ...n.children.flatMap(all)];
   const found = fabric.committed.flatMap(all).find((n) => n.instanceHandle === node);

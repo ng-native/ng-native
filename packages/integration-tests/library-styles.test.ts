@@ -361,7 +361,7 @@ describe("a library's component CSS, opted in", () => {
     const file = '/app/node_modules/x-ui/ui.mjs';
     const hover = partial(
       `import {Component} from '@angular/core';
-       @Component({selector: 'x-b', template: '<text>b</text>', styles: ['.b { color: red; -webkit-font-smoothing: antialiased }\\n.b:target { color: blue }']})
+       @Component({selector: 'x-b', template: '<text>b</text>', styles: ['.b { color: red; -webkit-touch-callout: none }\\n.b:target { color: blue }']})
        export class B {}`,
       file,
     );
@@ -374,7 +374,7 @@ describe("a library's component CSS, opted in", () => {
     assert.equal(warnings.length, 2);
     assert.match(
       warnings[0]!,
-      new RegExp(`^\\[angular-native\\] ${file}:${line} \\(B\\): dropped '-webkit-font-smoothing'`),
+      new RegExp(`^\\[angular-native\\] ${file}:${line} \\(B\\): dropped '-webkit-touch-callout'`),
     );
     assert.match(
       warnings[1]!,
@@ -735,7 +735,7 @@ describe('where a warning about a library points', () => {
     const file = '/app/node_modules/x-ui/lines.mjs';
     const src = partial(
       `import {Component} from '@angular/core';
-       @Component({selector: 'x-l', template: '', styles: ['.k {\\n  display: flex;\\n}\\n.l {\\n  -webkit-font-smoothing: antialiased;\\n}\\n']})
+       @Component({selector: 'x-l', template: '', styles: ['.k {\\n  display: flex;\\n}\\n.l {\\n  -webkit-touch-callout: none;\\n}\\n']})
        export class L {}`,
       file,
     );
@@ -749,7 +749,7 @@ describe('where a warning about a library points', () => {
     assert.match(
       warnings[0]!,
       new RegExp(
-        `lines\\.mjs:${line} \\(L, line 4 of its styles\\): dropped '-webkit-font-smoothing'`,
+        `lines\\.mjs:${line} \\(L, line 4 of its styles\\): dropped '-webkit-touch-callout'`,
       ),
     );
   });

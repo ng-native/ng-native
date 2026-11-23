@@ -274,6 +274,18 @@ the stylesheet.
 `font-variant-numeric` takes `tabular-nums`,
 `proportional-nums`, `lining-nums` and `oldstyle-nums`, as `fontVariant`.
 
+`font-family: ui-monospace` and `font-family: monospace` are each platform's monospaced face: SF
+Mono on iOS and macOS, Android's `monospace` face, and the desktop's monospace font on Linux. The
+first family of a stack is the one kept, so `ui-monospace, Menlo, monospace` is that face too.
+
+`-webkit-font-smoothing` is inherited, as in CSS, so an app can set it once at its root. On macOS,
+`antialiased` (Tailwind's `antialiased`) turns off the system's font smoothing for text, which
+draws it thinner, as Chrome and Safari on a Mac draw it; `none` turns off antialiasing too, and
+`auto` and `subpixel-antialiased` keep the smoothing. It applies to a `<text>`'s text, not a text
+field's. iOS and Android draw no smoothing to turn off, and Chrome reads it only on a Mac, so it
+changes nothing on iOS, Android or Linux. `-moz-osx-font-smoothing`, which Firefox reads, is left
+out without a warning.
+
 `display` takes `flex`, `none`, `contents`, the block containers `block`, `flow-root` and
 `inline-block`, `inline-flex`, and `grid` and `inline-grid`. An element that is `display: none` has
 no native view, nor has anything inside it: its views are made when it is displayed and go when it

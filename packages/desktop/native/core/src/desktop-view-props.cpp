@@ -21,6 +21,11 @@ void fromRawValue(const PropsParserContext &, const RawValue &value, ScrollbarGu
   result = keyword == "stable" ? ScrollbarGutter::Stable : ScrollbarGutter::Auto;
 }
 
+void fromRawValue(const PropsParserContext &, const RawValue &value, FontSmoothing &result) {
+  auto keyword = value.hasType<std::string>() ? static_cast<std::string>(value) : std::string{};
+  result = keyword == "antialiased" ? FontSmoothing::Antialiased : keyword == "none" ? FontSmoothing::None : FontSmoothing::Auto;
+}
+
 AriaFields parseAriaFields(const PropsParserContext &context, const AriaFields &source, const RawProps &rawProps) {
   return AriaFields{
       .required = convertRawProp(context, rawProps, "accessibilityRequired", source.required, false),
@@ -52,6 +57,7 @@ DesktopProps parseDesktopProps(const PropsParserContext &context, const DesktopP
       .accessibilityDescribedBy =
           convertRawProp(context, rawProps, "accessibilityDescribedBy", source.accessibilityDescribedBy, {}),
       .aria = parseAriaFields(context, source.aria, rawProps),
+      .fontSmoothing = convertRawProp(context, rawProps, "fontSmoothing", source.fontSmoothing, FontSmoothing::Auto),
   };
 }
 

@@ -138,6 +138,9 @@ const OBJECT_FIT = {
   none: 'none',
 };
 
+/** What `-webkit-font-smoothing` takes. */
+const FONT_SMOOTHING = new Set(['auto', 'none', 'antialiased', 'subpixel-antialiased']);
+
 /** What `touch-action` takes: every gesture, none, or the ones named. */
 const TOUCH_ACTIONS = new Set([
   ...['auto', 'none', 'manipulation', 'pinch-zoom'],
@@ -1605,6 +1608,22 @@ const TRANSLATORS = new Map([
       // RN's own reading: every value but `none` leaves the text selectable.
       out.selectable = keyword(value, property) !== 'none';
     },
+  ],
+  [
+    '-webkit-font-smoothing',
+    (property, value, out, context) => {
+      // Kept for the macOS host, which draws it, as Chrome and Safari read it only on a Mac.
+      const word = String(value).toLowerCase();
+      if (!FONT_SMOOTHING.has(word)) {
+        throw new CssUnsupported(`${context}: ${property}: '${value}' is not one of its keywords`);
+      }
+      out.fontSmoothing = word;
+    },
+  ],
+  [
+    // Firefox's, which Chrome ignores: written beside the webkit property, which is read.
+    '-moz-osx-font-smoothing',
+    () => {},
   ],
   [
     'border-inline-width',

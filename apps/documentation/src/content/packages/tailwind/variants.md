@@ -129,9 +129,9 @@ it. Publish it as an attribute and use the data variant instead:
 
 Tailwind's `--font-mono` is a browser font stack starting `ui-monospace`, and native's `fontFamily`
 takes a single name, not a fallback list - the compiler keeps only the first family from any stack,
-silently. `ui-monospace` exists on neither iOS nor Android, so `font-mono` would silently fall back
-to the system font everywhere without help. `native.css` gives `font-mono` `Courier New` (a real
-font on both, so it means something even with no platform class on the root) and then upgrades it
+silently. That first family is `ui-monospace`, which every platform draws in a monospaced face, but
+`native.css` names a font of its own anyway. It gives `font-mono` `Courier New` (a real font on
+both, so it means something even with no platform class on the root) and then upgrades it
 per platform - Menlo on iOS, the `monospace` alias (Roboto Mono) on Android - once
 `.platform-ios`/`.platform-android` is present. `web.css` does not need this: it does not import it,
 and a browser resolves `ui-monospace` on its own.

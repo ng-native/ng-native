@@ -234,5 +234,7 @@ diagnostics.
 
 Font stacks are a silent exception. `--font-sans` is a list, but native `fontFamily` accepts one
 name: `font-family: Inter, Helvetica, sans-serif` becomes `Inter`, discarding the rest without a
-warning. Native has no fallback stack. If the first font is unavailable or a CSS generic such as
-`ui-monospace`, text silently uses the system font. Name and verify a bundled font.
+warning. Native has no fallback stack. If the first font is unavailable, text silently uses the
+system font. `ui-monospace` and `monospace` are the platform's monospaced face, and `system-ui` its
+system font.
+Name and verify a bundled font.

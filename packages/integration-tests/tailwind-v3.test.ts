@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
 import { createFakeFabric } from '@ng-native/testing';
-import { buildV3 as build, committedProps } from './tailwind-cli.ts';
+import { buildV3 as build, committedProps, onPlatformOf } from './tailwind-cli.ts';
 
 const require = createRequire(import.meta.url);
 const { flattenTailwind } = require('@ng-native/tailwind') as {
@@ -37,6 +37,10 @@ function sheetFor(classes: string, app: object = {}): StyleSheet {
 
 /** Renders a parent wearing `outer` around a child wearing `inner`, and returns both's props. */
 function render(sheet: StyleSheet, outer: string, inner = '') {
+  return onPlatformOf(outer, () => renderOn(sheet, outer, inner));
+}
+
+function renderOn(sheet: StyleSheet, outer: string, inner: string) {
   const fabric = createFakeFabric();
   const engine = new Engine(fabric, 1, { globalStyles: sheet });
   const parent = engine.createElement('view');

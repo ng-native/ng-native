@@ -348,12 +348,6 @@
     "sepia-[37%]",
     "sepia-[3]"
   ],
-  "dropped '-webkit-font-smoothing': '…' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": [
-    "!antialiased",
-    "!subpixel-antialiased",
-    "antialiased",
-    "subpixel-antialiased"
-  ],
   "dropped '-webkit-line-clamp': '…' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": [
     "!line-clamp-[#1a2b3c]",
     "!line-clamp-[rgb(10,20,30)]",

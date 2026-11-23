@@ -21,6 +21,11 @@ using facebook::react::Tag;
 enum class ScrollbarWidth { Auto, Thin, None };
 enum class ScrollbarGutter { Auto, Stable };
 
+// CSS's `-webkit-font-smoothing` on a Paragraph, as Chrome on a Mac draws it: Core Graphics' font
+// smoothing (`auto`, and `subpixel-antialiased`, which no Mac display draws differently), none of
+// it (`antialiased`), or no antialiasing at all (`none`).
+enum class FontSmoothing { Auto, Antialiased, None };
+
 // How a ModalHostView shows (desktop-modal.h): a sheet on its window, a cover in the window, or a
 // popover at its anchor.
 enum class ModalPresentation { Sheet, Cover, Popover };
@@ -75,6 +80,8 @@ struct DesktopProps {
   AriaFields aria;
   // ModalHostView only.
   ModalPresentation presentation{ModalPresentation::Sheet};
+  // Paragraph only. The engine commits it on macOS alone.
+  FontSmoothing fontSmoothing{FontSmoothing::Auto};
 
   bool operator==(const DesktopProps &other) const = default;
 };

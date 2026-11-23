@@ -857,7 +857,14 @@ static BOOL focusFromKeyboard() {
   CGFloat width = _layout.frame.size.width - insets.left - insets.right;
   // A hair of slack, so the width Yoga rounded to the pixel lays out the same lines as measure.
   auto layout = ngn::layoutText(data.attributedString, data.paragraphAttributes, width + 0.5);
-  ngn::drawText(layout, NSGraphicsContext.currentContext.CGContext, CGPointMake(insets.left, insets.top), width);
+  // `-webkit-font-smoothing`, a desktop prop of the paragraph's (HostPlatformParagraphProps.h).
+  const auto *desktop = dynamic_cast<const ngn::HasDesktopProps *>(_props.get());
+  ngn::drawText(
+      layout,
+      NSGraphicsContext.currentContext.CGContext,
+      CGPointMake(insets.left, insets.top),
+      width,
+      desktop ? desktop->desktop.fontSmoothing : ngn::FontSmoothing::Auto);
 }
 
 @end

@@ -15,7 +15,7 @@ import { before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
 import { createFakeFabric } from '@ng-native/testing';
-import { build, committedProps } from './tailwind-cli.ts';
+import { build, committedProps, onPlatformOf } from './tailwind-cli.ts';
 
 const CLASSES =
   '{hover:,press:,hovered:,focus-visible:,ios:,web:,native:,macos:,linux:,desktop:,dark:}bg-red-500 pb-safe h-hairline font-mono';
@@ -155,14 +155,16 @@ describe('the two Tailwind presets', () => {
       compileCss(css: string, context: string, options: object): StyleSheet;
     };
     const sheet = compileCss(flattenTailwind(css), 'tailwind', { onUnsupported: () => {} });
-    const fabric = createFakeFabric();
-    const engine = new Engine(fabric, 1, { globalStyles: sheet });
-    for (const one of root.split(' ').filter(Boolean)) engine.addClass(engine.root, one);
-    const text = engine.createElement('view');
-    engine.setClasses(text, classes);
-    engine.appendChild(engine.root, text);
-    engine.commit();
-    return committedProps(fabric, text);
+    return onPlatformOf(root, () => {
+      const fabric = createFakeFabric();
+      const engine = new Engine(fabric, 1, { globalStyles: sheet });
+      for (const one of root.split(' ').filter(Boolean)) engine.addClass(engine.root, one);
+      const text = engine.createElement('view');
+      engine.setClasses(text, classes);
+      engine.appendChild(engine.root, text);
+      engine.commit();
+      return committedProps(fabric, text);
+    });
   };
   const fontOn = (css: string, platform: string) =>
     propsOn(css, platform, 'font-mono')['fontFamily'];
