@@ -97,7 +97,7 @@ const migrations = [
     name: 'vitest-tsconfig-paths',
     version: '0.18.1',
     description:
-      "Resolve the workspace's path aliases in Nx Vitest configs with vite-tsconfig-paths, as nxViteTsPaths does nothing from Nx 24.",
+      "Resolve the workspace's path aliases in Nx Vitest configs with Vite's resolve.tsconfigPaths from Vite 8, and with vite-tsconfig-paths before it, as nxViteTsPaths does nothing from Nx 24.",
     run: vitestTsconfigPaths,
   },
   {

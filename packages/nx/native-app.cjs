@@ -286,32 +286,11 @@ const vitestPathsDependencies = {
 const vitestViaViteDependencies = { vite: '^8.0.0' };
 
 /**
- * Whether the tests' path aliases can be left to Vite's own `resolve.tsconfigPaths`, which Vite 8
- * added, in a workspace whose root `package.json` is `manifest`: the Vite it lists is 8 or later,
- * or it lists none, and the Vitest it lists, if any, takes Vite 8 (Vitest 4.1 and later do). A
- * Vitest older than 4.1 keeps `vite-tsconfig-paths` whatever Vite is listed, since it runs on its
- * own Vite 6 or 7. A Vite it lists that is older, or that is not a range, keeps it too.
- *
- * @param {{ dependencies?: Record<string, string>, devDependencies?: Record<string, string> }} manifest
- */
-function viteResolvesPaths(manifest) {
-  const listed = { ...manifest.dependencies, ...manifest.devDependencies };
-  const first = (range) => (semver.validRange(range) ? semver.minVersion(range) : null);
-  const vitest = first(listed.vitest);
-  const vitestTakesVite8 = vitest ? semver.gte(vitest, '4.1.0') : null;
-  // Vitest loads the config with the Vite it depends on, so one older than 4.1 (Vite 6 or 7) wins
-  // over a Vite 8 at the root.
-  if (listed.vite) return (first(listed.vite)?.major ?? 0) >= 8 && vitestTakesVite8 !== false;
-  if (!listed.vitest) return true;
-  return vitestTakesVite8 === true;
-}
-
-/**
  * Adds what the tests' path aliases need to the root `package.json`, keeping a version it has:
  * Vite alone where Vite resolves them, and `vite-tsconfig-paths` with Vite otherwise.
  */
 function addVitestPathsDependencies(tree) {
-  const viaVite = viteResolvesPaths(readJson(tree, 'package.json'));
+  const viaVite = shared.viteResolvesPaths(readJson(tree, 'package.json'));
   const wanted = viaVite ? vitestViaViteDependencies : vitestPathsDependencies;
   addDependenciesToPackageJson(tree, {}, wanted, 'package.json', true);
 }
@@ -377,7 +356,7 @@ module.exports = {
   vitestConfig,
   vitestPathsDependencies,
   vitestViaViteDependencies,
-  viteResolvesPaths,
+  viteResolvesPaths: shared.viteResolvesPaths,
   ROOT_ESLINT_CONFIGS,
   eslintConfig,
   addVitestPathsDependencies,
