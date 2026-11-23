@@ -119,18 +119,28 @@ esac`,
 });
 
 describe('the bundle a launcher waits on', () => {
-  /** A Metro that takes a while to bundle, and notes in `log` when it answered. */
+  /**
+   * A Metro that answers the bundle only once the launcher's last step before launching has run (it
+   * writes `ready`), and a moment after, noting in `log` when it answered: a launcher that did not wait
+   * launches the app in that moment.
+   */
   async function slowMetro(log: string) {
-    const metro = createServer((request, response) => {
-      setTimeout(() => {
-        appendFileSync(log, `bundled ${request.url}\n`);
-        response.end('bundle');
-      }, 300);
+    let closed = false;
+    const metro = createServer(async (request, response) => {
+      const deadline = Date.now() + 10_000;
+      while (!closed && Date.now() < deadline && !readFileSync(log, 'utf8').includes('ready')) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      if (closed) return;
+      appendFileSync(log, `bundled ${request.url}\n`);
+      response.end('bundle');
     });
     await new Promise<void>((resolve) => metro.listen(0, '127.0.0.1', resolve));
     return {
       port: (metro.address() as AddressInfo).port,
       close: () => {
+        closed = true;
         metro.close();
         metro.closeAllConnections();
       },
@@ -151,7 +161,7 @@ describe('the bundle a launcher waits on', () => {
   devices) printf 'List of devices attached\\nemulator-5554\\tdevice\\n' ;;
   *"emu avd name"*) echo phone ;;
   *getprop*) echo 1 ;;
-  *resolve-activity*) echo app/.Main ;;
+  *resolve-activity*) echo ready >> ${JSON.stringify(log)}; echo app/.Main ;;
   *"am start"*) echo launched >> ${JSON.stringify(log)} ;;
 esac`,
       );
@@ -166,6 +176,7 @@ esac`,
       });
       await app.stop();
       assert.deepEqual(readFileSync(log, 'utf8').trim().split('\n'), [
+        'ready',
         'bundled /.expo/.virtual-metro-entry.bundle?platform=android&dev=true&lazy=true&minify=false&modulesOnly=false&runModule=true',
         'launched',
       ]);
@@ -195,6 +206,7 @@ esac`,
         path.join(root, 'bin/xcrun'),
         `case "$2" in
   list) echo '${devices}' ;;
+  install) echo ready >> ${JSON.stringify(log)} ;;
   launch) echo launched >> ${JSON.stringify(log)} ;;
 esac`,
       );
@@ -209,6 +221,7 @@ esac`,
       });
       await app.exited;
       assert.deepEqual(readFileSync(log, 'utf8').trim().split('\n'), [
+        'ready',
         'bundled /.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&lazy=true&minify=false&modulesOnly=false&runModule=true',
         'launched',
       ]);

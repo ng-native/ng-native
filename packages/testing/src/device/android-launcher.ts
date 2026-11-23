@@ -65,8 +65,12 @@ export function androidEmulatorLauncher(options: AndroidEmulatorOptions = {}): A
         .trim()
         .split('\n')
         .pop()!;
-      await warming;
-      progress('android', 'installed and the bundle warmed; launching', started);
+      const warmed = await warming;
+      progress(
+        'android',
+        `installed and ${warmed ? 'the bundle warmed' : 'the bundle not warmed'}; launching`,
+        started,
+      );
       await starting('shell', 'am', 'start', '-W', '-n', activity);
       let stopped = false;
       const exited = (async () => {

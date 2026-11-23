@@ -52,8 +52,12 @@ export function iosSimulatorLauncher(options: IosSimulatorOptions = {}): AppLaun
       });
       progress('ios', `${simulator.name} booted and the build ready`, started);
       await runCommand('xcrun', ['simctl', 'install', simulator.udid, build.path], { signal });
-      await warming;
-      progress('ios', 'installed and the bundle warmed; launching', started);
+      const warmed = await warming;
+      progress(
+        'ios',
+        `installed and ${warmed ? 'the bundle warmed' : 'the bundle not warmed'}; launching`,
+        started,
+      );
       signal?.throwIfAborted();
       // Attached to the app's console, the command lasts as long as the app does.
       const child = spawn(
