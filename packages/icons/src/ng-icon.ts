@@ -54,6 +54,7 @@ import { parseSvg, type SvgNode } from './parse-svg.ts';
 import { registerSvgComponents } from './svg-elements.ts';
 import {
   PAINT,
+  PRESENTATION,
   SVG_ELEMENTS,
   UNDRAWN,
   gradientProps,
@@ -69,6 +70,88 @@ import {
 
 /** The tags already reported as not drawn, so a list of icons says it once. */
 const reported = new Set<string>();
+
+/** What an icon draws from its markup, worked out once for every icon that draws the same. */
+interface Drawing {
+  readonly root: SvgNode;
+  /**
+   * Whether its shapes need nothing from the cascade: no text to take a font from it, and no
+   * paint from a token. Native paints a `currentColor` shape from the drawing it is in, so a
+   * shape of one of these is left out of it, and a colour or a size bound on the icon restyles
+   * the icon's own view and none of its shapes.
+   */
+  readonly selfContained: boolean;
+  /**
+   * The root's paint, where each child can take it as its own and no group has to carry it:
+   * nothing on the root that a group would draw differently, an opacity or a mask, and children
+   * that are shapes and groups. A view fewer per icon, which is a fifth of an outline set's.
+   */
+  readonly paint: SvgNode | null;
+}
+
+/** The root attributes a child takes as its own when the group carrying them goes. */
+const HANDED_DOWN: ReadonlySet<string> = new Set([
+  ...['fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-opacity', 'stroke-width'],
+  ...['stroke-linecap', 'stroke-linejoin', 'stroke-dasharray', 'stroke-dashoffset'],
+  'stroke-miterlimit',
+]);
+
+/** What a root's group draws that its children would draw differently, one by one. */
+const GROUP_ONLY: ReadonlySet<string> = new Set(['id', 'mask', 'clip-path', 'transform']);
+
+/** The children that take a paint as their own as they would inherit it. */
+const SHAPES: ReadonlySet<string> = new Set([
+  ...['path', 'circle', 'ellipse', 'rect', 'line', 'polyline', 'polygon', 'g'],
+]);
+
+/**
+ * ponytail: cleared whole when it fills, the bound on markup an app binds from a server. The icon
+ * sets an app provides are a few hundred names at most.
+ */
+const drawings = new Map<string, Drawing | null>();
+const MAX_DRAWINGS = 500;
+
+function drawingOf(markup: string): Drawing | null {
+  let drawing = drawings.get(markup);
+  if (drawing !== undefined) return drawing;
+  const root = parseSvg(markup);
+  drawing = root && { root, selfContained: selfContained(root), paint: paintOf(root) };
+  if (drawings.size >= MAX_DRAWINGS) drawings.clear();
+  drawings.set(markup, drawing);
+  return drawing;
+}
+
+/** An element's attributes with those its `style` sets, which win, before any `var()` is read. */
+const written = (node: SvgNode): Record<string, string> => ({
+  ...node.attrs,
+  ...styleAttributes(node.attrs['style'] ?? '', {}),
+});
+
+function selfContained(node: SvgNode): boolean {
+  if (node.tag === 'text' || node.tag === 'tspan') return false;
+  const attrs = written(node);
+  for (const paint of PAINT) if (isTokenPaint(attrs[paint])) return false;
+  return node.children.every(selfContained);
+}
+
+/** The root's attributes as a child of it would inherit them, or null where a group has to stay. */
+function paintOf(root: SvgNode): SvgNode | null {
+  if (!root.children.every((child) => SHAPES.has(child.tag))) return null;
+  const names = [...Object.keys(root.attrs), ...Object.keys(written(root))];
+  const drawn = (name: string) => GROUP_ONLY.has(name) || own(PRESENTATION, name) !== undefined;
+  if (names.some((name) => drawn(name) && !HANDED_DOWN.has(name))) return null;
+  // A token is settled by the cascade on the element that names it: it stays on the group.
+  const attrs = written(root);
+  for (const paint of PAINT) if (isTokenPaint(attrs[paint])) return null;
+  const paint: Record<string, string> = {};
+  for (const [name, value] of Object.entries(root.attrs)) {
+    if (HANDED_DOWN.has(name) || name === 'style') paint[name] = value;
+  }
+  return { tag: 'svg', attrs: paint, children: [] };
+}
+
+/** The inputs Angular writes on the host from a static attribute, named as the template does. */
+let inputNames: readonly string[] | undefined;
 
 /** ng-icons stores icons under a camel-cased key, so `hero-book-open` finds `heroBookOpen`. */
 function toPropertyName(name: string): string {
@@ -222,12 +305,12 @@ export class NgIcon {
     return undefined;
   });
 
-  private readonly root = computed(() => {
+  private readonly drawing = computed(() => {
     const markup = this.markup();
-    return markup === undefined ? null : parseSvg(markup);
+    return markup === undefined ? null : drawingOf(markup);
   });
 
-  protected readonly viewBox = computed(() => viewBoxProps(this.root()?.attrs['viewBox']));
+  protected readonly viewBox = computed(() => viewBoxProps(this.drawing()?.root.attrs['viewBox']));
 
   constructor() {
     // Before the first shape is created, which is before this component's own commit.
@@ -235,9 +318,8 @@ export class NgIcon {
     // Claimed, and stripped of the attributes Angular wrote from static inputs: `name` is one of
     // ours *and* one of react-native-svg's, so leaving it there hands native an element name.
     claimHost(this.host);
-    for (const input of reflectComponentType(NgIcon)?.inputs ?? []) {
-      delete this.host.props[input.templateName];
-    }
+    inputNames ??= (reflectComponentType(NgIcon)?.inputs ?? []).map((input) => input.templateName);
+    for (const name of inputNames) delete this.host.props[name];
     // The shapes are created rather than templated: an icon's tree is data, and a template that
     // could express it would be a component per tag with a recursive switch between them.
     effect(() => this.draw());
@@ -299,24 +381,45 @@ export class NgIcon {
   }
 
   private draw(): void {
-    const root = this.root();
+    const drawing = this.drawing();
     for (const child of [...this.host.childList]) this.renderer.removeChild(this.host, child);
-    if (!root) return;
+    if (!drawing) return;
+    const { root, paint, selfContained } = drawing;
 
-    // Everything hangs off one group carrying the root's presentation attributes, which is how
-    // react-native-svg's own `Svg` does it: the svg view itself holds no paint, so a root that
-    // says `stroke="currentColor"` needs a group for its children to inherit from.
-    const group = this.create('svg-g', root);
-    for (const child of root.children) this.append(group, child);
+    // The svg view itself holds no paint, so a root that says `stroke="currentColor"` needs its
+    // children to have it: as their own where they take it as they would inherit it, and
+    // otherwise on a group they inherit it from, which is how react-native-svg's own `Svg` does it.
+    if (paint) {
+      const inherited = this.attributes(paint);
+      for (const child of root.children) this.append(this.host, child, selfContained, inherited);
+      return;
+    }
+    const group = this.create('svg-g', root, selfContained);
+    for (const child of root.children) this.append(group, child, selfContained);
     this.renderer.appendChild(this.host, group);
   }
 
-  private append(parent: unknown, node: SvgNode): void {
+  private append(
+    parent: unknown,
+    node: SvgNode,
+    selfContained: boolean,
+    inherited?: Record<string, string>,
+  ): void {
     const element = own(SVG_ELEMENTS, node.tag);
     if (!element) return this.reportUndrawn(node.tag);
-    const shape = this.create(element, node);
-    for (const child of node.children) this.append(shape, child);
+    const shape = this.create(element, node, selfContained, inherited);
+    for (const child of node.children) this.append(shape, child, selfContained);
     this.renderer.appendChild(parent, shape);
+  }
+
+  /** An element's attributes with what its `style` sets, which ng-icons puts the stroke width in. */
+  private attributes(node: SvgNode): Record<string, string> {
+    return {
+      ...node.attrs,
+      ...styleAttributes(node.attrs['style'] ?? '', {
+        '--ng-icon__stroke-width': this.strokeWidth(),
+      }),
+    };
   }
 
   /**
@@ -358,18 +461,19 @@ export class NgIcon {
     return node.tag === 'text' || node.tag === 'tspan' ? { ...props, ...textProps(attrs) } : props;
   }
 
-  private create(element: string, node: SvgNode): unknown {
+  private create(
+    element: string,
+    node: SvgNode,
+    selfContained: boolean,
+    inherited?: Record<string, string>,
+  ): unknown {
     const shape = this.renderer.createElement(element) as EngineNode;
     // Created here rather than by a template, so nothing else will account for it: without this
     // the engine reports every shape as an element whose component was forgotten.
     claimHost(shape);
-    const attrs = {
-      ...node.attrs,
-      // A `style` attribute is where ng-icons puts the stroke width, as a custom property.
-      ...styleAttributes(node.attrs['style'] ?? '', {
-        '--ng-icon__stroke-width': this.strokeWidth(),
-      }),
-    };
+    if (selfContained) shape.outsideCascade = true;
+    // What the root hands down, under what the element says itself.
+    const attrs = { ...inherited, ...this.attributes(node) };
     const props = this.propsOf(node, attrs);
     // A paint that reads a custom property is settled by the cascade, with the tokens in scope
     // for the shape, and follows them. It stays in `propList`, which says the shape has one.

@@ -212,6 +212,7 @@ export default tseslint.config(
       'packages/integration-tests/css-has.test.ts',
       'packages/integration-tests/css-oracle.test.ts',
       'packages/integration-tests/css-restyle-keeps-matches.test.ts',
+      'packages/integration-tests/icon-restyle.test.ts',
       'packages/integration-tests/dev-loading-view.test.ts',
       'packages/integration-tests/device-sources.test.ts',
       'packages/integration-tests/dialogs.test.ts',

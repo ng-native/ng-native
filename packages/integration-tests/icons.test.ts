@@ -691,11 +691,11 @@ describe('an icon in the tree', () => {
     assert.equal(paths[0]?.props['strokeLinecap'], 1);
   });
 
-  it('carries the root presentation on a group, so the shapes inherit it', () => {
-    const group = byId('named').children[0]!;
-    assert.equal(group.viewName, 'RNSVGGroup');
-    assert.deepEqual(group.props['stroke'], { type: 2 }, 'currentColor, for the view to resolve');
-    assert.equal(group.props['strokeWidth'], '1.5', 'from the custom property in its style');
+  it('gives each shape the root presentation as its own, with no group to carry it', () => {
+    const shape = byId('named').children[0]!;
+    assert.equal(shape.viewName, 'RNSVGPath');
+    assert.deepEqual(shape.props['stroke'], { type: 2 }, 'currentColor, for the view to resolve');
+    assert.equal(shape.props['strokeWidth'], '1.5', 'from the custom property in its style');
   });
 
   it('hands the view the colour a currentColor brush paints from', () => {
@@ -709,18 +709,11 @@ describe('an icon in the tree', () => {
 
   it('draws geometry and a polyline from raw markup, with the stroke width the app set', () => {
     const shapes = flatten([byId('raw')]).map((node) => node.viewName);
-    assert.deepEqual(shapes, [
-      'RNSVGSvgView',
-      'RNSVGGroup',
-      'RNSVGCircle',
-      'RNSVGCircle',
-      'RNSVGPath',
-    ]);
-    const group = byId('raw').children[0]!;
-    assert.equal(group.children.length, 3, 'siblings, not one inside the next');
-    assert.equal(
-      byId('raw').children[0]?.props['strokeWidth'],
-      '3',
+    assert.deepEqual(shapes, ['RNSVGSvgView', 'RNSVGCircle', 'RNSVGCircle', 'RNSVGPath']);
+    assert.equal(byId('raw').children.length, 3, 'siblings, not one inside the next');
+    assert.deepEqual(
+      byId('raw').children.map((shape) => shape.props['strokeWidth']),
+      ['3', '3', '3'],
       'the input filled in the custom property, as it does on the web',
     );
   });
@@ -753,7 +746,7 @@ describe('an icon in the tree', () => {
       flatten([byId('labelled')])
         .map((n) => n.viewName)
         .filter((name) => name !== 'RNSVGSvgView'),
-      ['RNSVGGroup', 'RNSVGRect'],
+      ['RNSVGRect'],
     );
   });
 
@@ -762,9 +755,9 @@ describe('an icon in the tree', () => {
     await settle();
     assert.equal(byId('named').props['width'], 40);
     assert.equal(
-      flatten([byId('named')]).filter((n) => n.viewName === 'RNSVGGroup').length,
+      flatten([byId('named')]).filter((n) => n.viewName === 'RNSVGPath').length,
       1,
-      'one group, not two',
+      'one path, not two',
     );
   });
 });

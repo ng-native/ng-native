@@ -823,6 +823,11 @@ export interface StyleTarget {
   readonly boundStyle?: readonly DeferredDeclaration[] | null;
   /** A node the engine made, such as the paragraph around loose text: it only inherits. */
   readonly anonymous?: true;
+  /**
+   * A node the cascade leaves out: no rule matches it and it inherits nothing, so its style is
+   * always empty and a change above it never styles it again. Set before the node is attached.
+   */
+  readonly outsideCascade?: true;
   /** One of HTML's text elements the engine has styles of its own for, such as `strong`. */
   readonly styled?: true;
   /**
@@ -4081,6 +4086,8 @@ export class StyleResolver {
     // Within one commit a node is asked for its inherited map once per descendant, so this is the
     // hot path and it must not walk anywhere.
     if (resolvedIn(epoch, cached, node)) return cached!;
+    // Not its parent's either: what it would inherit is never read.
+    if (node.outsideCascade) return this.outside(node, epoch);
 
     const parent = node.parent ? this.resolve(node.parent, epoch) : null;
     if (parent && (this.anyAnimating || this.handedOver.size > 0) && this.animatedInheritables) {
@@ -4374,6 +4381,20 @@ export class StyleResolver {
     node.ownDirty = false;
     node.stateDirty = false;
     return passthrough;
+  }
+
+  /** The style of a node outside the cascade, which is the one every unstyled box shares. */
+  private outside(node: StyleTarget, epoch: number): StyleCache {
+    const cached = node.styleCache;
+    if (this.reusable(cached, node, ROOT_CONTEXT)) {
+      cached.epoch = epoch;
+      return cached;
+    }
+    node.styleDirty = false;
+    node.ownDirty = false;
+    node.hasDirty = false;
+    node.stateDirty = false;
+    return this.sharedEmpty(node, epoch);
   }
 
   /** The one cache of every node with nothing to style and nothing to hand down, given to one more. */

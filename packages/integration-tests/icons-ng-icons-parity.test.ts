@@ -220,16 +220,16 @@ describe('an icon from provideNgIconLoader', () => {
   after(cleanup);
 
   it('draws what the loader returns as a string', () => {
-    assert.deepEqual(viewNames('string'), ['RNSVGSvgView', 'RNSVGGroup', 'RNSVGRect']);
+    assert.deepEqual(viewNames('string'), ['RNSVGSvgView', 'RNSVGRect']);
   });
 
   it('draws what the loader returns as a promise or an observable', () => {
-    assert.deepEqual(viewNames('promise'), ['RNSVGSvgView', 'RNSVGGroup', 'RNSVGCircle']);
-    assert.deepEqual(viewNames('observable'), ['RNSVGSvgView', 'RNSVGGroup', 'RNSVGEllipse']);
+    assert.deepEqual(viewNames('promise'), ['RNSVGSvgView', 'RNSVGCircle']);
+    assert.deepEqual(viewNames('observable'), ['RNSVGSvgView', 'RNSVGEllipse']);
   });
 
   it('asks the loader once per name with withCaching', () => {
-    assert.deepEqual(viewNames('promise-again'), ['RNSVGSvgView', 'RNSVGGroup', 'RNSVGCircle']);
+    assert.deepEqual(viewNames('promise-again'), ['RNSVGSvgView', 'RNSVGCircle']);
     assert.equal(calls.filter((name) => name === 'promise-icon').length, 1);
   });
 
@@ -256,7 +256,7 @@ describe('an icon from provideNgIconLoader', () => {
     await answered();
     finishSlow(markup('line x2="1"'));
     await answered();
-    assert.deepEqual(viewNames('swapped'), ['RNSVGSvgView', 'RNSVGGroup', 'RNSVGCircle']);
+    assert.deepEqual(viewNames('swapped'), ['RNSVGSvgView', 'RNSVGCircle']);
   });
 
   it('asks again for a name whose load failed, rather than caching the failure', async () => {
@@ -295,7 +295,7 @@ describe('an icon whose loader answers out of order', () => {
       pending[0]!('<svg viewBox="0 0 24 24"><line x2="1"/></svg>');
       await settle();
       await settle();
-      assert.deepEqual(viewNames('swap'), ['RNSVGSvgView', 'RNSVGGroup', 'RNSVGCircle']);
+      assert.deepEqual(viewNames('swap'), ['RNSVGSvgView', 'RNSVGCircle']);
     } finally {
       cleanup();
     }

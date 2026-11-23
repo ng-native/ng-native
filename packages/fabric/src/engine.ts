@@ -761,6 +761,8 @@ export interface EngineNode extends HostNode {
   words?: EngineNode[];
   /** A node the engine made, which no rule matches: it only inherits. */
   anonymous?: true;
+  /** See `StyleTarget.outsideCascade`. */
+  outsideCascade?: true;
   /** See `StyleTarget.styled`. */
   styled?: true;
   /** `:focus`, from the native focus and blur events. */
@@ -6580,6 +6582,7 @@ class RetainedNode {
   box: EngineNode | undefined = undefined;
   words: EngineNode[] | undefined = undefined;
   anonymous: true | undefined = undefined;
+  outsideCascade: true | undefined = undefined;
   styled: true | undefined = undefined;
   bornIn: number | undefined = undefined;
   truncates: true | undefined = undefined;
@@ -6759,6 +6762,7 @@ const ENGINE_NODE_FIELDS = {
   box: true,
   words: true,
   anonymous: true,
+  outsideCascade: true,
   styled: true,
   focused: true,
   active: true,

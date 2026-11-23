@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "bench": "node --no-opt --no-sparkplug --no-maglev --import ./bench/release.mjs --import @ng-native/testing/register bench/renderer.bench.ts",
     "bench:animation": "node --no-opt --no-sparkplug --no-maglev --import ./bench/release.mjs --import @ng-native/testing/register bench/animation.bench.ts",
+    "bench:icons": "node --no-opt --no-sparkplug --no-maglev --import ./bench/release.mjs --import @ng-native/testing/register bench/icons.bench.ts",
     "bench:screens": "node --no-opt --no-sparkplug --no-maglev --import ./bench/release.mjs --import ./register-linker.mjs bench/screens.bench.ts",
     "bench:tailwind": "node --no-opt --no-sparkplug --no-maglev --import ./bench/release.mjs --import ./register-linker.mjs bench/tailwind.bench.ts"
   },

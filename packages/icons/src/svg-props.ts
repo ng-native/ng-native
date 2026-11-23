@@ -118,7 +118,7 @@ const referenceOf = (value: string | undefined): string | undefined =>
   value === undefined ? undefined : (URL_REFERENCE.exec(value) ?? /^#(.+)$/.exec(value))?.[1];
 
 /** SVG attribute -> native prop, for the presentation attributes shapes and groups share. */
-const PRESENTATION: Record<string, string> = {
+export const PRESENTATION: Record<string, string> = {
   fill: 'fill',
   'fill-opacity': 'fillOpacity',
   'fill-rule': 'fillRule',
