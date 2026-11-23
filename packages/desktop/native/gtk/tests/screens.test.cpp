@@ -87,7 +87,45 @@ const char *titleOf(GtkWidget *headerBar) {
   return title && ADW_IS_WINDOW_TITLE(title) ? adw_window_title_get_title(ADW_WINDOW_TITLE(title)) : nullptr;
 }
 
+const char *subtitleOf(GtkWidget *headerBar) {
+  GtkWidget *title = adw_header_bar_get_title_widget(ADW_HEADER_BAR(headerBar));
+  return title && ADW_IS_WINDOW_TITLE(title) ? adw_window_title_get_subtitle(ADW_WINDOW_TITLE(title)) : nullptr;
+}
+
+Props::Shared header(const std::string &title, const std::string &subtitle) {
+  auto props = std::make_shared<HeaderProps>();
+  props->bar.title = title;
+  props->bar.subtitle = subtitle;
+  return props;
+}
+
 } // namespace
+
+TEST_CASE("the front screen's header subtitle is the header bar's, changed and cleared with it") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 400, 300);
+  GtkWidget *bar = ngn::gtk::chromeOf(views.surface)->headerBar;
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {400, 300}});
+  auto first = shadow(3, "RNSScreen", nullptr, {{0, 0}, {400, 300}});
+  auto config = shadow(4, "RNSScreenStackHeaderConfig", header("Inbox", "3 waiting"), {{0, 0}, {400, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {first, 2}, {config, 3}});
+  CHECK(std::string(titleOf(bar)) == "Inbox");
+  CHECK(std::string(subtitleOf(bar)) == "3 waiting");
+
+  views.update(config, header("Inbox", "2 waiting"));
+  CHECK(std::string(subtitleOf(bar)) == "2 waiting");
+  views.update(config, header("Inbox", ""));
+  CHECK(std::string(subtitleOf(bar)) == "");
+
+  // A screen pushed with none: its header has none either.
+  views.update(config, header("Inbox", "1 waiting"));
+  auto second = shadow(5, "RNSScreen", nullptr, {{0, 0}, {400, 300}});
+  auto secondConfig = shadow(6, "RNSScreenStackHeaderConfig", header("Detail", ""), {{0, 0}, {400, 44}});
+  mountAll(views, {{second, 2}, {secondConfig, 5}});
+  CHECK(std::string(titleOf(bar)) == "Detail");
+  CHECK(std::string(subtitleOf(bar)) == "");
+}
 
 TEST_CASE("the front screen's header is the window's header bar: its title, its items in slots, and back") {
   REQUIRE(ngn::testing::gtkReady());

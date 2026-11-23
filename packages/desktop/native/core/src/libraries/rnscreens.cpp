@@ -11,12 +11,16 @@
 #include <react/renderer/components/rnscreens/Props.h>
 #include <react/renderer/components/rnscreens/RNSSafeAreaViewState.h>
 #include <react/renderer/core/ConcreteState.h>
+#include <react/renderer/core/LayoutContext.h>
 
 using namespace facebook::react;
 
 namespace facebook::react {
 // The library's own (RNSScreenShadowNode.cpp), whose shadow node the desktop replaces.
 extern const char RNSScreenComponentName[];
+// The library's own (RNSScreenStackHeaderConfigShadowNode.cpp), whose shadow node the desktop
+// replaces too.
+extern const char RNSScreenStackHeaderConfigComponentName[];
 } // namespace facebook::react
 
 namespace ngn {
@@ -31,18 +35,50 @@ using TabsScreenShadowNode =
 // (screen-presentation.h); presented, it takes the size it is presented at.
 using ScreenShadowNode = ConcreteViewShadowNode<RNSScreenComponentName, ScreenProps, RNSScreenEventEmitter, SplitPaneState>;
 
+// A header config's props, the library's and the desktop's own `subtitle` beside them: the
+// library's class is final, so it is held rather than extended.
+class HeaderConfigProps final : public ViewProps {
+ public:
+  HeaderConfigProps() = default;
+  HeaderConfigProps(const PropsParserContext &context, const HeaderConfigProps &sourceProps, const RawProps &rawProps)
+      : ViewProps(context, sourceProps, rawProps),
+        screens(context, sourceProps.screens, rawProps),
+        subtitle(convertRawProp(context, rawProps, "subtitle", sourceProps.subtitle, std::string{})) {}
+
+  RNSScreenStackHeaderConfigProps screens;
+  std::string subtitle;
+};
+
+// A header config with those props. Its frame starts at the screen's corner, where the library's
+// node puts it from a state the desktop never sets.
+class HeaderConfigShadowNode final : public ConcreteViewShadowNode<
+                                         RNSScreenStackHeaderConfigComponentName,
+                                         HeaderConfigProps,
+                                         RNSScreenStackHeaderConfigEventEmitter> {
+ public:
+  using ConcreteViewShadowNode::ConcreteViewShadowNode;
+
+  void layout(LayoutContext layoutContext) override {
+    ConcreteViewShadowNode::layout(layoutContext);
+    ensureUnsealed();
+    layoutMetrics_.frame.origin = {0, 0};
+  }
+};
+
 } // namespace
 
 void installGlue_rnscreens() {
   auto &glue = libraryGlue();
   glue.headerBar = [](const Props &props) -> std::optional<HeaderBar> {
-    const auto *p = dynamic_cast<const RNSScreenStackHeaderConfigProps *>(&props);
-    if (p == nullptr) {
+    const auto *config = dynamic_cast<const HeaderConfigProps *>(&props);
+    if (config == nullptr) {
       return std::nullopt;
     }
+    const auto *p = &config->screens;
     return HeaderBar{
         .hidden = p->hidden,
         .title = p->title,
+        .subtitle = config->subtitle,
         .titleColor = p->titleColor,
         .titleFontFamily = p->titleFontFamily,
         .titleFontSize = p->titleFontSize,
@@ -99,6 +135,7 @@ void installGlue_rnscreens() {
   };
   glue.components.push_back(concreteComponentDescriptorProvider<ToolkitSizedComponentDescriptor<TabsScreenShadowNode>>());
   glue.components.push_back(concreteComponentDescriptorProvider<ToolkitSizedComponentDescriptor<ScreenShadowNode>>());
+  glue.components.push_back(concreteComponentDescriptorProvider<ConcreteComponentDescriptor<HeaderConfigShadowNode>>());
   glue.safeAreaStates.emplace_back([](const State &state, EdgeInsets insets) {
     const auto *concrete = dynamic_cast<const ConcreteState<RNSSafeAreaViewState> *>(&state);
     if (concrete == nullptr) {

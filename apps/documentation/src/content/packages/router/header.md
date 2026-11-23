@@ -410,6 +410,14 @@ draws in its own font and colour: `titleColor`, `titleFontFamily`, `titleFontSiz
 title. The heading a sheet draws for its screen's header is the bold system font in the default
 text colour too.
 
+`subtitle` is a short line beside the title, such as a count of items waiting. On macOS it is the
+window's subtitle, which the system draws under or beside the title, and on Linux the header bar's
+subtitle under its title. A sheet's heading has none, and iOS and Android do not show it.
+
+```html
+<native-header title="Inbox" [subtitle]="waiting() + ' waiting'" />
+```
+
 ### Liquid Glass on iOS 26
 
 A bar with a background is opaque: the content stops at it, with a hairline under it. Since iOS 26

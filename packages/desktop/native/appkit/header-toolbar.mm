@@ -383,6 +383,7 @@ NSImage *symbol(const std::string &name, NSString *description) {
   _identifiers = ids;
 
   window.title = bar && !_bar.title.empty() ? nsString(_bar.title) : _appTitle;
+  window.subtitle = bar ? nsString(_bar.subtitle) : @"";
   while (_toolbar.items.count > 0) {
     [_toolbar removeItemAtIndex:0];
   }

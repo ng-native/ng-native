@@ -89,6 +89,7 @@ export type HeaderInterfaceStyle = 'unspecified' | 'light' | 'dark';
     '[headerLeftBarButtonItems]': 'barButtons.left()',
     '[headerRightBarButtonItems]': 'barButtons.right()',
     '[title]': 'title()',
+    '[subtitle]': 'resolvedSubtitle()',
     '[titleColor]': 'resolvedTitleColor()',
     '[titleFontFamily]': 'titleFontFamily() ?? defaults().titleFontFamily',
     '[titleFontSize]': 'titleFontSize() ?? defaults().titleFontSize',
@@ -244,6 +245,20 @@ export class NativeHeader {
 
   /** The bar's title. Absent leaves whatever the platform would show, which is nothing. */
   readonly title = input<string>();
+  /**
+   * A short line beside the title, such as a count of items waiting: the window's subtitle on
+   * macOS, under or beside the toolbar's title, and the header bar's subtitle on Linux. Not shown
+   * on iOS or Android, which are sent nothing for it.
+   */
+  readonly subtitle = input<string>();
+  private readonly onDesktop = nativePlatform() === 'macos' || nativePlatform() === 'linux';
+  /**
+   * The subtitle on a desktop, an empty one when it is unset so one shown before is cleared; on iOS
+   * and Android nothing, since react-native-screens has no prop for it there.
+   */
+  protected readonly resolvedSubtitle = computed(() =>
+    this.onDesktop ? (this.subtitle() ?? '') : undefined,
+  );
   /**
    * Title colour, on iOS and Android. It and the title font inputs are not applied on macOS, where
    * the title is the window title and the system draws it, and a sheet's title is a heading in the

@@ -914,7 +914,7 @@ void Headers::layOutBar(SurfaceId surfaceId, Shown &shown) {
     }
     adw_header_bar_set_title_widget(ADW_HEADER_BAR(bar), center);
   } else {
-    GtkWidget *title = keep(adw_window_title_new(shown.bar->title.c_str(), ""));
+    GtkWidget *title = keep(adw_window_title_new(shown.bar->title.c_str(), shown.bar->subtitle.c_str()));
     addClass(title, colorClass("color", shown.bar->titleColor));
     adw_header_bar_set_title_widget(ADW_HEADER_BAR(bar), title);
   }

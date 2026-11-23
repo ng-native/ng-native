@@ -44,6 +44,9 @@ struct BarButton {
 struct HeaderBar {
   bool hidden{false};
   std::string title;
+  // `<native-header>`'s subtitle, a desktop prop react-native-screens has none of: the window's
+  // subtitle on macOS, the header bar's on GTK. Empty for none.
+  std::string subtitle;
   facebook::react::SharedColor titleColor;
   std::string titleFontFamily;
   int titleFontSize{0};
