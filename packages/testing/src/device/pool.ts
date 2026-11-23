@@ -757,19 +757,24 @@ class Bridge {
         cleanup();
         reject(this.listenError(error));
       };
+      const expired = () =>
+        new Error(
+          launched
+            ? `The ${platform ?? ''} app the pool launched did not connect to port ${this.port} ` +
+                `within ${waited / 1000}s: it is stuck before its entry runs ` +
+                'startDeviceTests(), or the entry does not call it under EXPO_PUBLIC_DEVICE_TESTS.'
+            : `No ${platform ? `${platform} ` : ''}app free on the device test pool's port ` +
+                `${this.port} within ${timeout / 1000}s. Start Metro with ` +
+                'EXPO_PUBLIC_DEVICE_TESTS=1 and open the app on a simulator or emulator.',
+        );
+      // A claim with no time left fails before it is offered an app, which it would take at once.
+      if (timeout <= 0) {
+        reject(expired());
+        return;
+      }
       const timer = setTimeout(() => {
         cleanup();
-        reject(
-          new Error(
-            launched
-              ? `The ${platform ?? ''} app the pool launched did not connect to port ${this.port} ` +
-                  `within ${waited / 1000}s: it is stuck before its entry runs ` +
-                  'startDeviceTests(), or the entry does not call it under EXPO_PUBLIC_DEVICE_TESTS.'
-              : `No ${platform ? `${platform} ` : ''}app free on the device test pool's port ` +
-                  `${this.port} within ${timeout / 1000}s. Start Metro with ` +
-                  'EXPO_PUBLIC_DEVICE_TESTS=1 and open the app on a simulator or emulator.',
-          ),
-        );
+        reject(expired());
       }, timeout);
       const waiter = {
         platform,

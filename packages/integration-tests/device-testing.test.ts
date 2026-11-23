@@ -954,6 +954,27 @@ describe('the device pool', () => {
     }
   });
 
+  it('says it did not connect when a launch finishes past the wait, though an app is there', async () => {
+    const { launch, launches } = fakeLauncher();
+    const start = launch.start;
+    launch.start = (() => {
+      if (launches.length === 0) return start();
+      return wait(400).then(start);
+    }) as typeof launch.start;
+    const run = await setup({ launch, connectTimeout: 300 });
+    try {
+      const starting = run.worker().worker.start();
+      await wait(150);
+      run
+        .app('late')
+        .poll()
+        .catch(() => {});
+      await assert.rejects(starting, /app the pool launched did not connect/);
+    } finally {
+      await run.done();
+    }
+  });
+
   it('launches the app three times at most before it says it did not connect', async () => {
     const { launch, launches } = fakeLauncher();
     const run = await setup({ launch, connectTimeout: 300 });
