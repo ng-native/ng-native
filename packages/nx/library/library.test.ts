@@ -23,7 +23,7 @@ const { addProjectConfiguration, readJson, readProjectConfiguration, updateJson,
 const { library, bases, generatorDefaults } = require('./index.cjs');
 const { componentSource, testSource } = require('../component/sources.cjs');
 const native = require('../native-app.cjs');
-const VITE_RANGE = native.vitestPathsDependencies.vite;
+const VITE_RANGE = native.vitestViaViteDependencies.vite;
 
 type Options = { directory: string; name?: string; tags?: string; [option: string]: unknown };
 const calls: { base: string; options: Options }[] = [];
@@ -170,8 +170,8 @@ describe('in a workspace with @nx/angular', () => {
     const tree = integrated();
     await generate(tree, { directory: 'packages/ui' });
     const config = tree.read('packages/ui/vitest.config.mts', 'utf-8')!;
-    assert.equal(config, native.vitestConfig(true, 'library'));
-    assert.match(config, /plugins: \[tsconfigPaths\(\), ngNative\(\)\],/);
+    assert.equal(config, native.vitestConfig(true, 'library', true));
+    assert.match(config, /resolve: \{ tsconfigPaths: true \}, plugins: \[ngNative\(\)\],/);
     // A library has no app for the in-app tests' projects to build and open.
     assert.doesNotMatch(config, /deviceTests/);
   });
@@ -218,7 +218,7 @@ describe('in a workspace with @nx/angular', () => {
       native.devDependencies['@ng-native/testing'],
     );
     assert.equal(devDependencies.vitest, '~4.1.0');
-    assert.equal(devDependencies['vite-tsconfig-paths'], '^5.1.4');
+    assert.equal(devDependencies['vite-tsconfig-paths'], undefined);
     assert.equal(devDependencies.vite, VITE_RANGE);
   });
 

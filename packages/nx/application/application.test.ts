@@ -33,7 +33,7 @@ const { findMatchingConfigFiles } =
 const { application } = require('./index.cjs');
 const { pnpmGlobs } = require('./workspaces.cjs');
 const native = require('../native-app.cjs');
-const VITE_RANGE = native.vitestPathsDependencies.vite;
+const VITE_RANGE = native.vitestViaViteDependencies.vite;
 const { registry } = require('../save-exact.cjs') as {
   registry: { versions: (name: string, cwd: string) => Promise<string[]> };
 };
@@ -182,6 +182,33 @@ describe('in an integrated workspace', () => {
     }
     const agents = tree.read('apps/mobile/AGENTS.md', 'utf-8')!;
     assert.match(agents, /Run `nx test mobile`, `nx typecheck mobile` and `nx lint mobile`/);
+  });
+
+  it("with --linter=eslint, spreads the workspace's root ESLint config before its own", async () => {
+    // Without it `nx lint` skipped the root's @nx/enforce-module-boundaries and passed what the
+    // workspace's own ESLint run, from the root, failed.
+    const tree = integrated();
+    tree.write('eslint.config.mjs', 'export default [];\n');
+    await generate(tree, { directory: 'apps/mobile', linter: 'eslint' });
+    const config = tree.read('apps/mobile/eslint.config.mjs', 'utf-8')!;
+    assert.equal(config, native.eslintConfig('../../eslint.config.mjs'));
+    assert.match(config, /^import baseConfig from '\.\.\/\.\.\/eslint\.config\.mjs';/);
+    const spread = config.indexOf('\n  ...baseConfig,\n');
+    assert.ok(
+      spread > config.indexOf('export default ['),
+      'the root config is spread in the array',
+    );
+    assert.ok(spread < config.indexOf('...ngNative.configs.recommended'), 'before the plugin');
+  });
+
+  it("imports the root's ESLint config from wherever the app is, whichever file it is", async () => {
+    const tree = integrated();
+    tree.write('eslint.config.cjs', 'module.exports = [];\n');
+    await generate(tree, { directory: 'apps/mobile/deep', linter: 'eslint' });
+    assert.match(
+      tree.read('apps/mobile/deep/eslint.config.mjs', 'utf-8')!,
+      /^import baseConfig from '\.\.\/\.\.\/\.\.\/eslint\.config\.cjs';/,
+    );
   });
 
   it('runs expo start itself, since @nx/expo infers start with an executor it deprecates', async () => {
@@ -347,16 +374,48 @@ describe('in an integrated workspace', () => {
     ]);
   });
 
-  it('resolves those aliases in tests too, adding vite-tsconfig-paths when the workspace has none', async () => {
-    // The angular-monorepo preset has no vite-tsconfig-paths, and a library generated after the app left its
-    // tests unable to import it: "Cannot find package '@org/ui'".
+  it("resolves those aliases in tests with Vite's own tsconfigPaths, adding no plugin", async () => {
+    // The angular-monorepo preset has none, and a library generated after the app left its tests
+    // unable to import it: "Cannot find package '@org/ui'". vite-tsconfig-paths warns on every
+    // test run on Vite 8, which resolves them itself, so it is not added.
     const tree = integrated();
     await generate(tree, { directory: 'apps/mobile' });
-    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /tsconfigPaths\(\)/);
-    assert.equal(readJson(tree, 'package.json').devDependencies['vite-tsconfig-paths'], '^5.1.4');
+    const config = tree.read('apps/mobile/vitest.config.mts', 'utf-8')!;
+    assert.match(config, /resolve: \{ tsconfigPaths: true \}, plugins: \[ngNative\(\)\]/);
+    assert.doesNotMatch(config, /vite-tsconfig-paths|tsconfigPaths\(\)/);
+    assert.equal(readJson(tree, 'package.json').devDependencies['vite-tsconfig-paths'], undefined);
   });
 
-  it('adds Vite, which @ng-native/testing imports and vite-tsconfig-paths only peers on', async () => {
+  it('keeps vite-tsconfig-paths where the workspace has a Vite before 8, which does not resolve them', async () => {
+    const tree = integrated();
+    updateJson(tree, 'package.json', (manifest) => {
+      manifest.devDependencies.vite = '^7.1.0';
+      return manifest;
+    });
+    await generate(tree, { directory: 'apps/mobile' });
+    const config = tree.read('apps/mobile/vitest.config.mts', 'utf-8')!;
+    assert.match(config, /plugins: \[tsconfigPaths\(\), ngNative\(\)\]/);
+    assert.doesNotMatch(config, /resolve: \{ tsconfigPaths/);
+    const { devDependencies } = readJson(tree, 'package.json');
+    assert.equal(devDependencies['vite-tsconfig-paths'], '^5.1.4');
+    assert.equal(devDependencies.vite, '^7.1.0');
+  });
+
+  it('keeps vite-tsconfig-paths where the workspace has a Vitest that does not take Vite 8', async () => {
+    const tree = integrated();
+    updateJson(tree, 'package.json', (manifest) => {
+      manifest.devDependencies.vitest = '~4.0.8';
+      return manifest;
+    });
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /tsconfigPaths\(\)/);
+    assert.equal(
+      readJson(tree, 'package.json').devDependencies.vite,
+      native.vitestPathsDependencies.vite,
+    );
+  });
+
+  it('adds Vite, which @ng-native/testing imports and which npm installs for no optional peer', async () => {
     // @nx/vite's required vite peer was what put Vite in the workspace: npm installs no optional
     // peer, and the app's tests failed with "Cannot find package 'vite'".
     const tree = integrated();
@@ -687,8 +746,8 @@ describe('in a pnpm workspace', () => {
       'expo/tsconfig.base.json',
       '../../tsconfig.base.json',
     ]);
-    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /tsconfigPaths\(\)/);
-    assert.equal(readJson(tree, 'package.json').devDependencies['vite-tsconfig-paths'], '^5.1.4');
+    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /tsconfigPaths: true/);
+    assert.equal(readJson(tree, 'package.json').devDependencies['vite-tsconfig-paths'], undefined);
   });
 
   it("keeps its custom conditions beside Expo's when it extends it", async () => {
@@ -734,7 +793,7 @@ describe('in a pnpm workspace', () => {
     const config = readJson(tree, 'apps/mobile/tsconfig.json');
     assert.deepEqual(config.extends, ['expo/tsconfig.base.json', '../../tsconfig.base.json']);
     assert.deepEqual(config.compilerOptions.customConditions, ['react-native', '@proj/source']);
-    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /tsconfigPaths\(\)/);
+    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /tsconfigPaths: true/);
   });
 
   it('stops at an extends cycle, and skips a package it cannot read', async () => {
@@ -983,7 +1042,7 @@ describe('in a workspace that saves exact versions', () => {
     assert.equal(root.devDependencies['@nx/expo'], NX_VERSION);
   });
 
-  it('adds vite-tsconfig-paths in a workspace package with path aliases', async () => {
+  it('resolves path aliases in tests in a workspace package with path aliases', async () => {
     const tree = pnpmWorkspace();
     tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\nsavePrefix: ''\n");
     tree.write('tsconfig.base.json', JSON.stringify({ compilerOptions: { paths: {} } }));
@@ -992,8 +1051,8 @@ describe('in a workspace that saves exact versions', () => {
       devDependencies: { nx: `^${NX_VERSION.split('.')[0]}.0.0` },
     }));
     await generate(tree, { directory: 'apps/mobile' });
-    assert.equal(readJson(tree, 'package.json').devDependencies['vite-tsconfig-paths'], '^5.1.4');
-    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /tsconfigPaths\(\)/);
+    assert.equal(readJson(tree, 'package.json').devDependencies['vite-tsconfig-paths'], undefined);
+    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /tsconfigPaths: true/);
     assert.equal(readJson(tree, 'apps/mobile/package.json').dependencies.expo, '58.0.19');
   });
 

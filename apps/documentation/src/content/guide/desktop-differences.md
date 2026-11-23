@@ -69,8 +69,8 @@ is exact only for a text body; read binary data through `arrayBuffer()`.
 
 `(mouseenter)`, `(mouseleave)`, `(mousemove)`, `(mouseover)` and `(mouseout)` are React Native's
 pointer events, and `(dblclick)`, `(contextmenu)` and `(wheel)` are the desktop host's. They keep
-their DOM names, as on the web. `@ng-native/eslint-plugin`'s `desktop-only-events` rule warns that
-each fires only on a desktop OS.
+their DOM names, as on the web. `@ng-native/eslint-plugin`'s `desktop-only-events` rule warns, in an
+app that also builds for iOS or Android, that each fires only on a desktop OS.
 
 ## Windows and the app
 

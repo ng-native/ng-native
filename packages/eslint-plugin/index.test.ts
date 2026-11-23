@@ -504,6 +504,39 @@ test('a desktop event is a warning that it fires only there, in a project that b
   }
 });
 
+test('a desktop event is not reported in a project that builds for no phone', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ng-native-eslint-'));
+  try {
+    writeFileSync(
+      join(dir, 'app.json'),
+      JSON.stringify({ expo: { platforms: ['macos', 'linux'] } }),
+    );
+    const template = '<view (mouseenter)="go()" (wheel)="go()"></view><view (click)="go()"></view>';
+    const messages = await lint(template, join(dir, 'a.html'), dir);
+    // Only the DOM click, which no OS sends to a view; the desktop events fire on every OS listed.
+    assert.deepEqual(
+      messages.map((m) => m.split(' ')[1]),
+      ['@ng-native/no-dom-events:'],
+    );
+    assert.match(messages[0]!, /\(click\)/);
+    // The same project that adds a phone is warned again.
+    for (const phone of ['ios', 'android']) {
+      writeFileSync(
+        join(dir, 'app.json'),
+        JSON.stringify({ expo: { platforms: [phone, 'macos', 'linux'] } }),
+      );
+      const mobile = await lint('<view (mouseenter)="go()"></view>', join(dir, 'a.html'), dir);
+      assert.deepEqual(
+        mobile.map((m) => m.split(' ')[1]),
+        ['@ng-native/desktop-only-events:'],
+        phone,
+      );
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a project's app.json without expo.platforms builds for no desktop OS, whatever a project above lists", async () => {
   const dir = mkdtempSync(join(tmpdir(), 'ng-native-eslint-'));
   try {

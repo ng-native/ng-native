@@ -317,7 +317,11 @@ async function library(tree, options) {
   const aliases = hasPathAliases(tree, usesWorkspaces(tree));
   tree.write(
     joinPathFragments(directory, 'vitest.config.mts'),
-    native.vitestConfig(aliases, 'library'),
+    native.vitestConfig(
+      aliases,
+      'library',
+      native.viteResolvesPaths(readJson(tree, 'package.json')),
+    ),
   );
   writeSpecConfig(tree, directory, angular);
   if (!angular) importWithTsExtensions(tree, directory);
@@ -337,10 +341,8 @@ async function library(tree, options) {
   });
 
   await addImports(tree, directory, angular ? {} : typecheckDependencies);
-  // `tsconfigPaths()`, which the Vitest config uses to reach the workspace's other libraries.
-  if (aliases) {
-    addDependenciesToPackageJson(tree, {}, native.vitestPathsDependencies, 'package.json', true);
-  }
+  // What the Vitest config uses to reach the workspace's other libraries.
+  if (aliases) native.addVitestPathsDependencies(tree);
 
   if (!options.skipFormat) await formatFiles(tree);
   if (options.skipInstall) return () => {};

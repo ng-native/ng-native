@@ -6,13 +6,23 @@
  * app nobody has verified.
  */
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const native = require('./native-app.cjs');
+const semver = require('semver');
 
 const template = path.resolve(import.meta.dirname, '../../template');
 const manifest = JSON.parse(readFileSync(path.join(template, 'package.json'), 'utf8'));
@@ -46,6 +56,34 @@ describe('the generated app', () => {
       readFileSync(path.resolve(import.meta.dirname, '../testing/package.json'), 'utf8'),
     );
     assert.equal(native.vitestPathsDependencies.vite, testing.peerDependencies.vite);
+    // Where Vite resolves the aliases itself, the range is the part of it that does.
+    assert.ok(semver.subset(native.vitestViaViteDependencies.vite, testing.peerDependencies.vite));
+  });
+
+  it("leaves the aliases to Vite's own resolve.tsconfigPaths in each project that compiles Angular", () => {
+    const config = native.vitestConfig(true, 'app', true);
+    assert.match(config, /\{ resolve: \{ tsconfigPaths: true \}, plugins: \[ngNative\(\)\],/);
+    assert.doesNotMatch(config, /vite-tsconfig-paths|tsconfigPaths\(\)/);
+    // Not in the device projects, which compile nothing of the app's.
+    assert.equal(config.match(/tsconfigPaths/g)?.length, 1);
+    const desktop = native.vitestConfig(true, 'desktop', true);
+    assert.equal(desktop.match(/resolve: \{ tsconfigPaths: true \}/g)?.length, 2);
+  });
+
+  it('leaves the aliases to Vite from Vite 8, or a Vitest that takes it where Vite is not listed', () => {
+    const resolves = (devDependencies: Record<string, string>) =>
+      native.viteResolvesPaths({ devDependencies });
+    assert.equal(resolves({}), true);
+    assert.equal(resolves({ vite: '^8.0.0' }), true);
+    assert.equal(resolves({ vite: '8.3.5' }), true);
+    assert.equal(resolves({ vite: '^7.3.0' }), false);
+    assert.equal(resolves({ vite: '^7.0.0 || ^8.0.0' }), false);
+    assert.equal(resolves({ vite: 'latest' }), false);
+    assert.equal(resolves({ vitest: '~4.1.0' }), true);
+    assert.equal(resolves({ vitest: '^5.0.0' }), true);
+    assert.equal(resolves({ vitest: '~4.0.8' }), false);
+    // A Vite it lists decides, whatever the Vitest.
+    assert.equal(resolves({ vite: '^8.0.0', vitest: '~4.0.8' }), true);
   });
 
   it('adds vite-tsconfig-paths to it when there are, as Nx 24 writes its own Vite configs', () => {
@@ -106,6 +144,33 @@ describe('the generated app', () => {
     assert.deepEqual(config.compilerOptions.lib, ['DOM', 'ESNext']);
     assert.equal(config.compilerOptions.allowImportingTsExtensions, true);
     assert.equal(config.compilerOptions.noEmit, true);
+  });
+
+  it("does not inherit the workspace's noPropertyAccessFromIndexSignature, which main.ts breaks", () => {
+    // src/main.ts reads process.env.EXPO_PUBLIC_DEVICE_TESTS with a dot, which Expo's Babel preset
+    // inlines and a bracket does not, so the flag Nx's Angular presets set fails the typecheck
+    // with TS4111. Read the options TypeScript ends up with, as `ngc -p tsconfig.json` does.
+    const ts = require('typescript');
+    const dir = mkdtempSync(path.join(tmpdir(), 'ng-native-tsconfig-'));
+    try {
+      const write = (file: string, json: object) => {
+        mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+        writeFileSync(path.join(dir, file), JSON.stringify(json));
+      };
+      write('node_modules/expo/tsconfig.base.json', { compilerOptions: {} });
+      write('tsconfig.base.json', {
+        compilerOptions: { noPropertyAccessFromIndexSignature: true },
+      });
+      write('apps/mobile/tsconfig.json', native.tsconfig('../../tsconfig.base.json'));
+      const { options } = ts.getParsedCommandLineOfConfigFile(
+        path.join(dir, 'apps/mobile/tsconfig.json'),
+        {},
+        { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {} },
+      );
+      assert.equal(options.noPropertyAccessFromIndexSignature, false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("installs the template's dependencies, at the template's versions", () => {

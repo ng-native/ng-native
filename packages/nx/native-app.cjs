@@ -14,9 +14,10 @@
  *   import a library at all: Metro reports `Cannot resolve @org/ui`.
  * - `tsconfig.json` also extends the workspace's `tsconfig.base.json` when there is one, which is
  *   where those aliases live, and puts back the Expo settings the workspace's base overrides.
- * - `vitest.config.mts` adds `vite-tsconfig-paths` when the workspace has path aliases, for the
- *   same aliases, which Vitest does not read from tsconfig either. It is what Nx 24 writes in its
- *   own Vite configs: `nxViteTsPaths` from `@nx/vite` is an inert stub there.
+ * - `vitest.config.mts` resolves the workspace's path aliases when it has them, which Vitest does
+ *   not read from tsconfig either: with Vite's own `resolve.tsconfigPaths` from Vite 8, and with
+ *   `vite-tsconfig-paths` before it, as Nx 24 writes its own Vite configs for older Vite:
+ *   `nxViteTsPaths` from `@nx/vite` is an inert stub there.
  *
  * What does not depend on Nx, the dependencies, `app.json` and bundle identifier among them, is
  * `@ng-native/migrate/native-app.cjs`, which `@ng-native/schematics` builds its apps from too.
@@ -24,6 +25,7 @@
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const semver = require('semver');
+const { addDependenciesToPackageJson, readJson } = require('@nx/devkit');
 const shared = require('@ng-native/migrate/native-app.cjs');
 
 const { dependencies, devDependencies, accepted } = shared;
@@ -160,7 +162,10 @@ function tsconfig(workspaceBase, conditions = []) {
   }
   // The workspace's base is written for a web build or for emitting declarations, and wins over
   // Expo's where they overlap. These are Expo's, restored: without `DOM` and `ESNext` the framework
-  // packages' own source, which the app compiles, fails to typecheck.
+  // packages' own source, which the app compiles, fails to typecheck. The workspace's stricter
+  // `noPropertyAccessFromIndexSignature`, which Nx's Angular presets set, is put back too:
+  // `src/main.ts` reads `process.env.EXPO_PUBLIC_DEVICE_TESTS` with a dot, the only form Expo's
+  // Babel preset inlines, and the flag rejects that.
   return {
     extends: ['expo/tsconfig.base.json', workspaceBase],
     compilerOptions: {
@@ -171,6 +176,7 @@ function tsconfig(workspaceBase, conditions = []) {
       module: 'preserve',
       moduleResolution: 'bundler',
       customConditions,
+      noPropertyAccessFromIndexSignature: false,
       composite: false,
       declaration: false,
       emitDeclarationOnly: false,
@@ -228,10 +234,12 @@ export default defineConfig({
 
 /**
  * @param {boolean} withPaths whether to resolve the workspace's tsconfig path aliases
+ * @param {boolean} [viaVite] whether Vite does that itself, as from Vite 8, rather than the
+ *   `vite-tsconfig-paths` plugin, which Vite 8 warns is no longer needed
  * @param {'app' | 'desktop' | 'library'} [variant] the template's config, with its Node, iOS and
  *   Android projects; the desktop template's, with a project for each desktop OS; or a library's, Node alone
  */
-function vitestConfig(withPaths, variant = 'app') {
+function vitestConfig(withPaths, variant = 'app', viaVite = false) {
   const config =
     variant === 'library'
       ? LIBRARY_VITEST_CONFIG
@@ -245,16 +253,20 @@ function vitestConfig(withPaths, variant = 'app') {
           'utf8',
         );
   if (!withPaths) return config;
-  return (
-    config
-      .replace(
+  // Each project's: the phone template's one in Node, the desktop template's one for each OS.
+  if (viaVite) {
+    return config.replaceAll(
+      'plugins: [ngNative(',
+      'resolve: { tsconfigPaths: true }, plugins: [ngNative(',
+    );
+  }
+  return config
+    .replace(
+      "import { defineConfig } from 'vitest/config';",
+      "import tsconfigPaths from 'vite-tsconfig-paths';\n" +
         "import { defineConfig } from 'vitest/config';",
-        "import tsconfigPaths from 'vite-tsconfig-paths';\n" +
-          "import { defineConfig } from 'vitest/config';",
-      )
-      // Each project's: the phone template's one in Node, the desktop template's one for each OS.
-      .replaceAll('plugins: [ngNative(', 'plugins: [tsconfigPaths(), ngNative(')
-  );
+    )
+    .replaceAll('plugins: [ngNative(', 'plugins: [tsconfigPaths(), ngNative(');
 }
 
 /**
@@ -266,6 +278,58 @@ const vitestPathsDependencies = {
   'vite-tsconfig-paths': '^5.1.4',
   vite: '^6.0.0 || ^7.0.0 || ^8.0.0',
 };
+
+/**
+ * What `vitestConfig(true, variant, true)` needs: Vite at the first range that resolves tsconfig
+ * paths itself, where the workspace has none.
+ */
+const vitestViaViteDependencies = { vite: '^8.0.0' };
+
+/**
+ * Whether the tests' path aliases can be left to Vite's own `resolve.tsconfigPaths`, which Vite 8
+ * added, in a workspace whose root `package.json` is `manifest`: the Vite it lists is 8 or later,
+ * or it lists none and the Vitest it lists, if any, takes Vite 8 (Vitest 4.1 and later do). A
+ * Vite it lists that is older, or that is not a range, keeps `vite-tsconfig-paths`.
+ *
+ * @param {{ dependencies?: Record<string, string>, devDependencies?: Record<string, string> }} manifest
+ */
+function viteResolvesPaths(manifest) {
+  const listed = { ...manifest.dependencies, ...manifest.devDependencies };
+  const first = (range) => (semver.validRange(range) ? semver.minVersion(range) : null);
+  if (listed.vite) return (first(listed.vite)?.major ?? 0) >= 8;
+  if (!listed.vitest) return true;
+  const vitest = first(listed.vitest);
+  return Boolean(vitest && semver.gte(vitest, '4.1.0'));
+}
+
+/**
+ * Adds what the tests' path aliases need to the root `package.json`, keeping a version it has:
+ * Vite alone where Vite resolves them, and `vite-tsconfig-paths` with Vite otherwise.
+ */
+function addVitestPathsDependencies(tree) {
+  const viaVite = viteResolvesPaths(readJson(tree, 'package.json'));
+  const wanted = viaVite ? vitestViaViteDependencies : vitestPathsDependencies;
+  addDependenciesToPackageJson(tree, {}, wanted, 'package.json', true);
+}
+
+/** The names a flat ESLint config at a workspace's root can have, and one an ES module can import. */
+const ROOT_ESLINT_CONFIGS = ['eslint.config.mjs', 'eslint.config.js', 'eslint.config.cjs'];
+
+/**
+ * The app's `eslint.config.mjs`. In a workspace with a flat config at its root, as Nx's presets
+ * write, it spreads that first, as the configs `@nx/angular` generates do: the root's
+ * `@nx/enforce-module-boundaries` and its other rules would otherwise not apply to the app, and
+ * `nx lint` would pass what the workspace's own ESLint run fails.
+ *
+ * @param {string | undefined} rootConfig the root config's path from the app's directory
+ */
+function eslintConfig(rootConfig) {
+  if (!rootConfig) return shared.ESLINT_CONFIG;
+  return shared.ESLINT_CONFIG.replace(
+    "import ngNative from '@ng-native/eslint-plugin';\n",
+    `import baseConfig from '${rootConfig}';\nimport ngNative from '@ng-native/eslint-plugin';\n`,
+  ).replace('export default [\n', 'export default [\n  ...baseConfig,\n');
+}
 
 /**
  * The ranges a workspace package's `package.json` lists: the root's own where everything it can
@@ -308,6 +372,11 @@ module.exports = {
   typecheckTsconfig,
   vitestConfig,
   vitestPathsDependencies,
+  vitestViaViteDependencies,
+  viteResolvesPaths,
+  ROOT_ESLINT_CONFIGS,
+  eslintConfig,
+  addVitestPathsDependencies,
   reuseRootRanges,
   expoCompanions,
 };

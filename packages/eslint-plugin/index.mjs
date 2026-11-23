@@ -151,6 +151,16 @@ function buildsForDesktop(context) {
   return platformsAbove(dirname(filename)).some((os) => DESKTOP_PLATFORMS.has(os));
 }
 
+/**
+ * Whether the project a file is in lists iOS or Android in the nearest `app.json`'s
+ * `expo.platforms`. A desktop-only app lists desktop OSes alone. Read where the project lists a
+ * desktop OS, since with none listed it builds for both phones, as Expo does by default.
+ */
+function buildsForPhone(context) {
+  const filename = context.physicalFilename ?? context.filename;
+  return platformsAbove(dirname(filename)).some((os) => os === 'ios' || os === 'android');
+}
+
 function platformsAbove(directory) {
   const file = join(directory, 'app.json');
   const stat = statSync(file, { throwIfNoEntry: false });
@@ -282,7 +292,9 @@ const desktopOnlyEvents = {
     schema: [],
   },
   create(context) {
-    if (isDomComponent(context) || !buildsForDesktop(context)) return {};
+    if (isDomComponent(context) || !buildsForDesktop(context) || !buildsForPhone(context)) {
+      return {};
+    }
     const check = (where, name) => {
       const event = name.split('.')[0];
       const known = DOM_EVENTS.get(event);

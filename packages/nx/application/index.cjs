@@ -265,7 +265,10 @@ async function writeFiles(tree, resolved) {
     '.gitignore',
     desktopOnly ? `${native.GITIGNORE}\n${native.DESKTOP_GITIGNORE}` : native.GITIGNORE,
   );
-  if (lint) file('eslint.config.mjs', native.ESLINT_CONFIG);
+  if (lint) {
+    const root = native.ROOT_ESLINT_CONFIGS.find((config) => tree.exists(config));
+    file('eslint.config.mjs', native.eslintConfig(root && `${offsetFromRoot(directory)}${root}`));
+  }
 
   const base = hasPathAliases(tree, workspaces);
   const workspaceBase = base ? `${offsetFromRoot(directory)}tsconfig.base.json` : undefined;
@@ -274,7 +277,11 @@ async function writeFiles(tree, resolved) {
   if (linksLibraries(tree, workspaces)) {
     file('tsconfig.typecheck.json', JSON.stringify(native.typecheckTsconfig(), null, 2) + '\n');
   }
-  file('vitest.config.mts', native.vitestConfig(Boolean(base), desktopOnly ? 'desktop' : 'app'));
+  const viaVite = native.viteResolvesPaths(readJson(tree, 'package.json'));
+  file(
+    'vitest.config.mts',
+    native.vitestConfig(Boolean(base), desktopOnly ? 'desktop' : 'app', viaVite),
+  );
 
   const manifest = { name: projectName, version: '0.0.1', private: true, main: 'src/main.ts' };
   const root = readJson(tree, 'package.json');
@@ -329,12 +336,10 @@ async function application(tree, options) {
       true,
     );
   }
-  // `tsconfigPaths()`, which the app's Vitest config uses to reach the workspace's libraries.
-  // Added now rather than only when present, because a library generated later is the ordinary
-  // case and nothing would come back to add it then.
-  if (hasPathAliases(tree, workspaces)) {
-    addDependenciesToPackageJson(tree, {}, native.vitestPathsDependencies, 'package.json', true);
-  }
+  // What the app's Vitest config uses to reach the workspace's libraries. Added now rather than
+  // only when present, because a library generated later is the ordinary case and nothing would
+  // come back to add it then.
+  if (hasPathAliases(tree, workspaces)) native.addVitestPathsDependencies(tree);
   await writeFiles(tree, resolved);
   addProjectConfiguration(tree, projectName, {
     root: directory,
