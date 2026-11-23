@@ -2,8 +2,10 @@ name: CI run telemetry
 
 # Sends the workflow runs that finished since the last successful scheduled run to Coralogix in one
 # batch through scripts/ci-telemetry.mjs, instead of a runner job for every finished run. A run that
-# fails sends nothing, so the next one covers its window. Closed pull requests go out from
-# telemetry.yml. A manual run with `since` or `until` sends that window again and can send a run twice.
+# fails while collecting sends nothing, so the next one covers its window; one that fails while sending
+# can leave part of the batch delivered, which the next run sends again. Closed pull requests go out
+# from telemetry.yml. A manual run with `since` or `until` sends that window again and can send a run
+# twice.
 on:
   schedule:
     - cron: '*/30 * * * *'
