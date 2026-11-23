@@ -74,50 +74,31 @@ describe("an icon's shapes, as the icon changes", () => {
 });
 
 describe("an icon's root paint", () => {
-  it('is each shape its own, with no group to carry it', async () => {
-    const { fabric } = await render(Fixture);
-    const view = icon(fabric, 'outline');
+  it('stays on a group its shapes inherit it from, a group that is new with each drawing', async () => {
+    const { fabric, instance } = await render(Fixture);
+    const [group] = icon(fabric, 'swapped').children as [FakeFabricNode];
+    assert.equal(group.viewName, 'RNSVGGroup');
+    assert.deepEqual(group.props['stroke'], { type: 2 });
+    assert.equal(group.props['strokeWidth'], '1.5', "from the root's style");
     assert.deepEqual(
-      view.children.map((child) => child.viewName),
-      ['RNSVGPath', 'RNSVGPath'],
+      group.children.map((shape) => [shape.viewName, shape.props['strokeWidth']]),
+      [
+        ['RNSVGPath', undefined],
+        ['RNSVGPath', '3'],
+      ],
     );
-    const [first, second] = view.children as [FakeFabricNode, FakeFabricNode];
-    assert.deepEqual(first.props['stroke'], { type: 2 });
-    // `fill="none"`: named in the list and sent as nothing, which react-native-svg draws as none.
-    assert.equal(first.props['fill'] ?? null, null);
-    assert.equal(first.props['strokeWidth'], '1.5', "from the root's style");
-    assert.equal(first.props['strokeLinecap'], 1);
-    assert.deepEqual([...(first.props['propList'] as string[])].sort(), [
-      'fill',
-      'stroke',
-      'strokeLinecap',
-      'strokeWidth',
-    ]);
-    assert.equal(second.props['strokeWidth'], '3', "the shape's own over the root's style");
-  });
-
-  it('stays on a group where the group draws it differently, as an opacity over two shapes', async () => {
-    const { fabric } = await render(Fixture);
-    const [group] = icon(fabric, 'faded').children;
-    assert.equal(group?.viewName, 'RNSVGGroup');
-    assert.equal(group?.props['opacity'], 0.5);
+    // On Android the svg view draws again for a new child group, and not for new children of
+    // its own: shapes straight under it would go on showing the drawing before.
+    instance.swapped.set(
+      '<svg viewBox="0 0 24 24" stroke="red"><circle cx="5" cy="5" r="2"/></svg>',
+    );
+    await settle();
+    const [next] = icon(fabric, 'swapped').children as [FakeFabricNode];
+    assert.equal(next.viewName, 'RNSVGGroup');
     assert.deepEqual(
-      group?.children.map((child) => child.viewName),
-      ['RNSVGCircle', 'RNSVGCircle'],
+      next.children.map((shape) => shape.viewName),
+      ['RNSVGCircle'],
     );
-  });
-
-  it('hands down only the paint in the root style, past a title that draws nothing', async () => {
-    const { fabric } = await render(Fixture);
-    const view = icon(fabric, 'titled');
-    assert.deepEqual(
-      view.children.map((child) => child.viewName),
-      ['RNSVGRect'],
-    );
-    const [rect] = view.children as [FakeFabricNode];
-    assert.deepEqual(rect.props['fill'], { type: 0, payload: 'red' });
-    assert.notEqual(rect.props['width'], '24px', "the root's size is not the rect's");
-    assert.notEqual(rect.props['height'], '24px');
   });
 });
 
@@ -125,17 +106,22 @@ describe('an icon drawn again', () => {
   it('takes a new stroke width, where another icon drawing the same markup keeps its own', async () => {
     const { fabric, instance } = await render(Fixture);
     const widths = (id: string) =>
-      icon(fabric, id).children.map((shape) => shape.props['strokeWidth']);
-    assert.deepEqual(widths('swapped'), ['1.5', '3']);
+      icon(fabric, id).children[0]!.children.map((shape) => shape.props['strokeWidth']);
+    assert.deepEqual(widths('swapped'), [undefined, '3'], "the root's on the group");
     instance.weight.set(2);
     await settle();
-    assert.deepEqual(widths('outline'), ['2', '3']);
+    assert.equal(icon(fabric, 'outline').children[0]!.props['strokeWidth'], '2');
+    assert.deepEqual(widths('outline'), [undefined, '3']);
     instance.swapped.set(`${instance.swapped()} `);
     await settle();
-    assert.deepEqual(widths('swapped'), ['1.5', '3'], "not the other icon's width");
+    assert.equal(
+      icon(fabric, 'swapped').children[0]!.props['strokeWidth'],
+      '1.5',
+      "not the other icon's width",
+    );
     instance.weight.set(undefined);
     await settle();
-    assert.deepEqual(widths('outline'), ['1.5', '3']);
+    assert.equal(icon(fabric, 'outline').children[0]!.props['strokeWidth'], '1.5');
   });
 
   it('clears the viewBox when the markup it draws has none', async () => {
@@ -158,7 +144,7 @@ describe('an icon drawn again', () => {
       const { fabric } = await render(Fixture, {
         processColor: (value) => `${prefix}:${String(value)}`,
       });
-      const [rect] = icon(fabric, 'titled').children as [FakeFabricNode];
+      const [rect] = icon(fabric, 'filled').children[0]!.children as [FakeFabricNode];
       const paint = rect.props['fill'] as { payload: unknown };
       cleanup();
       return paint.payload;

@@ -54,7 +54,6 @@ import { parseSvg, type SvgNode } from './parse-svg.ts';
 import { registerSvgComponents } from './svg-elements.ts';
 import {
   PAINT,
-  PRESENTATION,
   SVG_ELEMENTS,
   UNDRAWN,
   gradientProps,
@@ -81,33 +80,12 @@ interface Drawing {
    * the icon's own view and none of its shapes.
    */
   readonly selfContained: boolean;
-  /**
-   * The root's paint, where each child can take it as its own and no group has to carry it:
-   * nothing on the root that a group would draw differently, an opacity or a mask, and children
-   * that are shapes and groups. A view fewer per icon, which is a fifth of an outline set's.
-   */
-  readonly paint: SvgNode | null;
   /** The view's `viewBox` props, which a drawing with none leaves unset. */
   readonly viewBox: Readonly<Record<string, unknown>>;
 }
 
 /** The props `viewBoxProps` sets, each written on every draw so a drawing with none clears them. */
 const VIEW_BOX = ['minX', 'minY', 'vbWidth', 'vbHeight', 'align', 'meetOrSlice'] as const;
-
-/** The root attributes a child takes as its own when the group carrying them goes. */
-const HANDED_DOWN: ReadonlySet<string> = new Set([
-  ...['fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-opacity', 'stroke-width'],
-  ...['stroke-linecap', 'stroke-linejoin', 'stroke-dasharray', 'stroke-dashoffset'],
-  'stroke-miterlimit',
-]);
-
-/** What a root's group draws that its children would draw differently, one by one. */
-const GROUP_ONLY: ReadonlySet<string> = new Set(['id', 'mask', 'clip-path', 'transform']);
-
-/** The children that take a paint as their own as they would inherit it. */
-const SHAPES: ReadonlySet<string> = new Set([
-  ...['path', 'circle', 'ellipse', 'rect', 'line', 'polyline', 'polygon', 'g'],
-]);
 
 /**
  * ponytail: cleared whole when it fills, the bound on markup an app binds from a server. The icon
@@ -116,7 +94,7 @@ const SHAPES: ReadonlySet<string> = new Set([
 const drawings = new Map<string, Drawing | null>();
 const MAX_DRAWINGS = 500;
 
-/** An element's attributes, with what its root hands down, and the native props they make. */
+/** An element's attributes and the native props they make. */
 interface Translation {
   readonly engine: unknown;
   readonly strokeWidth: unknown;
@@ -126,8 +104,7 @@ interface Translation {
 
 /**
  * The last translation of each element, which a list of icons drawing the same few names reuses.
- * An element belongs to one drawing, so what its root hands it is the same each time. Kept with
- * its own drawing, and for one stroke width and engine at a time.
+ * Kept with its own drawing, and for one stroke width and engine at a time.
  */
 const translations = new WeakMap<SvgNode, Translation>();
 
@@ -138,7 +115,6 @@ function drawingOf(markup: string): Drawing | null {
   drawing = root && {
     root,
     selfContained: selfContained(root),
-    paint: paintOf(root),
     viewBox: viewBoxProps(root.attrs['viewBox']),
   };
   if (drawings.size >= MAX_DRAWINGS) drawings.clear();
@@ -157,28 +133,6 @@ function selfContained(node: SvgNode): boolean {
   const attrs = written(node);
   for (const paint of PAINT) if (isTokenPaint(attrs[paint])) return false;
   return node.children.every(selfContained);
-}
-
-/** The root's attributes as a child of it would inherit them, or null where a group has to stay. */
-function paintOf(root: SvgNode): SvgNode | null {
-  if (!root.children.every((child) => SHAPES.has(child.tag) || UNDRAWN.has(child.tag))) return null;
-  const names = [...Object.keys(root.attrs), ...Object.keys(written(root))];
-  const drawn = (name: string) => GROUP_ONLY.has(name) || own(PRESENTATION, name) !== undefined;
-  if (names.some((name) => drawn(name) && !HANDED_DOWN.has(name))) return null;
-  // A token is settled by the cascade on the element that names it: it stays on the group.
-  const attrs = written(root);
-  for (const paint of PAINT) if (isTokenPaint(attrs[paint])) return null;
-  const paint: Record<string, string> = {};
-  for (const [name, value] of Object.entries(root.attrs)) {
-    if (HANDED_DOWN.has(name)) paint[name] = value;
-  }
-  // Only the paint in it: a `width` there sizes the drawing, and a `rect` with none of its own would take it.
-  const style = (root.attrs['style'] ?? '')
-    .split(';')
-    .filter((declaration) => HANDED_DOWN.has(declaration.split(':')[0]!.trim()))
-    .join(';');
-  if (style) paint['style'] = style;
-  return { tag: 'svg', attrs: paint, children: [] };
 }
 
 /** The inputs Angular writes on the host from a static attribute, named as the template does. */
@@ -411,30 +365,22 @@ export class NgIcon {
     // Here rather than as six host bindings: they change only with the drawing.
     for (const prop of VIEW_BOX) this.renderer.setProperty(this.host, prop, drawing?.viewBox[prop]);
     if (!drawing) return;
-    const { root, paint, selfContained } = drawing;
+    const { root, selfContained } = drawing;
 
     // The svg view itself holds no paint, so a root that says `stroke="currentColor"` needs its
-    // children to have it: as their own where they take it as they would inherit it, and
-    // otherwise on a group they inherit it from, which is how react-native-svg's own `Svg` does it.
-    if (paint) {
-      const inherited = this.attributes(paint);
-      for (const child of root.children) this.append(this.host, child, selfContained, inherited);
-      return;
-    }
+    // children to inherit it from a group, which is how react-native-svg's own `Svg` does it. The
+    // group stays even where each child could take the root's paint as its own: on Android, the
+    // svg view does not draw again when its own children are replaced, so a changed `name` or
+    // `svg` would go on showing the icon before it.
     const group = this.create('svg-g', root, selfContained);
     for (const child of root.children) this.append(group, child, selfContained);
     this.renderer.appendChild(this.host, group);
   }
 
-  private append(
-    parent: unknown,
-    node: SvgNode,
-    selfContained: boolean,
-    inherited?: Record<string, string>,
-  ): void {
+  private append(parent: unknown, node: SvgNode, selfContained: boolean): void {
     const element = own(SVG_ELEMENTS, node.tag);
     if (!element) return this.reportUndrawn(node.tag);
-    const shape = this.create(element, node, selfContained, inherited);
+    const shape = this.create(element, node, selfContained);
     for (const child of node.children) this.append(shape, child, selfContained);
     this.renderer.appendChild(parent, shape);
   }
@@ -489,14 +435,14 @@ export class NgIcon {
   }
 
   /**
-   * What the root hands down, under what the element says itself, and the props that makes. A
-   * gradient reads the `color` input, so it is translated each time.
+   * An element's attributes and the props they make. A gradient reads the `color` input, so it is
+   * translated each time.
    */
-  private translate(node: SvgNode, inherited?: Record<string, string>): Translation {
+  private translate(node: SvgNode): Translation {
     const strokeWidth = this.strokeWidth();
     const last = translations.get(node);
     if (last?.engine === this.engine && last.strokeWidth === strokeWidth) return last;
-    const attrs = { ...inherited, ...this.attributes(node) };
+    const attrs = this.attributes(node);
     const translation = {
       engine: this.engine,
       strokeWidth,
@@ -507,18 +453,13 @@ export class NgIcon {
     return translation;
   }
 
-  private create(
-    element: string,
-    node: SvgNode,
-    selfContained: boolean,
-    inherited?: Record<string, string>,
-  ): unknown {
+  private create(element: string, node: SvgNode, selfContained: boolean): unknown {
     const shape = this.renderer.createElement(element) as EngineNode;
     // Created here rather than by a template, so nothing else will account for it: without this
     // the engine reports every shape as an element whose component was forgotten.
     claimHost(shape);
     if (selfContained) shape.outsideCascade = true;
-    const { attrs, props } = this.translate(node, inherited);
+    const { attrs, props } = this.translate(node);
     // A paint that reads a custom property is settled by the cascade, with the tokens in scope
     // for the shape, and follows them. It stays in `propList`, which says the shape has one.
     const cascade = this.engine as Partial<Pick<Engine, 'setBoundStyle'>>;

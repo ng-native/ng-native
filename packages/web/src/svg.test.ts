@@ -51,18 +51,28 @@ describe('ng-icon, over real SVG elements', () => {
     assert.match(icon().style.color, /#111827|rgb\(17,\s*24,\s*39\)/);
   });
 
-  it("gives each shape the root svg tag's own presentation attrs, with no <g> to carry them", () => {
-    assert.equal(iconShape('svg-g'), null);
+  it("wraps the parsed markup in a real <g>, carrying the root svg tag's own presentation attrs", () => {
+    const group = iconShape('svg-g') as SVGGElement;
+    assert.equal(group.namespaceURI, SVG_NAMESPACE);
+    assert.equal(group.tagName, 'g');
+    assert.equal(group.getAttribute('fill'), 'none', 'root fill="none" -> a real none, not black');
+    assert.equal(group.getAttribute('stroke'), 'currentColor');
+    assert.equal(group.getAttribute('stroke-width'), '1.5');
+  });
+
+  it("commits <path> real, with no fill/stroke of its own - inheriting the group's", () => {
     const path = iconShape('svg-path') as SVGPathElement;
     assert.equal(path.namespaceURI, SVG_NAMESPACE);
     assert.equal(path.tagName, 'path');
     assert.equal(path.getAttribute('d'), 'M4 4h16v16H4z');
-    assert.equal(path.getAttribute('fill'), 'none', 'root fill="none" -> a real none, not black');
-    assert.equal(path.getAttribute('stroke'), 'currentColor');
-    assert.equal(path.getAttribute('stroke-width'), '1.5');
     // Integers on the native prop, translated back to the keywords a browser wants.
     assert.equal(path.getAttribute('stroke-linecap'), 'round');
     assert.equal(path.getAttribute('stroke-linejoin'), 'round');
+    // Never declared its own fill/stroke, so nothing is written - real SVG inheritance from the
+    // wrapping <g> is what paints it, exactly like it would from a `currentColor` ancestor group
+    // on native.
+    assert.equal(path.hasAttribute('fill'), false);
+    assert.equal(path.hasAttribute('stroke'), false);
   });
 
   it('translates a resolved colour brush, and integer fill-rule/clip-rule, on <circle>', () => {

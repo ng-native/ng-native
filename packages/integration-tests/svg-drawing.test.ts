@@ -95,31 +95,24 @@ const svgView = (nativeID: string, color = 'rgb(4, 5, 6)') => [
 const lists = { x: [], y: [], dx: [], dy: [], rotate: [] };
 const DRAWN = [
   // Painted by nothing a page can change, so out of its cascade: the colour each draws in is the
-  // svg view's, which native paints `currentColor` from, and the root's paint is each shape's own.
+  // svg view's, which native paints `currentColor` from.
   svgView('outline'),
   [
-    'RNSVGPath',
+    'RNSVGGroup',
     {
       stroke: { type: 2 },
       strokeWidth: '2',
       propList: ['fill', 'stroke', 'strokeWidth'],
-      d: 'M0 0L5 5',
     },
   ],
+  ['RNSVGPath', { d: 'M0 0L5 5' }],
   [
     'RNSVGCircle',
-    {
-      fill: { type: 0, payload: 'red' },
-      stroke: { type: 2 },
-      strokeWidth: '2',
-      propList: ['fill', 'stroke', 'strokeWidth'],
-      cx: '4',
-      cy: '4',
-      r: '2',
-    },
+    { fill: { type: 0, payload: 'red' }, propList: ['fill'], cx: '4', cy: '4', r: '2' },
   ],
   svgView('glyph', 'rgb(9, 9, 9)'),
-  ['RNSVGPath', { fill: { type: 2 }, propList: ['fill'], d: 'M1 1L6 6' }],
+  ['RNSVGGroup', { fill: { type: 2 }, propList: ['fill'] }],
+  ['RNSVGPath', { d: 'M1 1L6 6' }],
   // A token and a text are the cascade's to settle, as they were.
   svgView('token'),
   ['RNSVGGroup', { ...ink, stroke: { type: 0, payload: 'rgb(1, 2, 3)' }, propList: ['stroke'] }],
