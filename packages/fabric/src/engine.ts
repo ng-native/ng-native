@@ -9437,9 +9437,12 @@ export class Engine implements HostEngine {
    * undefined where nothing sets one, which native draws black. Before its first commit, the
    * colour its own style gives it, or else its nearest committed ancestor's, which is the best
    * answer there is without settling it, as only a commit may: `watchColour` hears the settled
-   * one.
+   * one. A colour a component sets over the style, as an animation does, comes first.
    */
   colour(node: EngineNode): unknown {
+    // What a component sets over the style, an animated colour among it, is what native is sent.
+    const over = styleKey(node.props[STYLE_OVERRIDE], 'color');
+    if (over !== undefined) return over;
     for (let at: EngineNode | null = node; at; at = at.parent) {
       // Left out of the cascade, it shares an empty style that says nothing of its colour.
       if (at.outsideCascade) continue;

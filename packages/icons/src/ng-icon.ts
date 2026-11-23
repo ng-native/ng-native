@@ -97,8 +97,8 @@ const VIEW_BOX = ['minX', 'minY', 'vbWidth', 'vbHeight', 'align', 'meetOrSlice']
  */
 const drawings = new Map<string, Drawing | null>();
 const MAX_DRAWINGS = 500;
-/** The stroke widths a drawing keeps its shapes merged for. */
-const MAX_STROKE_WIDTHS = 8;
+/** The stroke widths and colours a drawing keeps its shapes merged for. */
+const MAX_MERGED = 16;
 
 /** An element's attributes and the native props they make. */
 interface Translation {
@@ -162,6 +162,30 @@ function opacityOf(colour: unknown): boolean | undefined {
 
 /** Each colour read, for the thousand icons in a list that are all painted in it. */
 const opacities = new Map<string, boolean | undefined>();
+
+/** The drawing's shapes merged for a stroke width and a colour, kept for the icons after it. */
+function mergedFor(drawing: Drawing, strokeWidth: unknown, opaque: boolean): SvgNode {
+  const key = `${String(strokeWidth)}|${opaque}`;
+  let root = drawing.merged.get(key);
+  if (!root) {
+    // ponytail: emptied when full, for an app that animates the width; a few are ever in use.
+    if (drawing.merged.size >= MAX_MERGED) drawing.merged.clear();
+    root = mergeShapes(drawing.root, strokeWidth as number | string | undefined, opaque);
+    // Nothing merged under either colour: the one tree, so an icon can tell it need not choose.
+    const other = drawing.merged.get(`${String(strokeWidth)}|${!opaque}`);
+    if (other && sameTree(other, root)) root = other;
+    drawing.merged.set(key, root);
+  }
+  return root;
+}
+
+/** Whether two merged trees draw the same, as two merges of one drawing that changed nothing do. */
+const sameTree = (a: SvgNode, b: SvgNode): boolean =>
+  a === b ||
+  (a.tag === b.tag &&
+    a.children.length === b.children.length &&
+    a.attrs['d'] === b.attrs['d'] &&
+    a.children.every((child, i) => sameTree(child, b.children[i]!)));
 
 /** The inputs Angular writes on the host from a static attribute, named as the template does. */
 let inputNames: readonly string[] | undefined;
@@ -423,16 +447,13 @@ export class NgIcon {
     if (!drawing) return;
     const { selfContained } = drawing;
     // Merged for the stroke width it draws at, which decides whether a small closed shape can be,
-    // and for whether its colour is opaque, which decides whether crossing strokes can be.
+    // and for whether its colour is opaque, which decides whether crossing strokes can be. The
+    // colour is read only where it changes what is drawn, so an icon with nothing to merge is not
+    // drawn again when its colour stops or starts being opaque.
     const strokeWidth = this.strokeWidth();
-    const opaque = this.opaque();
-    const key = `${strokeWidth}|${opaque}`;
-    let root = drawing.merged.get(key);
-    if (!root) {
-      // ponytail: emptied when full, for an app that animates the width; a few are ever in use.
-      if (drawing.merged.size >= MAX_STROKE_WIDTHS) drawing.merged.clear();
-      drawing.merged.set(key, (root = mergeShapes(drawing.root, strokeWidth, opaque)));
-    }
+    const solid = mergedFor(drawing, strokeWidth, true);
+    const faint = mergedFor(drawing, strokeWidth, false);
+    const root = solid === faint || this.opaque() ? solid : faint;
 
     // The svg view itself holds no paint, so a root that says `stroke="currentColor"` needs its
     // children to inherit it from a group, which is how react-native-svg's own `Svg` does it. The

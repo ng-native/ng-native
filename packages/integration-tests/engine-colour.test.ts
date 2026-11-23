@@ -120,6 +120,19 @@ describe("a node's colour watched", () => {
     assert.deepEqual(heard, ['rgba(0, 0, 0, 0.5)', 'rgb(255, 255, 255)']);
   });
 
+  it('takes a colour a component sets over the style, and follows it away again', () => {
+    const { engine, parent, node, heard } = watching();
+    engine.addClass(parent, 'plain');
+    engine.commit();
+    engine.setProp(node, 'styleOverride', { color: 'rgba(0, 0, 0, 0.5)' });
+    engine.commit();
+    assert.equal(engine.colour(node), 'rgba(0, 0, 0, 0.5)');
+    engine.setProp(node, 'styleOverride', undefined);
+    engine.commit();
+    assert.equal(engine.colour(node), 'rgb(255, 0, 0)');
+    assert.deepEqual(heard, ['rgb(255, 0, 0)', 'rgba(0, 0, 0, 0.5)', 'rgb(255, 0, 0)']);
+  });
+
   it('stops when told to', () => {
     const { engine, parent, heard, stop } = watching();
     stop();

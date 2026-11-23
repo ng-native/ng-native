@@ -73,8 +73,6 @@ interface Inherited {
   readonly handed: number | string | undefined;
   /** The stroke it paints with, `none` where nothing above it says one. */
   readonly paint: string;
-  /** What `currentColor` is under it, where an SVG `color` attribute above it says. */
-  readonly current: string | undefined;
   /** Whether the colour the icon draws `currentColor` in is known to be opaque. */
   readonly opaque: boolean;
 }
@@ -84,13 +82,11 @@ interface Inherited {
  * only where it is not opaque: a stroke with any transparency in it shows the crossing darker
  * drawn as two shapes, and as one path does not. A colour not read here counts as not opaque.
  */
-function opaquePaint(paint: string, current: string | undefined, opaque: boolean): boolean {
+function opaquePaint(paint: string, opaque: boolean): boolean {
   if (paint === 'none') return true;
-  if (/^currentcolor$/i.test(paint)) {
-    return current === undefined || /^currentcolor$/i.test(current)
-      ? opaque
-      : opaquePaint(current, undefined, opaque);
-  }
+  // The icon's colour: an SVG `color` attribute is not sent to native, which paints `currentColor`
+  // in the colour of the svg view.
+  if (/^currentcolor$/i.test(paint)) return opaque;
   const colour = parseColor(paint);
   return colour !== null && colour[3] >= 1;
 }
@@ -208,7 +204,10 @@ const ARGUMENTS: Readonly<Record<string, number>> = {
 };
 
 const NUMBER_AT = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/y;
-const SEPARATORS = /[\s,]*/y;
+/** Space, which may come anywhere a separator may. */
+const SPACE = /\s*/y;
+/** What may come between two numbers: space, and at most one comma in it. */
+const BETWEEN = /\s*,?\s*/y;
 
 /** One command of path data and its numbers, every repeat of them. */
 interface Segment {
@@ -224,13 +223,15 @@ interface Segment {
 function parsePath(d: string): Segment[] | undefined {
   const segments: Segment[] = [];
   let at = 0;
-  const skip = () => {
-    SEPARATORS.lastIndex = at;
-    SEPARATORS.exec(d);
-    at = SEPARATORS.lastIndex;
+  const skip = (pattern: RegExp) => {
+    pattern.lastIndex = at;
+    pattern.exec(d);
+    at = pattern.lastIndex;
   };
-  const readNumber = (flag: boolean): number | undefined => {
-    skip();
+  // A comma goes between two numbers only: not after a command, before one or twice. Android's
+  // parser stops at one anywhere else, which would take the shapes merged after it with it.
+  const readNumber = (flag: boolean, first: boolean): number | undefined => {
+    skip(first ? SPACE : BETWEEN);
     if (flag) {
       if (d[at] !== '0' && d[at] !== '1') return undefined;
       return Number(d[at++]);
@@ -241,7 +242,7 @@ function parsePath(d: string): Segment[] | undefined {
     at = NUMBER_AT.lastIndex;
     return Number(match[0]);
   };
-  skip();
+  skip(SPACE);
   while (at < d.length) {
     const command = d[at]!;
     const count = ARGUMENTS[command.toLowerCase()];
@@ -249,20 +250,24 @@ function parsePath(d: string): Segment[] | undefined {
     at++;
     const numbers: number[] = [];
     segments.push({ command, numbers });
-    if (count === 0) {
-      skip();
-      continue;
-    }
     // At least one repeat, then more while a number follows.
-    do {
+    let more = count > 0;
+    while (more) {
       for (let i = 0; i < count; i++) {
-        const value = readNumber(command.toLowerCase() === 'a' && (i === 3 || i === 4));
+        const value = readNumber(
+          command.toLowerCase() === 'a' && (i === 3 || i === 4),
+          i === 0 && numbers.length === 0,
+        );
         if (value === undefined) return undefined;
         numbers.push(value);
       }
-      skip();
+      const end = at;
+      skip(BETWEEN);
       NUMBER_AT.lastIndex = at;
-    } while (at < d.length && NUMBER_AT.test(d));
+      more = at < d.length && NUMBER_AT.test(d);
+      at = end;
+    }
+    skip(SPACE);
   }
   return segments;
 }
@@ -389,7 +394,6 @@ export function mergeShapes(
     stroke: 1,
     handed,
     paint: 'none',
-    current: undefined,
     opaque,
   });
 }
@@ -416,7 +420,6 @@ function handedDown(node: SvgNode, from: Inherited): Inherited {
       own['stroke']?.includes('url(') === true,
     stroke: strokeOf(node, from.handed) ?? from.stroke,
     paint: own['stroke'] ?? from.paint,
-    current: own['color'] ?? from.current,
   };
 }
 
@@ -425,8 +428,7 @@ function mergeable(child: SvgNode, inherited: Inherited): { key: string; d: stri
   const stroke = strokeOf(child, inherited.handed) ?? inherited.stroke;
   if (closedWithinStroke(child, stroke)) return undefined;
   const paint = child.attrs['stroke'] ?? inherited.paint;
-  const current = child.attrs['color'] ?? inherited.current;
-  if (!opaquePaint(paint, current, inherited.opaque)) return undefined;
+  if (!opaquePaint(paint, inherited.opaque)) return undefined;
   const key = paintKey(child, inherited);
   const d = key === undefined ? undefined : pathData(child);
   return key === undefined || d === undefined ? undefined : { key, d };

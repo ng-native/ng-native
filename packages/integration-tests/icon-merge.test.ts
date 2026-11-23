@@ -276,8 +276,15 @@ describe('path data that reads to its end', () => {
     }
   });
 
+  it('reads a comma between two numbers only, as Android does', () => {
+    for (const d of ['M1,1 2,2', 'M1 1 , 2 2', 'M0 0a1,1,0,0,1,2,2']) assert.ok(wellFormed(d), d);
+    for (const d of ['M1 1L4 4z,', 'M1 1,L2 2', 'M,1 1', ',M1 1', 'M1 1z,M2 2']) {
+      assert.ok(!wellFormed(d), d);
+    }
+  });
+
   it('stops at a command short of its numbers, a flag that is not one, or a stray letter', () => {
-    for (const d of ['M1', 'M1 2L3', 'M0 0a1 1 0 2 0 5 5', 'M1 2 X', 'M0 0C1 2 3']) {
+    for (const d of ['M1', 'M1 2L3', 'M0 0a1 1 0 2 0 5 5', 'M1 2 X', 'M0 0C1 2 3', 'M1,,1']) {
       assert.ok(!wellFormed(d), d);
     }
   });
@@ -294,8 +301,9 @@ describe('an outline icon on screen', () => {
     const icon = flatten(fabric.committed).find((node) => node.props['nativeID'] === 'icon')!;
     assert.deepEqual(
       flatten([icon]).map((node) => node.viewName),
-      ['RNSVGSvgView', 'RNSVGGroup', 'RNSVGPath'],
+      [icon.viewName, 'RNSVGGroup', 'RNSVGPath'],
     );
+    assert.match(icon.viewName, /^RNSVGSvgView/, 'RNSVGSvgViewAndroid where tests run as Android');
     assert.equal(
       icon.children[0]!.children[0]!.props['d'],
       'M1 1L2 2M4 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0z',
@@ -351,6 +359,24 @@ describe('an outline icon in a colour that is not opaque', () => {
     assert.deepEqual(shapesOf(fabric, 'css'), ['RNSVGPath', 'RNSVGCircle']);
   });
 
+  it('does not draw again an icon whose drawing its colour does not change, when the colour stops being opaque', async () => {
+    const { fabric, instance } = await render(Colours);
+    instance.tone.set('solid');
+    await settle();
+    const created: string[] = [];
+    const create = fabric.createNode.bind(fabric);
+    fabric.createNode = ((...args: Parameters<typeof create>) => {
+      const node = create(...args);
+      created.push((node as FakeFabricNode).viewName);
+      return node;
+    }) as typeof create;
+    instance.tone.set('faint');
+    await settle();
+    // The outline icon is drawn apart again: a group, a path and a circle. Neither the filled one,
+    // which merges nothing, nor the red one, which merges in any colour, is drawn again.
+    assert.deepEqual(created.sort(), ['RNSVGCircle', 'RNSVGGroup', 'RNSVGPath']);
+  });
+
   it('follows a stylesheet colour that changes, each way', async () => {
     const { fabric, instance } = await render(Colours);
     instance.tone.set('solid');
@@ -377,10 +403,6 @@ describe('a stroke paint that is not opaque', () => {
       'a form not read here',
       '<svg fill="none" stroke="context-stroke"><path d="M1 1"/><path d="M2 2"/></svg>',
     ],
-    [
-      'currentColor under an SVG color with alpha',
-      '<svg fill="none" stroke="currentColor" color="rgba(0,0,0,.5)"><path d="M1 1"/><path d="M2 2"/></svg>',
-    ],
   ];
   for (const [what, markup] of cases) {
     it(`keeps shapes apart: ${what}`, () => {
@@ -389,9 +411,16 @@ describe('a stroke paint that is not opaque', () => {
     });
   }
 
-  it('does not keep apart shapes painted in an opaque colour, whatever the icon is', () => {
+  it('keeps them apart where the icon is not opaque, whatever an SVG color attribute says', () => {
+    // Native paints currentColor in the colour of the svg view: the attribute is not sent to it.
     const markup =
       '<svg fill="none" stroke="currentColor" color="red"><path d="M1 1"/><path d="M2 2"/></svg>';
+    const root = parseSvg(markup)!;
+    assert.equal(mergeShapes(root, undefined, false), root);
+  });
+
+  it('does not keep apart shapes written in an opaque colour, whatever the icon is', () => {
+    const markup = '<svg fill="none" stroke="red"><path d="M1 1"/><path d="M2 2"/></svg>';
     assert.deepEqual(
       mergeShapes(parseSvg(markup)!, undefined, false).children.map((c) => c.attrs['d']),
       ['M1 1M2 2'],
