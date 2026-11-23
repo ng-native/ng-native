@@ -783,6 +783,33 @@ describe('a styles expression', () => {
     }
   });
 
+  it('says how to share CSS between files when the styles are imported', () => {
+    const imported = "import { SHARED } from './shared';";
+    assert.throws(
+      () => transformAngular(component(imported, '[SHARED]'), '/tmp/a.ts'),
+      /styles depends on 'SHARED'.*\n.*put the CSS in a \.css file and list it in styleUrl or styleUrls/s,
+    );
+  });
+
+  it('says how to share host bindings between files when the host is imported', () => {
+    const src = [
+      "import { Component } from '@angular/core';",
+      "import { HOST } from './shared';",
+      "@Component({ selector: 'x-h', template: '<view></view>', host: HOST })",
+      'export class Hosted {}',
+    ].join('\n');
+    let message = '';
+    assert.throws(
+      () => transformAngular(src, '/tmp/h.ts'),
+      (error: Error) => {
+        message = error.message;
+        return /host depends on 'HOST'/.test(message);
+      },
+    );
+    assert.match(message, /write the bindings in this file, or share them with a directive/);
+    assert.doesNotMatch(message, /styleUrl/, 'the styles hint is for styles only');
+  });
+
   it('compiles every form the same file can evaluate', () => {
     const preamble = "const CSS = '.box { width: 50px; }'; const SHEETS = [CSS];";
     const forms = ["'.box { width: 50px; }'", 'CSS', '[CSS]', "[CSS, '.x { height: 1px; }']"];

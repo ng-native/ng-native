@@ -19,7 +19,7 @@ const {
   number,
   round,
 } = require('./values.cjs');
-const { backgroundImage } = require('./gradients.cjs');
+const { backgroundImage, tilePlacing } = require('./gradients.cjs');
 const { filter, backgroundSize, backgroundRepeat, backgroundPosition } = require('./filters.cjs');
 const { LOGICAL } = require('./shorthands.cjs');
 const grid = require('./grid.cjs');
@@ -1813,6 +1813,8 @@ const TRANSLATORS = new Map([
         Array.isArray(value) && value.every((layer) => layer?.type === 'none')
           ? []
           : backgroundImage(value, property);
+      // A repeating gradient is drawn as tiles, which places its layer as well as painting it.
+      Object.assign(out, tilePlacing(Array.isArray(value) ? value : [value], property));
     },
   ],
   [
@@ -1872,6 +1874,18 @@ const TRANSLATORS = new Map([
       out.experimental_backgroundRepeat = backgroundRepeat(
         placed.map((layer) => layer.repeat),
         property,
+      );
+      Object.assign(
+        out,
+        tilePlacing(
+          painted.map((layer) => layer.image),
+          property,
+          {
+            size: out.experimental_backgroundSize,
+            position: out.experimental_backgroundPosition,
+            repeat: out.experimental_backgroundRepeat,
+          },
+        ),
       );
     },
   ],

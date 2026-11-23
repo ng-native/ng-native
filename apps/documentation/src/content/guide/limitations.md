@@ -162,7 +162,7 @@ file changes.
 A component's `host` and `styles` are evaluated at build time from the file they are in: a spread, a
 constant or a `function` declaration in the same file works. `@oxc-angular/vite` compiles one file
 at a time, so unlike Angular's own compiler it cannot follow a value imported from another file, and
-the build fails naming the file and the import.
+the build fails naming the file, the import and what to write instead.
 
 **Workaround:** for `host`, write the bindings in the same file, or share the behavior with a
 directive in `hostDirectives`. For `styles`, put CSS shared between files in a `.css` file and list

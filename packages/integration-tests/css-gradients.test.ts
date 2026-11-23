@@ -266,6 +266,146 @@ describe('a gradient in the background shorthand', () => {
   });
 });
 
+describe('a repeating linear gradient', () => {
+  // Native has no repeating gradient, but it tiles a background image. A repeating gradient
+  // whose stops are lengths is one plain gradient drawn in tiles, and each case here is the tile
+  // written out by hand, the way a browser draws it the same (checked against Chrome's pixels).
+  const styleOf = (declarations: string): Record<string, unknown> =>
+    compileCss(`.a { ${declarations} }`).rules[0].declarations;
+  const tiled = (image: string, size: string, position: string) =>
+    styleOf(
+      `background-image: ${image}; background-size: ${size}; ` +
+        `background-position: ${position}; background-repeat: repeat`,
+    );
+  // 6px across stripes at 45 degrees to the box's sides: 6 / sin 45deg.
+  const DIAGONAL = '8.48528px 8.48528px';
+
+  it('is diagonal stripes as a tile two stripes long, from the corner it starts at', () => {
+    // The issue's stripes. A tile 6/sin wide and 6/cos high holds exactly two periods along
+    // the gradient line, and its own gradient line starts at the corner the box's does.
+    assert.deepEqual(
+      styleOf(
+        'background-image: repeating-linear-gradient(135deg, rgba(29,29,31,.28) 0 3px, transparent 3px 6px)',
+      ),
+      tiled(
+        'linear-gradient(135deg, rgba(29,29,31,.28) 0 3px, transparent 3px 6px, ' +
+          'rgba(29,29,31,.28) 6px 9px, transparent 9px 12px)',
+        DIAGONAL,
+        '0% 0%',
+      ),
+    );
+  });
+
+  it('anchors the tile at the corner each quadrant starts from', () => {
+    const stripes = (angle: string) =>
+      styleOf(`background-image: repeating-linear-gradient(${angle}, red 0 3px, blue 3px 6px)`);
+    const tile = (angle: string, position: string) =>
+      tiled(
+        `linear-gradient(${angle}, red 0 3px, blue 3px 6px, red 6px 9px, blue 9px 12px)`,
+        DIAGONAL,
+        position,
+      );
+    assert.deepEqual(stripes('45deg'), tile('45deg', '0% 100%'));
+    assert.deepEqual(stripes('225deg'), tile('225deg', '100% 0%'));
+    assert.deepEqual(stripes('-45deg'), tile('-45deg', '100% 100%'));
+  });
+
+  it('is a band across the box, one period long, for a straight edge', () => {
+    const stripes = (direction: string) =>
+      styleOf(`background-image: repeating-linear-gradient(${direction}red 0 4px, blue 4px 10px)`);
+    const band = (angle: string, size: string, position: string) =>
+      tiled(`linear-gradient(${angle}, red 0 4px, blue 4px 10px)`, size, position);
+    assert.deepEqual(stripes(''), band('180deg', '100% 10px', '0% 0%'));
+    assert.deepEqual(stripes('to top, '), band('0deg', '100% 10px', '0% 100%'));
+    assert.deepEqual(stripes('to right, '), band('90deg', '10px 100%', '0% 0%'));
+    assert.deepEqual(stripes('to left, '), band('270deg', '10px 100%', '100% 0%'));
+  });
+
+  it('places its stops as CSS does: the first at 0, a run spread out, none going back', () => {
+    assert.deepEqual(
+      styleOf('background-image: repeating-linear-gradient(red, lime, blue 8px, white 2px)'),
+      tiled('linear-gradient(red 0, lime 4px, blue 8px, white 8px)', '100% 8px', '0% 0%'),
+    );
+    assert.deepEqual(
+      styleOf('background-image: repeating-linear-gradient(red 0, blue 0.5rem)'),
+      tiled('linear-gradient(red 0, blue 8px)', '100% 8px', '0% 0%'),
+    );
+  });
+
+  it('places the other layers as they start, beside a tiled one', () => {
+    assert.deepEqual(
+      styleOf(
+        'background-image: linear-gradient(red, blue), repeating-linear-gradient(red 0 2px, blue 2px 4px)',
+      ),
+      styleOf(
+        'background-image: linear-gradient(red, blue), linear-gradient(red 0 2px, blue 2px 4px); ' +
+          'background-size: auto, 100% 4px; background-position: 0% 0%, 0% 0%; ' +
+          'background-repeat: repeat, repeat',
+      ),
+    );
+  });
+
+  it('is the same tile in the background shorthand, over its colour', () => {
+    assert.deepEqual(
+      styleOf('background: repeating-linear-gradient(90deg, red 0 2px, blue 2px 4px) white'),
+      styleOf(
+        'background-image: linear-gradient(90deg, red 0 2px, blue 2px 4px); ' +
+          'background-size: 4px 100%; background-position: 0% 0%; background-repeat: repeat; ' +
+          'background-color: white',
+      ),
+    );
+    // A position or a repeat moves nothing of an image the box's own size, so the tile's win.
+    assert.deepEqual(
+      styleOf(
+        'background: repeating-linear-gradient(90deg, red 0 2px, blue 2px 4px) center no-repeat white',
+      ),
+      styleOf('background: repeating-linear-gradient(90deg, red 0 2px, blue 2px 4px) white'),
+    );
+    // A layer beside it keeps where the shorthand places it.
+    assert.deepEqual(
+      styleOf(
+        'background: linear-gradient(red, blue) center / 10px 20px no-repeat, ' +
+          'repeating-linear-gradient(90deg, red 0 2px, blue 2px 4px)',
+      ),
+      styleOf(
+        'background-image: linear-gradient(red, blue), linear-gradient(90deg, red 0 2px, blue 2px 4px); ' +
+          'background-position: center, 0% 0%; background-size: 10px 20px, 4px 100%; ' +
+          'background-repeat: no-repeat, repeat; background-color: transparent',
+      ),
+    );
+  });
+
+  it('refuses what a tile cannot draw, and names the tile to write instead', () => {
+    for (const [image, why] of [
+      // A percentage is of the gradient line, whose length only the laid-out box has.
+      ['repeating-linear-gradient(red 0 10%, blue 10% 20%)', /not in px or rem/],
+      ['repeating-linear-gradient(red 0 1em, blue 1em 2em)', /not in px or rem/],
+      // A last stop with no position is at 100%.
+      ['repeating-linear-gradient(red 0 3px, blue)', /ends on a stop with no position/],
+      // A corner's angle depends on the box's shape.
+      ['repeating-linear-gradient(to top right, red 0 3px, blue 3px 6px)', /runs to a corner/],
+      ['repeating-linear-gradient(red 2px, blue 8px)', /other than 0/],
+      ['repeating-linear-gradient(red 0, blue 0)', /repeats every 0px/],
+    ] as const) {
+      assert.throws(
+        () => styleOf(`background-image: ${image}`),
+        (error: Error) =>
+          why.test(error.message) &&
+          /repeating-linear-gradient.*background-size.*background-repeat/s.test(error.message),
+        image,
+      );
+    }
+    assert.throws(
+      () => styleOf('background: repeating-linear-gradient(red 0 3px, blue 3px 6px) 0 0 / 20px'),
+      /repeating-linear-gradient.*background-size/s,
+    );
+    assert.throws(
+      () => styleOf('background-image: repeating-radial-gradient(red 0 3px, blue 3px 6px)'),
+      /repeating-radial-gradient has no native equivalent/,
+    );
+  });
+});
+
 describe('a gradient on a device', () => {
   it('runs its colours through the host converter, as any other colour is', async () => {
     const mod = await compileFixture('fixtures/gradient.ts');

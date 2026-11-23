@@ -120,6 +120,25 @@ function templatesOf(src, filename, components, externals) {
   return [...inline, ...external];
 }
 
+/**
+ * What to write instead of a value imported into `styles` or `host`, which the compiler cannot
+ * follow into another file. Its own message names the import but not the way round it.
+ */
+const IMPORTED_INSTEAD = {
+  styles:
+    'To share styles between files, put the CSS in a .css file and list it in styleUrl or styleUrls.',
+  host:
+    'To share host bindings between files, write the bindings in this file, or share them with a ' +
+    'directive in hostDirectives.',
+};
+
+function withHint(message) {
+  const imported = /\.(styles|host) depends on '[^']*', which is imported from another module/.exec(
+    message,
+  );
+  return imported ? `${message}\n${IMPORTED_INSTEAD[imported[1]]}` : message;
+}
+
 /** One compiler error, with its place in the template when that can be told. */
 function locate(message, templates) {
   const needle = quotedIn(message);
@@ -156,7 +175,9 @@ function locate(message, templates) {
  */
 function compileError(errors, filename, src, components, externals) {
   const templates = templatesOf(src, filename, components, externals);
-  const located = errors.map((error) => locate(error.message ?? String(error), templates));
+  const located = errors.map((error) =>
+    locate(withHint(error.message ?? String(error)), templates),
+  );
   const first = located.find((error) => error.loc);
 
   if (!first) {

@@ -44,6 +44,7 @@ function gradient(layer, context) {
   const value = layer.value;
   if (value.type === 'linear') return linear(value, context);
   if (value.type === 'radial') return radial(value, context);
+  if (value.type === 'repeating-linear') return repeatingTile(value, context).image;
   throw new CssUnsupported(
     `${context}: a ${value.type}-gradient has no native equivalent; native paints linear and ` +
       `radial gradients only.`,
@@ -55,6 +56,131 @@ function linear(value, context) {
     type: 'linear-gradient',
     direction: direction(value.direction, context),
     colorStops: colorStops(value.items, context),
+  };
+}
+
+const TILE_INSTEAD =
+  'Write the tile out instead: a linear-gradient of one period, or two for an angle, with ' +
+  'background-size and background-repeat: repeat.';
+
+/**
+ * A repeating linear gradient, as the plain gradient native tiles to draw the same stripes.
+ *
+ * The stripes run across the gradient line every `period` points. Along a side, a band the box's
+ * width (or height) and one period long repeats them exactly. At an angle, a tile `period / |sin|`
+ * wide and `period / |cos|` high does: its own gradient line is then two periods long, and each
+ * edge of the tile is a whole number of periods along it, so the tiles meet without a seam. The
+ * tile is anchored at the corner the gradient starts from, where the box's gradient line is at 0
+ * too, so the stripes keep their phase whatever the box's size.
+ *
+ * Only stops in points can be laid out at build time: a percentage is of a gradient line whose
+ * length only the laid-out box has, and a corner's angle hangs on the box's shape too.
+ */
+function repeatingTile(value, context) {
+  const refuse = (why) => {
+    throw new CssUnsupported(
+      `${context}: a repeating-linear-gradient ${why}, so it cannot be drawn as the tile native ` +
+        `repeats. ${TILE_INSTEAD}`,
+    );
+  };
+  const way = direction(value.direction, context);
+  if (way.type !== 'angle') refuse("runs to a corner, whose angle depends on the box's shape");
+  const stops = colorStops(value.items, context);
+  const placed = periodStops(stops, refuse);
+  const period = placed.at(-1);
+
+  const radians = (way.value * Math.PI) / 180;
+  const sin = straight(Math.sin(radians));
+  const cos = straight(Math.cos(radians));
+  const periods = sin === 0 || cos === 0 ? 1 : 2;
+  const colorStopsOfTile = [];
+  for (let each = 0; each < periods; each++) {
+    stops.forEach((one, index) => {
+      colorStopsOfTile.push({ color: one.color, position: round(placed[index] + each * period) });
+    });
+  }
+  return {
+    image: { type: 'linear-gradient', direction: way, colorStops: colorStopsOfTile },
+    size: {
+      x: sin === 0 ? '100%' : round(period / Math.abs(sin)),
+      y: cos === 0 ? '100%' : round(period / Math.abs(cos)),
+    },
+    position: { left: sin < 0 ? '100%' : '0%', top: cos > 0 ? '100%' : '0%' },
+    repeat: { x: 'repeat', y: 'repeat' },
+  };
+}
+
+/** Where each stop of one period falls, in points, refusing a period a tile cannot hold. */
+function periodStops(stops, refuse) {
+  const positions = stops.map((one) => one.position);
+  if (positions.some((at) => at !== null && typeof at !== 'number')) {
+    refuse('has a stop that is not in px or rem, such as a percentage of the gradient line');
+  }
+  if (positions.at(-1) === null) refuse('ends on a stop with no position, which is at 100%');
+  if ((positions[0] ?? 0) !== 0) refuse('starts its first stop somewhere other than 0');
+  const placed = placeStops(positions);
+  if (placed.at(-1) <= 0) refuse('repeats every 0px');
+  return placed;
+}
+
+/** A sine or cosine, with the float noise of a right angle taken off: `sin(180deg)` is 0. */
+const straight = (value) => (Math.abs(value) < 1e-9 ? 0 : value);
+
+/**
+ * Stop positions as CSS settles them: a first with none is at 0, one before an earlier one is
+ * moved up to it, and a run with none is spread evenly between the stops either side.
+ */
+function placeStops(positions) {
+  const placed = [...positions];
+  placed[0] ??= 0;
+  let known = 0;
+  for (let at = 1; at < placed.length; at++) {
+    if (placed[at] === null) continue;
+    placed[at] = Math.max(placed[at], placed[known]);
+    const step = (placed[at] - placed[known]) / (at - known);
+    for (let gap = known + 1; gap < at; gap++) placed[gap] = placed[known] + step * (gap - known);
+    known = at;
+  }
+  return placed;
+}
+
+const UNPLACED = {
+  size: { x: 'auto', y: 'auto' },
+  position: { left: '0%', top: '0%' },
+  repeat: { x: 'repeat', y: 'repeat' },
+};
+
+/**
+ * Where each layer of a background is placed, when a repeating linear gradient is among them: its
+ * tile's size, position and repeat for that layer, and what `placing` says (or where a layer
+ * starts) for the others. Nothing when no layer is one, so the declaration places nothing more.
+ *
+ * A position or a repeat given to the repeating layer changes nothing a browser draws, since the
+ * image is the box's own size, so the tile's take their place. A size does change it, and the
+ * tile cannot say the same, so it is refused.
+ */
+function tilePlacing(images, context, placing = {}) {
+  const tiles = images.map((layer) =>
+    layer?.type === 'gradient' && layer.value?.type === 'repeating-linear'
+      ? repeatingTile(layer.value, context)
+      : null,
+  );
+  if (!tiles.some(Boolean)) return {};
+  const each = (part) =>
+    tiles.map((tile, index) => tile?.[part] ?? placing[part]?.[index] ?? UNPLACED[part]);
+  tiles.forEach((tile, index) => {
+    const size = placing.size?.[index];
+    if (tile && size && (size.x !== 'auto' || size.y !== 'auto')) {
+      throw new CssUnsupported(
+        `${context}: a repeating-linear-gradient given a background-size is drawn in tiles of ` +
+          `that size, which native cannot repeat it within. ${TILE_INSTEAD}`,
+      );
+    }
+  });
+  return {
+    experimental_backgroundSize: each('size'),
+    experimental_backgroundPosition: each('position'),
+    experimental_backgroundRepeat: each('repeat'),
   };
 }
 
@@ -427,4 +553,4 @@ function positionToken(term, context) {
 const ident = (term) =>
   term?.type === 'token' && term.value?.type === 'ident' ? term.value.value : null;
 
-module.exports = { backgroundImage, deferGradient, GRADIENTS };
+module.exports = { backgroundImage, deferGradient, tilePlacing, GRADIENTS };
