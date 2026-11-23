@@ -216,7 +216,7 @@ export async function divergences(
 ) {
   // A file path is not a module specifier: Windows reads `C:` as a URL scheme before the loader
   // ever sees the file.
-  const viewsUrl = pathToFileURL(path.join(expoPackage, 'src/expo-ui.ts')).href;
+  const viewsUrl = pathToFileURL(path.join(expoPackage, 'src/expo-ui-views.ts')).href;
   const { EXPO_UI_VIEWS } = await import(viewsUrl);
   const components = componentProps(source);
   const declared = declaredViews(expoUi);

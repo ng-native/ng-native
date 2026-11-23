@@ -4,11 +4,13 @@
  * Latest versions workflow against the newest one `@ng-native/expo`'s peer range allows.
  */
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const script = new URL('../../scripts/expo-ui-native-props.mjs', import.meta.url);
@@ -43,6 +45,20 @@ describe('the props typed ui-* components send', () => {
     const { found, stale } = await divergences(installed);
     assert.deepEqual(found, []);
     assert.deepEqual(stale, []);
+  });
+
+  /**
+   * The Latest versions workflow runs the script with plain `node`, with none of the loaders these
+   * tests run under, so what it imports must be source Node's own type stripping reads: no
+   * decorator, and no import that reaches one.
+   */
+  it('runs under plain node, as the Latest versions workflow runs it', () => {
+    const output = execFileSync(process.execPath, [fileURLToPath(script), installed], {
+      encoding: 'utf8',
+      // Not the loader this test file runs under.
+      env: { ...process.env, NODE_OPTIONS: '' },
+    });
+    assert.match(output, /every prop a ui-\* component sends is declared, or known/);
   });
 
   it("fails on a view host whose native view declares no form of matchContents, as in #910's", async () => {
