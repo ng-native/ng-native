@@ -518,19 +518,17 @@ export class NgIcon {
     // the engine reports every shape as an element whose component was forgotten.
     claimHost(shape);
     if (selfContained) shape.outsideCascade = true;
-    const { attrs, props: translated } = this.translate(node, inherited);
-    let props = translated;
+    const { attrs, props } = this.translate(node, inherited);
     // A paint that reads a custom property is settled by the cascade, with the tokens in scope
     // for the shape, and follows them. It stays in `propList`, which says the shape has one.
     const cascade = this.engine as Partial<Pick<Engine, 'setBoundStyle'>>;
+    let bound: Set<string> | undefined;
     for (const paint of PAINT) {
-      if (!isTokenPaint(attrs[paint]) || !cascade.setBoundStyle?.(shape, paint, attrs[paint]))
-        continue;
-      props = { ...props };
-      delete props[paint];
+      if (isTokenPaint(attrs[paint]) && cascade.setBoundStyle?.(shape, paint, attrs[paint]))
+        (bound ??= new Set()).add(paint);
     }
     for (const [prop, value] of Object.entries(props)) {
-      this.renderer.setProperty(shape, prop, value);
+      if (!bound?.has(prop)) this.renderer.setProperty(shape, prop, value);
     }
     return shape;
   }
