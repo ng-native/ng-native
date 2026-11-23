@@ -10,6 +10,7 @@ import path from 'node:path';
 import { keepLines, progress, runCommand, sleep } from './command.ts';
 import type { AppLauncher, LaunchedApp } from './launcher.ts';
 import { crashReportSince } from './macos-launcher.ts';
+import { warmBundle } from './metro-server.ts';
 import { nativeBuild } from './native-build.ts';
 
 export interface IosSimulatorOptions {
@@ -33,6 +34,7 @@ export function iosSimulatorLauncher(options: IosSimulatorOptions = {}): AppLaun
   return {
     async start(request): Promise<LaunchedApp> {
       const started = Date.now();
+      const warming = warmBundle(request.metroPort, 'ios', request.signal);
       const [simulator, build] = await Promise.all([
         bootedSimulator(options.device, request.signal),
         nativeBuild(request.projectRoot, 'ios', { signal: request.signal }),
@@ -50,7 +52,8 @@ export function iosSimulatorLauncher(options: IosSimulatorOptions = {}): AppLaun
       });
       progress('ios', `${simulator.name} booted and the build ready`, started);
       await runCommand('xcrun', ['simctl', 'install', simulator.udid, build.path], { signal });
-      progress('ios', 'installed; launching, and waiting for Metro to bundle the app', started);
+      await warming;
+      progress('ios', 'installed and the bundle warmed; launching', started);
       signal?.throwIfAborted();
       // Attached to the app's console, the command lasts as long as the app does.
       const child = spawn(

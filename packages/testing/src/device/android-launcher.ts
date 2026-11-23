@@ -8,6 +8,7 @@ import { readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { progress, runCommand, sleep } from './command.ts';
 import type { AppLauncher, LaunchedApp } from './launcher.ts';
+import { warmBundle } from './metro-server.ts';
 import { androidSdk, nativeBuild } from './native-build.ts';
 
 export interface AndroidEmulatorOptions {
@@ -30,6 +31,7 @@ export function androidEmulatorLauncher(options: AndroidEmulatorOptions = {}): A
     async start(request): Promise<LaunchedApp> {
       const sdk = androidSdk();
       const started = Date.now();
+      const warming = warmBundle(request.metroPort, 'android', request.signal);
       const [serial, build] = await Promise.all([
         runningEmulator(sdk, options.device, request.signal),
         nativeBuild(request.projectRoot, 'android', { abi: HOST_ABI, signal: request.signal }),
@@ -63,7 +65,8 @@ export function androidEmulatorLauncher(options: AndroidEmulatorOptions = {}): A
         .trim()
         .split('\n')
         .pop()!;
-      progress('android', 'installed; launching, and waiting for Metro to bundle the app', started);
+      await warming;
+      progress('android', 'installed and the bundle warmed; launching', started);
       await starting('shell', 'am', 'start', '-W', '-n', activity);
       let stopped = false;
       const exited = (async () => {

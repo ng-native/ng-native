@@ -107,6 +107,33 @@ async function startMetro(
   }
 }
 
+/**
+ * Bundle the app on `port` as a phone asks for it, for a launcher to wait on while the device boots
+ * and the app installs. Metro starts with no cache on CI and takes minutes there to bundle the app
+ * from cold; done here, the app's own request is answered from the bundle Metro keeps. Settles
+ * however the fetch ends: a bundle that failed fails again on the app's request, which says why.
+ */
+export async function warmBundle(
+  port: number,
+  platform: 'ios' | 'android',
+  signal?: AbortSignal,
+): Promise<void> {
+  // The query the app's own request has, so Metro builds the same graph and keeps it.
+  const query = `platform=${platform}&dev=true&lazy=true&minify=false&modulesOnly=false&runModule=true`;
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${port}/.expo/.virtual-metro-entry.bundle?${query}`,
+      { signal: AbortSignal.any([AbortSignal.timeout(WARM_MS), ...(signal ? [signal] : [])]) },
+    );
+    await response.arrayBuffer();
+  } catch {
+    // Not warmed: the app's request bundles it instead.
+  }
+}
+
+/** How long a warm-up may take before the app is launched anyway. */
+const WARM_MS = 5 * 60_000;
+
 async function running(port: number): Promise<boolean> {
   try {
     // Bounded, the body included: a Metro that takes the connection and never answers is not one

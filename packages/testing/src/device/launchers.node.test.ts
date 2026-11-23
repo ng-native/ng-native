@@ -4,7 +4,17 @@
  * that hang on the step under test; the build is one already kept, so the launch reaches it.
  */
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -103,6 +113,108 @@ esac`,
       assert.ok(took < 5000, `gave up in ${took}ms, not after simctl's 30 seconds`);
     } finally {
       restore();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('the bundle a launcher waits on', () => {
+  /** A Metro that takes a while to bundle, and notes in `log` when it answered. */
+  async function slowMetro(log: string) {
+    const metro = createServer((request, response) => {
+      setTimeout(() => {
+        appendFileSync(log, `bundled ${request.url}\n`);
+        response.end('bundle');
+      }, 300);
+    });
+    await new Promise<void>((resolve) => metro.listen(0, '127.0.0.1', resolve));
+    return {
+      port: (metro.address() as AddressInfo).port,
+      close: () => {
+        metro.close();
+        metro.closeAllConnections();
+      },
+    };
+  }
+
+  it("has Metro bundle the app before Android's app is launched, as the app asks for it", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'launch-warm-'));
+    const saved = process.env['ANDROID_HOME'];
+    const log = path.join(root, 'order.log');
+    writeFileSync(log, '');
+    const metro = await slowMetro(log);
+    try {
+      const sdk = path.join(root, 'sdk');
+      script(
+        path.join(sdk, 'platform-tools/adb'),
+        `case "$*" in
+  devices) printf 'List of devices attached\\nemulator-5554\\tdevice\\n' ;;
+  *"emu avd name"*) echo phone ;;
+  *getprop*) echo 1 ;;
+  *resolve-activity*) echo app/.Main ;;
+  *"am start"*) echo launched >> ${JSON.stringify(log)} ;;
+esac`,
+      );
+      script(path.join(sdk, 'build-tools/35.0.0/aapt2'), 'echo app');
+      process.env['ANDROID_HOME'] = sdk;
+      const app = await androidEmulatorLauncher({ device: 'phone' }).start({
+        port: 1,
+        runId: 'r',
+        stateDir: path.join(root, 'state'),
+        projectRoot: project(root),
+        metroPort: metro.port,
+      });
+      await app.stop();
+      assert.deepEqual(readFileSync(log, 'utf8').trim().split('\n'), [
+        'bundled /.expo/.virtual-metro-entry.bundle?platform=android&dev=true&lazy=true&minify=false&modulesOnly=false&runModule=true',
+        'launched',
+      ]);
+    } finally {
+      if (saved === undefined) delete process.env['ANDROID_HOME'];
+      else process.env['ANDROID_HOME'] = saved;
+      metro.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("has Metro bundle the app before iOS's app is launched, as the app asks for it", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'launch-warm-'));
+    const saved = process.env['PATH'];
+    const log = path.join(root, 'order.log');
+    writeFileSync(log, '');
+    const metro = await slowMetro(log);
+    try {
+      const devices = JSON.stringify({
+        devices: {
+          'com.apple.CoreSimulator.SimRuntime.iOS-27-0': [
+            { udid: 'U', name: 'iPhone', state: 'Booted' },
+          ],
+        },
+      });
+      script(
+        path.join(root, 'bin/xcrun'),
+        `case "$2" in
+  list) echo '${devices}' ;;
+  launch) echo launched >> ${JSON.stringify(log)} ;;
+esac`,
+      );
+      script(path.join(root, 'bin/plutil'), 'echo value');
+      process.env['PATH'] = `${path.join(root, 'bin')}:${saved}`;
+      const app = await iosSimulatorLauncher({ device: 'iPhone' }).start({
+        port: 1,
+        runId: 'r',
+        stateDir: path.join(root, 'state'),
+        projectRoot: project(root),
+        metroPort: metro.port,
+      });
+      await app.exited;
+      assert.deepEqual(readFileSync(log, 'utf8').trim().split('\n'), [
+        'bundled /.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&lazy=true&minify=false&modulesOnly=false&runModule=true',
+        'launched',
+      ]);
+    } finally {
+      process.env['PATH'] = saved;
+      metro.close();
       rmSync(root, { recursive: true, force: true });
     }
   });
