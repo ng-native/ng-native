@@ -6974,6 +6974,9 @@ function holdsCurrentColour(value: unknown, tokens: Readonly<Record<string, Toke
     const resolved = resolveColour(colour, tokens, () => ((asked = true), 'black'));
     return asked || resolved === 'currentcolor';
   }
+  // A shadow token in a list of shadows, `var(--s), 0 0 1px red`: what the token holds.
+  const slot = (value as { __shadows?: { reference?: string } }).__shadows?.reference;
+  if (slot !== undefined) return holdsCurrentColour(tokens[slot], tokens);
   return Object.values(value).some((part) => holdsCurrentColour(part, tokens));
 }
 

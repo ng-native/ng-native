@@ -502,6 +502,10 @@ describe('a token holding platform-color() where a colour has to be worked out',
       'a token of the whole shadow',
       ':root { --s: 0 0 2px currentColor; } .a { box-shadow: var(--s); }',
     ],
+    [
+      'a token in a list of shadows',
+      ':root { --s: 0 0 2px currentColor; } .a { box-shadow: var(--s), 0 0 1px red; }',
+    ],
   ] as const) {
     it(`says it of a shadow in ${label} where the colour is a platform one`, () => {
       const s = app(`.p { color: CanvasText; } ${css}`);
