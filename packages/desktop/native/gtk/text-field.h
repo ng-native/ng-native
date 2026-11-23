@@ -52,6 +52,11 @@ struct TextField {
   facebook::react::Props::Shared applied;
 };
 
+// The key `keyval` is as `(keyPress)` names it: Backspace, Enter and a printable character as React
+// Native iOS names them, and Escape, Tab and the arrows by the web's KeyboardEvent.key, as the AppKit
+// field names them too. Empty for any other key.
+std::string keyPressName(guint keyval);
+
 // The UTF-16 length of the first `characters` characters of `utf8`.
 int utf16Units(const std::string &utf8, int characters);
 // The characters in the first `units` UTF-16 units of `utf8`.

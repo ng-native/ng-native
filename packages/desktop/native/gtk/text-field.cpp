@@ -197,7 +197,7 @@ bool pressesLatin(GtkWidget *widget, guint keyval, guint keycode, guint latin) {
   return found;
 }
 
-// `onKeyPress`, before the key changes the text, with the key as React Native iOS names it.
+// `onKeyPress`, before the key changes the text, with the key as keyPressName names it.
 gboolean keyPressed(GtkEventControllerKey *, guint keyval, guint keycode, GdkModifierType state, gpointer user) {
   auto *field = static_cast<TextField *>(user);
   // GtkText's own undo and redo keys, run here so that its replay is known (a multiline field's
@@ -223,17 +223,7 @@ gboolean keyPressed(GtkEventControllerKey *, guint keyval, guint keycode, GdkMod
   if (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) {
     return FALSE;
   }
-  std::string key;
-  if (keyval == GDK_KEY_BackSpace) {
-    key = "Backspace";
-  } else if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
-    key = "Enter";
-  } else if (gunichar c = gdk_keyval_to_unicode(keyval); c != 0 && g_unichar_isprint(c)) {
-    char utf8[8] = {};
-    g_unichar_to_utf8(c, utf8);
-    key = utf8;
-  }
-  if (!key.empty()) {
+  if (std::string key = keyPressName(keyval); !key.empty()) {
     if (auto emitter = emitterOf(*field)) {
       emitter->onKeyPress({.text = key, .eventCount = field->eventCount});
     }
@@ -513,6 +503,41 @@ void watch(TextField *field, GtkWidget *editor) {
 }
 
 } // namespace
+
+std::string keyPressName(guint keyval) {
+  switch (keyval) {
+    case GDK_KEY_BackSpace:
+      return "Backspace";
+    case GDK_KEY_Return:
+    case GDK_KEY_KP_Enter:
+      return "Enter";
+    case GDK_KEY_Escape:
+      return "Escape";
+    case GDK_KEY_Tab:
+    case GDK_KEY_ISO_Left_Tab:
+      return "Tab";
+    case GDK_KEY_Up:
+    case GDK_KEY_KP_Up:
+      return "ArrowUp";
+    case GDK_KEY_Down:
+    case GDK_KEY_KP_Down:
+      return "ArrowDown";
+    case GDK_KEY_Left:
+    case GDK_KEY_KP_Left:
+      return "ArrowLeft";
+    case GDK_KEY_Right:
+    case GDK_KEY_KP_Right:
+      return "ArrowRight";
+    default:
+      break;
+  }
+  if (gunichar c = gdk_keyval_to_unicode(keyval); c != 0 && g_unichar_isprint(c)) {
+    char utf8[8] = {};
+    g_unichar_to_utf8(c, utf8);
+    return utf8;
+  }
+  return {};
+}
 
 int utf16Units(const std::string &utf8, int characters) {
   int units = 0;

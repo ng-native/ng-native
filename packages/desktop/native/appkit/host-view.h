@@ -60,5 +60,9 @@
 @interface NGNTextInputView : NGNView <NSTextFieldDelegate>
 @end
 
+// Sends `(keyPress)` with `key` from the `<text-input>` that has `window`'s keyboard, for a key the
+// host takes before the field sees it (Tab, which moves the focus). False when no text input has it.
+BOOL NGNSendTextInputKeyPress(NSWindow *window, NSString *key);
+
 // The view for a component name: a text field for TextInput, a plain NGNView otherwise.
 NGNView *NGNMakeView(const facebook::react::ShadowView &view);

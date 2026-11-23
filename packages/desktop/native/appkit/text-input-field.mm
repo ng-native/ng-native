@@ -110,6 +110,40 @@ BOOL shouldChange(NSTextView *text, NSRange range, NSString *replacement, const 
 
 } // namespace
 
+NSString *NGNKeyForCommand(SEL command) {
+  static NSDictionary<NSString *, NSString *> *keys = @{
+    @"insertNewline:" : @"Enter",
+    @"insertNewlineIgnoringFieldEditor:" : @"Enter",
+    @"insertLineBreak:" : @"Enter",
+    @"deleteBackward:" : @"Backspace",
+    @"cancelOperation:" : @"Escape",
+    @"moveUp:" : @"ArrowUp",
+    @"moveDown:" : @"ArrowDown",
+    @"moveLeft:" : @"ArrowLeft",
+    @"moveRight:" : @"ArrowRight",
+    @"moveUpAndModifySelection:" : @"ArrowUp",
+    @"moveDownAndModifySelection:" : @"ArrowDown",
+    @"moveLeftAndModifySelection:" : @"ArrowLeft",
+    @"moveRightAndModifySelection:" : @"ArrowRight",
+  };
+  return keys[NSStringFromSelector(command)];
+}
+
+NSString *NGNTypedKey(NSString *replacement, NSEvent *current, BOOL composing) {
+  if (replacement.length == 0 || composing || [replacement characterAtIndex:0] < 0x20) {
+    return nil;
+  }
+  constexpr NSEventMask mouse = NSEventMaskLeftMouseDown | NSEventMaskLeftMouseUp | NSEventMaskLeftMouseDragged |
+      NSEventMaskRightMouseDown | NSEventMaskRightMouseUp | NSEventMaskOtherMouseDown | NSEventMaskOtherMouseUp;
+  if (current != nil && (NSEventMaskFromType(current.type) & mouse)) {
+    return nil;
+  }
+  if (current.type == NSEventTypeKeyDown && (current.modifierFlags & NSEventModifierFlagCommand)) {
+    return nil;
+  }
+  return replacement;
+}
+
 NSString *NGNAutomaticCapitalizationKey() {
   static NSString *key = [] {
     auto symbol = static_cast<NSString *__unsafe_unretained *>(
@@ -138,6 +172,7 @@ NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
 @interface NGNTextField ()
 - (void)controlDidBecomeFirstResponder;
 - (void)controlDidEndEditing;
+- (void)reportTyped:(NSString *)replacement editor:(NSTextView *)editor;
 @end
 
 // WebKit's AXInvalid, which AppKit has no property for, said as `invalid` is: a field whose value
@@ -173,6 +208,9 @@ NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
   }                                                                                                        \
   -(BOOL)textView : (NSTextView *)textView shouldChangeTextInRange : (NSRange)range replacementString      \
       : (NSString *)string {                                                                               \
+    if (!_inserting) {                                                                                     \
+      [self.box reportTyped:string editor:textView];                                                       \
+    }                                                                                                      \
     static const TextInputOptions none{};                                                                  \
     return NGNControlShouldChangeText(                                                                     \
         self, self.superclass, textView, range, string, self.box ? self.box.options : none, &_inserting);  \
@@ -422,6 +460,15 @@ NGN_FIELD_CELL_METHODS
   }
 }
 
+- (void)reportTyped:(NSString *)replacement editor:(NSTextView *)editor {
+  if (self.typed == nil) {
+    return;
+  }
+  if (NSString *key = NGNTypedKey(replacement, NSApp.currentEvent, editor.hasMarkedText)) {
+    self.typed(key);
+  }
+}
+
 - (void)controlDidBecomeFirstResponder {
   if (_pendingSelection.location != NSNotFound && _control.currentEditor &&
       NSMaxRange(_pendingSelection) <= _control.stringValue.length) {
@@ -517,6 +564,11 @@ NGN_INVALID_ATTRIBUTE_METHODS(self.invalid)
 }
 
 - (BOOL)shouldChangeTextInRange:(NSRange)range replacementString:(NSString *)string {
+  if (!_inserting && self.typed != nil) {
+    if (NSString *key = NGNTypedKey(string, NSApp.currentEvent, self.hasMarkedText)) {
+      self.typed(key);
+    }
+  }
   if (![super shouldChangeTextInRange:range replacementString:string]) {
     return NO;
   }

@@ -195,6 +195,28 @@ TEST_CASE("GTK's character offsets become UTF-16 units and back, a character out
   CHECK(ngn::gtk::charactersIn(text, 2) == 1);
 }
 
+TEST_CASE("a key is named for keyPress as React Native names it, and Escape, Tab and the arrows as the web does") {
+  using ngn::gtk::keyPressName;
+  CHECK(keyPressName(GDK_KEY_BackSpace) == "Backspace");
+  CHECK(keyPressName(GDK_KEY_Return) == "Enter");
+  CHECK(keyPressName(GDK_KEY_KP_Enter) == "Enter");
+  CHECK(keyPressName(GDK_KEY_a) == "a");
+  CHECK(keyPressName(GDK_KEY_space) == " ");
+  CHECK(keyPressName(GDK_KEY_Escape) == "Escape");
+  CHECK(keyPressName(GDK_KEY_Tab) == "Tab");
+  CHECK(keyPressName(GDK_KEY_ISO_Left_Tab) == "Tab");
+  CHECK(keyPressName(GDK_KEY_Up) == "ArrowUp");
+  CHECK(keyPressName(GDK_KEY_Down) == "ArrowDown");
+  CHECK(keyPressName(GDK_KEY_Left) == "ArrowLeft");
+  CHECK(keyPressName(GDK_KEY_Right) == "ArrowRight");
+  CHECK(keyPressName(GDK_KEY_KP_Up) == "ArrowUp");
+  CHECK(keyPressName(GDK_KEY_KP_Down) == "ArrowDown");
+  CHECK(keyPressName(GDK_KEY_KP_Left) == "ArrowLeft");
+  CHECK(keyPressName(GDK_KEY_KP_Right) == "ArrowRight");
+  CHECK(keyPressName(GDK_KEY_Home).empty());
+  CHECK(keyPressName(GDK_KEY_F1).empty());
+}
+
 TEST_CASE("a text input is a GtkText the user's changes count on, and a controlled value waits for them") {
   REQUIRE(ngn::testing::gtkReady());
   MountedViews views;

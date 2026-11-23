@@ -1384,8 +1384,15 @@ int main(int argc, const char *argv[]) {
                                             constexpr unsigned short kTab = 48;
                                             auto mods = event.modifierFlags &
                                                 (NSEventModifierFlagCommand | NSEventModifierFlagControl);
-                                            if (event.keyCode == kTab && mods == 0 && moveFocus(event)) {
-                                              return nil;
+                                            if (event.keyCode == kTab && mods == 0) {
+                                              // A focused field's (keyPress) for Tab and Shift-Tab, which never
+                                              // reach it: the focus moves first, or the field editor moves it.
+                                              if (!(event.modifierFlags & NSEventModifierFlagOption)) {
+                                                NGNSendTextInputKeyPress(event.window, @"Tab");
+                                              }
+                                              if (moveFocus(event)) {
+                                                return nil;
+                                              }
                                             }
                                             if (moveInComposite(event)) {
                                               return nil;

@@ -13,10 +13,17 @@
 #include "ngn/native-controls.h"
 #include "ngn/text-input.h"
 
+#include <react/renderer/core/EventBeat.h>
+#include <react/renderer/core/EventDispatcher.h>
+#include <react/renderer/core/EventEmitter.h>
 #include <react/renderer/mounting/MountingTransaction.h>
+#include <react/renderer/runtimescheduler/RuntimeScheduler.h>
 
+#include <algorithm>
 #include <memory>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace ngn::testing {
 
@@ -33,6 +40,33 @@ struct NoInput final : InputSink {
   bool dragOver(const PointerInput &, const DragItems &) override { return false; }
   void dragExit(ContainerId) override {}
   bool drop(const PointerInput &, const DragItems &) override { return false; }
+};
+
+// The events a view sends, by type, kept by a dispatcher's listener before any queue: give a
+// shadow view `emitter` before it mounts.
+template <typename Emitter = facebook::react::EventEmitter>
+struct SentEvents {
+  facebook::react::RuntimeScheduler scheduler{[](auto &&) {}};
+  std::shared_ptr<facebook::react::EventDispatcher> dispatcher;
+  std::vector<std::string> types;
+  std::shared_ptr<Emitter> emitter;
+
+  SentEvents() {
+    using namespace facebook::react;
+    EventQueueProcessor processor([](auto &&...) {}, [](auto &&...) {}, [](auto &&...) {}, {});
+    dispatcher = std::make_shared<EventDispatcher>(
+        processor, std::make_unique<EventBeat>(std::make_shared<EventBeat::OwnerBox>(), scheduler), [](auto &&...) {},
+        std::weak_ptr<EventLogger>());
+    dispatcher->addListener(std::make_shared<const EventListener>([this](const RawEvent &event) {
+      types.push_back(event.type);
+      return true;
+    }));
+    emitter = std::make_shared<Emitter>(nullptr, dispatcher);
+  }
+
+  long count(const std::string &type) const {
+    return std::count(types.begin(), types.end(), type);
+  }
 };
 
 // Props as a component's descriptor parses them from what the app commits.

@@ -873,6 +873,14 @@ static BOOL focusFromKeyboard() {
 
 using ngn::DesktopTextInputProps;
 
+// The single-line and the multiline input: each sends (keyPress) for a key.
+@protocol NGNKeyPressSender
+- (void)sendKeyPress:(NSString *)key;
+@end
+
+@interface NGNTextInputView () <NGNKeyPressSender>
+@end
+
 namespace {
 
 // The font a TextInput's text attributes resolve to, as its Paragraph would draw them.
@@ -941,6 +949,9 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
       if (auto e = [strong inputEmitter]) {
         e->onFocus([strong metrics]);
       }
+    };
+    _box.typed = ^(NSString *key) {
+      [weakSelf sendKeyPress:key];
     };
     // Secure entry is a field of its own class in AppKit; the box swaps it as the prop changes.
     auto first = std::dynamic_pointer_cast<const DesktopTextInputProps>(view.props);
@@ -1062,7 +1073,18 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
   }
 }
 
+// `(keyPress)` for a key typed (NGNTypedKey) or one its command names (NGNKeyForCommand), as
+// React Native sends it: before the key changes the text.
+- (void)sendKeyPress:(NSString *)key {
+  if (auto e = [self inputEmitter]) {
+    e->onKeyPress({.text = key.UTF8String, .eventCount = _eventCount});
+  }
+}
+
 - (BOOL)control:(NSControl *)control textView:(NSTextView *)textView doCommandBySelector:(SEL)selector {
+  if (NSString *key = NGNKeyForCommand(selector)) {
+    [self sendKeyPress:key];
+  }
   if (selector == @selector(insertNewline:)) {
     if (auto e = [self inputEmitter]) {
       e->onSubmitEditing([self metrics]);
@@ -1106,7 +1128,7 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
 #pragma mark - NGNMultilineTextInputView
 
 // A multiline TextInput: an NSTextView, which wraps, scrolls and takes Return as a new line.
-@interface NGNMultilineTextInputView : NGNView <NSTextViewDelegate>
+@interface NGNMultilineTextInputView : NGNView <NSTextViewDelegate, NGNKeyPressSender>
 @end
 
 @implementation NGNMultilineTextInputView {
@@ -1139,6 +1161,9 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
       if (auto e = [strong inputEmitter]) {
         e->onFocus([strong metrics]);
       }
+    };
+    _text.typed = ^(NSString *key) {
+      [weakSelf sendKeyPress:key];
     };
     auto first = std::dynamic_pointer_cast<const DesktopTextInputProps>(view.props);
     _text.autoFocus = first && first->autoFocus;
@@ -1205,6 +1230,20 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
 
 - (std::shared_ptr<const TextInputEventEmitter>)inputEmitter {
   return std::static_pointer_cast<const TextInputEventEmitter>(self.eventEmitter);
+}
+
+// As a single-line field sends it (NGNTextInputView).
+- (void)sendKeyPress:(NSString *)key {
+  if (auto e = [self inputEmitter]) {
+    e->onKeyPress({.text = key.UTF8String, .eventCount = _eventCount});
+  }
+}
+
+- (BOOL)textView:(NSTextView *)textView doCommandBySelector:(SEL)selector {
+  if (NSString *key = NGNKeyForCommand(selector)) {
+    [self sendKeyPress:key];
+  }
+  return NO;
 }
 
 - (void)textDidChange:(NSNotification *)note {
@@ -1370,4 +1409,17 @@ NGNView *NGNMakeView(const ShadowView &view) {
     return [[library alloc] initWithShadowView:view];
   }
   return [[NGNView alloc] initWithShadowView:view];
+}
+
+BOOL NGNSendTextInputKeyPress(NSWindow *window, NSString *key) {
+  // A single-line input's field editor is inside its field while it edits, so this finds both.
+  NSResponder *responder = window.firstResponder;
+  for (NSView *view = [responder isKindOfClass:NSView.class] ? (NSView *)responder : nil; view != nil;
+       view = view.superview) {
+    if ([view conformsToProtocol:@protocol(NGNKeyPressSender)]) {
+      [(id<NGNKeyPressSender>)view sendKeyPress:key];
+      return YES;
+    }
+  }
+  return NO;
 }

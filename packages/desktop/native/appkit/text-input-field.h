@@ -28,6 +28,18 @@ NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
     NSDictionary<NSTextCheckingOptionKey, id> *checking,
     const ngn::TextInputOptions &options);
 
+// The key a text command is sent for, as `(keyPress)` names it (the web's KeyboardEvent.key):
+// Return, Backspace, Escape and the arrows, alone or with Shift. Nil for any other command, such
+// as one Option or Command sends, and for Tab, which the host's key monitor takes before the field
+// and sends itself (NGNSendTextInputKeyPress).
+NSString *NGNKeyForCommand(SEL command);
+
+// A change to a field's text as `(keyPress)` names it, React Native iOS's way: the text a keystroke
+// or an input method put in. Nil for a change `current` (NSApp's event) shows was not typed (Command
+// held, as for a paste, or a mouse event, as for the Edit menu or a drop), for a deletion, Return
+// and Tab (NGNKeyForCommand names those), and while an input method is composing.
+NSString *NGNTypedKey(NSString *replacement, NSEvent *current, BOOL composing);
+
 // textView:shouldChangeTextInRange:replacementString: for an NSTextField subclass whose field editor
 // `editor` is: `superclass`'s answer (a formatter's), then NGNFitReplacement's, putting what fits in
 // place of the change when it differs. `inserting` is the control's own flag for that re-entry.
@@ -58,6 +70,8 @@ BOOL NGNControlShouldChangeText(
 @property (nonatomic) BOOL autoFocus;
 // Called when the field takes the keyboard.
 @property (nonatomic, copy) void (^focused)(void);
+// Called with each key typed into the field (NGNTypedKey), before the change is made.
+@property (nonatomic, copy) void (^typed)(NSString *key);
 // Whether its value is refused (aria-invalid), as VoiceOver reads it from the control.
 @property (nonatomic) BOOL invalid;
 - (void)applyOptions:(const ngn::TextInputOptions &)options;
@@ -72,6 +86,8 @@ BOOL NGNControlShouldChangeText(
 
 @interface NGNTextView : NSTextView
 @property (nonatomic) BOOL autoFocus;
+// Called with each key typed into it (NGNTypedKey), before the change is made.
+@property (nonatomic, copy) void (^typed)(NSString *key);
 // Whether its value is refused (aria-invalid), as VoiceOver reads it.
 @property (nonatomic) BOOL invalid;
 @property (nonatomic, copy) void (^focused)(void);

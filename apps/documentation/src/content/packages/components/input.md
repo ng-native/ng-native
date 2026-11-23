@@ -99,7 +99,9 @@ carries just the new string, matching React Native's `onChangeText`; `(change)`,
 `(contentSizeChange)` are the raw element events. `(keyPress)` names the key in
 `$event.nativeEvent.key`: `Backspace`, `Enter`, or the character typed (`' '` for a space), on a
 device and in a browser alike. iOS reports no `Enter` from a single-line field, so use
-`(submitEditing)` for the return key there. `(selectionChange)` carries
+`(submitEditing)` for the return key there. On macOS and Linux it also names `Escape`, `Tab`,
+`ArrowUp`, `ArrowDown`, `ArrowLeft` and `ArrowRight`, alone or with Shift, as a browser names them,
+so a field can drive a suggestion list; iOS and Android do not send these. `(selectionChange)` carries
 `$event.nativeEvent.selection`, a `{ start, end }` that changes as the caret moves or a range is
 selected.
 

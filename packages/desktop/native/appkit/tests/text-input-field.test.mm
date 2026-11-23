@@ -370,3 +370,104 @@ TEST_CASE("a multiline text view keeps to maxLength, draws its placeholder and f
   CHECK(NSEqualRanges(text.selectedRange, NSMakeRange(0, 3)));
   [window close];
 }
+
+TEST_CASE("a command a key sends is named as the web names the key, and other commands are not") {
+  CHECK([NGNKeyForCommand(@selector(insertNewline:)) isEqualToString:@"Enter"]);
+  CHECK([NGNKeyForCommand(@selector(insertNewlineIgnoringFieldEditor:)) isEqualToString:@"Enter"]);
+  CHECK([NGNKeyForCommand(@selector(insertLineBreak:)) isEqualToString:@"Enter"]);
+  CHECK([NGNKeyForCommand(@selector(deleteBackward:)) isEqualToString:@"Backspace"]);
+  CHECK([NGNKeyForCommand(@selector(cancelOperation:)) isEqualToString:@"Escape"]);
+  CHECK([NGNKeyForCommand(@selector(moveUp:)) isEqualToString:@"ArrowUp"]);
+  CHECK([NGNKeyForCommand(@selector(moveDown:)) isEqualToString:@"ArrowDown"]);
+  CHECK([NGNKeyForCommand(@selector(moveLeft:)) isEqualToString:@"ArrowLeft"]);
+  CHECK([NGNKeyForCommand(@selector(moveRight:)) isEqualToString:@"ArrowRight"]);
+  // Shift with an arrow extends the selection: the same key.
+  CHECK([NGNKeyForCommand(@selector(moveUpAndModifySelection:)) isEqualToString:@"ArrowUp"]);
+  CHECK([NGNKeyForCommand(@selector(moveDownAndModifySelection:)) isEqualToString:@"ArrowDown"]);
+  CHECK([NGNKeyForCommand(@selector(moveLeftAndModifySelection:)) isEqualToString:@"ArrowLeft"]);
+  CHECK([NGNKeyForCommand(@selector(moveRightAndModifySelection:)) isEqualToString:@"ArrowRight"]);
+  // Option or Command with a key, which the GTK field leaves out too.
+  CHECK((NGNKeyForCommand(@selector(moveWordLeft:)) == nil));
+  CHECK((NGNKeyForCommand(@selector(deleteWordBackward:)) == nil));
+  CHECK((NGNKeyForCommand(@selector(moveToBeginningOfDocument:)) == nil));
+  CHECK((NGNKeyForCommand(@selector(selectAll:)) == nil));
+  // Tab: the host's key monitor takes it first, to move the focus, and sends it for the field.
+  CHECK((NGNKeyForCommand(@selector(insertTab:)) == nil));
+}
+
+namespace {
+
+NSEvent *keyDown(NSEventModifierFlags flags) {
+  return [NSEvent keyEventWithType:NSEventTypeKeyDown
+                          location:NSZeroPoint
+                     modifierFlags:flags
+                         timestamp:0
+                      windowNumber:0
+                           context:nil
+                        characters:@"v"
+       charactersIgnoringModifiers:@"v"
+                         isARepeat:NO
+                           keyCode:9];
+}
+
+NSEvent *mouseUp() {
+  return [NSEvent mouseEventWithType:NSEventTypeLeftMouseUp
+                            location:NSZeroPoint
+                       modifierFlags:0
+                           timestamp:0
+                        windowNumber:0
+                             context:nil
+                         eventNumber:0
+                          clickCount:1
+                            pressure:0];
+}
+
+} // namespace
+
+TEST_CASE("a change is a typed key when a keystroke or an input method made it, not a paste or a drop") {
+  CHECK([NGNTypedKey(@"a", nil, NO) isEqualToString:@"a"]);
+  CHECK([NGNTypedKey(@"a", keyDown(0), NO) isEqualToString:@"a"]);
+  CHECK([NGNTypedKey(@"A", keyDown(NSEventModifierFlagShift), NO) isEqualToString:@"A"]);
+  CHECK([NGNTypedKey(@" ", keyDown(0), NO) isEqualToString:@" "]);
+  // Option types a character of its own.
+  CHECK([NGNTypedKey(@"é", keyDown(NSEventModifierFlagOption), NO) isEqualToString:@"é"]);
+  // Command-V, and the Edit menu's Paste or a drop, which a mouse event made.
+  CHECK((NGNTypedKey(@"pasted", keyDown(NSEventModifierFlagCommand), NO) == nil));
+  CHECK((NGNTypedKey(@"pasted", mouseUp(), NO) == nil));
+  // A deletion, and Return and Tab, which their commands name.
+  CHECK((NGNTypedKey(@"", keyDown(0), NO) == nil));
+  CHECK((NGNTypedKey(nil, keyDown(0), NO) == nil));
+  CHECK((NGNTypedKey(@"\n", keyDown(0), NO) == nil));
+  CHECK((NGNTypedKey(@"\t", keyDown(0), NO) == nil));
+  // What an input method is composing.
+  CHECK((NGNTypedKey(@"に", keyDown(0), YES) == nil));
+}
+
+TEST_CASE("a field and a multiline text view tell their owner each key typed, once") {
+  NSWindow *window = offscreenWindow();
+  NGNTextField *field = addField(window);
+  NSMutableArray<NSString *> *keys = [NSMutableArray array];
+  field.typed = ^(NSString *key) {
+    [keys addObject:key];
+  };
+  // Cut to fit, and put in again in its place, it is still one key.
+  [field applyOptions:{.maxLength = 2}];
+  REQUIRE([window makeFirstResponder:field.control]);
+  type(editor(field), @"a");
+  type(editor(field), @"bc");
+  CHECK([field.stringValue isEqualToString:@"ab"]);
+  CHECK([keys isEqualToArray:@[ @"a", @"bc" ]]);
+
+  NGNTextView *text = [[NGNTextView alloc] initWithFrame:NSMakeRect(0, 40, 200, 80)];
+  [window.contentView addSubview:text];
+  [keys removeAllObjects];
+  text.typed = ^(NSString *key) {
+    [keys addObject:key];
+  };
+  [text applyOptions:{.capitalize = Capitalize::Words}];
+  REQUIRE([window makeFirstResponder:text]);
+  type(text, @"x");
+  CHECK([text.string isEqualToString:@"X"]);
+  CHECK([keys isEqualToArray:@[ @"x" ]]);
+  [window close];
+}
