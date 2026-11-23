@@ -23,7 +23,7 @@
  * `runs` sends each attempt that finished after `--since` up to and including `--until`, once. Unset,
  * `--until` is when the current run (GITHUB_RUN_ID) was created, or now, and `--since` is when the
  * last successful scheduled run of TELEMETRY_WORKFLOW (a workflow file name) was created, at most
- * 24 hours back, or an hour before `--until`. A run that fails sends nothing, so the next one
+ * 24 hours back (runs that finished before that are never sent), or an hour before `--until`. A run that fails sends nothing, so the next one
  * covers its window; that is the only record of what was sent, so a scheduled run must not overlap
  * another (the workflow serializes them). Re-running a successful window by hand with `--since`
  * sends it again.
@@ -70,6 +70,7 @@ const WORKFLOWS = new Set([
 /** How long before the window a run may have been created and still finish in it. */
 const LONGEST_RUN_HOURS = 12;
 const MAX_WINDOW_HOURS = 24;
+const SLICE_MS = 3_600_000;
 
 async function main() {
   const numeric = /^\d+$/.test(id ?? '');
@@ -97,11 +98,9 @@ async function sendRun(runId, attemptArg) {
 async function sendRuns() {
   const { since, until } = await window();
   console.log(`Runs finished after ${since} up to ${until}`);
-  const created = new Date(Date.parse(since) - LONGEST_RUN_HOURS * 3_600_000).toISOString();
-  const runs = await githubPages(
-    `/repos/${REPO}/actions/runs?status=completed&created=>=${created}`,
-    'workflow_runs',
-    1000,
+  const runs = await completedRuns(
+    Date.parse(since) - LONGEST_RUN_HOURS * 3_600_000,
+    Date.parse(until),
   );
   const inWindow = (run) =>
     Date.parse(run.updated_at) > Date.parse(since) &&
@@ -118,6 +117,26 @@ async function sendRuns() {
   const records = [];
   for (const run of attempts) records.push(await buildRecord(run));
   await sendRecords(records.filter(Boolean));
+}
+
+/**
+ * The completed runs created from `from` to `to` (milliseconds), listed an hour of creation time at a
+ * time so that no list nears the 1000 results the API pages through, however long a window a gap
+ * left. A run created on a slice's edge is listed by both slices and kept once.
+ */
+async function completedRuns(from, to) {
+  const byId = new Map();
+  for (let start = from; start <= to; start += SLICE_MS) {
+    const end = Math.min(start + SLICE_MS, to);
+    const range = `${new Date(start).toISOString()}..${new Date(end).toISOString()}`;
+    const runs = await githubPages(
+      `/repos/${REPO}/actions/runs?status=completed&created=${range}`,
+      'workflow_runs',
+      1000,
+    );
+    for (const run of runs) byId.set(run.id, run);
+  }
+  return [...byId.values()];
 }
 
 /**
@@ -140,6 +159,8 @@ async function window() {
     since = workflow_runs[0]?.created_at;
   }
   const oldest = new Date(Date.parse(until) - MAX_WINDOW_HOURS * 3_600_000).toISOString();
+  if (since && since < oldest && !flag('since'))
+    console.warn(`The last send was before ${oldest}; runs that finished before it are not sent.`);
   const fallback = new Date(Date.parse(until) - 3_600_000).toISOString();
   since = !since ? fallback : since < oldest && !flag('since') ? oldest : since;
   return { since, until };
