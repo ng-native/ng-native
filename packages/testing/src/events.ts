@@ -115,7 +115,18 @@ function release(node: FakeFabricNode): void {
   if (current.viewName === 'NgNativeButton' && current.props['enabled'] !== false) {
     emit(node, 'topButtonPress', {});
   }
+  // UISwitch, Android's switch and NSSwitch flip and send the new value, which a disabled one
+  // does not (`<switch>` commits `disabled` and Android's `enabled` together). What the switch
+  // shows is the value last committed: a flip the app refused was put back with a command, and
+  // one it took was committed.
+  if (isSwitch(current) && current.props['disabled'] !== true) {
+    emit(node, 'topChange', { value: current.props['value'] !== true });
+  }
 }
+
+/** A `<switch>`, under either of the names the platforms commit it by. */
+const isSwitch = (node: FakeFabricNode): boolean =>
+  node.viewName === 'Switch' || node.viewName === 'AndroidSwitch';
 
 async function press(node: FakeFabricNode): Promise<void> {
   if (!touchable(node)) return;

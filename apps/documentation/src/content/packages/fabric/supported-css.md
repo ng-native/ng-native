@@ -177,15 +177,15 @@ a script at runtime skips the shadow and draws its other functions. A blur's edg
 view's box, as on the web.
 
 A component's stylesheet is compiled for the platform Metro is bundling, so an unscoped rule keeps
-its filter in the Android build and drops it with a warning in the iOS build; a sheet compiled with
-no platform, such as a component under a test, has to suit both. A Tailwind sheet serves both
-platforms too, so `grayscale` there is dropped with a warning, while `android:grayscale` is kept.
-A filter inside `@keyframes` is checked against the platform alone, since a keyframe has no
-selector to scope it.
+its filter in the Android build and drops it with a warning in the iOS build. Vitest compiles a
+component's sheet for the `os` its plugin runs as, as Metro does for that platform; a sheet compiled
+with no platform has to suit iOS and Android both. A Tailwind sheet serves both platforms too, so
+`grayscale` there is dropped with a warning, while `android:grayscale` is kept. A filter inside
+`@keyframes` is checked against the platform alone, since a keyframe has no selector to scope it.
 
-On the desktop, a macOS build is checked as an iOS one is (its host draws no `filter` yet). The GTK
-host on Linux draws every function, `blur()` and `drop-shadow()` included, so the Linux build keeps
-an unscoped filter, and so does a rule scoped with `.platform-linux` (Tailwind's `linux:` variant).
+The GTK host on Linux draws every function, `blur()` and `drop-shadow()` included, so the Linux
+build keeps an unscoped filter, and so does a rule scoped with `.platform-linux` (Tailwind's
+`linux:` variant).
 
 A `filter` can also be a list of tokens, each holding one function or nothing: `filter:
 var(--blur,) var(--grayscale,)` draws whichever of them are set on the element, from whichever

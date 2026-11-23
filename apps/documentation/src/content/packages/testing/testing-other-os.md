@@ -41,8 +41,10 @@ it is `.android`, then `.native`. An `os` of `'linux'` resolves `.linux`, then `
 `render(X, { os, osVersion })` changes the OS for one render: the `OS`, `OS_VERSION`, `DESKTOP` and
 `APPLE` tokens, the view names and the `platform-<os>` class, the `macos:` and `desktop:` variants,
 and the `(hover)` and `(pointer)` media features, which a Mac answers `hover` and `fine`. One file
-can check an OS gate both ways. It does not change which platform file an import resolved to:
-that is the project's `os`.
+can check an OS gate both ways. It does not change which platform file an import resolved to, or
+the platform a component's stylesheet was compiled for, which keeps what that OS draws and drops
+what it does not with a warning (a `filter: grayscale(1)` stays on macOS and goes on iOS): both are
+the project's `os`.
 
 ```ts
 it('offers the menu bar on macOS only', async () => {

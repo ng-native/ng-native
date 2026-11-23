@@ -182,9 +182,34 @@ function hides(node: FakeFabricNode): boolean {
   );
 }
 
+/**
+ * The presentations that cover the whole of the screen below: a push, unset or named, and the
+ * full-screen and contained modals. A sheet or a transparent modal leaves the screen below showing.
+ */
+const COVERING: ReadonlySet<unknown> = new Set([
+  undefined,
+  'push',
+  'fullScreenModal',
+  'containedModal',
+]);
+
+/**
+ * Whether a node is a screen of a native stack under one that covers it. The stack shows its last
+ * screen and hides those below it, which stay mounted to keep their state. Read from the node's
+ * `parent`, so a query `within` a covered screen finds nothing in it either.
+ */
+function covered(node: FakeFabricNode): boolean {
+  const stack = node.parent;
+  if (stack?.viewName !== 'RNSScreenStack') return false;
+  const above = stack.children.slice(stack.children.indexOf(node) + 1);
+  return above.some((screen) => COVERING.has(screen.props['stackPresentation']));
+}
+
 /** Every node someone using the app could see or reach. */
 const reachable = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
-  nodes.flatMap((node) => (hides(node) ? [] : [node, ...reachable(node.children)]));
+  nodes.flatMap((node) =>
+    hides(node) || covered(node) ? [] : [node, ...reachable(node.children)],
+  );
 
 /** What a screen reader would read out: every `RawText` under the node, in order. */
 export function textContent(node: FakeFabricNode): string {

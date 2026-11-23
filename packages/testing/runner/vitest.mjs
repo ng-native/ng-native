@@ -287,7 +287,7 @@ function asWritten(source, file) {
  * @param {import('vite').Rollup.TransformPluginContext} context
  * @param {string} source
  * @param {string} file
- * @param {{ libraryStyles?: string[] | false, projectRoot: string }} options
+ * @param {{ platform?: string, libraryStyles?: string[] | false, projectRoot: string }} options
  */
 function compiled(context, source, file, options) {
   const code = file.includes('/node_modules/') ? source : stubAssets(source);
@@ -344,6 +344,14 @@ export const PLATFORM_EXTENSIONS = {
   linux: ['linux', 'ios', 'native'],
   web: ['web'],
 };
+
+/**
+ * The OSes a component's sheet is compiled for alone, as Metro compiles it for the platform it
+ * bundles, so a test drops what that OS does not draw and keeps what it does. A `web` project's
+ * sheets are compiled as before, for iOS and Android together: Metro's `web` is a DOM component's
+ * page, whose CSS a browser reads instead.
+ */
+const NATIVE_BUILDS = new Set(['ios', 'android', 'macos', 'linux']);
 
 /** Vite's own extensions, which follow the platform ones. */
 const EXTENSIONS = ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'];
@@ -407,12 +415,13 @@ export function defaultOs(root) {
  */
 export function ngNative(options = {}) {
   let root = process.cwd();
+  let os = options.os;
   return {
     name: 'ng-native',
     enforce: 'pre',
     config: (config) => {
       const projectRoot = rootOf(config);
-      const os = options.os ?? defaultOs(projectRoot);
+      os = options.os ?? defaultOs(projectRoot);
       if (!Object.hasOwn(PLATFORM_EXTENSIONS, os)) {
         throw new Error(
           `[angular-native] ngNative({ os: '${os}' }) names no OS tests can run as: ` +
@@ -471,6 +480,7 @@ export function ngNative(options = {}) {
       const reference = domComponentReference(source, file);
       if (reference) return { code: reference, map: null };
       return compiled(this, source, file, {
+        platform: NATIVE_BUILDS.has(os) ? os : undefined,
         libraryStyles: options.libraryStyles,
         projectRoot: root,
       });

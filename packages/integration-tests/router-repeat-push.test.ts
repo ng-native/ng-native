@@ -18,6 +18,9 @@ import { compileFixture } from './compile.ts';
 
 afterEach(cleanup);
 
+/** The screens below the top too, which a query leaves out as hidden. */
+const BELOW = { includeHiddenElements: true };
+
 let mod: Record<string, unknown>;
 before(async () => {
   mod = await compileFixture('fixtures/repeat-push.ts');
@@ -45,7 +48,8 @@ it('pushes a second screen for a url already on the stack, and goes back through
   await turns();
   assert.equal(router.url, '/a');
   assert.equal(screens(), 3, 'A, B and a second A');
-  const texts = () => app.getAllByText(/^A \d+$/).map((node) => node.children[0]!.props['text']);
+  const texts = () =>
+    app.getAllByText(/^A \d+$/, BELOW).map((node) => node.children[0]!.props['text']);
   assert.equal(texts().length, 2);
   assert.notEqual(texts().at(-1), first, 'the one on top is a new page');
 
@@ -79,7 +83,7 @@ it('pushes a second screen for a url already on the stack from a link too', asyn
   await turns();
   assert.equal(router.url, '/customer');
   assert.equal(screens(), 3, 'Customer, Job and a second Customer');
-  assert.equal(app.getAllByText('Customer').length, 2);
+  assert.equal(app.getAllByText('Customer', BELOW).length, 2);
 
   nav.back();
   await turns();
@@ -157,7 +161,8 @@ async function twoAtOneUrl(urls = ['/b', '/a', '/c']) {
   };
   const screens = () =>
     flatten(app.fabric.committed).filter((node) => node.viewName === 'RNSScreen');
-  const texts = () => app.getAllByText(/^A \d+$/).map((node) => node.children[0]!.props['text']);
+  const texts = () =>
+    app.getAllByText(/^A \d+$/, BELOW).map((node) => node.children[0]!.props['text']);
   const first = (await app.findByText(/^A \d+$/)).children[0]!.props['text'] as string;
   for (const url of urls) {
     await nav.push(url);
@@ -200,7 +205,8 @@ it('goes back to the lower of two screens at one url after a query changed it in
   };
   const screens = () =>
     flatten(app.fabric.committed).filter((node) => node.viewName === 'RNSScreen').length;
-  const texts = () => app.getAllByText(/^A \d+$/).map((node) => node.children[0]!.props['text']);
+  const texts = () =>
+    app.getAllByText(/^A \d+$/, BELOW).map((node) => node.children[0]!.props['text']);
   const first = (await app.findByText(/^A \d+$/)).children[0]!.props['text'] as string;
 
   for (const url of ['/a?tab=1', '/b', '/a', '/c']) {
@@ -228,7 +234,8 @@ it("goes back to the older of a screen's two entries when the other screen at it
   };
   const screens = () =>
     flatten(app.fabric.committed).filter((node) => node.viewName === 'RNSScreen').length;
-  const texts = () => app.getAllByText(/^A \d+$/).map((node) => node.children[0]!.props['text']);
+  const texts = () =>
+    app.getAllByText(/^A \d+$/, BELOW).map((node) => node.children[0]!.props['text']);
   const first = (await app.findByText(/^A \d+$/)).children[0]!.props['text'] as string;
 
   for (const url of ['/a?tab=1', '/b', '/a', '/c']) {
@@ -266,7 +273,8 @@ for (const [offset, url] of [
     };
     const screens = () =>
       flatten(app.fabric.committed).filter((node) => node.viewName === 'RNSScreen').length;
-    const texts = () => app.getAllByText(/^A \d+$/).map((node) => node.children[0]!.props['text']);
+    const texts = () =>
+      app.getAllByText(/^A \d+$/, BELOW).map((node) => node.children[0]!.props['text']);
     const first = (await app.findByText(/^A \d+$/)).children[0]!.props['text'] as string;
 
     await nav.push('/a?tab=1');
@@ -300,7 +308,8 @@ it('keeps only the entries history still holds for a screen whose query is repla
   const turns = async () => {
     for (let turn = 0; turn < 6; turn++) await settle();
   };
-  const texts = () => app.getAllByText(/^A \d+$/).map((node) => node.children[0]!.props['text']);
+  const texts = () =>
+    app.getAllByText(/^A \d+$/, BELOW).map((node) => node.children[0]!.props['text']);
   const first = (await app.findByText(/^A \d+$/)).children[0]!.props['text'] as string;
 
   for (let page = 1; page <= 20; page++) {
@@ -346,7 +355,8 @@ it('goes back to the lower of two screens at one url after a query changed it wi
   };
   const screens = () =>
     flatten(app.fabric.committed).filter((node) => node.viewName === 'RNSScreen').length;
-  const texts = () => app.getAllByText(/^A \d+$/).map((node) => node.children[0]!.props['text']);
+  const texts = () =>
+    app.getAllByText(/^A \d+$/, BELOW).map((node) => node.children[0]!.props['text']);
   const first = (await app.findByText(/^A \d+$/)).children[0]!.props['text'] as string;
 
   await router.navigateByUrl('/a?tab=1', { skipLocationChange: true });

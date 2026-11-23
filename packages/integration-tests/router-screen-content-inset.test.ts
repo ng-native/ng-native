@@ -89,8 +89,9 @@ describe('a stack page under its header', () => {
     return app;
   };
 
-  /** The view the page's root content commits into. */
-  const holder = (): FakeFabricNode => screen.getByText('Monday to Friday').parent!;
+  /** The view the page's root content commits into, on top or under a screen pushed over it. */
+  const holder = (): FakeFabricNode =>
+    screen.getByText('Monday to Friday', { includeHiddenElements: true }).parent!;
 
   it('commits the content in a safe area view that insets the top, on iOS 26', async () => {
     await open('ios', 26);

@@ -42,7 +42,10 @@ it('comes back on the page a reload left, above the pages that led to it', async
   });
 
   assert.ok(await screen.findByText('Our team'));
-  assert.ok(screen.getByText('We make apps'), 'the page it was reached from is beneath it');
+  assert.ok(
+    screen.getByText('We make apps', { includeHiddenElements: true }),
+    'the page it was reached from is beneath it',
+  );
 });
 
 it('goes back through its history as well when links have a parent page', async () => {
@@ -64,7 +67,10 @@ it('goes back through its history as well when links have a parent page', async 
   });
 
   assert.ok(await screen.findByText('Our team'));
-  assert.ok(screen.getByText('We make apps'), 'the page it was reached from is beneath it');
+  assert.ok(
+    screen.getByText('We make apps', { includeHiddenElements: true }),
+    'the page it was reached from is beneath it',
+  );
 });
 
 it('starts where it always does when no reload left anything', async () => {

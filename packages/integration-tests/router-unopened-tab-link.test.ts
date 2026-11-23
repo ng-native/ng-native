@@ -40,7 +40,10 @@ describe('a link into a tab nobody has opened', () => {
     await fireEvent.press(screen.getByTestId('album'));
     await idle();
     assert.equal(router.url, '/library/7');
-    assert.ok(screen.queryByText('library'), 'the Library screen is under the album');
+    assert.ok(
+      screen.queryByText('library', { includeHiddenElements: true }),
+      'the Library screen is under the album',
+    );
 
     navigation.back();
     await idle();
@@ -51,7 +54,10 @@ describe('a link into a tab nobody has opened', () => {
     await fireEvent.press(screen.getByTestId('relative'));
     await idle();
     assert.equal(router.url, '/library/7');
-    assert.ok(screen.queryByText('library'), 'the Library screen is under the album');
+    assert.ok(
+      screen.queryByText('library', { includeHiddenElements: true }),
+      'the Library screen is under the album',
+    );
 
     navigation.back();
     await idle();

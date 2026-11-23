@@ -188,7 +188,10 @@ takes no touch (`pointerEvents: 'none'`). `{ includeHiddenElements: true }` find
 element that is `display: none` has no view, so no query finds it, with the option or without. A
 node scrolled off screen is not hidden; the fake has no layout to say it is. A `<virtual-list>`
 keeps a few recycled rows as views with no opacity that take no touch, still showing their last
-item, so a query does not find those either.
+item, so a query does not find those either. A screen of a native stack is hidden while a screen
+is pushed over it, or presented over it as a `fullScreenModal` or `containedModal`, as the stack
+shows the top one on a device; a sheet or a transparent modal leaves the screen under it showing,
+and found.
 
 A node a query returns has `parent`: the node it is under as of that query, and `null` at the top.
 Query again after a change rather than keep a node and read its `parent` later.
@@ -242,6 +245,12 @@ happen: the handler never ran. Any other event by name is sent as before.
 A press on a `<ui-button>` ends with the event its native button sends, `topButtonPress` on iOS
 and `topButtonPressed` on Android, so its `(buttonPress)` runs. On iOS one that SwiftUI's
 `disabled` modifier turns off sends none.
+
+A press on a `<switch>` flips it, as a tap does: it ends with the `topChange` `{ value }` the
+switch sends on iOS, Android and macOS, the opposite of the `checked` value last committed, so
+`(checkedChange)` and a bound `[(checked)]` or form field see the new value. A disabled switch sends
+none. To set a switch to a given value instead, send the event yourself:
+`fireEvent(node, 'change', { value: false })`.
 
 ### `userEvent`
 

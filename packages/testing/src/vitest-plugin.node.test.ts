@@ -160,6 +160,52 @@ export class Chip {
   });
 });
 
+/**
+ * A component's sheet is compiled for the OS the tests run as, as Metro compiles it for the platform
+ * it bundles: `grayscale()` is drawn on Android and by the desktop hosts, and dropped with a warning
+ * on iOS. Every sheet was compiled for iOS and Android together, so a Mac app's lost its filter.
+ */
+describe("an app's own component styles", () => {
+  const component = (css: string) =>
+    "import { Component } from '@angular/core';\n" +
+    `@Component({ selector: 'x-gray', template: '<view class="g"></view>', styles: ['${css}'] })\n` +
+    'export class Gray {}\n';
+  const GRAY = component('.g { filter: grayscale(1); }');
+  const compiled = (plugin: ReturnType<typeof ngNative>, source = GRAY): string => {
+    const result = (plugin.transform as unknown as Transform)(source, '/app/src/gray.ts');
+    return typeof result === 'string' ? result : (result?.code ?? source);
+  };
+
+  it('are compiled for the os the plugin is given', () => {
+    for (const os of ['macos', 'linux', 'android'] as const) {
+      assert.match(compiled(ngNative({ os })), /"grayscale":1/, os);
+    }
+    assert.doesNotMatch(compiled(ngNative({ os: 'ios' })), /grayscale/);
+    // A skew Android cannot draw is kept for iOS alone, so iOS is not iOS and Android together.
+    const SKEW = component('.g { transform: skewX(10deg); }');
+    assert.match(compiled(ngNative({ os: 'ios' }), SKEW), /skewX/);
+    assert.doesNotMatch(compiled(ngNative({ os: 'android' }), SKEW), /skewX/);
+    // Metro's `web` is a DOM component's page, which keeps the CSS for a browser. A `web` project's
+    // sheets are compiled for iOS and Android together, as they were.
+    assert.doesNotMatch(compiled(ngNative({ os: 'web' }), SKEW), /skewX/);
+  });
+
+  it("are compiled for the os the app's expo.platforms gives, with none named", () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'ngn-os-styles-'));
+    try {
+      writeFileSync(
+        path.join(root, 'app.json'),
+        JSON.stringify({ expo: { platforms: ['macos'] } }),
+      );
+      const plugin = ngNative();
+      (plugin.config as unknown as (config: object) => unknown)({ root });
+      assert.match(compiled(plugin), /"grayscale":1/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 it('leaves a module that never mentions require alone', () => {
   const transform = ngNative().transform as unknown as Transform;
   assert.equal(transform('export const a = 1;', '/app/src/a.ts'), null);

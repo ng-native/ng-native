@@ -28,5 +28,8 @@ it('opens a link above the page it belongs under', async () => {
   await followLink(componentRef.injector.get(Router), '/about/team', linkParent);
 
   assert.ok(await screen.findByText('Our team'));
-  assert.ok(screen.getByText('We make apps'), 'the page it belongs under is beneath it');
+  assert.ok(
+    screen.getByText('We make apps', { includeHiddenElements: true }),
+    'the page it belongs under is beneath it',
+  );
 });

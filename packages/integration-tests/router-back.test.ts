@@ -79,7 +79,10 @@ describe('going back in an app with tabs', () => {
     await settle();
     assert.equal(router.url, '/library/7');
     assert.ok(screen.getByText('album'));
-    assert.ok(screen.getByText('library'), 'the list is mounted under it');
+    assert.ok(
+      screen.getByText('library', { includeHiddenElements: true }),
+      'the list is mounted under it',
+    );
 
     navigation.back();
     await settle();

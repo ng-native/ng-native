@@ -62,9 +62,11 @@ it('pushes a screen when a link is pressed', async () => {
 With eagerly declared routes the pushed screen is already there when the press resolves, but a
 `loadComponent`, a guard or a resolver each put the screen a few tasks further away, and
 `findByText` keeps working when a route gains one. A pushed screen stacks on top of the one before
-it, as it does on a device, so the home screen is still in the tree afterwards: assert on what
-arrived rather than on what left. The native stack's transition and its navigation bar are drawn
-by the platform, and a test sees neither.
+it, as it does on a device: the home screen stays mounted under it, and a query does not find
+what is on it, as a screen reader does not reach it. A query given
+`{ includeHiddenElements: true }` finds the screens below too. A screen presented as a sheet or a
+transparent modal leaves the one under it showing, and a query finds both. The native stack's
+transition and its navigation bar are drawn by the platform, and a test sees neither.
 
 A page that takes a route parameter as an input needs `withComponentInputBinding()` in the test's
 providers, the same as the app does, or the input is never set and a required one throws on first
@@ -150,7 +152,7 @@ it('opens a link above the page it belongs under', async () => {
 
   expect(await screen.findByText('Our team')).toBeTruthy();
   // The page it belongs under is on the stack beneath it, so Back has somewhere to go.
-  expect(screen.getByText('We make apps')).toBeTruthy();
+  expect(screen.getByText('We make apps', { includeHiddenElements: true })).toBeTruthy();
 });
 ```
 

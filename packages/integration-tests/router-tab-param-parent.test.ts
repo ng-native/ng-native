@@ -69,7 +69,10 @@ describe('a bar under a parameter', () => {
     assert.equal(await navigation.push('/city/s%C3%A3o-paulo/library/7'), true);
     await idle();
     assert.ok(screen.getByText('album'));
-    assert.ok(screen.getByText('library'), 'the list is mounted under it');
+    assert.ok(
+      screen.getByText('library', { includeHiddenElements: true }),
+      'the list is mounted under it',
+    );
     navigation.back();
     await idle();
     assert.equal(router.url, '/city/s%C3%A3o-paulo/library');
