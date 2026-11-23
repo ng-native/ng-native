@@ -58,8 +58,12 @@ class ShortcutTest {
   fun showsInTheHelperOnlyAKeyItCanName() {
     assertEquals(KeyEvent.KEYCODE_INSERT, shortcut("Insert").keyCode())
     assertEquals('K', shortcut("k").helperChar())
-    assertEquals(KeyEvent.KEYCODE_F13, shortcut("F13").keyCode())
-    assertEquals(KeyEvent.KEYCODE_F20, shortcut("F20").keyCode())
+    assertEquals(KeyEvent.KEYCODE_F13, shortcut("F13").keyCode(sdk = 36))
+    assertEquals(KeyEvent.KEYCODE_F20, shortcut("F20").keyCode(sdk = 36))
+    // Before Android 16 the helper rejects a key code past the last one the OS knows.
+    assertNull(shortcut("F13").keyCode(sdk = 35))
+    assertNull(shortcut("F20").keyCode(sdk = 35))
+    assertEquals(KeyEvent.KEYCODE_F12, shortcut("F12").keyCode(sdk = 35))
     // No key code, and not one character: a wrong letter would be worse than no row.
     assertNull(shortcut("Help").keyCode())
     assertNull(shortcut("Help").helperChar())

@@ -1,5 +1,6 @@
 package dev.ngnative.components
 
+import android.os.Build
 import android.view.KeyEvent
 import android.view.KeyboardShortcutGroup
 import android.view.KeyboardShortcutInfo
@@ -64,8 +65,15 @@ internal class Shortcut(
     return KeyboardShortcutInfo(label, helperChar() ?: return null, modifiers)
   }
 
-  /** The key code of a key `KeyboardEvent.key` names with a word, or null. */
-  fun keyCode(): Int? = NAMED.entries.firstOrNull { it.value.equals(normalKey, true) }?.key
+  /**
+   * The key code of a key `KeyboardEvent.key` names with a word, or null. Null for F13 to F20
+   * before Android 16, whose helper rejects a key code past the last one the OS knows.
+   */
+  fun keyCode(sdk: Int = Build.VERSION.SDK_INT): Int? {
+    val code = NAMED.entries.firstOrNull { it.value.equals(normalKey, true) }?.key ?: return null
+    val unknown = code in KeyEvent.KEYCODE_F13..KeyEvent.KEYCODE_F20 && sdk < Build.VERSION_CODES.BAKLAVA
+    return if (unknown) null else code
+  }
 
   /** The character the helper shows for a key with no key code, or null for a word it lacks. */
   fun helperChar(): Char? = normalKey.singleOrNull()?.uppercaseChar()
