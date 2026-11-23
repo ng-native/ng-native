@@ -88,6 +88,16 @@ describe('the generated app', () => {
     assert.equal(resolves({ vite: '^8.0.0', vitest: '^4.0.8 || ^5.0.0' }), false);
     assert.equal(resolves({ vite: '^8.0.0', vitest: '~4.1.0' }), true);
     assert.equal(resolves({ vite: '^8.0.0', vitest: 'latest' }), true);
+    // A Vitest it lists whose version cannot be read is not known to take Vite 8, so it keeps the
+    // plugin; an npm alias is read through, and `latest` is the newest release.
+    assert.equal(resolves({ vite: '^8.0.0', vitest: 'npm:vitest@4.0.8' }), false);
+    assert.equal(resolves({ vite: '^8.0.0', vitest: 'npm:vitest@^4.1.0' }), true);
+    assert.equal(resolves({ vitest: 'npm:vitest@~4.1.0' }), true);
+    for (const vitest of ['workspace:*', 'catalog:', 'next', 'github:vitest-dev/vitest']) {
+      assert.equal(resolves({ vite: '^8.0.0', vitest }), false, vitest);
+      assert.equal(resolves({ vitest }), false, vitest);
+    }
+    assert.equal(resolves({ vitest: 'latest' }), true);
     assert.equal(resolves({ vite: '^7.3.0', vitest: '~4.1.0' }), false);
   });
 

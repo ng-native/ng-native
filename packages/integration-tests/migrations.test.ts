@@ -872,6 +872,50 @@ describe('vitest-tsconfig-paths, through nx migrate, ng update and ng-native-mig
       assert.deepEqual(cli, nx);
     });
 
+    for (const vitest of ['npm:vitest@4.0.8', 'workspace:*', 'catalog:', 'next']) {
+      it(`keeps the plugin when the Vitest it lists, ${vitest}, is not confirmed to take Vite 8`, async () => {
+        const { nx, angular, cli } = await acrossAdapters(
+          on({ nx: '24.0.0', vite: '^8.0.0', vitest }),
+          'vitest-tsconfig-paths',
+          '0.18.0',
+        );
+        assert.match(nx.files['apps/mobile/vitest.config.mts'] as string, /tsconfigPaths\(\)/);
+        assert.doesNotMatch(nx.files['apps/mobile/vitest.config.mts'] as string, /resolve:/);
+        assert.deepEqual(angular, nx);
+        assert.deepEqual(cli, nx);
+      });
+    }
+
+    it('turns on resolve.tsconfigPaths for a Vitest aliased to 4.1 or later', async () => {
+      const { files: after } = await viaNx(
+        on({ nx: '24.0.0', vite: '^8.0.0', vitest: 'npm:vitest@^4.1.0' }),
+        'vitest-tsconfig-paths',
+      );
+      assert.equal(after['apps/mobile/vitest.config.mts'], viaVite);
+    });
+
+    for (const key of [
+      'resolve : { alias: {} }',
+      "'resolve': { alias: {} }",
+      '"resolve": { alias: {} }',
+    ]) {
+      it(`keeps the plugin for a config whose own resolve is written ${key.split(':')[0]}`, async () => {
+        const own = generated.replace(
+          'export default defineConfig({',
+          `export default defineConfig({\n  ${key},`,
+        );
+        const { files: after } = await viaNx(
+          { ...on({ vite: '^8.0.0' }), 'apps/mobile/vitest.config.mts': own },
+          'vitest-tsconfig-paths',
+        );
+        assert.match(after['apps/mobile/vitest.config.mts'] as string, /tsconfigPaths\(\)/);
+        assert.doesNotMatch(
+          after['apps/mobile/vitest.config.mts'] as string,
+          /tsconfigPaths: true/,
+        );
+      });
+    }
+
     it('keeps the plugin for a config it cannot add the option to', async () => {
       const own = generated.replace(
         'export default defineConfig({',

@@ -31,7 +31,7 @@ const FIRST_PLUGIN = /plugins: \[nxViteTsPaths\(\), /g;
 
 /** The config with Vite's own option in place of the plugin, or null where it cannot take it. */
 function viaVite(text) {
-  if (/\bresolve:/.test(text)) return null;
+  if (/\bresolve['"]?\s*:/.test(text)) return null;
   const next = text
     .replace(new RegExp(`${FROM.source}\\r?\\n?`), '')
     .replace(FIRST_PLUGIN, 'resolve: { tsconfigPaths: true }, plugins: [');
