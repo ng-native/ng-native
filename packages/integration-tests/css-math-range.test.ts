@@ -268,6 +268,10 @@ describe('the props with nothing below zero', () => {
     // The attribute is a new block: its refused width is no width, so the rule's shows.
     renderer.setAttribute(node, 'style', 'width: -4px');
     assert.equal(committed('width'), 7);
+    // Nor does a value set in between bring back what the attribute held before.
+    renderer.setStyle(node, 'width', '40px');
+    renderer.setAttribute(node, 'style', 'width: -4px');
+    assert.equal(committed('width'), 7, 'the same attribute again');
     // One property set on its own, by contrast, keeps the value before a refused one.
     renderer.setStyle(node, 'width', '40px');
     renderer.setStyle(node, 'width', '-4px');

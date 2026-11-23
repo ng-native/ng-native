@@ -5045,7 +5045,11 @@ export class StyleResolver {
       ? parentInherited['color']
       : (own['color'] ?? parentInherited['color']);
     // Written in the declaration, or in the token it is all of: `box-shadow: var(--shadow)`.
-    const token = declaration.reference === undefined ? undefined : tokens[declaration.reference];
+    // Or in its fallback, where the token is unset: `box-shadow: var(--shadow, 0 0 2px)`.
+    const token =
+      declaration.reference === undefined
+        ? undefined
+        : (tokens[declaration.reference] ?? declaration.fallback);
     if (
       isPlatformColour(current) &&
       (holdsCurrentColour(declaration.within, tokens) || holdsCurrentColour(token, tokens))

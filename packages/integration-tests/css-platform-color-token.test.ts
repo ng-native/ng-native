@@ -506,6 +506,7 @@ describe('a token holding platform-color() where a colour has to be worked out',
       'a token of currentColor',
       ':root { --x: currentColor; } .a { box-shadow: 0 0 2px var(--x); }',
     ],
+    ["an unset token's fallback", '.a { box-shadow: var(--unset, 0 0 2px currentColor); }'],
     [
       'a token in a list of shadows',
       ':root { --s: 0 0 2px currentColor; } .a { box-shadow: var(--s), 0 0 1px red; }',
