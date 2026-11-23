@@ -12,6 +12,12 @@ std::function<bool(NGNSurfaceView *, NSEvent *, const ngn::PointerInput &)> gCon
 std::function<NSArray<NSView *> *(facebook::react::Tag, ngn::AxRotor)> gRotorViews;
 
 // A cursor of nothing, for `cursor: none`.
+// Every container alive, for safeAreaChangedIn:.
+NSHashTable<NGNSurfaceView *> *liveSurfaces() {
+  static NSHashTable<NGNSurfaceView *> *surfaces = [NSHashTable weakObjectsHashTable];
+  return surfaces;
+}
+
 NSCursor *noCursor() {
   static NSCursor *none = [[NSCursor alloc] initWithImage:[[NSImage alloc] initWithSize:NSMakeSize(1, 1)]
                                                   hotSpot:NSZeroPoint];
@@ -162,6 +168,14 @@ static std::optional<ngn::GesturePhase> phaseOf(NSEventPhase phase) {
   [gCursor set];
 }
 
++ (void)safeAreaChangedIn:(NSWindow *)window {
+  for (NGNSurfaceView *surface in liveSurfaces()) {
+    if (surface.window == window) {
+      surface.needsLayout = YES;
+    }
+  }
+}
+
 + (std::function<bool(NGNSurfaceView *, NSEvent *, const ngn::PointerInput &)>)contextMenuShower {
   return gContextMenuShower;
 }
@@ -199,6 +213,7 @@ static std::optional<ngn::GesturePhase> phaseOf(NSEventPhase phase) {
     _rootTag = rootTag;
     _input = input;
     _input->addContainer(container, surfaceId, rootTag);
+    [liveSurfaces() addObject:self];
     // The wheel reaches the core before the scroll view under the pointer takes it, and still
     // scrolls it: a `(wheel)` listener hears the turn without stopping the scroll, as on the web.
     // A turn a gesture handler took goes no further, so the view does not scroll with it.

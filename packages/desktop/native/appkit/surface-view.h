@@ -31,6 +31,10 @@
 // Shows the cursor the core asked for (input-dispatcher.h), and keeps showing it over the views
 // AppKit would reset it on.
 + (void)showCursor:(facebook::react::Cursor)cursor;
+// Has each container in `window` report its insets again at the next layout: the window's toolbar
+// came or went, which moves its safe area without moving a container whose frame stays (a split
+// view's pane under the window's content view).
++ (void)safeAreaChangedIn:(NSWindow *)window;
 // Every item of each of VoiceOver's rotors over this container, one line a rotor, searched as
 // VoiceOver searches them. For checking the rotors without a screen reader (NGN_LOG_ROTORS=1).
 - (NSString *)rotorItemsDescription;
