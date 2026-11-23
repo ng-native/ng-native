@@ -3116,7 +3116,11 @@ function addFrameDeclaration(declaration, out, tokens, deferred, context) {
       out.color = CURRENT_COLOUR;
       return;
     }
-    if (waiting.some((one) => namesCurrentColour(one.within))) {
+    // A token's fallback can be the element's colour too, on any property but color, which takes it.
+    const own = (one) =>
+      namesCurrentColour(one.within) ||
+      (one.props.join() !== 'color' && namesCurrentColour(one.fallback));
+    if (waiting.some(own)) {
       // All of it, as the frame had it before, as for any other value refused.
       for (const key of Object.keys(out)) delete out[key];
       Object.assign(out, before);

@@ -615,7 +615,12 @@ class NativeRenderer implements Renderer2 {
     if (mixed) return this.setMixedShorthand(el, key, value, mixed);
     if (!SHORTHANDS.has(key)) return false;
     const sides = longhands(key, value);
-    const refusal = sides ? shorthandRefusal(key, sides) : undefined;
+    // One value a browser drops leaves the sides set before, as several do: checked before they go.
+    const refusal = sides
+      ? shorthandRefusal(key, sides)
+      : typeof value === 'string' && !/var\(/i.test(value)
+        ? boundRefusal(key, value)
+        : undefined;
     if (refusal || sides === REFUSED) {
       this.engine.reportDroppedDeclaration(key, String(value), el.tag, refusal!);
       return true;

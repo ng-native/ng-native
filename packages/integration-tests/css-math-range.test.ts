@@ -240,6 +240,13 @@ describe('the props with nothing below zero', () => {
     renderer.setStyle(node, 'padding', '1px -1px');
     assert.equal(committed('paddingRight'), 2);
     assert.equal(committed('paddingTop'), 1);
+    // One value refused keeps the sides too, and one taken replaces them.
+    renderer.setStyle(node, 'padding', '-1px');
+    assert.equal(committed('paddingRight'), 2);
+    assert.equal(committed('paddingTop'), 1);
+    renderer.setStyle(node, 'padding', '5px');
+    assert.equal(committed('paddingRight'), 5);
+    renderer.setStyle(node, 'padding', '1px 2px');
     renderer.removeStyle(node, 'padding', 0 as never);
     assert.equal(committed('paddingRight'), 7, 'and goes with them when removed');
   });

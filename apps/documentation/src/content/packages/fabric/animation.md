@@ -148,7 +148,8 @@ A keyframe's value can be a token too, or an `em` or a viewport unit: it is sett
 element that plays the frame, as in a browser, so `to { height: var(--panel-height) }` opens each
 panel to the height set on it. A token that changes while the animation plays moves the frame,
 and the animation goes on from where its clock has got to. `currentColor` is taken by `color`
-alone, as the colour the element inherits.
+alone, as the colour the element inherits, written or as a `var()` fallback: on any other property
+the build refuses it with a warning.
 
 An `animation-timing-function` written inside a keyframe eases from that keyframe to the next, as in
 CSS, over the animation's own: Tailwind's `animate-bounce` falls on one curve and rises on another.

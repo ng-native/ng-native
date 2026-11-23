@@ -493,6 +493,27 @@ describe('a token holding platform-color() where a colour has to be worked out',
     assert.equal(warnings.filter((line) => line.includes('currentColor')).length, 1);
   });
 
+  for (const [label, css] of [
+    [
+      'a mix of currentColor',
+      ':root { --x: currentColor; } .a { box-shadow: 0 0 2px color-mix(in srgb, var(--x) 50%, white); }',
+    ],
+    [
+      'a token of the whole shadow',
+      ':root { --s: 0 0 2px currentColor; } .a { box-shadow: var(--s); }',
+    ],
+  ] as const) {
+    it(`says it of a shadow in ${label} where the colour is a platform one`, () => {
+      const s = app(`.p { color: CanvasText; } ${css}`);
+      const a = s.element('a', 'view', s.element('p'));
+      s.engine.commit();
+      assert.equal(s.committed(a)['boxShadow'], undefined);
+      const said = warnings.filter((line) => line.includes('platform'));
+      assert.equal(said.length, 1, warnings.join('\n'));
+      assert.match(said[0]!, /boxShadow is drawn in currentColor/);
+    });
+  }
+
   it('says it of a shadow in currentColor where the colour inherited is a platform one', () => {
     const s = app('.p { color: CanvasText; } .a { box-shadow: 0 0 2px; }');
     const a = s.element('a', 'view', s.element('p'));

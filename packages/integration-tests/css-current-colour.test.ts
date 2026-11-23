@@ -579,6 +579,16 @@ describe('color: currentColor in a keyframe', () => {
     }
   });
 
+  it('refuses currentColor as a token fallback on any other property, and takes it on color', () => {
+    assert.throws(
+      () => compileCss('@keyframes k { to { background-color: var(--missing, currentColor) } }'),
+      (error: Error) => /keyframe/.test(error.message) && /currentColor/.test(error.message),
+    );
+    assert.doesNotThrow(() =>
+      compileCss('@keyframes k { to { color: var(--missing, currentColor) } }'),
+    );
+  });
+
   it('keeps the value a frame gave before one in currentColor it refuses', () => {
     // As any other value a frame refuses: `width: 1px; width: foo()` keeps the 1px.
     for (const [property, prop, value] of [
