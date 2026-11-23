@@ -220,8 +220,11 @@ or linear gradients, with no position, size, repeat or `url()`, and no token in 
 token only as all of it, lengths in `px` or `rem` only, and a color written out, not a
 `color-mix()`. `font` has no `small-caps`, stretch, keyword size or system font.
 A value outside that is dropped, with a warning in development, and what was set before it stays,
-as a browser leaves it. A negative written out where a property has nothing below zero,
-`width: -4px` say, is dropped the same way.
+though a browser takes some of these, a positioned gradient say. Some values a browser drops too
+are dropped the same way, as a browser leaves them: a negative written out where a property has
+nothing below zero, `width: -4px` say, math that comes to no type the property takes, and more
+values than a shorthand takes. A `style` attribute set again is a new declaration block, so a
+value it changes to one dropped there leaves no value, as in a browser.
 
 `skewX()` and `skewY()` are drawn on iOS only. React Native on Android breaks a transform down into
 the rotation, scale and translation an Android view has, and a view has no skew, so `skewX()` is

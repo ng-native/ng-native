@@ -503,6 +503,10 @@ describe('a token holding platform-color() where a colour has to be worked out',
       ':root { --s: 0 0 2px currentColor; } .a { box-shadow: var(--s); }',
     ],
     [
+      'a token of currentColor',
+      ':root { --x: currentColor; } .a { box-shadow: 0 0 2px var(--x); }',
+    ],
+    [
       'a token in a list of shadows',
       ':root { --s: 0 0 2px currentColor; } .a { box-shadow: var(--s), 0 0 1px red; }',
     ],
@@ -517,6 +521,19 @@ describe('a token holding platform-color() where a colour has to be worked out',
       assert.match(said[0]!, /boxShadow is drawn in currentColor/);
     });
   }
+
+  it('says it of a color mixed from currentColor where the colour inherited is a platform one', () => {
+    // The element's own colour is the one that failed: currentColor in it is the inherited one,
+    // not a weaker rule's.
+    const s = app(
+      ':root { --t: white; } .p { color: CanvasText; } .a { color: red; }' +
+        ' .p > .a { color: color-mix(in srgb, currentColor 50%, var(--t)); }',
+    );
+    const a = s.element('a', 'view', s.element('p'));
+    s.engine.commit();
+    const said = warnings.filter((line) => line.includes('currentColor'));
+    assert.equal(said.length, 1, warnings.join('\n'));
+  });
 
   it('says it of a shadow in currentColor where the colour inherited is a platform one', () => {
     const s = app('.p { color: CanvasText; } .a { box-shadow: 0 0 2px; }');

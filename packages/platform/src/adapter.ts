@@ -386,7 +386,7 @@ const flexOf = (grow: string, shrink: string, basis: string): [string, string][]
 const writtenAs = new WeakMap<EngineNode, Map<string, string[]>>();
 
 /** The declarations each element's `style` attribute made, to take out when it changes or goes. */
-const attributeStyles = new WeakMap<EngineNode, readonly string[]>();
+const attributeStyles = new WeakMap<EngineNode, Readonly<Record<string, unknown>>>();
 
 class NativeRenderer implements Renderer2 {
   readonly data: { [key: string]: unknown } = Object.create(null);
@@ -485,7 +485,7 @@ class NativeRenderer implements Renderer2 {
       const declared = parseStyleAttribute(value);
       this.dropAttributeStyles(el, declared);
       for (const [key, next] of Object.entries(declared)) this.setStyle(el, key, next);
-      attributeStyles.set(el, Object.keys(declared));
+      attributeStyles.set(el, declared);
       return;
     }
     this.set(el, name, value);
@@ -511,10 +511,14 @@ class NativeRenderer implements Renderer2 {
     this.engine.setProp(el, name, value);
   }
 
-  /** Takes out what an element's `style` attribute declared and `kept` does not. */
+  /**
+   * Takes out what an element's `style` attribute declared that `kept` does not declare the same:
+   * a new attribute is a new declaration block, so a value it changes to one a browser drops
+   * leaves no value, where `setStyle` of one property keeps the one before.
+   */
   private dropAttributeStyles(el: EngineNode, kept: Record<string, unknown>): void {
-    for (const key of attributeStyles.get(el) ?? []) {
-      if (!(key in kept)) this.removeStyle(el, key);
+    for (const [key, value] of Object.entries(attributeStyles.get(el) ?? {})) {
+      if (kept[key] !== value) this.removeStyle(el, key);
     }
   }
 

@@ -251,6 +251,29 @@ describe('the props with nothing below zero', () => {
     assert.equal(committed('paddingRight'), 7, 'and goes with them when removed');
   });
 
+  it('drops a refused value in a replaced style attribute, as a new declaration block does', () => {
+    const fabric = createFakeFabric();
+    const sheet = compileCss('.c { width: 7px }');
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
+    const renderer = new NativeRendererFactory(engine).createRenderer(null, null);
+    const node = renderer.createElement('view') as EngineNode;
+    renderer.setAttribute(node, 'class', 'c');
+    renderer.appendChild(engine.root, node);
+    const committed = (key: string) => {
+      engine.commit();
+      return (fabric.committed[0]!.props as Record<string, unknown>)[key];
+    };
+    renderer.setAttribute(node, 'style', 'width: 40px');
+    assert.equal(committed('width'), 40);
+    // The attribute is a new block: its refused width is no width, so the rule's shows.
+    renderer.setAttribute(node, 'style', 'width: -4px');
+    assert.equal(committed('width'), 7);
+    // One property set on its own, by contrast, keeps the value before a refused one.
+    renderer.setStyle(node, 'width', '40px');
+    renderer.setStyle(node, 'width', '-4px');
+    assert.equal(committed('width'), 40);
+  });
+
   it('keeps a border before a refused one, and takes it away when the binding goes', () => {
     const fabric = createFakeFabric();
     const sheet = compileCss('.c { border-top-width: 7px }');

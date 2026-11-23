@@ -5040,7 +5040,10 @@ export class StyleResolver {
     if (!this.onPlatformColour) return;
     this.reportPlatformColour(declaration, tokens);
     // A shadow in currentColor, where the colour in scope is a platform one: `color: CanvasText`.
-    const current = own['color'] ?? parentInherited['color'];
+    // The colour in scope, which for a declaration of color itself is the inherited one.
+    const current = declaration.props.includes('color')
+      ? parentInherited['color']
+      : (own['color'] ?? parentInherited['color']);
     // Written in the declaration, or in the token it is all of: `box-shadow: var(--shadow)`.
     const token = declaration.reference === undefined ? undefined : tokens[declaration.reference];
     if (
@@ -6969,10 +6972,11 @@ function holdsCurrentColour(value: unknown, tokens: Readonly<Record<string, Toke
   if (value === null || typeof value !== 'object') return false;
   const colour = colourMarker(value);
   if (colour) {
-    // Asked for the colour in scope anywhere inside: a mix or a relative colour of it, or a token.
+    // Asked for the colour in scope anywhere inside, as settling asks: written, a token that is
+    // currentColor, or a mix or a relative colour of it.
     let asked = false;
-    const resolved = resolveColour(colour, tokens, () => ((asked = true), 'black'));
-    return asked || resolved === 'currentcolor';
+    colourWithin(colour, tokens, () => ((asked = true), 'black'));
+    return asked;
   }
   // A shadow token in a list of shadows, `var(--s), 0 0 1px red`: what the token holds.
   const slot = (value as { __shadows?: { reference?: string } }).__shadows?.reference;
