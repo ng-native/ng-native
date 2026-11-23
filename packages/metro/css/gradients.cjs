@@ -155,9 +155,10 @@ const UNPLACED = {
  * tile's size, position and repeat for that layer, and what `placing` says (or where a layer
  * starts) for the others. Nothing when no layer is one, so the declaration places nothing more.
  *
- * A position or a repeat given to the repeating layer changes nothing a browser draws, since the
- * image is the box's own size, so the tile's take their place. A size does change it, and the
- * tile cannot say the same, so it is refused.
+ * A repeat, or a position that is a keyword or a percentage, given to the repeating layer changes
+ * nothing a browser draws, since the image is the box's own size, so the tile's take their place.
+ * A size, or a position that is a length, does change it, and the tile cannot say the same, so it
+ * is refused.
  */
 function tilePlacing(images, context, placing = {}) {
   const tiles = images.map((layer) =>
@@ -169,6 +170,15 @@ function tilePlacing(images, context, placing = {}) {
   const each = (part) =>
     tiles.map((tile, index) => tile?.[part] ?? placing[part]?.[index] ?? UNPLACED[part]);
   tiles.forEach((tile, index) => {
+    const at = placing.position?.[index];
+    // A length moves the box-sized image (and clips it, with no-repeat), where a percentage of the
+    // free space, which there is none of, moves nothing. A tile drawn from 0 cannot say a shift.
+    if (tile && at && Object.values(at).some((one) => typeof one === 'number' && one !== 0)) {
+      throw new CssUnsupported(
+        `${context}: a repeating-linear-gradient given a background-position that is a length ` +
+          `shifts the stripes, which native cannot do to a tile. ${TILE_INSTEAD}`,
+      );
+    }
     const size = placing.size?.[index];
     if (tile && size && (size.x !== 'auto' || size.y !== 'auto')) {
       throw new CssUnsupported(

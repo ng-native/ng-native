@@ -404,6 +404,44 @@ describe('a repeating linear gradient', () => {
       /repeating-radial-gradient has no native equivalent/,
     );
   });
+
+  it('refuses a length position in the shorthand, which moves or clips the box-sized image', () => {
+    // A browser shifts the whole image by 1px and, with no-repeat, leaves a column uncovered. The
+    // tile is drawn from 0, so a position that is a length (or an offset from a side) is refused
+    // rather than dropped, while a percentage, which a box-sized image ignores, is not.
+    for (const position of ['1px 0 no-repeat', 'right 2px top 3px', '0 1px', 'left 4px center']) {
+      assert.throws(
+        () =>
+          styleOf(
+            `background: repeating-linear-gradient(90deg, red 0 2px, blue 2px 4px) ${position}`,
+          ),
+        /repeating-linear-gradient.*background-position/s,
+        position,
+      );
+    }
+    for (const position of ['0 0', 'right', 'bottom right', '50% 10%', 'center top']) {
+      assert.deepEqual(
+        styleOf(
+          `background: repeating-linear-gradient(90deg, red 0 2px, blue 2px 4px) ${position}`,
+        ),
+        styleOf('background: repeating-linear-gradient(90deg, red 0 2px, blue 2px 4px)'),
+        position,
+      );
+    }
+  });
+
+  it('writes no placement for an ordinary image, so a later rule cannot clear what an author set', () => {
+    // The resolver merges size, position and repeat as props of their own, so a tile's placement
+    // from one rule outlives a plain gradient a stronger rule gives (documented). The cure is not
+    // to reset placement for every ordinary image, which would also drop an author's own
+    // `background-size`; this pins that the plain image writes none.
+    assert.deepEqual(
+      Object.keys(styleOf('background-image: linear-gradient(red, blue)')).filter((key) =>
+        /^experimental_background(Size|Position|Repeat)$/.test(key),
+      ),
+      [],
+    );
+  });
 });
 
 describe('a gradient on a device', () => {
