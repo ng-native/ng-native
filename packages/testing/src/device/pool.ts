@@ -218,10 +218,11 @@ class DeviceWorker implements PoolWorker {
    */
   private async connect(): Promise<void> {
     const { launch } = this.options;
-    const claim = (signal?: AbortSignal, launched = false) =>
+    const claim = (signal?: AbortSignal, launched = false, left?: number, waited?: number) =>
       this.bridge.claim((message) => this.receive(message), {
         platform: this.options.platform,
-        timeout: this.options.connectTimeout ?? (launched ? 600_000 : 60_000),
+        timeout: left ?? this.options.connectTimeout ?? (launched ? 600_000 : 60_000),
+        waited,
         launched,
         root: this.projectRoot,
         screenshots: this.options.screenshots ?? {},
@@ -253,18 +254,15 @@ class DeviceWorker implements PoolWorker {
     // Where the app stopped: what it and Metro last printed.
     const lastOutputs = () =>
       lastOutput("Metro's", metro?.output()) + lastOutput("The app's", this.launched?.output?.());
-    // One claim for the whole wait: whichever app launched for it connects takes it.
-    const claiming = new AbortController();
-    const claimed = claim(claiming.signal, true).catch((error: Error) => {
-      error.message += lastOutputs();
-      throw error;
-    });
-    claimed.catch(() => {});
     const timeout = this.options.connectTimeout ?? 600_000;
+    const deadline = Date.now() + timeout;
     const window = Math.min(RELAUNCH_MS, timeout / LAUNCHES);
     for (let launches = 1; ; launches++) {
-      // An app that ended takes the claim with it: a claim left waiting would take the next app.
       const launched = app;
+      // A claim for this launch alone, given up when its window ends or the app ends: one left
+      // waiting would take the next app, or a session of the app stopped for being late.
+      const claiming = new AbortController();
+      let late = false;
       const early = launched.exited.then((how) => {
         const error = new Error(`The app exited before it connected (${how}).${lastOutputs()}`);
         return crashReportOf(launch, this.launchedAt).then((report) => {
@@ -272,31 +270,36 @@ class DeviceWorker implements PoolWorker {
           throw error;
         });
       });
-      early.catch(() => {});
-      let timer: ReturnType<typeof setTimeout> | undefined;
+      early.catch(() => claiming.abort());
       // An app that does not connect in its window is launched afresh, but for the last: one whose
       // first look for Metro failed, on a runner too busy for Metro to answer, never asks again.
-      const relaunch =
+      const timer =
         launches < LAUNCHES
-          ? new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), window)))
-          : new Promise<never>(() => {});
+          ? setTimeout(() => ((late = true), claiming.abort()), window)
+          : undefined;
       try {
-        const session = await Promise.race([claimed, early, relaunch]);
-        if (session) {
-          this.session = session;
-          break;
-        }
+        this.session = await Promise.race([
+          claim(claiming.signal, true, Math.max(deadline - Date.now(), 0), timeout).catch(
+            (error: Error) => {
+              if (!late) error.message += lastOutputs();
+              throw error;
+            },
+          ),
+          early,
+        ]);
+        break;
       } catch (error) {
-        claiming.abort();
-        throw error;
+        if (!late) throw error;
       } finally {
         clearTimeout(timer);
+        claiming.abort();
       }
       progress(
         this.options.platform ?? 'app',
         `not connected after ${Math.round(window / 1000)}s; launching it again`,
         this.launchedAt,
       );
+      // Stopped before the next claim is made: its poll closes with it, so it is no app to take.
       await launched.stop();
       app = await launchApp();
     }
@@ -728,6 +731,7 @@ class Bridge {
     {
       platform,
       timeout,
+      waited = timeout,
       root,
       screenshots,
       signal,
@@ -735,6 +739,8 @@ class Bridge {
     }: {
       platform?: string;
       timeout: number;
+      /** The whole wait, which the failure names, where this claim is the last part of it. */
+      waited?: number;
       launched?: boolean;
       root: string;
       screenshots: ScreenshotOptions;
@@ -757,7 +763,7 @@ class Bridge {
           new Error(
             launched
               ? `The ${platform ?? ''} app the pool launched did not connect to port ${this.port} ` +
-                  `within ${timeout / 1000}s: it is stuck before its entry runs ` +
+                  `within ${waited / 1000}s: it is stuck before its entry runs ` +
                   'startDeviceTests(), or the entry does not call it under EXPO_PUBLIC_DEVICE_TESTS.'
               : `No ${platform ? `${platform} ` : ''}app free on the device test pool's port ` +
                   `${this.port} within ${timeout / 1000}s. Start Metro with ` +

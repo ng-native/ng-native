@@ -931,6 +931,29 @@ describe('the device pool', () => {
     }
   });
 
+  it('leaves no claim behind when launching the app again fails', async () => {
+    const { launch, launches } = fakeLauncher();
+    const start = launch.start;
+    launch.start = () => {
+      if (launches.length === 1) throw new Error('the simulator went away');
+      return start();
+    };
+    const run = await setup({ launch, connectTimeout: 300 });
+    try {
+      await assert.rejects(run.worker().worker.start(), /the simulator went away/);
+      // An app that connects now is free for the next worker, not taken by a claim left waiting.
+      run
+        .app('later')
+        .poll()
+        .catch(() => {});
+      await wait(50);
+      await run.worker().worker.start();
+      assert.equal(launches.length, 1, 'the next worker took the app, and launched none');
+    } finally {
+      await run.done();
+    }
+  });
+
   it('launches the app three times at most before it says it did not connect', async () => {
     const { launch, launches } = fakeLauncher();
     const run = await setup({ launch, connectTimeout: 300 });

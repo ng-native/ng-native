@@ -136,7 +136,8 @@ export async function warmBundle(
   // Metro still busy after the bundle, on a loaded runner, can give: wait for one at once.
   const deadline = Date.now() + PROMPT_WAIT_MS;
   while (Date.now() < deadline && !signal?.aborted && !(await running(port, PROMPT_MS))) {
-    // Asked again at once: `running` waited its own second.
+    // A refusal comes back at once: asked again after a pause, not in a busy loop.
+    await sleep(250);
   }
   return true;
 }
