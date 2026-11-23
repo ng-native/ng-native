@@ -11,6 +11,7 @@
 #import "svg-view.h"
 
 #include "ngn/library-components.h"
+#include "ngn/scrollers.h"
 
 namespace ngn::appkit {
 
@@ -74,6 +75,10 @@ void AppKitBackend::createView(const ShadowView &view) {
 
 void AppKitBackend::deleteView(SurfaceId, Tag tag) {
   [views_ removeObjectForKey:@(tag)];
+  // What the host keeps by tag goes now, in mount order, rather than as the view is freed: a
+  // reload's instance reuses the tags, and its views may mount before the old ones are freed.
+  NGNForgetToolkitSize(tag);
+  ngn::ScrollerGutters::shared().remove(tag);
   [sourceLists_[@(tag)] remove];
   [sourceLists_ removeObjectForKey:@(tag)];
 }

@@ -75,9 +75,10 @@ std::function<void(NSInteger, CGPoint)> gOffsetChanged;
   return self;
 }
 
+// Its gutter goes as the backend deletes it (AppKitBackend::deleteView), not here: a reload's view
+// under the same tag may have recorded its own by the time this one is freed.
 - (void)dealloc {
   [NSNotificationCenter.defaultCenter removeObserver:self];
-  ngn::ScrollerGutters::shared().remove(self.reactTag);
 }
 
 - (NSView *)contentContainer {

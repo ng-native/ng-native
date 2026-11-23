@@ -82,3 +82,8 @@
 
 // The window a surface shows in, even once a split view controller took its content: nil when none.
 NSWindow *NGNWindowOfSplit(NSView *surfaceView);
+
+// The view `tag` went: the size it last heard from the toolkit goes with it. A reload's instance
+// numbers its views from the start again, so a pane mounted under the tag later hears its own size,
+// even one the old pane had.
+void NGNForgetToolkitSize(NSInteger tag);

@@ -71,6 +71,14 @@ void reportSize(NGNView<NGNSizedByToolkit> *view, NSSize size) {
   }
 }
 
+} // namespace
+
+void NGNForgetToolkitSize(NSInteger tag) {
+  gSizes.forget(static_cast<Tag>(tag));
+}
+
+namespace {
+
 // Sets a pane's or a row's SplitPaneState, unless it already says that.
 void updatePaneState(NGNView *view, facebook::react::Size size) {
   auto concrete = std::dynamic_pointer_cast<const ConcreteState<ngn::SplitPaneState>>(view.state);
