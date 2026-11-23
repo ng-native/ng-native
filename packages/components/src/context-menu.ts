@@ -11,6 +11,7 @@ import {
   input,
   signal,
   untracked,
+  type Signal,
   type TemplateRef,
 } from '@angular/core';
 import {
@@ -20,6 +21,7 @@ import {
   serializeMenu,
   type MenuTemplate,
   type NativeMenuEntry,
+  type ShortcutOs,
 } from '@ng-native/device';
 import { HostEngine, type HostNode } from '@ng-native/fabric';
 import { byNativeId } from './native-id.ts';
@@ -70,30 +72,19 @@ export class ContextMenu {
         (nativeID) => this.menus.setContextMenu(nativeID, null),
       )
     : null;
-  private readonly built = signal<MenuTemplate | null>(null);
-  private readonly menu = computed(() =>
-    serializeMenu(this.built()?.model.entries() ?? [], this.os),
-  );
-  /** The entries to send, or null where they show no item: only separators and empty sections. */
-  private readonly sent = computed(() => {
-    const { entries } = this.menu();
-    return showsAnItem(entries) ? entries : null;
-  });
+  private readonly menu = templateMenu(() => this.contextMenu() ?? null, this.injector, this.os);
+  private readonly sent = this.menu.sent;
 
   constructor() {
-    effect(() => this.build(this.contextMenu() ?? null));
     effect(() => {
       this.engine.setProp(this.node, 'contextMenu', this.sent());
       this.sender?.();
     });
     const stop = this.engine.setEventListener(this.node, 'topContextMenuSelect', (event) => {
       const id = (event as { nativeEvent?: { id?: string } }).nativeEvent?.id;
-      if (id !== undefined) this.choose(id);
+      if (id !== undefined) this.menu.choose(id);
     });
-    inject(DestroyRef).onDestroy(() => {
-      stop();
-      this.build(null);
-    });
+    inject(DestroyRef).onDestroy(stop);
   }
 
   /** Whether a long press opens this menu now, so `(longPress)` does not also fire. */
@@ -106,21 +97,44 @@ export class ContextMenu {
    * name, and runs as the view's own `topContextMenuSelect` would.
    */
   private sendByNativeId(nativeID: string): void {
-    this.menus.setContextMenu(nativeID, untracked(this.sent), (id) => this.choose(id));
+    this.menus.setContextMenu(nativeID, untracked(this.sent), (id) => this.menu.choose(id));
   }
+}
 
-  private choose(id: string): void {
-    this.menu().actions.get(id)?.();
-  }
+/** A menu written as a template of `<menu-item>`s, as `templateMenu` makes it. */
+export interface TemplateMenu {
+  /** The entries to send, or null where they show no item: only separators and empty sections. */
+  readonly sent: Signal<NativeMenuEntry[] | null>;
+  /** Run the item with `id`, as the menu is now: nothing for an id it no longer has. */
+  choose(id: string): void;
+}
 
-  /** Make the template's items, which register with the menu this element sends. */
-  private build(template: TemplateRef<unknown> | null): void {
+/**
+ * The menu `template` holds, its items made in `injector` and remade as the template changes, and
+ * destroyed with it. Called in an injection context.
+ */
+export function templateMenu(
+  template: () => TemplateRef<unknown> | null,
+  injector: Injector,
+  os: ShortcutOs,
+): TemplateMenu {
+  const built = signal<MenuTemplate | null>(null);
+  const build = (next: TemplateRef<unknown> | null) =>
     // Read and written outside the effect that calls this, which would otherwise run again.
     untracked(() => {
-      this.built()?.destroy();
-      this.built.set(template ? buildMenuTemplate(template, this.injector) : null);
+      built()?.destroy();
+      built.set(next ? buildMenuTemplate(next, injector) : null);
     });
-  }
+  effect(() => build(template()));
+  inject(DestroyRef).onDestroy(() => build(null));
+  const menu = computed(() => serializeMenu(built()?.model.entries() ?? [], os));
+  return {
+    sent: computed(() => {
+      const { entries } = menu();
+      return showsAnItem(entries) ? entries : null;
+    }),
+    choose: (id) => untracked(menu).actions.get(id)?.(),
+  };
 }
 
 /** Whether `entries` show an item: one that is not a separator, nor a section with none. */

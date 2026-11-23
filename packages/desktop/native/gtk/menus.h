@@ -73,6 +73,9 @@ void presentKeyboardShortcuts(GtkWidget *shortcuts, GtkWindow *parent);
 
 // A view's context menu at `point` in `widget`: chosen items call `chosen`. True once shown.
 bool popUpContextMenu(GtkWidget *widget, facebook::react::Point point, const std::vector<MenuItem> &items, std::function<void(const MenuItem &)> chosen);
+// The menu a press on `widget` opens, under it from its leading edge, as a GtkMenuButton's opens:
+// chosen items call `chosen`. True once shown.
+bool popUpMenuUnder(GtkWidget *widget, const std::vector<MenuItem> &items, std::function<void(const MenuItem &)> chosen);
 
 // The window's key handling, in the order AppKit's has it, for a window holding the app's
 // surfaces: the app's shortcuts (`shortcut`, true when one took the press), then the focus keys

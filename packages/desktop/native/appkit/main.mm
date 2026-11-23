@@ -332,6 +332,19 @@ void navigate(ngn::NavigationDirection direction, NSWindow *window) {
   }
 }
 
+// What choosing an item of the menu of the view with `tag` does: Back and Forward go through the
+// window's history, and the rest reach the view as `contextMenuSelect`.
+ngn::appkit::MenuChosen viewMenuChosen(Tag tag, NSWindow *window) {
+  return [tag, window](const ngn::MenuItem &item) {
+    if (item.command == ngn::MenuCommand::Back || item.command == ngn::MenuCommand::Forward) {
+      navigate(item.command == ngn::MenuCommand::Back ? ngn::NavigationDirection::Back : ngn::NavigationDirection::Forward,
+               window);
+    } else {
+      gHost.input->contextMenuSelect(tag, item.id);
+    }
+  };
+}
+
 // The interactive back swipe (back-swipe.h) in flight, and the screens it moves.
 struct Swipe {
   ngn::BackSwipe swipe;
@@ -1119,6 +1132,20 @@ int main(int argc, const char *argv[]) {
         }
       });
     };
+    // A press's menu (`<pressable [menu]>`), under the view pressed.
+    // From the run loop rather than the main queue: the menu tracks in a loop of its own until it
+    // closes, and a main queue block it ran in would hold back every other one queued until then.
+    gHost.menus->popUpMenu = [](Tag tag, std::vector<ngn::MenuItem> items) {
+      CFRunLoopRef main = CFRunLoopGetMain();
+      CFRunLoopPerformBlock(main, kCFRunLoopCommonModes, ^{
+        NSView *view = gHost.backend->view(tag);
+        if (view == nil || view.window == nil) {
+          return;
+        }
+        ngn::appkit::popUpMenuUnder(ngn::appkit::buildMenu("", items, viewMenuChosen(tag, view.window)), view);
+      });
+      CFRunLoopWakeUp(main);
+    };
     gHost.tray = std::make_shared<ngn::TrayHost>(std::make_shared<ngn::appkit::AppKitTray>(
         [](const std::string &icon) { gHost.tray->press(icon); },
         [](const std::string &icon, const std::string &id) { gHost.tray->menuSelect(icon, id); }));
@@ -1309,17 +1336,7 @@ int main(int argc, const char *argv[]) {
       if (!target) {
         return false;
       }
-      Tag tag = target->tag;
-      NSWindow *window = view.window;
-      NSMenu *menu = ngn::appkit::buildMenu("", target->items, [tag, window](const ngn::MenuItem &item) {
-        if (item.command == ngn::MenuCommand::Back || item.command == ngn::MenuCommand::Forward) {
-          navigate(item.command == ngn::MenuCommand::Back ? ngn::NavigationDirection::Back
-                                                          : ngn::NavigationDirection::Forward,
-                   window);
-        } else {
-          gHost.input->contextMenuSelect(tag, item.id);
-        }
-      });
+      NSMenu *menu = ngn::appkit::buildMenu("", target->items, viewMenuChosen(target->tag, view.window));
       [NSMenu popUpContextMenu:menu withEvent:event forView:view];
       return true;
     };

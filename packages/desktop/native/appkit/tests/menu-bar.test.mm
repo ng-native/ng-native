@@ -15,3 +15,28 @@ TEST_CASE("A menu item's key is one character as the user sees it, or a key the 
   // Two characters name no key.
   CHECK([ngn::appkit::keyEquivalent("ab") isEqualToString:@""]);
 }
+
+@interface NGNMenuAnchorTestView : NSView
+@end
+@implementation NGNMenuAnchorTestView
+- (BOOL)isFlipped {
+  return YES;
+}
+@end
+
+TEST_CASE("A menu a press opens goes under the view, from its leading edge") {
+  NSView *view = [[NGNMenuAnchorTestView alloc] initWithFrame:NSMakeRect(40, 50, 120, 30)];
+  NSPoint at = ngn::appkit::menuLocationUnder(view);
+  CHECK(at.x == 0);
+  CHECK(at.y == 32);
+  // Unflipped, the bottom edge is y 0, and the menu hangs below it.
+  NSView *plain = [[NSView alloc] initWithFrame:NSMakeRect(40, 50, 120, 30)];
+  at = ngn::appkit::menuLocationUnder(plain);
+  CHECK(at.x == 0);
+  CHECK(at.y == -2);
+  // Right to left, its leading edge is the view's right.
+  view.userInterfaceLayoutDirection = NSUserInterfaceLayoutDirectionRightToLeft;
+  at = ngn::appkit::menuLocationUnder(view);
+  CHECK(at.x == 120);
+  CHECK(at.y == 32);
+}

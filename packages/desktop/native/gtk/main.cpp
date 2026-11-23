@@ -376,6 +376,19 @@ void navigate(ngn::NavigationDirection direction, GtkWindow *window) {
   gHost.menus->navigate(direction, window ? surfaceOfWindow(window) : std::nullopt);
 }
 
+// What choosing an item of the menu of the view with `tag`, drawn on `widget`, does: Back and
+// Forward go through its window's history, and the rest reach the view as `contextMenuSelect`.
+std::function<void(const ngn::MenuItem &)> viewMenuChosen(facebook::react::Tag tag, GtkWidget *widget) {
+  auto *window = GTK_WINDOW(gtk_widget_get_root(widget));
+  return [tag, window](const ngn::MenuItem &item) {
+    if (item.command == ngn::MenuCommand::Back || item.command == ngn::MenuCommand::Forward) {
+      navigate(item.command == ngn::MenuCommand::Back ? ngn::NavigationDirection::Back : ngn::NavigationDirection::Forward, window);
+    } else {
+      gHost.input->contextMenuSelect(tag, item.id);
+    }
+  };
+}
+
 // What a text input does itself, by GTK's action for it on the focused widget.
 const char *textAction(ngn::MenuCommand command) {
   switch (command) {
@@ -910,16 +923,17 @@ int main(int argc, char *argv[]) {
     if (!target) {
       return false;
     }
-    auto tag = target->tag;
-    auto *window = GTK_WINDOW(gtk_widget_get_root(widget));
-    return ngn::gtk::popUpContextMenu(widget, input.point, target->items, [tag, window](const ngn::MenuItem &item) {
-      if (item.command == ngn::MenuCommand::Back || item.command == ngn::MenuCommand::Forward) {
-        navigate(item.command == ngn::MenuCommand::Back ? ngn::NavigationDirection::Back : ngn::NavigationDirection::Forward, window);
-      } else {
-        gHost.input->contextMenuSelect(tag, item.id);
+    return ngn::gtk::popUpContextMenu(widget, input.point, target->items, viewMenuChosen(target->tag, widget));
+  });
+  // A press's menu (`<pressable [menu]>`), under the view pressed.
+  menus->popUpMenu = [](facebook::react::Tag tag, std::vector<ngn::MenuItem> items) {
+    gHost.backend->runOnUiThread([tag, items = std::move(items)] {
+      GtkWidget *view = gHost.backend->view(tag);
+      if (view != nullptr && gtk_widget_get_mapped(view)) {
+        ngn::gtk::popUpMenuUnder(view, items, viewMenuChosen(tag, view));
       }
     });
-  });
+  };
   // The tray only while a StatusNotifierWatcher runs, as the launch finds it; Linux has no Dock.
   std::shared_ptr<ngn::TrayHost> tray;
   if (ngn::gtk::statusNotifierWatcherRunning()) {

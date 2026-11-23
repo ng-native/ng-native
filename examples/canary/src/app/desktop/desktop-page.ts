@@ -7,6 +7,7 @@ import {
   MenuGroup,
   MenuItem,
   NativeButton,
+  PressMenu,
   Pressable,
   ScrollView,
   Shortcut,
@@ -65,6 +66,7 @@ const MENU_NOTES: Record<OsName, string> = {
     MenuItem,
     NativeButton,
     NativeHeader,
+    PressMenu,
     Pressable,
     ScrollView,
     Shortcut,
@@ -161,6 +163,17 @@ const MENU_NOTES: Record<OsName, string> = {
         <menu-item label="Add a Star" (select)="addStar()" />
         <menu-item label="Clear Stars" destructive (select)="clearStars()" />
       </ng-template>
+
+      <text class="heading">Menu on a press</text>
+      <pressable class="card" testID="sort-menu" [menu]="sortMenu">
+        <text class="body">Sort by {{ sort() }}</text>
+      </pressable>
+      <text class="hint">{{ pressMenuNote }}</text>
+      <ng-template #sortMenu>
+        <menu-item label="Name" [checked]="sort() === 'Name'" (select)="sort.set('Name')" />
+        <menu-item label="Date" [checked]="sort() === 'Date'" (select)="sort.set('Date')" />
+        <menu-item label="Size" [checked]="sort() === 'Size'" (select)="sort.set('Size')" />
+      </ng-template>
       <view
         shortcut="mod+k"
         shortcutLabel="Say mod+k"
@@ -218,6 +231,11 @@ export class DesktopPage {
   protected readonly time = signal(new Date(2026, 2, 14, 14, 45).getTime());
   protected readonly countdown = signal(new Date(2026, 2, 14, 1, 30).getTime());
   protected readonly chosen = signal('Nothing chosen yet.');
+  protected readonly sort = signal('Name');
+  protected readonly pressMenuNote =
+    this.os === 'macos' || this.os === 'linux'
+      ? 'A click opens the sort menu under the card, with the order chosen checked.'
+      : 'This OS draws no menu on a press yet, so a press here does nothing.';
   /** The card's own nativeID, renamed and taken away in turn: its menu follows each. */
   protected readonly cardName = signal<string | undefined>(undefined);
   protected readonly over = signal(false);

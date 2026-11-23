@@ -18,6 +18,9 @@
  * - On iOS it is a TurboModule with `setContextMenu(nativeID, entries)` too, for the same reason.
  *   React Native's iOS view sends no event it does not know either, so the module sends the item
  *   chosen as `{ type: 'contextMenuSelect', nativeID, id }`.
+ * - Where it draws menus on a press, `popUpMenu(view, entries)` draws one under the view with that
+ *   tag now, and sends the item chosen as the view's `topContextMenuSelect`, as a context menu's
+ *   (the desktop host).
  * - Where it draws context menus, `setTakesLongPress(nativeID, takes)` names a view inside one
  *   whose own `(longPress)` takes a long press first: a long press there opens no menu around it,
  *   as the innermost handler wins in a native app. A right-click still opens the menu on Android.
@@ -180,6 +183,11 @@ export interface NativeMenus {
    * not open on one there. Android and iOS, beside `setContextMenu`.
    */
   setTakesLongPress?(nativeID: string, takes: boolean): void;
+  /**
+   * Draw `entries` under the view with tag `view` now, and send the item chosen as its
+   * `topContextMenuSelect`. The desktop host.
+   */
+  popUpMenu?(view: number, entries: readonly NativeMenuEntry[]): void;
   subscribe(listener: (event: NativeMenuEvent) => void): () => void;
 }
 
@@ -193,6 +201,7 @@ interface MenusModule {
   setHistory?(surface: number, history: unknown): void;
   setContextMenu?(nativeID: string, entries: unknown): void;
   setTakesLongPress?(nativeID: string, takes: boolean): void;
+  popUpMenu?(view: number, entries: unknown): void;
   /** An Expo module's own events. */
   addListener?(event: string, listener: (event: unknown) => void): { remove(): void };
 }
@@ -234,15 +243,20 @@ export function menusSource(): NativeMenus | null {
   };
 }
 
-/** The context menu methods a module has, bound, and none it lacks: a host without them reads props. */
+/**
+ * The menu methods a module may lack, bound, and none it lacks: a host without the context menu
+ * ones reads props, and one without `popUpMenu` leaves a press to `(press)`.
+ */
 function contextMenuMethods(
   module: MenusModule,
-): Pick<NativeMenus, 'setContextMenu' | 'setTakesLongPress'> {
+): Pick<NativeMenus, 'setContextMenu' | 'setTakesLongPress' | 'popUpMenu'> {
   const setContextMenu = module.setContextMenu?.bind(module);
   const setTakesLongPress = module.setTakesLongPress?.bind(module);
+  const popUpMenu = module.popUpMenu?.bind(module);
   return {
     ...(setContextMenu && { setContextMenu }),
     ...(setTakesLongPress && { setTakesLongPress }),
+    ...(popUpMenu && { popUpMenu }),
   };
 }
 
@@ -314,6 +328,17 @@ export class Menus {
       if (this.longPressTakers.has(nativeID)) return false;
     }
     return false;
+  }
+
+  /** Whether the host draws a menu under a view on a press (`popUpMenu`): the desktop host. */
+  readonly popsUpMenus: boolean = this.native?.popUpMenu !== undefined;
+
+  /**
+   * Draw `entries` under the view with tag `view` now. The host sends the item chosen as the
+   * view's `topContextMenuSelect`.
+   */
+  popUpMenu(view: number, entries: readonly NativeMenuEntry[]): void {
+    this.native?.popUpMenu?.(view, entries);
   }
 
   /** What choosing an item does, by the `nativeID` of the view whose menu it is in. */

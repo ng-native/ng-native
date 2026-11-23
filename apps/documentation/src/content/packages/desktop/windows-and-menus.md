@@ -34,7 +34,8 @@ once the app sets it, with the host's Developer menu kept before Help; until the
 default bar shows. An item with a `menuRole` is AppKit's own command (Copy reaches the focused
 field) unless the app handles it. An app's `[shortcut]` takes its key press before the menus do,
 except that Cmd-Z, X, C, V and A still reach a focused text input. A view's `[contextMenu]` shows
-as an NSMenu on a secondary click, and its choice comes back to the view. View > Back and Forward
+as an NSMenu on a secondary click, and a `<pressable>`'s `[menu]` as an NSMenu under it on a press
+(`popUpMenu`); either's choice comes back to the view. View > Back and Forward
 (Cmd-[ and Cmd-]), mouse buttons 4 and 5, a three-finger swipe and, with "Swipe between pages",
 a two-finger sideways swipe that nothing scrolls send `navigate` with the window's surface. A back
 swipe over a native stack with a screen below its front one is interactive (`back-swipe.h`): the
@@ -66,7 +67,8 @@ menus' keys, and a focused text input keeps Ctrl+Z, X, C, V and A. A press nothi
 used then reaches its buttons: Return presses a `default` `<native-button>` and Escape a `cancel`
 one, while a focused text input or button keeps Return for itself. Close Window (Ctrl+W) closes the
 sheet, cover or popover in front first, as Escape asks it to, and the window after. A view's
-`[contextMenu]` shows as a GTK popover menu at the secondary click.
+`[contextMenu]` shows as a GTK popover menu at the secondary click, and a `<pressable>`'s `[menu]`
+as one under it on a press.
 
 ## The tray and the Dock
 

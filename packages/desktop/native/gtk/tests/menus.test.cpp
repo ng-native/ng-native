@@ -368,6 +368,35 @@ TEST_CASE("a context menu shows its items at the click, and goes once closed, ev
   CHECK(criticals == 0);
 }
 
+TEST_CASE("a press's menu opens under its view, pointing at the whole of it, and runs the item chosen") {
+  REQUIRE(ngn::testing::gtkReady());
+  GtkWidget *window = gtk_window_new();
+  GtkWidget *view = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_widget_set_size_request(view, 200, 100);
+  gtk_window_set_child(GTK_WINDOW(window), view);
+  gtk_window_present(GTK_WINDOW(window));
+  ngn::testing::runUntil([view] { return gtk_widget_get_width(view) > 0; });
+  CHECK_FALSE(ngn::gtk::popUpMenuUnder(view, {{.separator = true}}, [](const MenuItem &) {}));
+  std::vector<std::string> chosen;
+  REQUIRE(ngn::gtk::popUpMenuUnder(view, {{.title = "Name", .command = MenuCommand::AppItem, .id = "name", .checked = true}},
+                                   [&chosen](const MenuItem &item) { chosen.push_back(item.id); }));
+  GtkWidget *popover = gtk_widget_get_last_child(view);
+  REQUIRE(GTK_IS_POPOVER_MENU(popover));
+  GdkRectangle at{};
+  REQUIRE(gtk_popover_get_pointing_to(GTK_POPOVER(popover), &at));
+  CHECK(at.x == 0);
+  CHECK(at.y == 0);
+  CHECK(at.width == 200);
+  CHECK(at.height == 100);
+  CHECK(gtk_popover_get_position(GTK_POPOVER(popover)) == GTK_POS_BOTTOM);
+  CHECK(gtk_widget_get_halign(popover) == GTK_ALIGN_START);
+  CHECK(gtk_widget_activate_action(popover, "menu.item-0", nullptr));
+  CHECK(chosen == std::vector<std::string>{"name"});
+  gtk_popover_popdown(GTK_POPOVER(popover));
+  gtk_window_destroy(GTK_WINDOW(window));
+  settle();
+}
+
 TEST_CASE("the app's undo history runs its actions on the UI thread, whichever thread registers them") {
   REQUIRE(ngn::testing::gtkReady());
   auto undo = ngn::gtk::makeUndoManager();

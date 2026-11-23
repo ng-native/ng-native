@@ -205,4 +205,20 @@ void installMenuBar(const std::vector<MenuItem> &menus, MenuChosen chosen) {
   NSApp.mainMenu = bar;
 }
 
+// The gap between the view and the menu under it, as a pull-down button leaves.
+constexpr CGFloat kMenuGap = 2;
+
+NSPoint menuLocationUnder(NSView *view) {
+  NSRect bounds = view.bounds;
+  bool rightToLeft = view.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft;
+  return NSMakePoint(
+      rightToLeft ? NSMaxX(bounds) : NSMinX(bounds), view.isFlipped ? NSMaxY(bounds) + kMenuGap : NSMinY(bounds) - kMenuGap);
+}
+
+void popUpMenuUnder(NSMenu *menu, NSView *view) {
+  // A right-to-left menu is placed by its top right corner.
+  menu.userInterfaceLayoutDirection = view.userInterfaceLayoutDirection;
+  [menu popUpMenuPositioningItem:nil atLocation:menuLocationUnder(view) inView:view];
+}
+
 } // namespace ngn::appkit

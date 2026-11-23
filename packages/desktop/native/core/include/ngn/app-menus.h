@@ -132,6 +132,12 @@ class MenuHost {
   // Told, on the thread `setHistory` came on, of a window whose history changed. Set once.
   std::function<void(SurfaceId)> historyChanged;
 
+  // --- menus a press opens ---
+  // Draws `items` under the view with `tag` (`<pressable [menu]>`), told on the thread the app's
+  // `popUpMenu` came on; the host sends the item chosen as the view's `contextMenuSelect`. Set
+  // once by the host.
+  std::function<void(facebook::react::Tag tag, std::vector<MenuItem> items)> popUpMenu;
+
   std::shared_ptr<void> listen(Listener listener);
 
  private:

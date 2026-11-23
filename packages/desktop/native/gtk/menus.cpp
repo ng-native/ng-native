@@ -306,7 +306,12 @@ void GtkMenus::show(GtkWidget *slot) {
   gtk_widget_set_visible(slot, model_ != nullptr && g_menu_model_get_n_items(model_) > 0);
 }
 
-bool popUpContextMenu(GtkWidget *widget, facebook::react::Point point, const std::vector<MenuItem> &items, std::function<void(const MenuItem &)> chosen) {
+namespace {
+
+// A popover menu of `items` on `widget`, pointing at `at` (in the widget's coordinates) and below
+// it (a popover's default side), its leading edge on the rectangle's: nothing when it would show
+// no item.
+bool popUpMenuAt(GtkWidget *widget, GdkRectangle at, const std::vector<MenuItem> &items, std::function<void(const MenuItem &)> chosen) {
   if (items.empty()) {
     return false;
   }
@@ -325,7 +330,6 @@ bool popUpContextMenu(GtkWidget *widget, facebook::react::Point point, const std
   gtk_widget_set_parent(popover, widget);
   gtk_popover_set_has_arrow(GTK_POPOVER(popover), FALSE);
   gtk_widget_set_halign(popover, gtk_widget_get_direction(widget) == GTK_TEXT_DIR_RTL ? GTK_ALIGN_END : GTK_ALIGN_START);
-  GdkRectangle at{static_cast<int>(point.x), static_cast<int>(point.y), 1, 1};
   gtk_popover_set_pointing_to(GTK_POPOVER(popover), &at);
   // It goes once closed, after the item chosen has run.
   // Held until then, so a view that goes first takes nothing from under it.
@@ -339,6 +343,16 @@ bool popUpContextMenu(GtkWidget *widget, facebook::react::Point point, const std
   }), nullptr);
   gtk_popover_popup(GTK_POPOVER(popover));
   return true;
+}
+
+} // namespace
+
+bool popUpContextMenu(GtkWidget *widget, facebook::react::Point point, const std::vector<MenuItem> &items, std::function<void(const MenuItem &)> chosen) {
+  return popUpMenuAt(widget, {static_cast<int>(point.x), static_cast<int>(point.y), 1, 1}, items, std::move(chosen));
+}
+
+bool popUpMenuUnder(GtkWidget *widget, const std::vector<MenuItem> &items, std::function<void(const MenuItem &)> chosen) {
+  return popUpMenuAt(widget, {0, 0, gtk_widget_get_width(widget), gtk_widget_get_height(widget)}, items, std::move(chosen));
 }
 
 bool textInputFocused(GtkWindow *window) {

@@ -364,6 +364,16 @@ std::shared_ptr<NativeModule> makeMenusModule(std::shared_ptr<MenuHost> host) {
             static_cast<SurfaceId>(args[0].asInt()),
             WindowHistory{.back = titles(args[1].getDefault("back")), .forward = titles(args[1].getDefault("forward"))});
       });
+      // popUpMenu(view, entries): the menu a press on the view with that tag opens, under it.
+      async("popUpMenu", [host](const folly::dynamic &args, std::vector<JsCallback>) {
+        if (args.size() < 2 || !args[0].isNumber() || !host->popUpMenu) {
+          return;
+        }
+        auto items = parseMenu(args[1]);
+        if (!items.empty()) {
+          host->popUpMenu(static_cast<facebook::react::Tag>(args[0].asInt()), std::move(items));
+        }
+      });
       listeners();
       subscription = host->listen([this](const folly::dynamic &event) { emit(kEvent, event); });
     }

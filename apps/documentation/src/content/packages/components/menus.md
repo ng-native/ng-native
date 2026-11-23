@@ -1,13 +1,13 @@
 ---
 title: Menus and shortcuts
-summary: A menu bar, context menus and keyboard shortcuts, written once as elements for every OS.
+summary: A menu bar, context menus, press menus and shortcuts, written once as elements for any OS.
 ---
 
 # Menus and shortcuts
 
 Menus are written as elements: `<menu-item>`s inside a `<menu-bar>`, a `<menu-group>` or a template
-given to `[contextMenu]`. They draw nothing in place. Each OS draws the menu its own way, and its
-items stay in step with their bindings for as long as they are there.
+given to `[contextMenu]` or a `<pressable>`'s `[menu]`. They draw nothing in place. Each OS draws
+the menu its own way, and its items stay in step with their bindings for as long as they are there.
 
 ## The menu bar
 
@@ -108,6 +108,29 @@ native side of `@ng-native/components`, which a development build has and Expo G
 Expo Go the menu does not open, and `(longPress)` fires as it would without one. The web host does
 not draw it.
 
+## Menus on a press
+
+```angular-html
+<pressable [menu]="sortMenu">
+  <text>Sort by {{ sortLabel() }}</text>
+</pressable>
+<ng-template #sortMenu>
+  <menu-item label="Name" [checked]="sort() === 'name'" (select)="sort.set('name')" />
+  <menu-item label="Date" [checked]="sort() === 'date'" (select)="sort.set('date')" />
+</ng-template>
+```
+
+`[menu]` on a `<pressable>` opens its menu under the element on a press: a click, a screen
+reader's press, or on macOS Space while it has focus. `(press)` does not fire then. The menu is
+written as a context menu's is, and a one-way `[checked]` stays as the app binds it, so a menu of
+choices like this one is a pop-up select. `open()` opens it from code, named in the template with
+`#sort="pressMenu"`, and says whether it opened.
+
+macOS draws it as a menu under the element, and Linux as a popover menu below it. iOS, Android,
+Expo Go and the web host draw none yet: there a press fires `(press)` as it would without
+`[menu]`, and a warning in development says so once. A menu that shows no item opens nothing, and
+the press fires `(press)`.
+
 ## Reference
 
 <!-- api: MenuItem -->
@@ -115,5 +138,7 @@ not draw it.
 <!-- api: MenuGroup -->
 
 <!-- api: ContextMenu -->
+
+<!-- api: PressMenu -->
 
 <!-- api: Shortcut -->

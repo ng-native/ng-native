@@ -328,6 +328,29 @@ TEST_CASE("a context menu reads the entries a view's contextMenu prop gives") {
   CHECK(ngn::parseMenu(nullptr).empty());
 }
 
+TEST_CASE("popUpMenu hands the host the view's tag and its menu, and nothing without a view") {
+  Fixture f;
+  std::vector<std::pair<facebook::react::Tag, std::vector<std::string>>> popUps;
+  f.host->popUpMenu = [&](facebook::react::Tag tag, std::vector<ngn::MenuItem> items) {
+    popUps.emplace_back(tag, titles(items));
+  };
+  f.module->call(
+      "popUpMenu",
+      dynamic::array(
+          42,
+          dynamic::array(
+              dynamic::object("id", "a1")("label", "Name")("checked", true),
+              dynamic::object("separator", true),
+              dynamic::object("id", "a2")("label", "Date")("checked", false))));
+  REQUIRE(popUps.size() == 1);
+  CHECK(popUps[0].first == 42);
+  CHECK(popUps[0].second == std::vector<std::string>{"Name", "-", "Date"});
+  f.module->call("popUpMenu", dynamic::array(nullptr, dynamic::array(dynamic::object("id", "a1")("label", "Name"))));
+  f.module->call("popUpMenu", dynamic::array(42, dynamic::array()));
+  f.module->call("popUpMenu", dynamic::array(42));
+  CHECK(popUps.size() == 1);
+}
+
 TEST_CASE("the app reports each window's history, and the host hears when it changes") {
   Fixture f;
   std::vector<ngn::SurfaceId> changed;

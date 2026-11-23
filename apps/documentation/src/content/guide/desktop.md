@@ -55,7 +55,8 @@ runtime.
   component in each, or a named outlet of the app's one Router. See
   [Windows](/packages/device/app-windows).
 - **Menus.** Every app gets the standard menu bar. `<menu-bar>`, `<menu-group>` and `<menu-item>`
-  add to it, `[contextMenu]` gives a view a menu on a secondary click, and `[shortcut]` a key.
+  add to it, `[contextMenu]` gives a view a menu on a secondary click, `[menu]` gives a
+  `<pressable>` one on a click, and `[shortcut]` a key.
   See [Menus](/packages/components/menus).
 - **A sidebar.** `<split-view>`, `<sidebar>`, `<sidebar-section>` and `<sidebar-item>` are the
   window's source list, and a tab app's tabs become one. See

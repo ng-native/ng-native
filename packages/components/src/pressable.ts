@@ -25,6 +25,7 @@ import {
   type NativeSyntheticEvent,
 } from '@ng-native/fabric';
 import { CONTEXT_MENU } from './context-menu.ts';
+import { PRESS_MENU } from './press-menu.ts';
 import type { Insets, TouchEvent } from './events.ts';
 import {
   describeElement,
@@ -238,6 +239,8 @@ export abstract class TouchableBase extends ViewBase {
   private longPressListeners = 0;
   /** A `[contextMenu]` on the same element, whose menu a long press may open instead. */
   private readonly contextMenu = inject(CONTEXT_MENU, { self: true, optional: true });
+  /** A `[menu]` on the same element, which a press opens instead of firing `(press)`. */
+  private readonly pressMenu = inject(PRESS_MENU, { self: true, optional: true });
   /**
    * For `Menus`, read only where there is a `(longPress)` (see `takeLongPressFromMenus`), and for
    * the interaction observers, read only once something is pressed.
@@ -559,6 +562,7 @@ export abstract class TouchableBase extends ViewBase {
    * Observers are looked up here rather than injected, because a press is rare and a lookup for
    * every `<text>` on screen is not. A press is reported whether or not anything listens to it: a
    * control that does nothing when tapped is what an observer looking for dead taps wants to hear.
+   * A press on an element whose `[menu]` opens is reported, and `(press)` does not fire.
    */
   protected emitReported(
     output: { emit(event: PressEvent): void },
@@ -568,7 +572,7 @@ export abstract class TouchableBase extends ViewBase {
   ): void {
     const observers = interactionObservers(this.injector);
     const interaction = observers && this.describeInteraction(type, event, source);
-    output.emit(event);
+    if (output !== this.press || !this.pressMenu?.open()) output.emit(event);
     if (observers && interaction) notifyInteraction(observers, interaction);
   }
 

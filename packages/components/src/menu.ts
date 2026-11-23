@@ -15,8 +15,10 @@ import {
   model,
   output,
   signal,
+  type OnChanges,
   type OutputEmitterRef,
   type Signal,
+  type SimpleChanges,
 } from '@angular/core';
 import {
   MENU_MODEL,
@@ -27,6 +29,7 @@ import {
   type MenuRole,
 } from '@ng-native/device';
 import type { EngineNode } from '@ng-native/fabric';
+import { ControlledModel } from './controlled-model.ts';
 
 export { menuModelInTreeOrder, treeOrder } from '@ng-native/device';
 
@@ -68,15 +71,16 @@ function listened(emitter: OutputEmitterRef<void>): Signal<boolean> {
 }
 
 /**
- * One item of a menu. `(select)` fires when it is chosen, and a `[(checked)]` item toggles. An
- * item with a `menuRole` and no `(select)` does what the OS does for that role.
+ * One item of a menu. `(select)` fires when it is chosen, and a `[(checked)]` item toggles. A
+ * one-way `[checked]` stays as the app binds it, so a menu of choices checks the one the app keeps.
+ * An item with a `menuRole` and no `(select)` does what the OS does for that role.
  */
 @Component({
   selector: 'menu-item',
   template: '',
   host: { '[style.display]': '"none"' },
 })
-export class MenuItem {
+export class MenuItem implements OnChanges {
   readonly label = input('');
   /** What the item is for, where the OS has a standard one: it replaces that default. */
   readonly menuRole = input<MenuRole>();
@@ -85,6 +89,7 @@ export class MenuItem {
   readonly disabled = input(false, { transform: booleanAttribute });
   /** A check mark. Bound two-way, it toggles as the item is chosen. */
   readonly checked = model<boolean | undefined>(undefined);
+  private readonly checkedModel = new ControlledModel(this.checked, 'checked');
   readonly destructive = input(false, { transform: booleanAttribute });
   readonly subtitle = input<string>();
   /** An SF Symbol, on Apple's OSes. */
@@ -119,11 +124,15 @@ export class MenuItem {
     );
   }
 
+  ngOnChanges(changes: SimpleChanges): void {
+    this.checkedModel.noteChanges(changes);
+  }
+
   /** One handler for the item's life: the id a host reports a choice by. See `menuActionId`. */
   private readonly choose = (): void => {
     if (this.disabled()) return;
     const checked = this.checked();
-    if (checked !== undefined) this.checked.set(!checked);
+    if (checked !== undefined) this.checkedModel.propose(!checked);
     this.select.emit();
   };
 }

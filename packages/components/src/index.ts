@@ -69,6 +69,7 @@ export {
 } from './modal.ts';
 export { MenuBar, MenuGroup, MenuItem, MenuSeparator, treeOrder } from './menu.ts';
 export { CONTEXT_MENU, ContextMenu } from './context-menu.ts';
+export { PRESS_MENU, PressMenu } from './press-menu.ts';
 export { Shortcut } from './shortcut.ts';
 export {
   DragItem,
