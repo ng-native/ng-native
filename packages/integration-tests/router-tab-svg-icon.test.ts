@@ -59,7 +59,7 @@ class FakeSvgRenderer {
 const icon = () => mod['icon'] as WritableSignal<TabIcon | undefined>;
 const selectedIcon = () => mod['selectedIcon'] as WritableSignal<TabIcon | undefined>;
 
-async function start(renderer: boolean, platform: 'ios' | 'android' = 'ios') {
+async function start(renderer: boolean, platform: 'ios' | 'android' | 'macos' | 'linux' = 'ios') {
   registerPlatformComponents(platform);
   registerScreenComponents();
   const app = await render(mod['Shell'] as Type<unknown>, {
@@ -218,4 +218,32 @@ describe('an SVG tab icon', () => {
       console.warn = warn;
     }
   });
+
+  for (const os of ['macos', 'linux'] as const) {
+    it(`reaches the ${os} host as its markup, which it draws itself, with no renderer and no warning`, async () => {
+      const warned: unknown[] = [];
+      const warn = console.warn;
+      console.warn = (message: unknown) => warned.push(message);
+      try {
+        const { home } = await start(false, os);
+        assert.equal(home().props['iconType'], 'template');
+        assert.deepEqual(home().props['iconImageSource'], {
+          uri: `data:image/svg+xml;utf8,${encodeURIComponent('<svg id="home"/>')}`,
+        });
+        icon().set({ svg: '<svg id="away"/>' });
+        await idle();
+        assert.deepEqual(home().props['iconImageSource'], {
+          uri: `data:image/svg+xml;utf8,${encodeURIComponent('<svg id="away"/>')}`,
+        });
+        icon().set({ sfSymbol: 'house' });
+        await idle();
+        assert.equal(home().props['iconType'], 'sfSymbol');
+        assert.equal(home().props['iconImageSource'], null, 'taken away when it stops being SVG');
+        assert.equal(drawings.length, 0);
+        assert.deepEqual(warned, []);
+      } finally {
+        console.warn = warn;
+      }
+    });
+  }
 });

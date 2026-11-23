@@ -12,6 +12,7 @@
 #include <adwaita.h>
 #include <doctest/doctest.h>
 
+#include <cmath>
 #include <map>
 
 using namespace facebook::react;
@@ -83,6 +84,26 @@ std::vector<GtkWidget *> rowsOf(GtkWidget *box) {
     }
   }
   return rows;
+}
+
+// An icon whose top half is filled, to tell it drew, and drew the right way up.
+constexpr const char *kTopHalfIcon = R"svg(<svg viewBox="0 0 16 16"><rect width="16" height="8"/></svg>)svg";
+
+// A style making `.ngn-test-red` red, taken away again on every way out.
+struct RedStyle {
+  GtkCssProvider *provider = gtk_css_provider_new();
+  RedStyle() {
+    gtk_css_provider_load_from_data(provider, ".ngn-test-red { color: rgb(255, 0, 0); }", -1);
+    gtk_style_context_add_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
+  }
+  ~RedStyle() {
+    gtk_style_context_remove_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(provider));
+    g_object_unref(provider);
+  }
+};
+
+uint32_t argbOf(const ngn::testing::Pixel &p) {
+  return static_cast<uint32_t>(p.a) << 24 | p.r << 16 | p.g << 8 | p.b;
 }
 
 } // namespace
@@ -364,16 +385,26 @@ struct TabsGlue {
   }
 };
 
-Props::Shared tab(const char *key, const char *title) {
+Props::Shared tab(const char *key, const char *title, std::string svgIcon = "") {
   auto props = std::make_shared<TabProps>();
-  props->tab = {.screenKey = key, .title = title};
+  props->tab = {.screenKey = key, .title = title, .svgIcon = std::move(svgIcon)};
   return props;
 }
 
 std::string rowLabel(GtkWidget *row) {
   GtkWidget *content = gtk_list_box_row_get_child(GTK_LIST_BOX_ROW(row));
   GtkWidget *label = content ? gtk_widget_get_first_child(content) : nullptr;
-  return label && GTK_IS_LABEL(label) ? gtk_label_get_text(GTK_LABEL(label)) : "";
+  while (label && !GTK_IS_LABEL(label)) {
+    label = gtk_widget_get_next_sibling(label);
+  }
+  return label ? gtk_label_get_text(GTK_LABEL(label)) : "";
+}
+
+// A native row's SVG icon, the first of its content, or null.
+GtkWidget *rowIcon(GtkWidget *row) {
+  GtkWidget *content = gtk_list_box_row_get_child(GTK_LIST_BOX_ROW(row));
+  GtkWidget *first = content ? gtk_widget_get_first_child(content) : nullptr;
+  return first && GTK_IS_DRAWING_AREA(first) ? first : nullptr;
 }
 
 } // namespace
@@ -649,7 +680,7 @@ TEST_CASE("a tabs host is a split view whose sidebar lists its tabs and whose co
   views.backend->hooks.chooseTab = [&views](SurfaceId surface, Tag host, Tag screen) { views.mounting->chooseTab(surface, host, screen); };
   auto host = view(2, "RNSTabsHostIOS", std::make_shared<const ViewProps>(), {{0, 0}, {800, 500}});
   auto library = view(3, "RNSTabsScreenIOS", tab("library", "Library"), {{0, 0}, {560, 500}});
-  auto search = view(4, "RNSTabsScreenIOS", tab("search", "Search"), {{0, 0}, {560, 500}});
+  auto search = view(4, "RNSTabsScreenIOS", tab("search", "Search", kTopHalfIcon), {{0, 0}, {560, 500}});
   views.mount({ShadowViewMutation::CreateMutation(host), ShadowViewMutation::CreateMutation(library), ShadowViewMutation::CreateMutation(search),
                ShadowViewMutation::InsertMutation(MountedViews::kSurface, host, 0), ShadowViewMutation::InsertMutation(2, library, 0),
                ShadowViewMutation::InsertMutation(2, search, 1)});
@@ -672,6 +703,9 @@ TEST_CASE("a tabs host is a split view whose sidebar lists its tabs and whose co
   REQUIRE(rows.size() == 2);
   CHECK(rowLabel(rows[0]) == "Library");
   CHECK(rowLabel(rows[1]) == "Search");
+  // A tab's SVG icon is drawn before its title, and a tab with none has none.
+  CHECK(rowIcon(rows[0]) == nullptr);
+  CHECK(rowIcon(rows[1]) != nullptr);
   CHECK(gtk_list_box_get_selected_row(GTK_LIST_BOX(boxes[0])) == GTK_LIST_BOX_ROW(rows[0]));
   // The content page has the chosen tab's title, which its header bar shows when the screen has none.
   auto contentTitle = [&] {
@@ -827,4 +861,42 @@ TEST_CASE("a compact window showing the sidebar alone has a button in its header
   // Wide, the sidebar and the content are side by side: no need of it.
   s.splits().setCompact(2, false);
   CHECK_FALSE(gtk_widget_get_visible(button));
+}
+
+TEST_CASE("a native row draws its item's SVG icon in the row's text colour, and none once it is taken away") {
+  REQUIRE(ngn::testing::gtkReady());
+  Split s;
+  s.views.update(s.inbox, parsedProps<ngn::SidebarItemComponentDescriptor>(dynamic::object("label", "Inbox")("svgIcon", kTopHalfIcon)));
+  auto rows = rowsOf(s.splits().lists(3)[0]);
+  REQUIRE(rows.size() == 3);
+  GtkWidget *icon = rowIcon(rows[1]);
+  REQUIRE(icon);
+  CHECK(rowLabel(rows[1]) == "Inbox");
+  CHECK(rowIcon(rows[2]) == nullptr);
+  ngn::testing::runUntil([&] { return gtk_widget_get_width(icon) == 16 && gtk_widget_get_height(icon) == 16; });
+
+  // Its top half in the colour the label beside it has, its bottom half clear.
+  GdkRGBA color;
+  gtk_widget_get_color(icon, &color);
+  auto top = ngn::testing::widgetPixel(icon, 8, 2);
+  CHECK(top.a > 200);
+  CHECK(std::abs(top.r - std::lround(color.red * 255)) <= 2);
+  CHECK(std::abs(top.g - std::lround(color.green * 255)) <= 2);
+  CHECK(std::abs(top.b - std::lround(color.blue * 255)) <= 2);
+  CHECK(ngn::testing::widgetPixel(icon, 8, 13).a == 0);
+
+  // A style that changes the row's colour draws the icon again in it.
+  {
+    RedStyle red;
+    gtk_widget_add_css_class(rows[1], "ngn-test-red");
+    s.views.settle();
+    CHECK(argbOf(ngn::testing::widgetPixel(icon, 8, 2)) == 0xffff0000);
+  }
+
+  s.views.update(s.inbox, parsedProps<ngn::SidebarItemComponentDescriptor>(dynamic::object("label", "Inbox")));
+  rows = rowsOf(s.splits().lists(3)[0]);
+  CHECK(rowIcon(rows[1]) == nullptr);
+  // Markup that is no svg is no icon.
+  s.views.update(s.inbox, parsedProps<ngn::SidebarItemComponentDescriptor>(dynamic::object("label", "Inbox")("svgIcon", "lucideBlocks")));
+  CHECK(rowIcon(rowsOf(s.splits().lists(3)[0])[1]) == nullptr);
 }

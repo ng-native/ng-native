@@ -63,9 +63,11 @@ export type TabIcon =
   /** Android: a drawable resource name. */
   | { readonly drawable: string }
   /**
-   * SVG markup, such as an `@ng-icons` icon, drawn as a mask and tinted like `template`. Native
-   * cannot draw SVG, so it is drawn once by the renderer `withSvgIcons` provides, `size` points
-   * square: 25 on iOS and 24 on Android unless it says. The tab has no icon until it has been.
+   * SVG markup, such as an `@ng-icons` icon, drawn as a mask and tinted like `template`. On iOS
+   * and Android it is drawn once by the renderer `withSvgIcons` provides, `size` points square:
+   * 25 on iOS and 24 on Android unless it says, and the tab has no icon until it has been. On
+   * macOS and Linux the host draws the markup itself, as the icon of the tab's sidebar row, and
+   * needs no renderer.
    */
   | { readonly svg: string; readonly size?: number };
 
@@ -262,6 +264,13 @@ function warnNoSvgRenderer(path: string): void {
   );
 }
 
+const isDesktop = () => nativePlatform() === 'macos' || nativePlatform() === 'linux';
+
+/** SVG markup as the `data:` uri a desktop host reads a tab's SVG icon from. */
+function svgDataUri(svg: string): string {
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 /** A tab bar icon's size in points when an SVG icon gives none, as each platform draws one. */
 function svgIconSize(): number {
   return nativePlatform() === 'android' ? 24 : 25;
@@ -411,7 +420,8 @@ export class NativeTab implements OnInit {
 
   /**
    * An SVG icon as the renderer drew it, undefined until it has. Markup that changes is drawn
-   * again, and a drawing that finishes after newer markup arrived is dropped.
+   * again, and a drawing that finishes after newer markup arrived is dropped. On a desktop it is
+   * the markup itself, as a data uri.
    */
   private drawn(icon: Signal<TabIcon | undefined>): Signal<unknown> {
     const markup = computed(
@@ -421,6 +431,13 @@ export class NativeTab implements OnInit {
       },
       { equal: (a, b) => a?.svg === b?.svg && a?.size === b?.size },
     );
+    // A desktop host draws the markup itself, which it reads from a data uri.
+    if (isDesktop()) {
+      return computed(() => {
+        const wanted = markup();
+        return wanted && { uri: svgDataUri(wanted.svg) };
+      });
+    }
     const drawn = signal<unknown>(undefined);
     effect((onCleanup) => {
       const wanted = markup();

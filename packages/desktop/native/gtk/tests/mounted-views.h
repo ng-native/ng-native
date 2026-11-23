@@ -114,6 +114,32 @@ struct Pixel {
   int r{0}, g{0}, b{0}, a{0};
 };
 
+// `widget`'s pixel at (x, y) in its points, as GTK draws it now.
+inline Pixel widgetPixel(GtkWidget *widget, int x, int y) {
+  GdkTexture *texture = gtk::renderWidget(widget);
+  if (!texture) {
+    throw std::runtime_error("the widget did not render");
+  }
+  int width = gdk_texture_get_width(texture);
+  int height = gdk_texture_get_height(texture);
+  int scale = width / std::max(1, gtk_widget_get_width(widget));
+  std::vector<guchar> data(static_cast<size_t>(width) * height * 4);
+  gdk_texture_download(texture, data.data(), static_cast<size_t>(width) * 4);
+  // NGN_GTK_TEST_SHOTS=<dir> keeps each widget read, for a failure on a machine without a screen.
+  if (const char *dir = getenv("NGN_GTK_TEST_SHOTS"); dir && *dir) {
+    static int shot = 0;
+    gdk_texture_save_to_png(texture, (std::string(dir) + "/shot-" + std::to_string(++shot) + ".png").c_str());
+  }
+  g_object_unref(texture);
+  int px = std::clamp(x * scale + scale / 2, 0, width - 1);
+  int py = std::clamp(y * scale + scale / 2, 0, height - 1);
+  // GDK_MEMORY_DEFAULT: B, G, R, A, premultiplied.
+  const guchar *p = &data[(static_cast<size_t>(py) * width + px) * 4];
+  int a = p[3];
+  auto un = [a](int c) { return a == 0 ? 0 : std::min(255, c * 255 / a); };
+  return {un(p[2]), un(p[1]), un(p[0]), a};
+}
+
 struct MountedViews {
   static constexpr facebook::react::SurfaceId kSurface = 1;
 
@@ -208,28 +234,7 @@ struct MountedViews {
 
   // The surface's pixel at (x, y) in its points, as GTK draws it now.
   Pixel pixel(int x, int y) const {
-    GdkTexture *texture = gtk::renderWidget(surface);
-    if (!texture) {
-      throw std::runtime_error("the surface did not render");
-    }
-    int width = gdk_texture_get_width(texture);
-    int height = gdk_texture_get_height(texture);
-    int scale = width / std::max(1, gtk_widget_get_width(surface));
-    std::vector<guchar> data(static_cast<size_t>(width) * height * 4);
-    gdk_texture_download(texture, data.data(), static_cast<size_t>(width) * 4);
-    // NGN_GTK_TEST_SHOTS=<dir> keeps each surface read, for a failure on a machine without a screen.
-    if (const char *dir = getenv("NGN_GTK_TEST_SHOTS"); dir && *dir) {
-      static int shot = 0;
-      gdk_texture_save_to_png(texture, (std::string(dir) + "/shot-" + std::to_string(++shot) + ".png").c_str());
-    }
-    g_object_unref(texture);
-    int px = std::clamp(x * scale + scale / 2, 0, width - 1);
-    int py = std::clamp(y * scale + scale / 2, 0, height - 1);
-    // GDK_MEMORY_DEFAULT: B, G, R, A, premultiplied.
-    const guchar *p = &data[(static_cast<size_t>(py) * width + px) * 4];
-    int a = p[3];
-    auto un = [a](int c) { return a == 0 ? 0 : std::min(255, c * 255 / a); };
-    return {un(p[2]), un(p[1]), un(p[0]), a};
+    return widgetPixel(surface, x, y);
   }
 };
 

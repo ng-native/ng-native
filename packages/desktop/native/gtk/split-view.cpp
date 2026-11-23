@@ -2,6 +2,7 @@
 
 #include "gtk-backend.h"
 #include "screens.h"
+#include "svg-icon.h"
 #include "view-widget.h"
 
 #include <react/renderer/core/ConcreteState.h>
@@ -74,6 +75,9 @@ static void ngn_pane_slot_init(NgnPaneSlot *slot) {
 namespace ngn::gtk {
 
 namespace {
+
+// The side of a row's SVG icon: Adwaita's for a symbolic icon.
+constexpr int kRowIconSize = 16;
 
 // The label of the item the app selects in a list, or null where it selects none.
 const char *selectedLabel(const SourceList &list) {
@@ -882,6 +886,10 @@ void SplitViews::fill(Tag parent, Lists &l, size_t index) {
         gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), slot);
       } else {
         GtkWidget *content = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        // An SF Symbol has no Linux equivalent, so only an SVG icon is drawn.
+        if (GtkWidget *icon = makeSvgIcon(r.svgIcon, kRowIconSize)) {
+          gtk_box_append(GTK_BOX(content), icon);
+        }
         GtkWidget *label = gtk_label_new(r.label.c_str());
         gtk_label_set_xalign(GTK_LABEL(label), 0);
         gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);

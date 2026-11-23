@@ -134,6 +134,7 @@ add_library(ngn_core STATIC
     core/src/spawn-rules.cpp
     core/src/split-view.cpp
     core/src/svg.cpp
+    core/src/svg-markup.cpp
     core/src/symbol.cpp
     core/src/system.cpp
     core/src/tabs-host.cpp

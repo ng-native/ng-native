@@ -79,6 +79,7 @@ NativeControlProps::NativeControlProps(
       title(convertRawProp(context, rawProps, "title", sourceProps.title, {})),
       kind(convertRawProp(context, rawProps, "kind", sourceProps.kind, {})),
       sfSymbol(convertRawProp(context, rawProps, "sfSymbol", sourceProps.sfSymbol, {})),
+      svgIcon(convertRawProp(context, rawProps, "svgIcon", sourceProps.svgIcon, {})),
       value(convertRawProp(context, rawProps, "value", sourceProps.value, false)),
       animating(convertRawProp(context, rawProps, "animating", sourceProps.animating, true)),
       hidesWhenStopped(convertRawProp(context, rawProps, "hidesWhenStopped", sourceProps.hidesWhenStopped, true)),

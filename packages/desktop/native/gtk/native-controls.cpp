@@ -1,6 +1,7 @@
 #include "native-controls.h"
 
 #include "screens.h"
+#include "svg-icon.h"
 
 #include <react/renderer/core/RawEvent.h>
 
@@ -105,8 +106,37 @@ void setClass(GtkWidget *widget, const char *name, bool on) {
 
 // --- Button -----------------------------------------------------------------------------------
 
+// The side of a button's SVG icon: Adwaita's for a symbolic icon.
+constexpr int kButtonIconSize = 16;
+
+// The button's content: its title, or its SVG icon and its title, drawn in the button's text colour.
+// The icon is made again only when its markup changes.
+void setButtonContent(GtkWidget *button, const NativeControlProps &p) {
+  GtkWidget *child = gtk_button_get_child(GTK_BUTTON(button));
+  GtkWidget *icon = child && GTK_IS_BOX(child) ? gtk_widget_get_first_child(child) : nullptr;
+  const char *drawn = icon ? static_cast<const char *>(g_object_get_data(G_OBJECT(icon), "ngn-svg-icon")) : nullptr;
+  if (drawn && p.svgIcon == drawn) {
+    GtkWidget *label = gtk_widget_get_next_sibling(icon);
+    gtk_label_set_text(GTK_LABEL(label), p.title.c_str());
+    gtk_widget_set_visible(label, !p.title.empty());
+    return;
+  }
+  icon = makeSvgIcon(p.svgIcon, kButtonIconSize);
+  if (!icon) {
+    gtk_button_set_label(GTK_BUTTON(button), p.title.c_str());
+    return;
+  }
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+  gtk_widget_set_halign(box, GTK_ALIGN_CENTER);
+  GtkWidget *label = gtk_label_new(p.title.c_str());
+  gtk_widget_set_visible(label, !p.title.empty());
+  gtk_box_append(GTK_BOX(box), icon);
+  gtk_box_append(GTK_BOX(box), label);
+  gtk_button_set_child(GTK_BUTTON(button), box);
+}
+
 void configureButton(GtkWidget *button, const NativeControlProps &p) {
-  gtk_button_set_label(GTK_BUTTON(button), p.title.c_str());
+  setButtonContent(button, p);
   setClass(button, "suggested-action", p.kind == "default");
   setClass(button, "destructive-action", p.kind == "destructive");
   setClass(button, "flat", p.kind == "plain");
@@ -723,7 +753,11 @@ void applyControlProps(ViewData &view) {
   gtk_widget_set_sensitive(w, p->enabled);
   // The app's label for the control, which reads its own (a button's title) without one.
   // And its hint, which the view around the control is no accessible element to carry.
-  for (auto [property, text] : {std::pair{GTK_ACCESSIBLE_PROPERTY_LABEL, &p->accessibilityLabel},
+  // A button holding an icon and its title is named by the title, as one holding only the title is.
+  const std::string *label = p->accessibilityLabel.empty() && c->kind == ControlKind::Button && !p->svgIcon.empty()
+      ? &p->title
+      : &p->accessibilityLabel;
+  for (auto [property, text] : {std::pair{GTK_ACCESSIBLE_PROPERTY_LABEL, label},
                                 std::pair{GTK_ACCESSIBLE_PROPERTY_DESCRIPTION, &p->accessibilityHint}}) {
     if (!text->empty()) {
       gtk_accessible_update_property(GTK_ACCESSIBLE(w), property, text->c_str(), -1);

@@ -58,7 +58,7 @@ std::string controlSizeKey(ControlKind kind, const NativeControlProps &p) {
   key.add(static_cast<int>(p.controlSize));
   switch (kind) {
     case ControlKind::Button:
-      key.add(p.title).add(p.kind).add(p.sfSymbol);
+      key.add(p.title).add(p.kind).add(p.sfSymbol).add(p.svgIcon);
       break;
     case ControlKind::Switch:
       break;

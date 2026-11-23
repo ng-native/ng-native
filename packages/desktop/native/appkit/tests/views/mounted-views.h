@@ -136,4 +136,26 @@ struct MountedViews {
   }
 };
 
+// The alpha of `image` drawn `size` points square at 1x, at the pixel (x, y) from its top left.
+inline CGFloat imageAlpha(NSImage *image, CGFloat size, NSInteger x, NSInteger y) {
+  NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil
+                                                                  pixelsWide:(NSInteger)size
+                                                                  pixelsHigh:(NSInteger)size
+                                                               bitsPerSample:8
+                                                             samplesPerPixel:4
+                                                                    hasAlpha:YES
+                                                                    isPlanar:NO
+                                                              colorSpaceName:NSDeviceRGBColorSpace
+                                                                 bytesPerRow:0
+                                                                bitsPerPixel:0];
+  [NSGraphicsContext saveGraphicsState];
+  NSGraphicsContext.currentContext = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
+  [image drawInRect:NSMakeRect(0, 0, size, size)];
+  [NSGraphicsContext restoreGraphicsState];
+  return [rep colorAtX:x y:y].alphaComponent;
+}
+
+// An icon whose top half is filled, to tell it drew, and drew the right way up.
+inline constexpr const char *kTopHalfIcon = R"svg(<svg viewBox="0 0 16 16"><rect width="16" height="8"/></svg>)svg";
+
 } // namespace ngn::testing

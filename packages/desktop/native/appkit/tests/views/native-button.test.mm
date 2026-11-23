@@ -35,3 +35,30 @@ TEST_CASE("only a default button takes Return, a cancel one takes Escape, and on
   m.update(plain, nativeButtonProps(folly::dynamic::object("title", "Later")));
   CHECK([keyOf(m, 2) isEqualToString:@""]);
 }
+
+TEST_CASE("a button draws its SVG icon as a template image beside its title, sized to its text") {
+  MountedViews m;
+  auto save = MountedViews::shadow(
+      2, "NgNativeButton", nativeButtonProps(folly::dynamic::object("title", "Save")("svgIcon", ngn::testing::kTopHalfIcon)));
+  m.add(save);
+  auto buttonOf = [&] {
+    NSButton *button = (NSButton *)[m.view(2) keyboardResponder];
+    REQUIRE([button isKindOfClass:NSButton.class]);
+    return button;
+  };
+  NSImage *image = buttonOf().image;
+  REQUIRE((image != nil));
+  CHECK([image isTemplate]);
+  CHECK(buttonOf().imagePosition == NSImageLeading);
+  // 13 points of text at the regular size.
+  CHECK(image.size.width == 16);
+  CHECK(ngn::testing::imageAlpha(image, 16, 8, 2) == doctest::Approx(1));
+  CHECK(ngn::testing::imageAlpha(image, 16, 8, 13) == doctest::Approx(0));
+
+  m.update(save, nativeButtonProps(folly::dynamic::object("title", "Save")("svgIcon", ngn::testing::kTopHalfIcon)("controlSize", "small")));
+  CHECK(buttonOf().image.size.width < 16);
+
+  m.update(save, nativeButtonProps(folly::dynamic::object("title", "Save")));
+  CHECK((buttonOf().image == nil));
+  CHECK(buttonOf().imagePosition == NSNoImage);
+}

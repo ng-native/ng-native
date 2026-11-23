@@ -34,7 +34,16 @@ greys it out.
 - **`sfSymbol`** - an SF Symbol beside the label, on iOS and macOS.
 - **`drawable`** - a drawable resource beside the label, on Android.
 - **`icon`** - either of the two as one value, `{ sfSymbol }` or `{ drawable }`, as on
-  `<native-tab>`.
+  `<native-tab>`, or on macOS and Linux an icon's SVG markup, `{ svg }`, such as an `@ng-icons`
+  icon:
+
+  ```html
+  <native-button [icon]="{ svg: lucidePlus }">Add</native-button>
+  ```
+
+  The host draws it as it draws a symbol: a template image AppKit tints on macOS, and in the
+  button's text colour on Linux. iOS, Android and the web show no SVG icon, and in development
+  the button says so once.
 
 `(press)` fires once for each click, tap or key that activates it. On Android it takes
 `android_ripple` and the rest of a `<pressable>`'s press inputs.

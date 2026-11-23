@@ -183,6 +183,7 @@ export const WRITTEN_PROPS: readonly string[] = [
   'styleAttr',
   'submitBehavior',
   'supportedOrientations',
+  'svgIcon',
   'testID',
   'text',
   'textAlign',

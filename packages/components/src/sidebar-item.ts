@@ -17,6 +17,7 @@ import { ControlBase, TouchableBase } from './pressable.ts';
 import { Sidebar, type SidebarRow } from './sidebar.ts';
 import { hostDraws } from './split-view.ts';
 import { Text } from './text.ts';
+import { svgIconMarkup } from './svg-icon.ts';
 
 /**
  * On macOS a row of the sidebar's source list, a model object the desktop host builds an
@@ -85,6 +86,7 @@ export type SidebarItemIcon = ButtonIcon;
     '[badge]': 'drawnHere ? undefined : badge()',
     '[sfSymbol]': 'drawnHere ? undefined : symbol()',
     '[drawable]': 'drawnHere ? undefined : drawableResource()',
+    '[svgIcon]': 'drawnHere ? undefined : svgIcon()',
     '[selected]': 'drawnHere ? undefined : selected()',
     '[attr.data-selected]': "selected() ? '' : null",
     '[attr.data-emphasized]': "emphasized() ? '' : null",
@@ -106,7 +108,10 @@ export class SidebarItem extends ControlBase implements SidebarRow {
   readonly sfSymbol = input<string>();
   /** Android: a drawable resource before the label. */
   readonly drawableName = input<string>(undefined, { alias: 'drawable' });
-  /** The picture for each OS at once, as on `<native-tab>`. */
+  /**
+   * The picture for each OS at once, as on `<native-tab>`. On macOS and Linux it can be an icon's
+   * SVG markup, `[icon]="{ svg: lucideBlocks }"`, which the host draws in the row's text colour.
+   */
   readonly icon = input<SidebarItemIcon>();
   /** Whether this is the sidebar's selected item. A `path` from the router sets it by route. */
   readonly selected = model(false);
@@ -131,6 +136,8 @@ export class SidebarItem extends ControlBase implements SidebarRow {
     const icon = this.icon();
     return this.drawableName() ?? (icon && 'drawable' in icon ? icon.drawable : undefined);
   });
+
+  protected readonly svgIcon = computed(() => svgIconMarkup(this.icon(), 'sidebar-item'));
 
   private stopSelect: (() => void) | null = null;
   private stopEmphasis: (() => void) | null = null;

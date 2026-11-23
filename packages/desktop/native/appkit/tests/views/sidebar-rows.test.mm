@@ -198,3 +198,42 @@ TEST_CASE("A click the window sends to a custom row's views goes to the content 
   CHECK(presses.downs == 1);
   [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:NSDate.distantPast inMode:NSDefaultRunLoopMode dequeue:YES];
 }
+
+TEST_CASE("A native row draws its item's SVG icon as a template image, and none once it is taken away") {
+  MountedViews mounted;
+  Restore restore;
+  NGNSplitView.input = &mounted.input;
+  mounted.add(MountedViews::shadow(4, "View", viewProps(folly::dynamic::object())));
+  mounted.add(MountedViews::shadow(5, ngn::SidebarSectionComponentName, sectionProps(folly::dynamic::object())), 4);
+  auto item = MountedViews::shadow(
+      6, ngn::SidebarItemComponentName, itemProps(folly::dynamic::object("label", "Skills")("svgIcon", ngn::testing::kTopHalfIcon)));
+  mounted.add(item, 5);
+  NSOutlineView *outline = outlineIn(mounted.view(4));
+  REQUIRE((outline != nil));
+  auto imageOf = [&] {
+    auto *cell = (NSTableCellView *)[outline viewAtColumn:0 row:0 makeIfNecessary:YES];
+    REQUIRE((cell != nil));
+    return cell.imageView.image;
+  };
+
+  NSImage *image = imageOf();
+  REQUIRE((image != nil));
+  // Tinted by AppKit for the selection, the window's state and Increase Contrast, as a symbol is.
+  CHECK([image isTemplate]);
+  CHECK(image.size.width == 16);
+  CHECK(image.size.height == 16);
+  CHECK(ngn::testing::imageAlpha(image, 16, 8, 2) == doctest::Approx(1));
+  CHECK(ngn::testing::imageAlpha(image, 16, 8, 13) == doctest::Approx(0));
+
+  // An SF Symbol wins over it, as it does on a button.
+  mounted.update(item, itemProps(folly::dynamic::object("label", "Skills")("svgIcon", ngn::testing::kTopHalfIcon)("sfSymbol", "star")));
+  REQUIRE((imageOf() != nil));
+  CHECK(imageOf().size.width != 16);
+
+  mounted.update(item, itemProps(folly::dynamic::object("label", "Skills")("svgIcon", nullptr)));
+  CHECK((imageOf() == nil));
+
+  // Markup that is no svg is no icon.
+  mounted.update(item, itemProps(folly::dynamic::object("label", "Skills")("svgIcon", "lucideBlocks")));
+  CHECK((imageOf() == nil));
+}

@@ -214,7 +214,7 @@ TabsHosts::Changes TabsHosts::settle(ViewTree &tree) {
     SidebarGroup group{.tag = tag};
     for (const auto &[screen, tab] : screens) {
       group.rows.push_back(SidebarRow{
-          .tag = screen, .label = tab.title, .badge = tab.badge, .sfSymbol = tab.sfSymbol, .selected = screen == shown});
+          .tag = screen, .label = tab.title, .badge = tab.badge, .sfSymbol = tab.sfSymbol, .svgIcon = tab.svgIcon, .selected = screen == shown});
     }
     SourceList list{.groups = {std::move(group)}};
     if (host.drawn != list) {

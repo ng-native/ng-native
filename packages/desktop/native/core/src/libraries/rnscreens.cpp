@@ -3,6 +3,7 @@
 #include "ngn/library-glue.h"
 #include "ngn/screen-presentation.h"
 #include "ngn/split-view.h"
+#include "ngn/svg-markup.h"
 
 #include <react/renderer/components/rnscreens/EventEmitters.h>
 #include <react/renderer/components/rnscreens/ShadowNodes.h>
@@ -80,6 +81,8 @@ void installGlue_rnscreens() {
         .title = p->title,
         .badge = p->badgeValue,
         .sfSymbol = p->iconType == RNSTabsScreenIOSIconType::SfSymbol ? p->iconResourceName : std::string{},
+        // `<native-tab [icon]="{ svg }">` commits its markup on a desktop as a data uri.
+        .svgIcon = svgMarkupOfUri(p->iconImageSource.uri).value_or(""),
         .preventNativeSelection = p->preventNativeSelection,
     };
   };

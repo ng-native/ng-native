@@ -164,6 +164,8 @@ class SidebarItemProps final : public facebook::react::ViewProps {
   std::string badge;
   std::string sfSymbol;
   std::string drawable;
+  // An icon's SVG markup (ngn/svg-markup.h), drawn where there is no SF Symbol.
+  std::string svgIcon;
   bool selected{false};
 };
 
@@ -191,6 +193,8 @@ struct SidebarRow {
   std::string label;
   std::string badge;
   std::string sfSymbol;
+  // An icon's SVG markup, which the toolkit draws in the row's text colour where it has no symbol.
+  std::string svgIcon;
   bool selected{false};
   // An item with children: the toolkit hosts its views in the row.
   bool custom{false};

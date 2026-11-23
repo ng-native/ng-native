@@ -1,0 +1,115 @@
+#include "ngn/svg-markup.h"
+#include "svg-recorder.h"
+
+#include <doctest/doctest.h>
+
+#include <algorithm>
+#include <optional>
+
+#include <string>
+#include <vector>
+
+namespace {
+
+using Lines = std::vector<std::string>;
+
+// What `markup` draws in a box `size` points square, its shapes only.
+Lines drawnOf(const std::string &markup, double size = 24, std::optional<uint32_t> painted = std::nullopt) {
+  auto document = ngn::parseSvgMarkup(markup);
+  REQUIRE(document);
+  Recorder canvas;
+  ngn::drawSvg(painted ? ngn::svgPaintedIn(*document, *painted) : *document, size, size, canvas);
+  return canvas.drawn();
+}
+
+// Lucide's markup, as `@ng-icons/lucide` ships it: the paint on the root, inherited by each shape.
+const std::string lucide =
+    R"svg(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" )svg"
+    R"svg(stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18" /><rect x="3" y="4" width="18" )svg"
+    R"svg(height="16" rx="2" /><circle cx="12" cy="12" r="3" /><polyline points="1 2 3 4" /><line x1="0" y1="0" x2="4" y2="0" /></svg>)svg";
+
+} // namespace
+
+TEST_CASE("an outline icon's shapes take the root's paint, scaled from its viewBox") {
+  auto document = ngn::parseSvgMarkup(lucide);
+  REQUIRE(document);
+  Recorder canvas;
+  ngn::drawSvg(*document, 48, 48, canvas);
+  CHECK(canvas.calls.at(1) == "concat 2 0 0 2 0 0");
+  CHECK(canvas.drawn() == Lines{
+                              "stroke M3,12L21,12 w2 cap1 join1 #ff000000",
+                              "stroke M5,4L19,4C21,6L21,18C19,20L5,20C3,18L3,6C5,4Z w2 cap1 join1 #ff000000",
+                              "stroke M15,12C12,15C9,12C12,9C15,12Z w2 cap1 join1 #ff000000",
+                              "stroke M1,2L3,4 w2 cap1 join1 #ff000000",
+                              "stroke M0,0L4,0 w2 cap1 join1 #ff000000",
+                          });
+}
+
+TEST_CASE("a style declaration beats its attribute, and a var() takes its fallback") {
+  // Heroicons' outline set, which carries its weight in `--ng-icon__stroke-width`.
+  auto drawn = drawnOf(
+      R"svg(<svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" )svg"
+      R"svg(style="stroke-width: var(--ng-icon__stroke-width, 3)"><path stroke-linecap="square" d="M0 0L1 1"/></svg>)svg");
+  CHECK(drawn == Lines{"stroke M0,0L1,1 w3 cap2 join0 #ff000000"});
+  // A var() with no fallback still beats the attribute, and leaves the width unset, as in a browser.
+  CHECK(drawnOf(R"svg(<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" style="stroke-width: var(--w)"><path d="M0 0L1 1"/></svg>)svg") ==
+        Lines{"stroke M0,0L1,1 w1 cap0 join0 #ff000000"});
+}
+
+TEST_CASE("a shape with no fill fills black, and painted in a colour fills in that colour") {
+  const std::string solid = R"svg(<svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M0 0H16V16Z"/></svg>)svg";
+  CHECK(drawnOf(solid, 16) == Lines{"fill M0,0L16,0L16,16Z evenodd #ff000000"});
+  CHECK(drawnOf(solid, 16, 0xff336699) == Lines{"fill M0,0L16,0L16,16Z evenodd #ff336699"});
+}
+
+TEST_CASE("painted in one colour, every paint keeps its own opacity and none stays none") {
+  auto drawn = drawnOf(
+      R"svg(<svg viewBox="0 0 24 24"><defs><linearGradient id="g"><stop offset="0" stop-color="red"/></linearGradient></defs>)svg"
+      R"svg(<path d="M0 0H1" fill="rgba(255, 0, 0, 0.5)" stroke="none"/><path d="M0 0H2" fill="url(#g)"/>)svg"
+      R"svg(<path d="M0 0H3" fill="#f00" stroke="currentColor" stroke-opacity="0.25"/><path d="M0 0H4" fill="#ff000080"/></svg>)svg",
+      24, 0xff336699);
+  CHECK(drawn == Lines{
+                     "fill M0,0L1,0 #80336699",
+                     "fill M0,0L2,0 #ff336699",
+                     "fill M0,0L3,0 #ff336699",
+                     "stroke M0,0L3,0 w1 cap0 join0 #ff336699 @0.25",
+                     "fill M0,0L4,0 #80336699",
+                 });
+}
+
+TEST_CASE("groups nest and transform their shapes, and a hidden one draws nothing") {
+  auto document = ngn::parseSvgMarkup(
+      R"svg(<?xml version="1.0"?><!DOCTYPE svg><!-- an icon --><svg:svg viewBox="0 0 24 24"><title>Box &amp; more</title>)svg"
+      R"svg(<g transform="translate(2 3) scale(2)" fill="#000"><rect width="1" height="1"/><g style="display: none"><path d="M0 0H9"/></g></g></svg:svg>)svg");
+  REQUIRE(document);
+  Recorder canvas;
+  ngn::drawSvg(*document, 24, 24, canvas);
+  CHECK(std::find(canvas.calls.begin(), canvas.calls.end(), "concat 2 0 0 2 2 3") != canvas.calls.end());
+  CHECK(canvas.drawn() == Lines{"fill M0,0L1,0L1,1L0,1Z #ff000000"});
+}
+
+TEST_CASE("markup that is not an svg element is no document") {
+  CHECK_FALSE(ngn::parseSvgMarkup("lucideBlocks"));
+  CHECK_FALSE(ngn::parseSvgMarkup(""));
+  CHECK_FALSE(ngn::parseSvgMarkup("<div></div>"));
+  CHECK_FALSE(ngn::parseSvgMarkup(R"svg(<svg viewBox="0 0 24 24"><path d="M0 0")svg"));
+  CHECK_FALSE(ngn::parseSvgMarkup(R"svg(<svg viewBox=0 0 24 24></svg>)svg"));
+  // Nested deeper than any icon: refused rather than read to the end of the stack.
+  std::string deep = "<svg>";
+  for (int i = 0; i < 10000; i++) {
+    deep += "<g>";
+  }
+  for (int i = 0; i < 10000; i++) {
+    deep += "</g>";
+  }
+  deep += "</svg>";
+  CHECK_FALSE(ngn::parseSvgMarkup(deep));
+}
+
+TEST_CASE("an svg data uri's markup, percent-encoded or base64") {
+  CHECK(ngn::svgMarkupOfUri("data:image/svg+xml;utf8,%3Csvg%20viewBox%3D%220%200%201%201%22%2F%3E") ==
+        std::optional<std::string>(R"svg(<svg viewBox="0 0 1 1"/>)svg"));
+  CHECK(ngn::svgMarkupOfUri("data:image/svg+xml;base64,PHN2Zy8+") == std::optional<std::string>("<svg/>"));
+  CHECK_FALSE(ngn::svgMarkupOfUri("data:image/png;base64,AAAA"));
+  CHECK_FALSE(ngn::svgMarkupOfUri("https://example.com/icon.svg"));
+}

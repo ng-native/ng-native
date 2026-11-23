@@ -4,6 +4,7 @@
 #import "test-launch.h"
 
 #import "surface-view.h"
+#import "svg-icon.h"
 
 #include <react/renderer/core/ConcreteState.h>
 
@@ -682,7 +683,10 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 }
 @end
 
-// A native row: the item's SF Symbol, label and badge.
+// The side of a row's SVG icon, which is what a source list draws an SF Symbol at.
+constexpr CGFloat kRowIconSize = 16;
+
+// A native row: the item's SF Symbol or SVG icon, label and badge.
 @interface NGNSourceRowCell : NSTableCellView
 @property (nonatomic, strong) NSTextField *badge;
 @end
@@ -1053,7 +1057,7 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   const auto &r = row.row;
   cell.textField.stringValue = nsString(r.label);
   cell.imageView.image = r.sfSymbol.empty()
-      ? nil
+      ? NGNSvgTemplateImage(r.svgIcon, kRowIconSize)
       : [NSImage imageWithSystemSymbolName:nsString(r.sfSymbol) accessibilityDescription:nil];
   cell.badge.stringValue = nsString(r.badge);
   cell.badge.hidden = r.badge.empty();

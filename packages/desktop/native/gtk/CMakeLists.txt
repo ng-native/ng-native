@@ -77,6 +77,7 @@ add_library(ngn_gtk OBJECT
     settings-portal.cpp
     split-view.cpp
     status-notifier.cpp
+    svg-icon.cpp
     surface-input.cpp
     system-access.cpp
     text-field.cpp

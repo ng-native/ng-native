@@ -7,6 +7,7 @@ import {
 } from '@ng-native/fabric';
 import type { ControlSize } from '@ng-native/device';
 import { ControlBase, TouchableBase } from './pressable.ts';
+import { svgIconMarkup } from './svg-icon.ts';
 
 /**
  * What a button does in its window: on macOS, Return presses `default` and Escape presses `cancel`.
@@ -14,8 +15,13 @@ import { ControlBase, TouchableBase } from './pressable.ts';
  */
 export type ButtonKind = 'default' | 'cancel' | 'destructive' | 'plain';
 
-/** A button's picture, as on `<native-tab>`: an SF Symbol on Apple's OSes, a drawable on Android. */
-export type ButtonIcon = { readonly sfSymbol: string } | { readonly drawable: string };
+/**
+ * A button's picture, as on `<native-tab>`: an SF Symbol on Apple's OSes, a drawable on Android, or
+ * an icon's SVG markup, such as an `@ng-icons` set's, on macOS and Linux. The host draws the markup
+ * in the button's text colour, as it does a symbol, and an SF Symbol given too wins on macOS.
+ */
+export type ButtonIcon =
+  { readonly sfSymbol: string } | { readonly drawable: string } | { readonly svg: string };
 
 /**
  * The button on Apple's OSes is the host's: NSButton on macOS and UIButton on iOS. Android has no
@@ -48,6 +54,7 @@ registerViewName(
     '[controlSize]': 'controlSize()',
     '[sfSymbol]': 'symbol()',
     '[drawable]': 'drawableResource()',
+    '[svgIcon]': 'svgIcon()',
     '[enabled]': '!pressDisabled()',
   },
 })
@@ -75,6 +82,8 @@ export class NativeButton extends ControlBase {
     const icon = this.icon();
     return this.drawableName() ?? (icon && 'drawable' in icon ? icon.drawable : undefined);
   });
+
+  protected readonly svgIcon = computed(() => svgIconMarkup(this.icon(), 'native-button', true));
 
   /**
    * Where the host draws the button (AppKit, UIKit, GTK), it presses it: the responder would press

@@ -107,11 +107,12 @@ Size Control<Descriptor>::measureOnUiThread(const ShadowNode &node, Size max) {
 TEST_CASE("a native button's props are parsed, with enabled and controlSize") {
   Control<ngn::NativeButtonComponentDescriptor> c;
   auto p = c.props(folly::dynamic::object("title", "Delete")("kind", "destructive")("controlSize", "small")(
-      "sfSymbol", "trash")("enabled", false)("opacity", 0.5));
+      "sfSymbol", "trash")("svgIcon", "<svg/>")("enabled", false)("opacity", 0.5));
   CHECK(p->title == "Delete");
   CHECK(p->kind == "destructive");
   CHECK(p->controlSize == ngn::ControlSize::Small);
   CHECK(p->sfSymbol == "trash");
+  CHECK(p->svgIcon == "<svg/>");
   CHECK_FALSE(p->enabled);
   CHECK(p->opacity == doctest::Approx(0.5));
 
@@ -120,6 +121,8 @@ TEST_CASE("a native button's props are parsed, with enabled and controlSize") {
   CHECK(next->kind == "destructive");
   CHECK_FALSE(next->enabled);
   CHECK(c.props(folly::dynamic::object("enabled", nullptr), next)->enabled);
+  CHECK(next->svgIcon == "<svg/>");
+  CHECK(c.props(folly::dynamic::object("svgIcon", nullptr), next)->svgIcon.empty());
   CHECK(c.props(folly::dynamic::object("controlSize", nullptr), next)->controlSize == ngn::ControlSize::Regular);
 }
 
@@ -340,6 +343,7 @@ TEST_CASE("a control's size key holds every input it is measured by, and nothing
       {K::Button, object(), folly::dynamic::object("title", "Go")},
       {K::Button, object(), folly::dynamic::object("kind", "plain")},
       {K::Button, object(), folly::dynamic::object("sfSymbol", "trash")},
+      {K::Button, object(), folly::dynamic::object("svgIcon", "<svg/>")},
       {K::Button, object(), folly::dynamic::object("controlSize", "large")},
       {K::Switch, object(), folly::dynamic::object("controlSize", "mini")},
       {K::ActivityIndicator, object(), folly::dynamic::object("size", "large")},

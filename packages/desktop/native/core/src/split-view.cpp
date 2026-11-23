@@ -52,6 +52,7 @@ SidebarItemProps::SidebarItemProps(
       badge(convertRawProp(context, rawProps, "badge", sourceProps.badge, std::string{})),
       sfSymbol(convertRawProp(context, rawProps, "sfSymbol", sourceProps.sfSymbol, std::string{})),
       drawable(convertRawProp(context, rawProps, "drawable", sourceProps.drawable, std::string{})),
+      svgIcon(convertRawProp(context, rawProps, "svgIcon", sourceProps.svgIcon, std::string{})),
       selected(convertRawProp(context, rawProps, "selected", sourceProps.selected, false)) {}
 
 void SidebarSectionShadowNode::applySourceListLayout() const {
@@ -135,6 +136,7 @@ SidebarGroup group(const ViewTree &tree, const ViewTree::Node &section) {
       row.label = props->label;
       row.badge = props->badge;
       row.sfSymbol = props->sfSymbol;
+      row.svgIcon = props->svgIcon;
       row.selected = props->selected;
     }
     out.rows.push_back(std::move(row));

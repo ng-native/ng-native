@@ -70,6 +70,7 @@ add_library(ngn_appkit OBJECT
     split-view.mm
     surface-view.mm
     svg-view.mm
+    svg-icon.mm
     cg-canvas.mm
     tray-and-dock.mm
     store-review.mm

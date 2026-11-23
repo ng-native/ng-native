@@ -69,6 +69,9 @@ It is tinted like a symbol, 25 points square on iOS and 24 on Android unless the
 `size`, and the tab shows no icon until it has been drawn, a frame or two after the bar appears.
 Without a renderer the tab has no icon, and in development it logs a warning naming the tab's path.
 
+On macOS and Linux, where the tabs are the window's sidebar, the host draws the markup itself as
+the row's icon, so it needs no renderer and shows from the first frame.
+
 Every tab is a route a user reaches in one tap, so a tab whose route is lazy pauses on its first
 visit while its code loads. `withPreloading(PreloadAllModules)` in `provideNativeRouter` loads
 those routes right after start-up; see [the router](/packages/router).

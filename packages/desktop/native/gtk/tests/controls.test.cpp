@@ -8,6 +8,7 @@
 #include <doctest/doctest.h>
 
 #include <clocale>
+#include <cmath>
 #include <optional>
 #include <string>
 #include <utility>
@@ -129,6 +130,47 @@ TEST_CASE("a native button is a GtkButton with its title, styled by its kind, an
   views.update(view, controlProps<Descriptor>(folly::dynamic::object("title", "Add a Star")));
   CHECK_FALSE(gtk_widget_has_css_class(button, "suggested-action"));
   CHECK_FALSE(gtk_widget_has_css_class(button, "flat"));
+}
+
+TEST_CASE("a native button draws its SVG icon before its title, and only its title once the icon is taken away") {
+  REQUIRE(ngn::testing::gtkReady());
+  using Descriptor = ngn::NativeButtonComponentDescriptor;
+  constexpr const char *icon = R"svg(<svg viewBox="0 0 16 16"><rect width="16" height="8"/></svg>)svg";
+  MountedViews views(false, 200, 100);
+  auto view = control(2, "NgNativeButton", controlProps<Descriptor>(folly::dynamic::object("title", "Save")("svgIcon", icon)));
+  views.add(view);
+  GtkWidget *button = controlOf(views, 2);
+  REQUIRE(button);
+  auto content = [&] {
+    GtkWidget *box = gtk_button_get_child(GTK_BUTTON(button));
+    REQUIRE(GTK_IS_BOX(box));
+    GtkWidget *drawn = gtk_widget_get_first_child(box);
+    GtkWidget *label = gtk_widget_get_next_sibling(drawn);
+    REQUIRE(GTK_IS_DRAWING_AREA(drawn));
+    REQUIRE(GTK_IS_LABEL(label));
+    return std::pair{drawn, label};
+  };
+  auto [drawn, label] = content();
+  CHECK(std::string(gtk_label_get_text(GTK_LABEL(label))) == "Save");
+  ngn::testing::runUntil([&] { return gtk_widget_get_width(drawn) == 16; });
+  // Drawn in the button's text colour, the right way up.
+  GdkRGBA color;
+  gtk_widget_get_color(drawn, &color);
+  auto top = ngn::testing::widgetPixel(drawn, 8, 2);
+  CHECK(top.a > 200);
+  CHECK(std::abs(top.r - std::lround(color.red * 255)) <= 2);
+  CHECK(ngn::testing::widgetPixel(drawn, 8, 13).a == 0);
+
+  // A new title keeps the icon it has.
+  views.update(view, controlProps<Descriptor>(folly::dynamic::object("title", "Keep")("svgIcon", icon)));
+  CHECK(content().first == drawn);
+  CHECK(std::string(gtk_label_get_text(GTK_LABEL(content().second))) == "Keep");
+
+  views.update(view, controlProps<Descriptor>(folly::dynamic::object("title", "Save")));
+  CHECK(std::string(gtk_button_get_label(GTK_BUTTON(button))) == "Save");
+  // Markup that is no svg is no icon.
+  views.update(view, controlProps<Descriptor>(folly::dynamic::object("title", "Save")("svgIcon", "lucideBlocks")));
+  CHECK(std::string(gtk_button_get_label(GTK_BUTTON(button))) == "Save");
 }
 
 TEST_CASE("a switch is a GtkSwitch: the user's change is sent, and the app's value and commands are not") {

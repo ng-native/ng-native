@@ -1,10 +1,12 @@
 #import "native-controls.h"
 
 #import "search-field.h"
+#import "svg-icon.h"
 
 #include <react/renderer/components/view/ViewEventEmitter.h>
 
 #include <cassert>
+#include <cmath>
 
 using namespace facebook::react;
 using RNSize = facebook::react::Size;
@@ -37,6 +39,15 @@ NSFont *controlFont(ControlSize size) {
   return [NSFont systemFontOfSize:[NSFont systemFontSizeForControlSize:nsControlSize(size)]];
 }
 
+// A button's picture: its SF Symbol, or its SVG icon a little taller than its text, as AppKit sizes
+// a symbol beside a label.
+NSImage *buttonImage(const NativeControlProps &p) {
+  if (!p.sfSymbol.empty()) {
+    return [NSImage imageWithSystemSymbolName:nsString(p.sfSymbol) accessibilityDescription:nil];
+  }
+  return NGNSvgTemplateImage(p.svgIcon, std::round(controlFont(p.controlSize).pointSize * 1.25));
+}
+
 // The push button an NgNativeButton is: its title, picture and size, and what its kind means.
 void configureButton(NSButton *button, const NativeControlProps &p) {
   button.title = nsString(p.title);
@@ -44,7 +55,7 @@ void configureButton(NSButton *button, const NativeControlProps &p) {
   button.font = controlFont(p.controlSize);
   button.bordered = p.kind != "plain";
   button.bezelStyle = NSBezelStylePush;
-  button.image = p.sfSymbol.empty() ? nil : [NSImage imageWithSystemSymbolName:nsString(p.sfSymbol) accessibilityDescription:nil];
+  button.image = buttonImage(p);
   button.imagePosition = button.image == nil ? NSNoImage : (p.title.empty() ? NSImageOnly : NSImageLeading);
   // Return presses the default button of its window, and Escape the cancel one. Only a `default`
   // button takes Return, on every desktop OS; one with no kind takes neither key.
@@ -107,8 +118,8 @@ RNSize AppKitControlMeasurer::measure(ControlKind kind, const NativeControlProps
         cell.font = controlFont(p.controlSize);
         cell.bordered = p.kind != "plain";
         cell.bezelStyle = NSBezelStylePush;
-        if (!p.sfSymbol.empty()) {
-          cell.image = [NSImage imageWithSystemSymbolName:nsString(p.sfSymbol) accessibilityDescription:nil];
+        if (NSImage *image = buttonImage(p)) {
+          cell.image = image;
           cell.imagePosition = p.title.empty() ? NSImageOnly : NSImageLeading;
         }
         return cellSize(cell);

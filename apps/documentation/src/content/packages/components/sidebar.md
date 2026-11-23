@@ -54,7 +54,9 @@ the title. The selection survives a section collapsing.
 - **`label`** and **`badge`** - the row's text, and a count or a short word at its trailing edge.
 - **`sfSymbol`**, **`drawable`** and **`icon`** - the picture, as on a
   [`<native-tab>`](/packages/router/tabs) and a
-  [`<native-button>`](/packages/components/native-button). Drawn rows show no picture yet.
+  [`<native-button>`](/packages/components/native-button). On macOS and Linux `icon` can also be
+  an icon's SVG markup, such as an `@ng-icons` icon: `[icon]="{ svg: lucideBlocks }"`. Linux shows
+  no SF Symbol, so there an SVG icon is the only picture a row has. Drawn rows show no picture yet.
 - **`[(selected)]`** and **`(select)`** - the selection, and the user choosing the item. A sidebar
   selects one item at a time, so choosing one deselects the others.
 
@@ -105,9 +107,9 @@ which layout and pane are in front, for a back button of the app's own.
 ## Tabs on macOS
 
 A tab bar renders as the window's sidebar on macOS, with no change to the app: each
-`<native-tab>` is a sidebar item, its `title` as the label, with its `sfSymbol` and `badge`, and
-its page in the content pane. The tabs own the window's split view, so a `<split-view>` inside a
-tab is a plain split view in the content.
+`<native-tab>` is a sidebar item, its `title` as the label, with its `sfSymbol` or SVG icon and
+`badge`, and its page in the content pane. The tabs own the window's split view, so a
+`<split-view>` inside a tab is a plain split view in the content.
 
 ## In the desktop host
 

@@ -72,10 +72,10 @@ struct RecordingTabs final : ngn::TabsHosts {
   }
 };
 
-ShadowView tab(Tag tag, std::string key, std::string title, bool prevent = false) {
+ShadowView tab(Tag tag, std::string key, std::string title, bool prevent = false, std::string svgIcon = "") {
   auto props = std::make_shared<TabProps>();
   props->tab = {.screenKey = key, .title = title, .sfSymbol = key == "library" ? "books.vertical" : "",
-                .preventNativeSelection = prevent};
+                .svgIcon = svgIcon, .preventNativeSelection = prevent};
   return shadowView(tag, "RNSTabsScreenIOS", {}, props);
 }
 
@@ -184,6 +184,15 @@ TEST_CASE("the first tab shows until the app asks for one, and the rest are cove
   f.mount(tabsApp());
   CHECK(f.calls() == Lines{"cover 4", "cover 5", "lists of 2: [2: 3 Library <books.vertical> *, 4 Search, 5 Locked]"});
   CHECK(f.events == Lines{"willAppear 3", "didAppear 3"});
+}
+
+TEST_CASE("a tab's SVG icon is its row's, and goes when the tab takes it away") {
+  Fixture f;
+  f.mount(tabsApp());
+  f.mount({ShadowViewMutation::UpdateMutation(tab(4, "search", "Search"), tab(4, "search", "Search", false, "<svg/>"), 2)});
+  CHECK(f.calls() == Lines{"lists of 2: [2: 3 Library <books.vertical> *, 4 Search <svg>, 5 Locked]"});
+  f.mount({ShadowViewMutation::UpdateMutation(tab(4, "search", "Search", false, "<svg/>"), tab(4, "search", "Search"), 2)});
+  CHECK(f.calls() == Lines{"lists of 2: [2: 3 Library <books.vertical> *, 4 Search, 5 Locked]"});
 }
 
 TEST_CASE("without a request, the first tab shown starts the count, so the first click is the user's") {

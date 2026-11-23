@@ -141,12 +141,13 @@ TEST_CASE("the sidebar's props are read under their pane names") {
   CHECK(sidebar.autosaveName == "main");
 
   auto rowProps = props<ngn::SidebarItemComponentDescriptor>(
-      dynamic::object("label", "Inbox")("badge", "3")("sfSymbol", "tray")("drawable", "ic_inbox")("selected", true));
+      dynamic::object("label", "Inbox")("badge", "3")("sfSymbol", "tray")("drawable", "ic_inbox")("svgIcon", "<svg/>")("selected", true));
   const auto &row = static_cast<const ngn::SidebarItemProps &>(*rowProps);
   CHECK(row.label == "Inbox");
   CHECK(row.badge == "3");
   CHECK(row.sfSymbol == "tray");
   CHECK(row.drawable == "ic_inbox");
+  CHECK(row.svgIcon == "<svg/>");
   CHECK(row.selected);
 
   auto groupProps = props<ngn::SidebarSectionComponentDescriptor>(dynamic::object("title", "Mailboxes")("collapsible", true));
@@ -264,6 +265,22 @@ TEST_CASE("neighbouring sections in one parent are one source list") {
   lines = f.mount({ShadowViewMutation::UpdateMutation(
       item(6, dynamic::object("label", "Sent")), item(6, dynamic::object("label", "Sent")("selected", true)), 4)});
   CHECK(lines.empty());
+
+  // An item's SVG icon is its row's, and taking it away takes it from the row.
+  lines = f.mount({ShadowViewMutation::UpdateMutation(
+      item(6, dynamic::object("label", "Sent")("selected", true)),
+      item(6, dynamic::object("label", "Sent")("selected", true)("svgIcon", "<svg/>")),
+      4)});
+  CHECK(lines == Lines{
+                     "lists of 2: [4 Mailboxes (collapsible): 5 Inbox (3) <tray> *, 6 Sent <svg> * | 8: 9 Flagged] [12 Tags: 13 Work]",
+                 });
+  lines = f.mount({ShadowViewMutation::UpdateMutation(
+      item(6, dynamic::object("label", "Sent")("selected", true)("svgIcon", "<svg/>")),
+      item(6, dynamic::object("label", "Sent")("selected", true)),
+      4)});
+  CHECK(lines == Lines{
+                     "lists of 2: [4 Mailboxes (collapsible): 5 Inbox (3) <tray> *, 6 Sent * | 8: 9 Flagged] [12 Tags: 13 Work]",
+                 });
 
   // Content inside an item makes it a custom row.
   auto meter = shadowView(7, "View", {});

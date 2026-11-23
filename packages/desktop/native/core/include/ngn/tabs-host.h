@@ -99,6 +99,8 @@ struct TabScreen {
   std::string badge;
   // The SF Symbol, when the tab's icon is one.
   std::string sfSymbol;
+  // The SVG markup, when the tab's icon is a `data:image/svg+xml` image (`<native-tab [icon]="{ svg }">`).
+  std::string svgIcon;
   bool preventNativeSelection{false};
 };
 

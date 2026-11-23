@@ -100,7 +100,7 @@ void FakeBackend::setSplitView(SurfaceId, Tag split, bool window) {
 }
 
 // "lists of 3: [4 Mail: 5 Inbox (3) *, 6 custom] [9: 10 Sent]": a list per run of sections, each
-// section's tag and title, then each row's tag, label, badge, selected (*) and custom.
+// section's tag and title, then each row's tag, label, badge, symbol, svg icon, selected (*) and custom.
 void FakeBackend::setSvgDrawing(SurfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) {
   calls.push_back("svg " + std::to_string(svg) + " with " + std::to_string(document->root.children.size()));
 }
@@ -129,6 +129,9 @@ void FakeBackend::setSourceLists(SurfaceId, Tag parent, const std::vector<Source
         }
         if (!row.sfSymbol.empty()) {
           line += " <" + row.sfSymbol + ">";
+        }
+        if (!row.svgIcon.empty()) {
+          line += " <svg>";
         }
         if (row.selected) {
           line += " *";
