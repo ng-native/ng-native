@@ -69,8 +69,11 @@ jobs:
       # React Native's ccache wrapper runs plain clang, silently, without CCACHE_BINARY.
       - run: echo "CCACHE_BINARY=$(command -v ccache)" >> "$GITHUB_ENV"
 
+      # Under the job's limit, so a run that hangs fails here and the logs below are still collected:
+      # a job that reaches its own limit is cancelled, and runs no step after.
       - name: Run the device tests on a simulator
         working-directory: examples/canary
+        timeout-minutes: 35
         run: npx vitest run --project ios
 
       # A build this run finished, whether the tests then passed or not: a screenshot that does not
