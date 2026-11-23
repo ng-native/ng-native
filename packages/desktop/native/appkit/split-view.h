@@ -54,6 +54,9 @@
 
 // NgNativeSidebarItem: a model object, or a custom row's views.
 @interface NGNSidebarItemView : NGNView
+// Whether its source list draws the row's selection emphasized (NSTableRowView.emphasized): in the
+// accent colour, while the window is key and the list has the focus. The item hears each change.
+@property (nonatomic) BOOL rowEmphasized;
 @end
 
 // RNSTabsHostIOS (the core's tabs-host.h): a split view whose sidebar lists the tabs and whose

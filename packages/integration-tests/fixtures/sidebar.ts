@@ -38,8 +38,11 @@ import { View } from '../../components/src/view.ts';
           />
         </sidebar-section>
         <sidebar-section testID="smart">
-          <sidebar-item testID="storage" label="Storage" (select)="chosen.set('storage')">
-            <pressable testID="bump" (press)="bumps.set(bumps() + 1)"><text>+</text></pressable>
+          <sidebar-item #storage testID="storage" label="Storage" (select)="chosen.set('storage')">
+            <view>
+              <pressable testID="bump" (press)="bumps.set(bumps() + 1)"><text>+</text></pressable>
+              <text testID="storage-text" class="storage-text">Storage</text>
+            </view>
           </sidebar-item>
         </sidebar-section>
       </sidebar>
@@ -47,6 +50,14 @@ import { View } from '../../components/src/view.ts';
         ><text>{{ chosen() }}</text></view
       >
     </split-view>
+  `,
+  styles: `
+    sidebar-item[data-selected] .storage-text {
+      opacity: 0.8;
+    }
+    sidebar-item[data-emphasized] .storage-text {
+      opacity: 0.5;
+    }
   `,
 })
 export class SidebarFixture {
@@ -59,4 +70,5 @@ export class SidebarFixture {
   readonly chosen = signal('');
   readonly bumps = signal(0);
   readonly split = viewChild.required(SplitView);
+  readonly storage = viewChild.required('storage', { read: SidebarItem });
 }

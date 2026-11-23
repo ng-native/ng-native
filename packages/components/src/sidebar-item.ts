@@ -7,6 +7,8 @@ import {
   input,
   model,
   output,
+  signal,
+  type Signal,
 } from '@angular/core';
 import { SIDEBAR_SELECTION } from '@ng-native/device';
 import { registerViewName } from '@ng-native/fabric';
@@ -41,6 +43,7 @@ export type SidebarItemIcon = ButtonIcon;
  *
  * Content inside the element replaces the default row of icon, label and badge: its pressables
  * take clicks, and while the row is selected its host has `data-selected` for CSS to restyle it.
+ * On macOS it also has `data-emphasized` while that selection is drawn in the accent colour.
  */
 @Component({
   selector: 'sidebar-item',
@@ -84,6 +87,7 @@ export type SidebarItemIcon = ButtonIcon;
     '[drawable]': 'drawnHere ? undefined : drawableResource()',
     '[selected]': 'drawnHere ? undefined : selected()',
     '[attr.data-selected]': "selected() ? '' : null",
+    '[attr.data-emphasized]': "emphasized() ? '' : null",
     '[class.sidebar-item-drawn]': 'drawnHere',
   },
 })
@@ -109,6 +113,15 @@ export class SidebarItem extends ControlBase implements SidebarRow {
   /** The user chose this item. */
   readonly select = output<void>();
 
+  /** On macOS, whether the source list draws the row's selection emphasized, as it last said. */
+  private readonly hostEmphasized = signal(false);
+  /**
+   * macOS: whether the row is selected and its selection is drawn in the accent colour, while the
+   * window is key and the sidebar has the focus. Otherwise the selection is grey, and this is false.
+   * Always false on other platforms.
+   */
+  readonly emphasized: Signal<boolean> = computed(() => this.selected() && this.hostEmphasized());
+
   protected readonly symbol = computed(() => {
     const icon = this.icon();
     return this.sfSymbol() ?? (icon && 'sfSymbol' in icon ? icon.sfSymbol : undefined);
@@ -120,6 +133,7 @@ export class SidebarItem extends ControlBase implements SidebarRow {
   });
 
   private stopSelect: (() => void) | null = null;
+  private stopEmphasis: (() => void) | null = null;
 
   constructor() {
     super();
@@ -151,11 +165,19 @@ export class SidebarItem extends ControlBase implements SidebarRow {
     this.stopSelect = this.engine.setEventListener(this.node, 'topSidebarSelect', (event) => {
       if ((event as { target?: unknown }).target === this.node) this.choose();
     });
+    this.stopEmphasis = this.engine.setEventListener(this.node, 'topSidebarEmphasis', (event) => {
+      const { target, nativeEvent } = event as {
+        target?: unknown;
+        nativeEvent?: { emphasized?: unknown };
+      };
+      if (target === this.node) this.hostEmphasized.set(nativeEvent?.emphasized === true);
+    });
   }
 
   override ngOnDestroy(): void {
     super.ngOnDestroy();
     this.stopSelect?.();
+    this.stopEmphasis?.();
   }
 
   /** The user chose this row: select it, deselect the rest, and say so. */

@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
-import type { Type } from '@angular/core';
+import { ErrorHandler, type Type } from '@angular/core';
 import { Router, type Routes } from '@angular/router';
 import { registerPlatformComponents } from '@ng-native/fabric';
 import { cleanup, render, settle, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
@@ -110,5 +110,46 @@ describe('a sidebar item with a path', () => {
     await idle();
     assert.equal(router.url, '/');
     assert.deepEqual(selected(), ['home']);
+  });
+});
+
+describe('sidebar items with a path that an @for or an @if renders', () => {
+  let mod: Record<string, unknown>;
+  before(async () => {
+    registerPlatformComponents('macos');
+    mod = await compileFixture('fixtures/sidebar-routes.ts');
+  });
+  after(() => registerPlatformComponents('ios'));
+  afterEach(() => cleanup());
+
+  it('render without reading a path before it is bound, and the url selects them', async () => {
+    const errors: unknown[] = [];
+    const app = await render(mod['RepeatedShell'] as Type<unknown>, {
+      providers: [
+        provideNativeRouter(mod['routes'] as Routes),
+        {
+          provide: ErrorHandler,
+          useValue: { handleError: (error: unknown) => errors.push(error) },
+        },
+      ],
+    });
+    const router = app.componentRef.injector.get(Router);
+    await idle();
+    const selected = (ids = ['home', 'inbox', 'mail', 'elsewhere']) =>
+      ids.filter((id) => app.getByTestId(id).props['selected'] === true);
+    assert.deepEqual(errors, []);
+    assert.deepEqual(selected(), ['home']);
+    await router.navigateByUrl('/mail');
+    await idle();
+    assert.deepEqual(selected(), ['mail']);
+    await router.navigateByUrl('/elsewhere');
+    await idle();
+    assert.equal(router.url, '/elsewhere');
+    assert.deepEqual(selected(), ['elsewhere']);
+
+    // Gone, it leaves the url to the item at ''.
+    (app.componentRef.instance as { more: { set(value: boolean): void } }).more.set(false);
+    await idle();
+    assert.deepEqual(selected(['home', 'inbox', 'mail']), ['home']);
   });
 });

@@ -588,6 +588,13 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 @end
 
 @implementation NGNSidebarItemView
+- (void)setRowEmphasized:(BOOL)emphasized {
+  if (_rowEmphasized == emphasized) {
+    return;
+  }
+  _rowEmphasized = emphasized;
+  send(self, "sidebarEmphasis", folly::dynamic::object("emphasized", (bool)emphasized));
+}
 - (void)updateLayout:(const LayoutMetrics &)metrics {
   CGFloat before = NSHeight(self.frame);
   [super updateLayout:metrics];
@@ -655,6 +662,19 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   [super mouseDown:event];
   return YES;
 }
+// The window sends a click on the row's views here, past the outline view: one the content does not
+// take goes to the outline view, which selects the row.
+- (void)mouseDown:(NSEvent *)event {
+  if ([self takeMouseDown:event]) {
+    return;
+  }
+  NSOutlineView *outline = self.outline;
+  if (outline != nil) {
+    [outline mouseDown:event];
+  } else {
+    [super mouseDown:event];
+  }
+}
 - (void)dealloc {
   if (gContainerRootChanged && self.item != nil) {
     gContainerRootChanged(self.item.reactTag, NO);
@@ -702,9 +722,19 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 // A row's selection as a source list draws it: rounded, inset from the sidebar's edges, the accent
 // colour while the list has the focus and grey otherwise.
 @interface NGNSourceRowView : NSTableRowView
+// The row's item, told whether the selection is drawn emphasized.
+@property (nonatomic, weak) NGNSidebarItemView *item;
 @end
 
 @implementation NGNSourceRowView
+- (void)setEmphasized:(BOOL)emphasized {
+  [super setEmphasized:emphasized];
+  [self.item setRowEmphasized:emphasized];
+}
+- (void)setItem:(NGNSidebarItemView *)item {
+  _item = item;
+  [item setRowEmphasized:self.emphasized];
+}
 - (void)drawSelectionInRect:(NSRect)dirtyRect {
   NSRect rect = NSInsetRect(self.bounds, 10, 0);
   NSColor *color =
@@ -765,8 +795,8 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   return YES;
 }
 
-// NSTableView's hit test answers the table for a cell's content, so the custom row under the click
-// is found by where it is.
+// A click on a custom row comes here from the row's cell, or from the window where the hit test
+// answers the table, so the custom row under the click is found by where it is.
 - (void)mouseDown:(NSEvent *)event {
   for (NGNSourceRowHost *host in _hosts.allValues) {
     if (host.window == self.window &&
@@ -796,6 +826,33 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   } else {
     [super mouseUp:event];
   }
+}
+
+// NSTableView hands a click to a view in a cell it does not know, rather than select the row. The
+// custom row's content already had the clicks it takes (mouseDown above): the rest select the row.
+- (BOOL)validateProposedFirstResponder:(NSResponder *)responder forEvent:(NSEvent *)event {
+  if (event.type == NSEventTypeLeftMouseDown && [responder isKindOfClass:NSView.class]) {
+    for (NSView *v = (NSView *)responder; v != nil && v != self; v = v.superview) {
+      if ([v isKindOfClass:NGNSourceRowHost.class]) {
+        return NO;
+      }
+    }
+  }
+  return [super validateProposedFirstResponder:responder forEvent:event];
+}
+
+// The plain style indents a section's rows by a level, which the source-list style takes back:
+// they line up with the section's title. The indentation stays, since AppKit reserves that width on
+// every row for the disclosure.
+- (NSRect)frameOfCellAtColumn:(NSInteger)column row:(NSInteger)row {
+  NSRect frame = [super frameOfCellAtColumn:column row:row];
+  if (self.fills) {
+    return frame;
+  }
+  CGFloat nested = [self levelForRow:row] * self.indentationPerLevel;
+  frame.origin.x -= nested;
+  frame.size.width += nested;
+  return frame;
 }
 
 - (id)objectFor:(NSInteger)tag class:(Class)cls {
@@ -939,7 +996,17 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 }
 
 - (NSTableRowView *)outlineView:(NSOutlineView *)outlineView rowViewForItem:(id)item {
-  return self.fills ? nil : [NGNSourceRowView new];
+  if (self.fills) {
+    return nil;
+  }
+  NGNSourceRowView *rowView = [NGNSourceRowView new];
+  if ([item isKindOfClass:NGNSourceRow.class]) {
+    NGNView *view = self.views ? self.views(((NGNSourceRow *)item).tag) : nil;
+    if ([view isKindOfClass:NGNSidebarItemView.class]) {
+      rowView.item = (NGNSidebarItemView *)view;
+    }
+  }
+  return rowView;
 }
 
 - (CGFloat)outlineView:(NSOutlineView *)outlineView heightOfRowByItem:(id)item {

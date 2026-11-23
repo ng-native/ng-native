@@ -1,6 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import type { CanActivateFn, Routes } from '@angular/router';
 import { Sidebar } from '../../components/src/sidebar.ts';
+import { SidebarSection } from '../../components/src/sidebar-section.ts';
 import { SidebarItem } from '../../components/src/sidebar-item.ts';
 import { SplitView } from '../../components/src/split-view.ts';
 import { SidebarItemPath } from '../../router/src/sidebar-item-path.ts';
@@ -37,3 +38,33 @@ export const routes: Routes = [
   `,
 })
 export class Shell {}
+
+/** Items an @for and an @if render, beside a static one in another section. */
+@Component({
+  selector: 'x-sidebar-routes-repeated',
+  imports: [Sidebar, SidebarSection, SidebarItem, SplitView, SidebarItemPath],
+  template: `
+    <split-view>
+      <sidebar>
+        <sidebar-section>
+          <sidebar-item testID="home" path="" label="Home" />
+        </sidebar-section>
+        <sidebar-section title="Mail">
+          @for (item of items; track item.path) {
+            <sidebar-item [testID]="item.path" [path]="item.path" [label]="item.label" />
+          }
+          @if (more()) {
+            <sidebar-item testID="elsewhere" [path]="'elsewhere'" label="Elsewhere" />
+          }
+        </sidebar-section>
+      </sidebar>
+    </split-view>
+  `,
+})
+export class RepeatedShell {
+  protected readonly items = [
+    { path: 'inbox', label: 'Inbox' },
+    { path: 'mail', label: 'Mail' },
+  ];
+  readonly more = signal(true);
+}

@@ -44,6 +44,7 @@ type Fixture = {
   chosen: Signalish<string>;
   bumps: Signalish<number>;
   split: () => { showSidebar(): boolean };
+  storage: () => { emphasized(): boolean };
 };
 let Fixture: Type<Fixture>;
 
@@ -139,6 +140,36 @@ describe('on macOS', () => {
     assert.equal(instance.bumps(), 1);
     await touch(getByTestId('inbox'));
     assert.equal(instance.chosen(), '', 'the host selects, not the responder');
+  });
+
+  it('marks a custom row whose selection the host draws emphasized', async () => {
+    const { instance, getByTestId, fabric } = await render(Fixture);
+    const storage = getByTestId('storage');
+    const opacity = () => getByTestId('storage-text').props['opacity'];
+    fabric.emit(storage, 'topSidebarEmphasis', { emphasized: true });
+    await settle();
+    assert.equal(
+      instance.storage().emphasized(),
+      false,
+      'not selected: nothing is drawn emphasized',
+    );
+    assert.equal(opacity(), undefined);
+
+    fabric.emit(storage, 'topSidebarSelect', {});
+    await settle();
+    assert.equal(instance.storage().emphasized(), true);
+    assert.equal(opacity(), 0.5);
+
+    // The window stops being key, or the sidebar loses the focus: the selection turns grey.
+    fabric.emit(storage, 'topSidebarEmphasis', { emphasized: false });
+    await settle();
+    assert.equal(instance.storage().emphasized(), false);
+    assert.equal(opacity(), 0.8);
+
+    // Another item's report is its own.
+    fabric.emit(getByTestId('inbox'), 'topSidebarEmphasis', { emphasized: true });
+    await settle();
+    assert.equal(instance.storage().emphasized(), false);
   });
 
   it('follows the collapsed state the host reports, and sends the one the app sets', async () => {

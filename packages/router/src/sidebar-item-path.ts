@@ -6,7 +6,16 @@
  * provides `SIDEBAR_SELECTION` from `@ng-native/device`: this writes it as the url changes, and
  * the item's `[(selected)]` reads it back.
  */
-import { DestroyRef, Directive, Service, effect, inject, input, signal } from '@angular/core';
+import {
+  DestroyRef,
+  Directive,
+  Service,
+  effect,
+  inject,
+  input,
+  signal,
+  type OnInit,
+} from '@angular/core';
 import {
   ActivatedRoute,
   NavigationCancel,
@@ -81,11 +90,12 @@ class SidebarPaths {
   selector: 'sidebar-item[path]',
   host: { '(select)': 'navigate()' },
 })
-export class SidebarItemPath {
+export class SidebarItemPath implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly selection = inject(SIDEBAR_SELECTION);
   private readonly paths = inject(SidebarPaths);
+  private readonly destroyRef = inject(DestroyRef);
 
   /** The route this item selects, relative to the page it is on, as a `<native-tab>`'s is. */
   readonly path = input.required<string>();
@@ -94,7 +104,6 @@ export class SidebarItemPath {
   private readonly url = signal(this.router.url, { equal: () => false });
 
   constructor() {
-    const remove = this.paths.add(this.route, this);
     const events = this.router.events.subscribe((event) => {
       const settled =
         event instanceof NavigationEnd ||
@@ -102,10 +111,7 @@ export class SidebarItemPath {
         event instanceof NavigationError;
       if (settled) this.url.set(this.router.url);
     });
-    inject(DestroyRef).onDestroy(() => {
-      remove();
-      events.unsubscribe();
-    });
+    this.destroyRef.onDestroy(() => events.unsubscribe());
     effect(() => {
       this.paths.changed();
       const url = primarySegments(this.router, this.url()).map((segment) => segment.path);
@@ -120,6 +126,14 @@ export class SidebarItemPath {
       );
       this.selection.set(group[index] === this);
     });
+  }
+
+  /**
+   * Joins its group once its path is bound: every item of the group reads every path, and an
+   * item an @for or an @if creates is constructed before its inputs are.
+   */
+  ngOnInit(): void {
+    this.destroyRef.onDestroy(this.paths.add(this.route, this));
   }
 
   /** The user chose the item: go to its route. */

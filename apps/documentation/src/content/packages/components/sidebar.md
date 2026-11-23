@@ -61,6 +61,17 @@ the title. The selection survives a section collapsing.
 Content inside an item replaces its default row. Pressables in it take clicks, and while the row
 is selected its host has `data-selected`, for CSS to restyle the row on the selection highlight.
 
+On macOS the highlight is the accent colour while the window is key and the sidebar has the focus,
+and grey otherwise. While it is the accent colour, the host also has `data-emphasized`, and the
+item's read-only `emphasized` signal is true, so text that turns white on the accent colour can stay
+dark on the grey. Neither is set on other platforms.
+
+```css
+sidebar-item[data-emphasized] text {
+  color: white;
+}
+```
+
 ```html
 <sidebar-item label="Storage" [(selected)]="storage">
   <view class="storage-row">
@@ -111,7 +122,9 @@ back into layout, at most once a display frame. The sidebar's collapsed state fo
 
 Neighbouring `<sidebar-section>`s (`NgNativeSidebarSection`) in one parent are one NSOutlineView
 source list, laid out where Yoga put them, and each `<sidebar-item>` (`NgNativeSidebarItem`) is a
-row of it with its label, badge and SF Symbol. A click selects a row and sends
-`topSidebarSelect` to its item. An item with content is a custom row: its views sit in a cell of
-their own, which they fill, and a click on a pressable in it reaches the pressable while other
-clicks select the row.
+row of it with its label, badge and SF Symbol. A titled section's rows line up with its title and
+with the rows of an untitled section. A click selects a row and sends `topSidebarSelect` to its
+item, and a change to whether the row's selection is drawn emphasized sends `topSidebarEmphasis`
+with `{ emphasized }`. An item with content is a custom row: its views sit in a cell of their own,
+which they fill, and a click on a pressable in it reaches the pressable while other clicks select
+the row.
