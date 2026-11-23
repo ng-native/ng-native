@@ -156,9 +156,10 @@ TEST_CASE("An item hears whether its row's selection is drawn emphasized") {
 }
 
 TEST_CASE("A click the window sends to a custom row's views goes to the content only when it takes it") {
+  // Declared first so it is destroyed last: the mounted views hold a pointer to it until they go.
+  Presses presses;
   MountedViews mounted;
   Restore restore;
-  Presses presses;
   NGNSplitView.input = &presses;
   bool takes = false;
   NGNSplitView.rowContentTakesClick = [&](NSInteger, NSPoint) { return takes; };
