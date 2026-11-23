@@ -190,8 +190,10 @@ node scrolled off screen is not hidden; the fake has no layout to say it is. A `
 keeps a few recycled rows as views with no opacity that take no touch, still showing their last
 item, so a query does not find those either. A screen of a native stack is hidden while a screen
 is pushed over it, or presented over it as a `fullScreenModal` or `containedModal`, as the stack
-shows the top one on a device; a sheet or a transparent modal leaves the screen under it showing,
-and found.
+shows the top one on a device. On Android a `modal`, what `present()` shows by default, and a
+`pageSheet` hide it too, as Android shows them full screen. A sheet or a transparent modal leaves
+the screen under it showing, and found, and so do a `modal` and a `pageSheet` on iOS. A query
+`within` a view on a hidden screen finds nothing either.
 
 A node a query returns has `parent`: the node it is under as of that query, and `null` at the top.
 Query again after a change rather than keep a node and read its `parent` later.

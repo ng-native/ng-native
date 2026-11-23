@@ -178,10 +178,12 @@ view's box, as on the web.
 
 A component's stylesheet is compiled for the platform Metro is bundling, so an unscoped rule keeps
 its filter in the Android build and drops it with a warning in the iOS build. Vitest compiles a
-component's sheet for the `os` its plugin runs as, as Metro does for that platform; a sheet compiled
-with no platform has to suit iOS and Android both. A Tailwind sheet serves both platforms too, so
-`grayscale` there is dropped with a warning, while `android:grayscale` is kept. A filter inside
-`@keyframes` is checked against the platform alone, since a keyframe has no selector to scope it.
+component's sheet for the `os` its plugin runs as when that is iOS, Android, macOS or Linux, as
+Metro does for that platform. With `ngNative({ os: 'web' })` it compiles the sheet with no
+platform, and a sheet compiled with no platform has to suit iOS and Android both. A Tailwind sheet
+serves both platforms too, so `grayscale` there is dropped with a warning, while
+`android:grayscale` is kept. A filter inside `@keyframes` is checked against the platform alone,
+since a keyframe has no selector to scope it.
 
 The GTK host on Linux draws every function, `blur()` and `drop-shadow()` included, so the Linux
 build keeps an unscoped filter, and so does a rule scoped with `.platform-linux` (Tailwind's

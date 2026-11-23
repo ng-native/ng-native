@@ -37,7 +37,7 @@ import {
 import { mount } from '@ng-native/platform';
 import { fakeWindows, provideDesktopFakes, type FakeWindows } from './desktop-fakes.ts';
 import { destroyServiceApps } from './inject-service.ts';
-import { bindQueries, describeTree, flatten, type BoundQueries } from './queries.ts';
+import { bindQueries, describeTree, flatten, withParents, type BoundQueries } from './queries.ts';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from './test-utils.ts';
 import { waitFor, type WaitForOptions } from './wait-for.ts';
 
@@ -232,7 +232,9 @@ export function ownerOf(node: FakeFabricNode): Mounted {
 
 /** The node as it is in the most recent commit, found by its tag, or null once it is gone. */
 export function currentOf(node: FakeFabricNode): FakeFabricNode | null {
-  const hit = flatten(ownerOf(node).roots()).find((n) => n.reactTag === node.reactTag);
+  // Parents set again from the roots: a node a commit kept still points at the parent it had.
+  const roots = withParents(ownerOf(node).roots());
+  const hit = flatten(roots).find((n) => n.reactTag === node.reactTag);
   if (hit) owners.set(hit, ownerOf(node));
   return hit ?? null;
 }

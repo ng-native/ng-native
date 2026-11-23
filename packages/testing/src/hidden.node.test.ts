@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Component } from '@angular/core';
 import { Pressable, Text, View } from '@ng-native/components';
-import { cleanup, render, screen } from '@ng-native/testing';
+import { cleanup, render, screen, within } from '@ng-native/testing';
 
 afterEach(cleanup);
 
@@ -45,6 +45,13 @@ describe('hidden elements', () => {
     await render(Hidden);
     assert.ok(screen.getByText('Parked', { includeHiddenElements: true }));
     assert.ok(screen.getByRole('button', { includeHiddenElements: true }));
+  });
+
+  it('are not found within a node inside a hidden view, unless asked for', async () => {
+    await render(Hidden);
+    const button = screen.getByRole('button', { includeHiddenElements: true });
+    assert.equal(within(button).queryByText('Parked'), null);
+    assert.ok(within(button).getByText('Parked', { includeHiddenElements: true }));
   });
 
   it('are not there at all where they are not displayed', async () => {

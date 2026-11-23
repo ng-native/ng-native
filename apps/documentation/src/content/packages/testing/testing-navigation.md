@@ -65,8 +65,10 @@ With eagerly declared routes the pushed screen is already there when the press r
 it, as it does on a device: the home screen stays mounted under it, and a query does not find
 what is on it, as a screen reader does not reach it. A query given
 `{ includeHiddenElements: true }` finds the screens below too. A screen presented as a sheet or a
-transparent modal leaves the one under it showing, and a query finds both. The native stack's
-transition and its navigation bar are drawn by the platform, and a test sees neither.
+transparent modal leaves the one under it showing, and a query finds both. So does a `modal` or a
+`pageSheet` on iOS, where both are sheets; on Android they cover the screen under them. The
+native stack's transition and its navigation bar are drawn by the platform, and a test sees
+neither.
 
 A page that takes a route parameter as an input needs `withComponentInputBinding()` in the test's
 providers, the same as the app does, or the input is never set and a required one throws on first
