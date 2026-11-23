@@ -2,6 +2,7 @@
 
 #include "app-windows.h"
 #include "screens.h"
+#include "text-field.h"
 
 #include <dlfcn.h>
 
@@ -399,6 +400,10 @@ void routeKeys(GtkWindow *window, std::shared_ptr<KeyRouting> routing) {
         bool text = textInputFocused(window);
         if (routing->shortcut && routing->shortcut(chord, text)) {
           return TRUE;
+        }
+        // A focused input's (keyPress) for Tab and Shift-Tab, which the focus keys take before it.
+        if ((keyval == GDK_KEY_Tab || keyval == GDK_KEY_ISO_Left_Tab) && !(state & (GDK_CONTROL_MASK | GDK_ALT_MASK))) {
+          sendTabKeyPress(window);
         }
         if (routing->focus && routing->focus(window, keyval, state)) {
           return TRUE;

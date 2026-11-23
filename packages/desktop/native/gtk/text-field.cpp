@@ -15,6 +15,9 @@ namespace ngn::gtk {
 
 namespace {
 
+// On a window whose key handling sends Tab's (keyPress) (sendTabKeyPress), so its inputs do not.
+constexpr const char *kSendsTab = "ngn-sends-tab-key-press";
+
 bool multiline(const TextField &field) {
   return field.scroll != nullptr;
 }
@@ -221,6 +224,11 @@ gboolean keyPressed(GtkEventControllerKey *, guint keyval, guint keycode, GdkMod
     }
   }
   if (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) {
+    return FALSE;
+  }
+  bool tab = keyval == GDK_KEY_Tab || keyval == GDK_KEY_ISO_Left_Tab;
+  GtkRoot *root = gtk_widget_get_root(field->text);
+  if (tab && root && g_object_get_data(G_OBJECT(root), kSendsTab)) {
     return FALSE;
   }
   if (std::string key = keyPressName(keyval); !key.empty()) {
@@ -639,6 +647,18 @@ void makeTextField(GtkWidget *widget, ViewData &view) {
     setText(*field, props->defaultValue);
   }
   applyTextFieldProps(view);
+}
+
+void sendTabKeyPress(GtkWindow *window) {
+  g_object_set_data(G_OBJECT(window), kSendsTab, GINT_TO_POINTER(1));
+  for (GtkWidget *w = gtk_root_get_focus(GTK_ROOT(window)); w; w = gtk_widget_get_parent(w)) {
+    if (TextField *field = textFieldOf(w)) {
+      if (auto emitter = emitterOf(*field)) {
+        emitter->onKeyPress({.text = "Tab", .eventCount = field->eventCount});
+      }
+      return;
+    }
+  }
 }
 
 TextField *textFieldOf(GtkWidget *widget) {

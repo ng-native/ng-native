@@ -3,14 +3,17 @@
 // played through the X server under X11 (input-replay.h) so they take GTK's own path.
 #include "mounted-views.h"
 
+#include "../focus.h"
 #include "../host-sources.h"
 #include "../input-replay.h"
 #include "../menus.h"
 #include "../screens.h"
+#include "../text-field.h"
 #include "../view-widget.h"
 
 #include <adwaita.h>
 #include <doctest/doctest.h>
+#include <react/renderer/components/textinput/TextInputEventEmitter.h>
 
 #include <algorithm>
 
@@ -573,4 +576,62 @@ TEST_CASE("an undo's own registration is the redo, so Redo is there after one Un
   undo->redo();
   settle();
   CHECK(ran == std::vector<std::string>{"undo", "redo"});
+}
+
+TEST_CASE("a window's Tab and Shift-Tab send a focused text input's keyPress before the focus moves, once") {
+  REQUIRE(ngn::testing::gtkReady());
+  if (!onX11()) {
+    MESSAGE("not X11: no keys can be played into GTK here");
+    return;
+  }
+  using facebook::react::TextInputEventEmitter;
+  ngn::testing::MountedViews views{false, 300, 200};
+  views.add(ngn::testing::MountedViews::shadow(2, "TextInput", ngn::testing::textInputProps(folly::dynamic::object()), {{10, 10}, {150, 40}}));
+  views.add(ngn::testing::MountedViews::shadow(3, "TextInput", ngn::testing::textInputProps(folly::dynamic::object()), {{10, 60}, {150, 40}}));
+  auto *window = GTK_WINDOW(views.window);
+  ngn::gtk::trackFocus(window);
+  bool moves = true;
+  ngn::gtk::routeKeys(window, std::make_shared<ngn::gtk::KeyRouting>(ngn::gtk::KeyRouting{
+      .focus = [&views, &moves](GtkWindow *w, guint keyval, GdkModifierType state) {
+        return moves && ngn::gtk::moveFocusByKey(w, keyval, state, *views.backend, views.mounting->tree());
+      },
+  }));
+  ngn::testing::runUntil([window] { return gtk_window_is_active(window); });
+  auto *first = ngn::gtk::viewData(views.view(2));
+  auto *second = ngn::gtk::viewData(views.view(3));
+  ngn::testing::SentEvents<TextInputEventEmitter> fromFirst(*first);
+  ngn::testing::SentEvents<TextInputEventEmitter> fromSecond(*second);
+  auto play = [window](const char *script) {
+    REQUIRE(ngn::gtk::replayInputScript(GTK_WIDGET(window), ngn::parseInputScript(script)));
+    settle();
+    settle();
+  };
+  auto focused = [window](ngn::gtk::ViewData *d) {
+    for (GtkWidget *w = gtk_root_get_focus(GTK_ROOT(window)); w; w = gtk_widget_get_parent(w)) {
+      if (w == d->widget) {
+        return true;
+      }
+    }
+    return false;
+  };
+  gtk_widget_grab_focus(first->field->text);
+  REQUIRE(focused(first));
+
+  // The window's focus keys take Tab: the first input sends it, and the second has the focus.
+  play("key tab\n");
+  CHECK(fromFirst.count("topKeyPress") == 1);
+  CHECK(fromSecond.count("topKeyPress") == 0);
+  CHECK(focused(second));
+  // Shift-Tab, from the second, back.
+  play("key tab shift\n");
+  CHECK(fromSecond.count("topKeyPress") == 1);
+  CHECK(fromFirst.count("topKeyPress") == 1);
+  CHECK(focused(first));
+
+  // Tab the focus keys leave alone reaches the input, which sends no second keyPress for it.
+  moves = false;
+  play("key tab\n");
+  CHECK(fromFirst.count("topKeyPress") == 2);
+  first->emitter = nullptr;
+  second->emitter = nullptr;
 }
