@@ -27,9 +27,12 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request, or to main, makes the older run of the same workflow pointless: the
+# newest run on main is the one a release waits for. A run started by hand, or called by the Release
+# workflow, has a group of its own and is never cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 env:
   # The per-user build cache, moved where actions/cache can keep it.
