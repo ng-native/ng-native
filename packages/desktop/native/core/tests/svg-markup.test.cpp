@@ -4,6 +4,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <optional>
 
 #include <string>
@@ -94,6 +95,11 @@ TEST_CASE("markup that is not an svg element is no document") {
   CHECK_FALSE(ngn::parseSvgMarkup("<div></div>"));
   CHECK_FALSE(ngn::parseSvgMarkup(R"svg(<svg viewBox="0 0 24 24"><path d="M0 0")svg"));
   CHECK_FALSE(ngn::parseSvgMarkup(R"svg(<svg viewBox=0 0 24 24></svg>)svg"));
+  // A closing tag that names another element, or that never ends, closes nothing.
+  CHECK_FALSE(ngn::parseSvgMarkup(R"svg(<svg><rect width="8" height="8"/></wrong>)svg"));
+  CHECK_FALSE(ngn::parseSvgMarkup(R"svg(<svg><g><rect width="8" height="8"/></svg></g>)svg"));
+  CHECK_FALSE(ngn::parseSvgMarkup(R"svg(<svg><rect width="8" height="8"/></svg)svg"));
+  CHECK(ngn::parseSvgMarkup(R"svg(<svg><g></g ></svg>)svg"));
   // Nested deeper than any icon: refused rather than read to the end of the stack.
   std::string deep = "<svg>";
   for (int i = 0; i < 10000; i++) {
@@ -110,6 +116,45 @@ TEST_CASE("an svg data uri's markup, percent-encoded or base64") {
   CHECK(ngn::svgMarkupOfUri("data:image/svg+xml;utf8,%3Csvg%20viewBox%3D%220%200%201%201%22%2F%3E") ==
         std::optional<std::string>(R"svg(<svg viewBox="0 0 1 1"/>)svg"));
   CHECK(ngn::svgMarkupOfUri("data:image/svg+xml;base64,PHN2Zy8+") == std::optional<std::string>("<svg/>"));
+  // Base64 is percent-encoded too where a uri needs it.
+  CHECK(ngn::svgMarkupOfUri("data:image/svg+xml;base64,PHN2Zy8%2B") == std::optional<std::string>("<svg/>"));
   CHECK_FALSE(ngn::svgMarkupOfUri("data:image/png;base64,AAAA"));
+  // Another media type that starts as this one does.
+  CHECK_FALSE(ngn::svgMarkupOfUri("data:image/svg+xml-extra,%3Csvg%2F%3E"));
   CHECK_FALSE(ngn::svgMarkupOfUri("https://example.com/icon.svg"));
+}
+
+TEST_CASE("an rgb() colour's alpha as a number or a percentage, after commas or a slash") {
+  auto drawn = drawnOf(
+      R"svg(<svg viewBox="0 0 24 24"><path d="M0 0H1" fill="rgba(255, 0, 0, 50%)"/><path d="M0 0H2" fill="rgb(128 0 0 / 0.25)"/>)svg"
+      R"svg(<path d="M0 0H3" fill="rgb(50% 0% 100% / 50%)"/><path d="M0 0H4" fill="rgb(1, 2, 3)"/></svg>)svg");
+  CHECK(drawn == Lines{
+                     "fill M0,0L1,0 #80ff0000",
+                     "fill M0,0L2,0 #40800000",
+                     "fill M0,0L3,0 #808000ff",
+                     "fill M0,0L4,0 #ff010203",
+                 });
+}
+
+TEST_CASE("painted in one colour, currentColor keeps the opacity of the colour it inherits") {
+  auto drawn = drawnOf(
+      R"svg(<svg viewBox="0 0 24 24" color="transparent"><path d="M0 0H1" fill="currentColor"/>)svg"
+      R"svg(<g color="rgba(0, 0, 0, 0.5)"><path d="M0 0H2" fill="currentColor"/></g><path d="M0 0H3"/></svg>)svg",
+      24, 0xff336699);
+  CHECK(drawn == Lines{
+                     "fill M0,0L1,0 #336699",
+                     "fill M0,0L2,0 #80336699",
+                     "fill M0,0L3,0 #ff336699",
+                 });
+}
+
+TEST_CASE("an attribute of many ampersands reads in linear time") {
+  std::string many(1000000, '&');
+  auto start = std::chrono::steady_clock::now();
+  auto document = ngn::parseSvgMarkup(R"svg(<svg viewBox="0 0 1 1" id=")svg" + many + R"svg("/>)svg");
+  CHECK(document);
+  CHECK(std::chrono::steady_clock::now() - start < std::chrono::seconds(2));
+  // A reference still reads, after an ampersand that starts none too.
+  CHECK(drawnOf(R"svg(<svg viewBox="0 0 24 24"><path d="M0 0H1" fill="&#35;f00"/><path d="M0 0H2" fill="&&#35;f00" stroke="&#35;f&#48;0&"/></svg>)svg") ==
+        Lines{"fill M0,0L1,0 #ffff0000", "fill M0,0L2,0 #ff000000"});
 }

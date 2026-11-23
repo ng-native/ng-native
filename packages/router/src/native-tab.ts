@@ -356,7 +356,11 @@ export class NativeTab implements OnInit {
   /** Anything a symbol name cannot say: an image, a template image, an asset-catalogue name. */
   readonly icon = input<TabIcon>();
 
-  /** Shown while this tab is the selected one. Absent leaves the platform to tint `icon`. */
+  /**
+   * Shown while this tab is the selected one in an iOS or Android tab bar. Absent leaves the
+   * platform to tint `icon`. On macOS and Linux the tab's sidebar row shows `icon` whether or not
+   * the tab is selected.
+   */
   readonly selectedIcon = input<TabIcon>();
 
   /** One of Apple's standard items, which supplies its own icon and title. */

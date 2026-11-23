@@ -70,8 +70,9 @@ std::string unescaped(std::string_view text) {
   static const std::map<std::string_view, char> named = {{"amp", '&'}, {"lt", '<'}, {"gt", '>'}, {"quot", '"'}, {"apos", '\''}};
   std::string out;
   for (size_t i = 0; i < text.size(); i++) {
-    size_t end = text[i] == '&' ? text.find(';', i) : std::string_view::npos;
-    if (end == std::string_view::npos) {
+    // A reference ends at the next `;`, before any other `&`, so each search covers its own span.
+    size_t end = text[i] == '&' ? text.find_first_of(";&", i + 1) : std::string_view::npos;
+    if (end == std::string_view::npos || text[end] != ';') {
       out += text[i];
       continue;
     }
@@ -202,7 +203,13 @@ class XmlReader {
         return std::nullopt;
       }
       if (at("</")) {
-        skipPast(">");
+        pos_ += 2;
+        bool closes = name() == e.tag;
+        skipSpace();
+        if (!closes || !at(">")) {
+          return std::nullopt;
+        }
+        pos_++;
         return e;
       }
       if (at("<!--")) {
@@ -328,14 +335,37 @@ std::optional<uint32_t> colorOf(const std::string &value) {
   }
   if (text.rfind("rgb", 0) == 0) {
     auto open = text.find('(');
-    auto values = numbers(open == std::string::npos ? "" : std::string_view(text).substr(open + 1));
-    if (values.size() < 3) {
+    auto close = text.find(')');
+    if (open == std::string::npos || close == std::string::npos || close < open) {
       return std::nullopt;
     }
-    bool percent = text.find('%') != std::string::npos;
-    double scale = percent ? 2.55 : 1;
+    // Each channel with its own unit: `rgb(255, 0, 0, 50%)` and `rgb(100% 0% 0% / 0.5)` alike.
+    std::vector<double> values;
+    std::string args = text.substr(open + 1, close - open - 1);
+    std::replace_if(args.begin(), args.end(), [](char c) { return c == ',' || c == '/'; }, ' ');
+    const char *p = args.c_str();
+    while (*p != '\0') {
+      while (isSpace(*p)) {
+        p++;
+      }
+      if (*p == '\0') {
+        break;
+      }
+      char *end = nullptr;
+      double value = std::strtod(p, &end);
+      if (end == p) {
+        return std::nullopt;
+      }
+      bool percent = *end == '%';
+      p = percent ? end + 1 : end;
+      bool alpha = values.size() == 3;
+      values.push_back(percent ? value * (alpha ? 1 : 255) / 100 : value);
+    }
+    if (values.size() < 3 || values.size() > 4) {
+      return std::nullopt;
+    }
     double alpha = values.size() > 3 ? values[3] : 1;
-    return argb(values[0] * scale, values[1] * scale, values[2] * scale, std::clamp(alpha, 0.0, 1.0));
+    return argb(values[0], values[1], values[2], std::clamp(alpha, 0.0, 1.0));
   }
   if (!text.empty() && std::all_of(text.begin(), text.end(), [](unsigned char c) { return std::isalpha(c); })) {
     return 0xff000000;
@@ -622,24 +652,33 @@ std::optional<SvgNode> nodeOf(const XmlElement &x) {
   return node;
 }
 
-void paint(SvgNode &node, uint32_t color) {
+// `tint` with the opacity of `source` too.
+uint32_t tinted(uint32_t source, uint32_t tint) {
+  double alpha = (source >> 24) / 255.0 * (tint >> 24) / 255.0;
+  return (static_cast<uint32_t>(std::lround(alpha * 255)) << 24) | (tint & 0xffffff);
+}
+
+// `node` in `tint`, where `current` is the colour its `currentColor` is as the markup draws it.
+void paint(SvgNode &node, uint32_t tint, uint32_t current) {
   auto &e = node.element;
+  if (e.color) {
+    current = *e.color;
+    e.color = tinted(current, tint);
+  }
   auto repaint = [&](SvgBrush &brush) {
     using T = SvgBrush::Type;
     if (brush.type == T::Color) {
-      double alpha = (brush.argb >> 24) / 255.0 * (color >> 24) / 255.0;
-      brush.argb = (static_cast<uint32_t>(std::lround(alpha * 255)) << 24) | (color & 0xffffff);
-    } else if (brush.type == T::CurrentColor || brush.type == T::Ref) {
-      brush = {.type = T::Color, .argb = color};
+      brush.argb = tinted(brush.argb, tint);
+    } else if (brush.type == T::CurrentColor) {
+      brush = {.type = T::Color, .argb = tinted(current, tint)};
+    } else if (brush.type == T::Ref) {
+      brush = {.type = T::Color, .argb = tint};
     }
   };
   repaint(e.fill);
   repaint(e.stroke);
-  if (e.color) {
-    e.color = color;
-  }
   for (auto &child : node.children) {
-    paint(child, color);
+    paint(child, tint, current);
   }
 }
 
@@ -688,13 +727,14 @@ SvgDocument svgPaintedIn(const SvgDocument &document, uint32_t argb) {
   SvgDocument painted = document;
   painted.root.element.color = argb;
   for (auto &child : painted.root.children) {
-    // A shape that sets no fill fills black, which would be the one colour not tinted.
+    // A shape that sets no fill fills black, which would be the one colour not tinted. It is black
+    // whatever the `color`, unlike a fill of `currentColor`.
     auto &list = child.element.propList;
     if (std::find(list.begin(), list.end(), "fill") == list.end()) {
-      child.element.fill = {.type = SvgBrush::Type::CurrentColor};
+      child.element.fill = {.type = SvgBrush::Type::Color, .argb = 0xff000000};
       list.emplace_back("fill");
     }
-    paint(child, argb);
+    paint(child, argb, document.root.element.color.value_or(0xff000000));
   }
   return painted;
 }
@@ -702,14 +742,14 @@ SvgDocument svgPaintedIn(const SvgDocument &document, uint32_t argb) {
 std::optional<std::string> svgMarkupOfUri(std::string_view uri) {
   constexpr std::string_view prefix = "data:image/svg+xml";
   size_t comma = uri.find(',');
-  if (uri.substr(0, prefix.size()) != prefix || comma == std::string_view::npos) {
+  // The whole media type: its parameters, if any, follow a `;`.
+  if (uri.substr(0, prefix.size()) != prefix || comma == std::string_view::npos ||
+      (uri[prefix.size()] != ';' && uri[prefix.size()] != ',')) {
     return std::nullopt;
   }
   auto header = uri.substr(prefix.size(), comma - prefix.size());
-  std::string data(uri.substr(comma + 1));
-  if (header.find(";base64") != std::string_view::npos) {
-    return base64Decode(data);
-  }
+  std::string_view data = uri.substr(comma + 1);
+  // Percent-encoded first, base64 or not.
   std::string out;
   for (size_t i = 0; i < data.size(); i++) {
     int high = i + 2 < data.size() && data[i] == '%' ? hexDigit(data[i + 1]) : -1;
@@ -720,6 +760,9 @@ std::optional<std::string> svgMarkupOfUri(std::string_view uri) {
     } else {
       out += data[i];
     }
+  }
+  if (header.find(";base64") != std::string_view::npos) {
+    return base64Decode(out);
   }
   return out;
 }

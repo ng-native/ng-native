@@ -70,7 +70,9 @@ It is tinted like a symbol, 25 points square on iOS and 24 on Android unless the
 Without a renderer the tab has no icon, and in development it logs a warning naming the tab's path.
 
 On macOS and Linux, where the tabs are the window's sidebar, the host draws the markup itself as
-the row's icon, so it needs no renderer and shows from the first frame.
+the row's icon, so it needs no renderer and shows from the first frame. It draws the shapes
+[`<native-button>`](/packages/components/native-button) lists, and the row shows `icon` whether or
+not the tab is selected, so `selectedIcon` goes unused there.
 
 Every tab is a route a user reaches in one tap, so a tab whose route is lazy pauses on its first
 visit while its code loads. `withPreloading(PreloadAllModules)` in `provideNativeRouter` loads

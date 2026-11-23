@@ -132,6 +132,15 @@ TEST_CASE("a native button is a GtkButton with its title, styled by its kind, an
   CHECK_FALSE(gtk_widget_has_css_class(button, "flat"));
 }
 
+TEST_CASE("a widget's pixel is read at its point's middle at a whole or a fractional scale") {
+  CHECK(ngn::testing::texelOf(13, 16, 16) == 13);
+  CHECK(ngn::testing::texelOf(8, 32, 16) == 17);
+  // 175%: 16 points drawn 28 texels wide, where point 13's middle is texel 23.
+  CHECK(ngn::testing::texelOf(13, 28, 16) == 23);
+  CHECK(ngn::testing::texelOf(2, 28, 16) == 4);
+  CHECK(ngn::testing::texelOf(20, 28, 16) == 27);
+}
+
 TEST_CASE("a native button draws its SVG icon before its title, and only its title once the icon is taken away") {
   REQUIRE(ngn::testing::gtkReady());
   using Descriptor = ngn::NativeButtonComponentDescriptor;
