@@ -693,7 +693,7 @@ interface Committed {
   viewName: string;
   /**
    * What the UI thread had drawn its outer view with, for an element committed as two views,
-   * where those are kept out of `props`: see `drawnOver`.
+   * whose inner view's keys among them are kept out of `props`: see `drawnOver`.
    */
   drawn?: Readonly<Record<string, unknown>>;
 }
@@ -1224,45 +1224,34 @@ function scrollerProps(props: Record<string, unknown>): {
   };
 }
 
-/** Whether a node is committed as two views, which split its props between them. */
-const splitsViews = (node: EngineNode): boolean => node.scrollView === true || !!node.wrapper;
+/**
+ * The keys a node committed as two views gives its inner view, a scroll view's content or an
+ * element's wrapper, or null for a node committed as one.
+ */
+function innerKeys(node: EngineNode): ReadonlySet<string> | null {
+  if (node.scrollView === true) return CONTENT_KEYS;
+  return node.wrapper ? CHILD_PLACING : null;
+}
 
 /**
- * A two-view element's outer payload with what the UI thread drew on it (`setUiThreadProps`).
- * Reanimated drew on the view its tag names, the outer one, whatever the key, so those props are
- * kept out of the merge the split routes by key, and set here over the outer view's own: each
- * that came, changed or went is in the payload, as its own value where it went, and a change of
- * the element's own value under one is not.
+ * A two-view element's outer payload with the props the UI thread drew on it (`setUiThreadProps`)
+ * that the split would give the inner view. Reanimated drew on the view its tag names, the outer
+ * one, whatever the key. The rest are merged as a single view's are; these are kept out of the
+ * merge the split routes by key and set on the outer view here, each that came, changed or went.
  */
 function drawnOver(
   box: Record<string, unknown>,
-  before: Readonly<Record<string, unknown>>,
-  after: Readonly<Record<string, unknown>>,
   had: Readonly<Record<string, unknown>> | undefined,
   drawn: Readonly<Record<string, unknown>> | undefined,
   inner: ReadonlySet<string>,
 ): Record<string, unknown> {
   // Asked first, without a set: nearly no element committed as two views is drawn on.
   if (had === undefined && drawn === undefined) return box;
-  const keys = new Set([...Object.keys(had ?? {}), ...Object.keys(drawn ?? {})]);
-  for (const key of keys) {
-    const was = outerValue(key, before, had, inner);
-    const now = outerValue(key, after, drawn, inner);
-    if (Object.is(was, now)) delete box[key];
-    else box[key] = now ?? null;
+  for (const key of new Set([...Object.keys(had ?? {}), ...Object.keys(drawn ?? {})])) {
+    if (!inner.has(key) || Object.is(had?.[key], drawn?.[key])) continue;
+    box[key] = drawn?.[key] ?? null;
   }
   return box;
-}
-
-/** What a two-view element's outer view is committed with for `key`: see `drawnOver`. */
-function outerValue(
-  key: string,
-  own: Readonly<Record<string, unknown>>,
-  drawn: Readonly<Record<string, unknown>> | undefined,
-  inner: ReadonlySet<string>,
-): unknown {
-  if (drawn && key in drawn) return drawn[key];
-  return inner.has(key) ? undefined : own[key];
 }
 
 /** The props of a payload, or null where there are none. */
@@ -8623,6 +8612,17 @@ export class Engine implements HostEngine {
     this.markProps(node, false);
   }
 
+  /** Merge what the UI thread drew on a node, but what `drawnOver` sets on an outer view. */
+  private mergeDrawn(
+    node: EngineNode,
+    merged: Record<string, unknown>,
+    drawn: Readonly<Record<string, unknown>>,
+  ): void {
+    const inner = innerKeys(node);
+    if (!inner) return void Object.assign(merged, drawn);
+    for (const key in drawn) if (!inner.has(key)) merged[key] = drawn[key];
+  }
+
   /**
    * Stop showing the last frame of a node's finished `@keyframes` animation, where nothing holds
    * it there any more: script took its hold away after it ended. The node is what the cascade
@@ -13371,10 +13371,9 @@ export class Engine implements HostEngine {
     }
     keptForPaint(node, merged);
     // Last, over everything the engine worked out, as Reanimated's commit hook applied them. An
-    // element committed as two views takes them on its outer view after the split: `drawnOver`.
-    if (node.uiThreadProps !== undefined && !splitsViews(node)) {
-      Object.assign(merged, node.uiThreadProps);
-    }
+    // element committed as two views takes those its inner view would on its outer one instead,
+    // after the split: `drawnOver`.
+    if (node.uiThreadProps !== undefined) this.mergeDrawn(node, merged, node.uiThreadProps);
     // Asked first, without a call: nearly no node merged sets paint in its own style.
     const ownStyle = node.props['style'] as Record<string, unknown> | undefined;
     if (node.paintPassed !== undefined || setsPaint(ownStyle)) {
@@ -15996,7 +15995,7 @@ export class Engine implements HostEngine {
     const moved = this.childrenMoved(node, childHandles, held.childHandles);
     const { box, content } = splitScroller(payload ?? {});
     const drawn = node.uiThreadProps;
-    drawnOver(box, previous.props, props, previous.drawn, drawn, CONTENT_KEYS);
+    drawnOver(box, previous.drawn, drawn, CONTENT_KEYS);
     // All of it: the content's padding moves what it holds, and can resize the element.
     if (this.notesMoves) this.noteClone(node, payload, moved, childHandles, previous);
     const inside = this.clonedFor(held.handle, someProps(content), moved ? childHandles : null);
@@ -16048,7 +16047,7 @@ export class Engine implements HostEngine {
 
   /**
    * What a wrapped element's own view is cloned with: its share of the payload, with what the UI
-   * thread drew on it (`drawnOver`), less what native paints.
+   * thread drew on it that the wrapper would otherwise take (`drawnOver`), less what native paints.
    */
   private wrappedBox(
     node: EngineNode,
@@ -16058,12 +16057,13 @@ export class Engine implements HostEngine {
     payload: Record<string, unknown> | null,
     aroundMoved: boolean,
   ): Record<string, unknown> | null {
-    const drawn = node.uiThreadProps;
-    const box = splitWrapped(payload ?? {}).box;
-    drawnOver(box, previous.props, props, previous.drawn, drawn, CHILD_PLACING);
-    // Native paints the outer view as it is committed: with what the UI thread drew on it.
-    const outer = drawn ? { ...props, ...drawn } : props;
-    return this.paintNatively(node, viewName, outer, someProps(box), aroundMoved);
+    const box = drawnOver(
+      splitWrapped(payload ?? {}).box,
+      previous.drawn,
+      node.uiThreadProps,
+      CHILD_PLACING,
+    );
+    return this.paintNatively(node, viewName, props, someProps(box), aroundMoved);
   }
 
   /** `noteClone` for a wrapped element, whose children are counted in its wrapper. */

@@ -116,7 +116,7 @@ function split(css: string, wrap: boolean) {
   engine.appendChild(engine.root, box);
   const outer = () => fabric.committed[0]!;
   const inner = () => outer().children[0]!;
-  return { engine, box, outer, inner };
+  return { engine, fabric, box, outer, inner };
 }
 
 for (const [name, css, key, ownKey, own, drawn, wrap] of [
@@ -171,6 +171,16 @@ for (const [name, css, key, ownKey, own, drawn, wrap] of [
       assert.equal(inner().props[ownKey], own);
     });
 
+    it('sends them again only when they change', () => {
+      const { engine, box, fabric } = split(css, wrap);
+      engine.setUiThreadProps(box, { [key]: drawn });
+      engine.commit();
+      const before = { ...fabric.calls };
+      engine.setProp(box.childList![0]!, 'nativeID', 'child');
+      engine.commit();
+      assert.equal(fabric.calls.cloneWithChildrenAndProps, before.cloneWithChildrenAndProps);
+    });
+
     it('keeps them over a later change to the same prop of its own', () => {
       const { engine, box, outer } = split(css, wrap);
       engine.setProp(box, 'style', { opacity: 0.2 });
@@ -210,4 +220,33 @@ it('has native paint them on a wrapped element changed again and again, not its 
   const painted = rec.painted(engine.tagOf(box)!)['opacity'];
   const shown = painted ?? fabric.committed[0]!.props['opacity'];
   assert.equal(shown, 0.8);
+});
+
+it('keeps them when native paints a wrapped element again after an unrelated commit', () => {
+  const rec = recorder();
+  const fabric = createLaidOutFabric();
+  let now = 0;
+  const engine = new Engine(fabric, 1, {
+    globalStyles: compileCss(`.c { width: 200px; height: 10px }`) as StyleSheet,
+    nativeAnimated: rec.native,
+    now: () => now,
+  });
+  const box: EngineNode = engine.createElement('view');
+  engine.setClasses(box, 'c');
+  engine.wrapChildren(box, { viewName: 'RCTView', props: {} });
+  engine.appendChild(box, engine.createElement('view'));
+  engine.appendChild(engine.root, box);
+  engine.commit();
+  for (const x of ['10%', '20%', '30%']) {
+    now += 50;
+    engine.advanceAnimations();
+    engine.setUiThreadProps(box, { transform: [{ translateX: x }] });
+    engine.commit();
+  }
+  now += 50;
+  engine.setProp(box, 'accessibilityLabel', 'unrelated');
+  engine.commit();
+  const tag = engine.tagOf(box)!;
+  const painted = rec.painted(tag)['transform'];
+  assert.deepEqual(painted ?? fabric.committed[0]!.props['transform'], [{ translateX: 60 }]);
 });
