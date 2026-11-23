@@ -8,11 +8,14 @@ import {
   pinnedRange,
 } from '@ng-native/fabric';
 import { STICKY_SETTLE_MS } from './sticky-headers.ts';
+import type { VirtualListSticky } from './virtual-list-sticky.ts';
 
 /** What `StickyRows` needs of the list whose rows it pins. */
 export interface StickyRowsList {
   /** The sticky rows' indices, as `stickyIndices` gives them. */
   readonly indices: Signal<readonly number[]>;
+  /** The rows' levels, when a directive on the list gives them, read from the items. */
+  readonly levels: VirtualListSticky | null;
   readonly items: Signal<readonly unknown[]>;
   /** Whether the list header is pinned too, as `stickyHeader` says. */
   readonly header: Signal<boolean>;
@@ -37,11 +40,35 @@ interface Row {
   readonly parked?: boolean;
 }
 
+/** A sticky row: how deep it is, the rows it pins under, and the row that pushes it off. */
+interface StickyRow {
+  /** 0 for the outermost. The rows of `stickyIndices` are all at 0. */
+  readonly level: number;
+  /** The nearest row before it of each level further out, outermost first. */
+  readonly above: readonly number[];
+  /** The next row at its level or further out, if there is one. */
+  next: number | undefined;
+}
+
+const NONE: readonly number[] = [];
+
 /**
- * `<virtual-list>`'s sticky rows: which one holds the leading edge, the style that pins it, the
+ * The zIndex of a level 0 row where rows have levels, each level further in one under it. Fixed,
+ * not counted from the levels the list holds: a deeper level arriving would otherwise commit new
+ * props on every sticky row, and a view native is moving goes back to its place for a frame.
+ * Levels this deep and deeper share a zIndex of 1.
+ */
+const FRONT = 100;
+
+/**
+ * `<virtual-list>`'s sticky rows: which hold the leading edge, the style that pins each, the
  * header's pinned style, and, where the host moves views by the scroll on the native side, what
  * native is moving. The list's own share of `stickyIndices` and `stickyHeader`, as `StickyHeaders`
  * is `<scroll-view>`'s.
+ *
+ * Rows pin at levels, when `virtualListStickyLevel` gives them: a row holds the edge under the
+ * rows of the levels further out than its own, and the next row at its level or further out pushes
+ * it off. Without levels every sticky row is at level 0, each pushed off by the next.
  *
  * Pinning is not native: RN's `ScrollView.js` translates a sticky child against the scroll offset
  * in JavaScript, and a row here follows the offset the same way while it is the current one, by
@@ -94,40 +121,75 @@ export class StickyRows {
     this.native = engine.drivesScroll;
   }
 
-  /**
-   * The sticky indices that have a row. One given for rows not there yet pins nothing and pushes
-   * nothing off until its row arrives.
-   */
-  private readonly indices = computed(() => {
-    const count = this.list.items().length;
-    return this.list.indices().filter((index) => index < count);
-  });
-
   /** Whether the scroll offset is needed as a signal, which only pinning needs. */
-  private readonly pinning = computed(() => this.list.header() || this.indices().length > 0);
+  private readonly pinning = computed(() => this.list.header() || this.rows().size > 0);
 
-  /** Each sticky row, and the one after it, which pushes it off. */
-  readonly next = computed(() => {
-    const sticky = this.indices();
-    return new Map(sticky.map((index, at) => [index, sticky[at + 1]]));
+  /**
+   * Each sticky row's level, in list order: the rows of `stickyIndices` at level 0, and with a
+   * level function every row it gives one. Rows that size themselves take level 0 alone: where a
+   * deeper row pins depends on the heights of the rows over it. A sticky index given for rows not
+   * there yet pins nothing and pushes nothing off until its row arrives.
+   */
+  private readonly levels = computed<readonly (readonly [index: number, level: number])[]>(() => {
+    const indices = this.list.indices();
+    const levelOf = this.list.levels?.levelOf();
+    const items = this.list.items();
+    const levels: [number, number][] = [];
+    if (!levelOf) {
+      for (const index of indices) if (index < items.length) levels.push([index, 0]);
+      return levels;
+    }
+    const outermost = new Set(indices);
+    const flow = this.list.measuring();
+    items.forEach((item, index) => {
+      const level = outermost.has(index) ? 0 : levelOf(item, index);
+      if (level !== null && !(flow && level > 0)) levels.push([index, level]);
+    });
+    return levels;
+  });
+
+  /** Each sticky row, with the rows it pins under and the one that pushes it off. */
+  readonly rows = computed(() => {
+    const rows = new Map<number, StickyRow>();
+    // The rows a row here would pin under: each deeper than the one before it.
+    const open: number[] = [];
+    for (const [index, level] of this.levels()) {
+      while (open.length > 0 && rows.get(open.at(-1)!)!.level >= level) {
+        rows.get(open.pop()!)!.next = index;
+      }
+      rows.set(index, { level, above: [...open], next: undefined });
+      open.push(index);
+    }
+    return rows;
   });
 
   /**
-   * The sticky row currently holding the leading edge: the last one at or before the offset.
-   * Null when the list has scrolled back above the first of them.
+   * The sticky rows currently holding the leading edge, outermost first: the last one the offset
+   * has reached, under the rows it pins under. Empty when the list has scrolled back above the
+   * first of them.
    */
-  readonly pinned = computed<number | null>(() => {
-    const sticky = this.indices();
-    if (sticky.length === 0) return null;
-    const offset = this.offset();
+  readonly pinned = computed<readonly number[]>(
+    () => {
+      const order = this.levels();
+      if (order.length === 0) return NONE;
+      const offset = this.offset();
 
-    let pinned: number | null = null;
-    for (const index of sticky) {
-      if (this.list.topOf(index) <= offset) pinned = index;
-      else break;
-    }
-    return pinned;
-  });
+      // Where a row starts to hold never comes before where the row before it does, so the last
+      // one the offset has reached is found by halving.
+      let low = 0;
+      let high = order.length;
+      while (low < high) {
+        const middle = (low + high) >> 1;
+        if (this.startOf(order[middle]![0]) <= offset) low = middle + 1;
+        else high = middle;
+      }
+      if (low === 0) return NONE;
+      const pinned = order[low - 1]![0];
+      return [...this.rows().get(pinned)!.above, pinned];
+    },
+    // The same rows are the same pinning: where native moves them, a scroll then re-renders none.
+    { equal: (a, b) => a.length === b.length && a.every((index, at) => index === b[at]) },
+  );
 
   /**
    * The header's translation while it is pinned: the scroll position, held back at zero by an
@@ -137,7 +199,7 @@ export class StickyRows {
     const flip = this.list.flipText();
     if (!this.list.header()) return flip ? { transform: flip } : undefined;
     const along = this.offset() + this.list.headerHeight();
-    const first = this.indices()[0];
+    const [first] = this.rows().keys();
     const limit = first === undefined ? Infinity : this.list.topOf(first);
     const shift = Math.min(Math.max(0, along), limit);
     const move =
@@ -147,22 +209,27 @@ export class StickyRows {
   });
 
   /**
-   * Where a pinned row is along the list: at the leading edge, until the next sticky row reaches
-   * it there and pushes it off.
-   */
-  pinnedAt(index: number): number {
-    return Math.min(this.offset(), this.stopOf(index));
-  }
-
-  /**
    * The pinned row `index` in flow, moved by a transform from `at`, where flow put it, to the leading
    * edge, until the next sticky row reaches it there and pushes it off.
    */
   flowStyle(index: number, at: number): Record<string, unknown> {
-    const shift = Math.max(0, this.pinnedAt(index) - at);
+    const shift = Math.max(0, Math.min(this.offset(), this.stopOf(index)) - at);
     const move = `${this.list.horizontal() ? 'translateX' : 'translateY'}(${shift}px)`;
     const flip = this.list.flipText();
     return { ...this.list.flowSpacing(), zIndex: 1, transform: flip ? `${move} ${flip}` : move };
+  }
+
+  /**
+   * A pinned row placed by its `top`: under the rows it pins under, until the next row at its
+   * level or further out reaches it there and pushes it off.
+   */
+  slotStyle(index: number): Record<string, unknown> {
+    const at = Math.min(this.offset(), this.stopOf(index)) + this.above(index);
+    return {
+      ...this.list.slotStyle(index),
+      [this.list.horizontal() ? 'left' : 'top']: at,
+      zIndex: this.zIndexOf(index),
+    };
   }
 
   /**
@@ -174,9 +241,9 @@ export class StickyRows {
     const style: Record<string, unknown> = this.list.measuring()
       ? { ...this.list.flowSpacing() }
       : { ...this.list.slotStyle(index) };
-    style['zIndex'] = 1;
-    const top = this.list.topOf(index);
-    const shift = Math.min(Math.max(0, this.settled() - top), this.stopOf(index) - top);
+    style['zIndex'] = this.zIndexOf(index);
+    const start = this.startOf(index);
+    const shift = Math.min(Math.max(0, this.settled() - start), this.stopOf(index) - start);
     const move = shift > 0 ? `${horizontal ? 'translateX' : 'translateY'}(${shift}px)` : '';
     const transform = [move, this.list.flipText() ?? ''].filter(Boolean).join(' ');
     if (transform) style['transform'] = transform;
@@ -189,7 +256,7 @@ export class StickyRows {
    * back. Apart from that, `kind`, the row's `itemType`.
    */
   recyclingType(index: number, kind: unknown): unknown {
-    if (!this.next().has(index)) return kind;
+    if (!this.rows().has(index)) return kind;
     let type = this.typeOfKind.get(kind);
     if (!type) {
       type = Symbol('sticky');
@@ -309,22 +376,48 @@ export class StickyRows {
     for (const held of this.drives.values()) held.drive.stop();
   }
 
-  /** Where a sticky row stops, pushed off by the next: that row's top, less this row's size. */
+  /** The size of the rows a sticky row pins under, which is how far from the edge it holds. */
+  private above(index: number): number {
+    let size = 0;
+    for (const over of this.rows().get(index)?.above ?? NONE) size += this.list.heightOf(over);
+    return size;
+  }
+
+  /**
+   * A deeper row is drawn under the rows it pins under, and every sticky row over the rest. See
+   * `FRONT`. Without levels a sticky row's zIndex is 1, as it was before there were any.
+   */
+  private zIndexOf(index: number): number {
+    if (!this.list.levels?.levelOf()) return 1;
+    return Math.max(1, FRONT - (this.rows().get(index)?.level ?? 0));
+  }
+
+  /** The offset a sticky row starts to hold from: where its top meets the rows it pins under. */
+  private startOf(index: number): number {
+    return this.list.topOf(index) - this.above(index);
+  }
+
+  /**
+   * The offset a sticky row stops holding at, pushed off by the next: where that row's top meets
+   * this row's far edge.
+   */
   private stopOf(index: number): number {
-    const next = this.next().get(index);
-    return next === undefined ? Infinity : this.list.topOf(next) - this.list.heightOf(index);
+    const next = this.rows().get(index)?.next;
+    if (next === undefined) return Infinity;
+    return this.list.topOf(next) - this.list.heightOf(index) - this.above(index);
   }
 
   /**
    * How native moves a rendered row, or null when it does not: along the scroll view's own
-   * offset, which counts the header, from the row's top until the next sticky row pushes it off.
-   * A row the next one follows with no space between them holds nowhere, so native moves it
-   * nowhere: it is not let go, since native keeps the translate it had moved a row by.
+   * offset, which counts the header, from where the row meets the rows it pins under until the
+   * next sticky row pushes it off. A row the next one follows with no space between them holds
+   * nowhere, so native moves it nowhere: it is not let go, since native keeps the translate it
+   * had moved a row by.
    */
   private driveOf(row: Row): { range: ScrollRange; statics: readonly StaticTransform[] } | null {
-    if (!this.native || row.parked || !this.next().has(row.index)) return null;
+    if (!this.native || row.parked || !this.rows().has(row.index)) return null;
     const header = this.list.headerHeight();
-    const start = header + this.list.topOf(row.index);
+    const start = header + this.startOf(row.index);
     const stop = header + this.stopOf(row.index);
     return {
       range:

@@ -331,6 +331,52 @@ same time are placed at the same offset, unless `maintainVisibleContentPosition`
 
 <!-- api: VirtualListNumColumns -->
 
+### Sticky levels
+
+`[virtualListStickyLevel]` on the list pins rows at more than one level: a year at the leading
+edge, its month under it and the day under that, as a calendar's agenda or a grouped table does.
+It takes a function of each item and its index that returns the row's level, 0 for the outermost,
+or `null` for a row that scrolls with the rest:
+
+```html
+<virtual-list
+  #list
+  [items]="rows()"
+  [itemHeight]="44"
+  [virtualListStickyLevel]="levelOf"
+  [virtualListMaxStickyLevels]="2"
+>
+  @for (row of list.window(); track row.slot) {
+  <view [virtualListRow]="row"><text>{{ row.item.label }}</text></view>
+  }
+</virtual-list>
+```
+
+```ts
+protected readonly levelOf = (row: Row) =>
+  row.kind === 'year' ? 0 : row.kind === 'month' ? 1 : row.kind === 'day' ? 2 : null;
+```
+
+A row pins under the nearest row before it of each level further out than its own, and stays
+there while the rows after it scroll under it. The next row at its own level, or at one further
+out, pushes it off: a new day pushes the day before it off and leaves the month and the year, a
+new month pushes the month and its day off, and a new year all three. A row drawn over another is
+the one further out, so a row being pushed off slides under the rows it was pinned under.
+`[virtualListMaxStickyLevels]` keeps the levels from that number on from pinning: with 2, years
+and months pin and days scroll with the rest. Without it every level pins.
+
+The rows of `stickyIndices` are at level 0, so the two can be given together, and they pin
+whatever `[virtualListMaxStickyLevels]` is, which limits the levels the function gives.
+`stickyHeader` is pushed off by the first sticky row whatever its level. With columns, a sticky
+row of any level takes a line to itself. On a horizontal list the levels pin side by side from the
+leading edge.
+
+Levels are for a list with `itemHeight`, since a row pins under others by their heights. With rows
+that size themselves, level 0 pins as `stickyIndices` does, deeper rows scroll with the rest, and
+the list says so in development.
+
+<!-- api: VirtualListStickyLevel -->
+
 ## Section list
 
 `<section-list>` is `SectionList`: `sections` of `{ title, data }`, drawn from templates for the

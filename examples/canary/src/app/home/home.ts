@@ -240,6 +240,11 @@ export class Home {
       title: 'Virtual grid',
       blurb: '5,000 tiles in 2, 3 or 4 columns, months pinned across them',
     },
+    {
+      path: '/sticky-levels',
+      title: 'Sticky levels',
+      blurb: 'three years of an agenda, the year, month and day pinned one under the other',
+    },
     { path: '/modal', title: 'Modal', blurb: 'native presentation' },
     {
       path: '/regressions',

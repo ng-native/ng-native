@@ -161,6 +161,8 @@ export {
 } from './virtual-list.ts';
 export { VIRTUAL_LIST_LAYOUT, type VirtualListLayout } from './virtual-list-layout.ts';
 export { VirtualListNumColumns } from './virtual-list-num-columns.ts';
+export { VIRTUAL_LIST_STICKY, type VirtualListSticky } from './virtual-list-sticky.ts';
+export { VirtualListStickyLevel } from './virtual-list-sticky-level.ts';
 export { type GestureBackend, type GestureSpec, type GestureTarget } from './gesture-backend.ts';
 export {
   workletScroll,

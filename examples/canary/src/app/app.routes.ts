@@ -227,6 +227,10 @@ export const routes: Routes = [
   { path: 'list', loadComponent: () => import('./lists/list.ts').then((m) => m.ListPage) },
   { path: 'grid', loadComponent: () => import('./lists/grid.ts').then((m) => m.GridPage) },
   {
+    path: 'sticky-levels',
+    loadComponent: () => import('./lists/sticky-levels.ts').then((m) => m.StickyLevelsPage),
+  },
+  {
     path: 'components',
     loadComponent: () => import('./components/components.ts').then((m) => m.ComponentsPage),
   },

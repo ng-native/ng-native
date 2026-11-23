@@ -31,6 +31,7 @@ import { TemplateSlot } from './template-slot.ts';
 import { ZeroSizeWarning, checksZeroSize, written } from './zero-size-warning.ts';
 import { View } from './view.ts';
 import { VIRTUAL_LIST_LAYOUT } from './virtual-list-layout.ts';
+import { VIRTUAL_LIST_STICKY } from './virtual-list-sticky.ts';
 import { ScrollViewProps } from './scroll-view-props.ts';
 import { numberOr } from './transforms.ts';
 
@@ -232,7 +233,8 @@ interface Span {
  * the first sticky row pushes it off as RN's sticky headers push each other. Neither is native:
  * RN's `ScrollView.js` translates a sticky child against the scroll offset in JavaScript, and a
  * row here follows the offset the same way while it is the current one - by its `top` when
- * absolutely positioned, by a transform when in flow.
+ * absolutely positioned, by a transform when in flow. `[virtualListStickyLevel]` on the list pins
+ * rows at more than one level, each under the rows of the levels further out.
  *
  * What is on screen stays on screen when a measured row above it turns out taller or shorter than
  * its estimate: the offset is corrected by the difference. `maintainVisibleContentPosition` does
@@ -431,6 +433,7 @@ export class VirtualList<T> extends ScrollViewProps {
   /** The sticky rows and header: see `StickyRows`. */
   private readonly sticky = new StickyRows(this.engine, this.node, {
     indices: this.stickyIndices,
+    levels: inject(VIRTUAL_LIST_STICKY, { self: true, optional: true }),
     items: this.items,
     header: this.stickyHeader,
     headerHeight: this.headerHeight,
@@ -486,7 +489,7 @@ export class VirtualList<T> extends ScrollViewProps {
     const columns = this.columns();
     if (columns === 1) return null;
     const count = this.items().length;
-    const sticky = this.sticky.next();
+    const sticky = this.sticky.rows();
     const of = new Int32Array(count);
     const starts: number[] = [];
     let column = columns;
@@ -515,7 +518,7 @@ export class VirtualList<T> extends ScrollViewProps {
   /** An item's insets across the axis: its column's, or the whole width's. */
   private acrossOf(index: number): Record<string, unknown> {
     const lines = this.lines();
-    if (!lines || this.sticky.next().has(index)) return this.across();
+    if (!lines || this.sticky.rows().has(index)) return this.across();
     return this.columnAcross()[index - lines.starts[lines.of[index]!]!]!;
   }
 
@@ -1004,37 +1007,37 @@ export class VirtualList<T> extends ScrollViewProps {
   protected readonly spacer = computed(() => {
     const span = this.span();
     let lead = span ? this.topOf(span.first) : 0;
-    const pinned = this.sticky.pinned();
-    if (span && pinned !== null && pinned < span.first) {
+    const [pinned] = this.sticky.pinned();
+    if (span && pinned !== undefined && pinned < span.first) {
       lead = this.sticky.native ? this.topOf(pinned) : lead - this.heightOf(pinned) - this.rowGap();
     }
     return this.horizontal() ? { width: Math.max(0, lead) } : { height: Math.max(0, lead) };
   });
 
-  /** The rows from `first` up to `last`, and the pinned row above them if there is one. */
+  /** The rows from `first` up to `last`, and the pinned rows above them if there are any. */
   private rowsFor(items: readonly T[], first: number, last: number): VirtualRow<T>[] {
     const rows: VirtualRow<T>[] = [];
     const pinned = this.sticky.pinned();
-    const pinnedAbove = pinned !== null && pinned < first;
-    this.releaseRecycled(first, last, pinnedAbove ? pinned : null);
-    // The pinned row is on screen even when its own place in the list is not, which is the whole
+    const above = pinned.filter((index) => index < first);
+    this.releaseRecycled(first, last, above);
+    // A pinned row is on screen even when its own place in the list is not, which is the whole
     // point of it, so it is rendered whether or not the window reaches that far.
-    if (pinnedAbove) {
-      const key = this.keyAt(pinned);
+    for (const index of above) {
+      const key = this.keyAt(index);
       rows.push(
         this.hold({
-          index: pinned,
-          slot: this.recycledSlot(key, items[pinned]!, pinned),
+          index,
+          slot: this.recycledSlot(key, items[index]!, index),
           key,
-          item: items[pinned]!,
+          item: items[index]!,
           style: this.sticky.native
-            ? this.sticky.style(pinned)
+            ? this.sticky.style(index)
             : this.measuring()
               ? this.sticky.flowStyle(
-                  pinned,
-                  this.topOf(first) - this.heightOf(pinned) - this.rowGap(),
+                  index,
+                  this.topOf(first) - this.heightOf(index) - this.rowGap(),
                 )
-              : this.slotStyle(pinned, this.sticky.pinnedAt(pinned)),
+              : this.sticky.slotStyle(index),
         }),
       );
     }
@@ -1046,11 +1049,15 @@ export class VirtualList<T> extends ScrollViewProps {
           slot: this.recycledSlot(key, items[index]!, index),
           key,
           item: items[index]!,
-          style: this.styleFor(index, index === pinned),
+          style: this.styleFor(index, pinned.includes(index)),
         }),
       );
     }
-    if (pinnedAbove && this.sticky.native && this.measuring()) this.leadWindow(rows, pinned, first);
+    // Rows in flow pin one at a time, so the one above the window is the only one.
+    const [lead] = above;
+    if (lead !== undefined && this.sticky.native && this.measuring()) {
+      this.leadWindow(rows, lead, first);
+    }
     return rows;
   }
 
@@ -1069,11 +1076,11 @@ export class VirtualList<T> extends ScrollViewProps {
   }
 
   private styleFor(index: number, pinned: boolean): Record<string, unknown> {
-    if (this.sticky.native && this.sticky.next().has(index)) return this.sticky.style(index);
+    if (this.sticky.native && this.sticky.rows().has(index)) return this.sticky.style(index);
     if (this.measuring()) {
       return pinned ? this.sticky.flowStyle(index, this.topOf(index)) : this.flowStyle();
     }
-    return pinned ? this.slotStyle(index, this.sticky.pinnedAt(index)) : this.slotStyle(index);
+    return pinned ? this.sticky.slotStyle(index) : this.slotStyle(index);
   }
 
   /**
@@ -1113,10 +1120,10 @@ export class VirtualList<T> extends ScrollViewProps {
    * hidden, it waits for the next row of its type however many passes later, which is what a
    * reuse queue of cells does in UIKit.
    */
-  private releaseRecycled(first: number, last: number, pinned: number | null): void {
+  private releaseRecycled(first: number, last: number, pinned: readonly number[]): void {
     const keep = new Set<unknown>();
     for (let index = first; index < last; index++) keep.add(this.keyAt(index));
-    if (pinned !== null) keep.add(this.keyAt(pinned));
+    for (const index of pinned) keep.add(this.keyAt(index));
     for (const [key, held] of this.recycled) {
       if (keep.has(key)) continue;
       this.recycled.delete(key);
@@ -1145,7 +1152,7 @@ export class VirtualList<T> extends ScrollViewProps {
     // A sticky row is a type of its own: native keeps the translate it moved one by, and a plain
     // row taking its slot commits no transform to put it back. A row that stops or starts being
     // sticky takes a new slot for the same reason.
-    const sticky = this.sticky.next().has(index);
+    const sticky = this.sticky.rows().has(index);
     const held = this.recycled.get(key);
     if (held && this.sticky.isType(held.type) === sticky) return held.slot;
     const type = this.sticky.recyclingType(index, this.itemType()?.(item, index));
@@ -1371,8 +1378,8 @@ export class VirtualList<T> extends ScrollViewProps {
     this.engine.dispatchCommand(this.node, 'scrollToEnd', [options.animated ?? true]);
   }
 
-  private slotStyle(index: number, pinnedAt?: number): Record<string, unknown> {
-    const start = pinnedAt ?? this.topOf(index);
+  private slotStyle(index: number): Record<string, unknown> {
+    const start = this.topOf(index);
     const size = this.heightOf(index);
     const horizontal = this.horizontal();
     const key = horizontal ? 'left' : 'top';
@@ -1385,19 +1392,15 @@ export class VirtualList<T> extends ScrollViewProps {
     // The flip is part of the comparison because turning the list over changes every row, and a
     // cached slot would otherwise keep the orientation it was built with.
     const placed = { ...across, [extent]: size, [key]: start, transform: flip };
-    const stale = !style || pinnedAt !== undefined || !holds(style, placed);
+    const stale = !style || !holds(style, placed);
 
     if (stale) {
       style = horizontal
         ? { position: 'absolute', ...across, left: start, width: size }
         : { position: 'absolute', ...across, top: start, height: size };
-      // A pinned row draws over the ones sliding under it; the transform is the row's half of
-      // the inversion.
-      if (pinnedAt !== undefined) style['zIndex'] = 1;
+      // The transform is the row's half of the inversion.
       if (flip) style['transform'] = flip;
-      // Not a pinned row's, which the row would keep, zIndex and all, where it is pinned at its
-      // own place and then is a plain row there.
-      if (pinnedAt === undefined) this.slots.set(index, style);
+      this.slots.set(index, style);
       return style;
     }
     return style!;
