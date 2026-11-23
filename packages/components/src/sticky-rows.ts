@@ -164,6 +164,22 @@ export class StickyRows {
   });
 
   /**
+   * For each sticky row in list order, the least offset that reaches it or a row after it. Where a
+   * row starts to hold never comes before where the row before it does, unless a negative `rowGap`
+   * overlaps the rows, and this stays in order either way, so `pinned` can halve over it.
+   */
+  private readonly reach = computed(() => {
+    const order = this.levels();
+    const reach = new Array<number>(order.length);
+    let least = Infinity;
+    for (let at = order.length - 1; at >= 0; at--) {
+      least = Math.min(least, this.startOf(order[at]![0]));
+      reach[at] = least;
+    }
+    return reach;
+  });
+
+  /**
    * The sticky rows currently holding the leading edge, outermost first: the last one the offset
    * has reached, under the rows it pins under. Empty when the list has scrolled back above the
    * first of them.
@@ -174,13 +190,13 @@ export class StickyRows {
       if (order.length === 0) return NONE;
       const offset = this.offset();
 
-      // Where a row starts to hold never comes before where the row before it does, so the last
-      // one the offset has reached is found by halving.
+      // The last row the offset has reached is the last whose `reach` it has, found by halving.
+      const reach = this.reach();
       let low = 0;
       let high = order.length;
       while (low < high) {
         const middle = (low + high) >> 1;
-        if (this.startOf(order[middle]![0]) <= offset) low = middle + 1;
+        if (reach[middle]! <= offset) low = middle + 1;
         else high = middle;
       }
       if (low === 0) return NONE;

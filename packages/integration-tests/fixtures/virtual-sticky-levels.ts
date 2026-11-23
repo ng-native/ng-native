@@ -30,6 +30,7 @@ export const ENTRY = 40;
       [overscan]="1"
       [windowSize]="1"
       [velocityLead]="0"
+      [rowGap]="rowGap()"
       [horizontal]="horizontal()"
       [inverted]="inverted()"
       [stickyIndices]="sticky()"
@@ -53,6 +54,7 @@ export class VirtualStickyLevels {
   readonly entries = signal<readonly Entry[]>(entries());
   readonly fill = { flex: 1 };
   readonly sizeOf = (entry: Entry) => SIZES[entry.level ?? -1] ?? ENTRY;
+  readonly rowGap = signal(0);
   readonly horizontal = signal(false);
   readonly inverted = signal(false);
   readonly sticky = signal<readonly number[]>([]);

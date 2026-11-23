@@ -40,6 +40,7 @@ interface Instance {
     window(): { index: number; slot: number; parked?: boolean }[];
   };
   entries: WritableSignal<readonly Entry[]>;
+  rowGap: WritableSignal<number>;
   horizontal: WritableSignal<boolean>;
   inverted: WritableSignal<boolean>;
   sticky: WritableSignal<readonly number[]>;
@@ -63,6 +64,18 @@ describe('a windowed list with sticky rows at several levels', () => {
     assert.equal(at(0), 200, 'the year is at the leading edge');
     assert.equal(at(1), 200 + YEAR, 'the month under it');
     assert.equal(at(2), 200 + YEAR + MONTH, 'and the day under both');
+  });
+
+  it('pins the last row reached when a negative rowGap overlaps the rows', async () => {
+    // Two years and a month, 20 apart less than their sizes: the month is at 60 and holds from 10,
+    // under the second year, which holds from 30 only.
+    const levels = [0, 0, 1, ...Array.from({ length: 20 }, () => null)];
+    const { at, scroll } = await boot((page) => {
+      page.rowGap.set(-20);
+      page.entries.set(levels.map((level, id) => ({ id, label: `row ${id}`, level })));
+    });
+    await scroll(20);
+    assert.equal(at(2), 20 + YEAR, 'the month is pinned under the year it is in');
   });
 
   it('draws a pinned row over the rows pinned under it, and those over the rest', async () => {
