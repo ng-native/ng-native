@@ -6983,8 +6983,11 @@ function holdsCurrentColour(value: unknown, tokens: Readonly<Record<string, Toke
     return asked;
   }
   // A shadow token in a list of shadows, `var(--s), 0 0 1px red`: what the token holds.
-  const slot = (value as { __shadows?: { reference?: string } }).__shadows?.reference;
-  if (slot !== undefined) return holdsCurrentColour(tokens[slot], tokens);
+  // Or, where the token is unset, its fallback: `var(--s, 0 0 2px), 0 0 1px red`.
+  const slot = (value as { __shadows?: { reference?: string; fallback?: unknown } }).__shadows;
+  if (slot?.reference !== undefined) {
+    return holdsCurrentColour(tokens[slot.reference] ?? slot.fallback, tokens);
+  }
   return Object.values(value).some((part) => holdsCurrentColour(part, tokens));
 }
 
