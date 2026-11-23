@@ -69,6 +69,40 @@ is under 1, or it has a transform or a background, and moves what is inside it t
 when that ends, which costs a focused field its focus. `collapsable` written on the element is
 left as written.
 
+### What a transition animates
+
+A transition eases a value it can take between: numbers (`opacity`, the sizes, insets, margins,
+paddings, border widths and radii, `font-size`, `line-height`, `letter-spacing`), colors
+(`background-color`, `color`, the border colors), percentages, a `transform` and the individual
+`translate`, `rotate` and `scale` (named on their own, as above), and the amounts of a `filter`
+whose two ends list the same functions. `transition: all` covers whichever of these changed.
+
+Every other value changes at once when the class lands, as a discrete property does in a browser:
+`background-image` and so every gradient, a `box-shadow` list, `transform-origin`, `display`,
+keywords, `auto`, and a pair that does not share a unit. CSS does not interpolate gradients either,
+so `transition: all 150ms` on a button whose gradient goes from 20% to 35% white snaps it.
+
+To animate a gradient, put the difference in a layer of its own and fade that. The layer holds the
+extra gradient, sits over the button, and has the `opacity` the transition eases:
+
+```css
+.button {
+  background-image: linear-gradient(rgb(255 255 255 / 0.2), transparent);
+}
+.button-hover {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgb(255 255 255 / 0.15), transparent);
+  opacity: 0;
+  transition: opacity 150ms;
+}
+.button.hovered .button-hover {
+  opacity: 1;
+}
+```
+
+`opacity` is played by native (see above), so the fade costs no commit per frame.
+
 A duration, a delay or a curve can be a token in the longhands: `transition-property: opacity`
 with `transition-duration: var(--duration-fast)`. The `transition` shorthand does not take one:
 `transition: opacity var(--duration-fast) ease-out` is dropped whole, with a build warning, and the

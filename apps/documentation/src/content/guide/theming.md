@@ -223,8 +223,10 @@ a node is put in or taken out. The `dark` class `mount` keeps in step with the s
 class, so a `prefers-color-scheme` query is followed while `mount` keeps it. Other media queries,
 and stylesheets added later, are not followed on the web.
 
-A shape's `fill` or `stroke` written as a token, `<svg-path fill="var(--series-1)">`, is resolved
-against the tokens in scope at the shape, as the same declaration in a stylesheet is.
+An icon's own markup can take a colour from a token. In `<ng-icon [svg]="markup">`, where `markup`
+holds `<path d="M0 0L5 5" fill="var(--series-1)"/>` or the same in `style`, the shape's `fill` or
+`stroke` is resolved against the tokens in scope at the icon, as the same declaration in a
+stylesheet is, with a `var()` fallback used when the token is unset.
 
 ## Unsupported values and font fallbacks
 

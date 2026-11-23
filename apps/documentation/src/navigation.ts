@@ -270,6 +270,8 @@ export const PACKAGES: NavSection = {
         { path: 'packages/expo/native-views', title: 'Native views', group: 'Native views' },
         { path: 'packages/expo/expo-ui', title: 'Expo UI' },
         { path: 'packages/expo/search-field', title: 'Search field' },
+        { path: 'packages/expo/date-time-picker', title: 'Date and time picker' },
+        { path: 'packages/expo/segmented-control', title: 'Segmented control' },
         { path: 'packages/expo/dom-components', title: 'DOM components', group: 'Web interop' },
       ],
     },

@@ -60,6 +60,34 @@ describe('a shortcut', () => {
     assert.throws(() => parseShortcut('hyper+k', 'macos'), /no modifier 'hyper'/);
   });
 
+  it('keeps every named key the hosts know, as the web names them', () => {
+    const names = [
+      ...['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', 'Escape', 'Backspace'],
+      ...['Delete', 'Tab', 'Home', 'End', 'PageUp', 'PageDown', 'Insert'],
+      ...['Pause', 'ScrollLock', 'ContextMenu'],
+      ...Array.from({ length: 20 }, (_, n) => `F${n + 1}`),
+    ];
+    for (const name of names) {
+      assert.equal(parseShortcut(`mod+${name}`, 'macos').key, name, name);
+    }
+  });
+
+  it('reads Space as the space key, which the web names " "', () => {
+    assert.equal(parseShortcut('mod+Space', 'macos').key, ' ');
+    assert.equal(matchesShortcut('ctrl+Space', { key: ' ', ctrl: true }, 'android'), true);
+  });
+
+  it('throws on a multi-character key no host knows, where it would never fire', () => {
+    assert.throws(
+      () => parseShortcut('mod+enter', 'macos'),
+      /has no key 'enter'. Did you mean 'Enter'\?/,
+    );
+    assert.throws(() => parseShortcut('up', 'macos'), /has no key 'up'/);
+    assert.throws(() => parseShortcut('mod+F21', 'macos'), /has no key 'F21'/);
+    assert.throws(() => parseShortcut('mod+f1', 'macos'), /Did you mean 'F1'\?/);
+    assert.throws(() => parseShortcut('mod+Esc', 'macos'), /has no key 'Esc'/);
+  });
+
   it('matches a chord with exactly its modifiers, whatever case the key comes in', () => {
     assert.equal(matchesShortcut('mod+s', { key: 's', meta: true }, 'macos'), true);
     assert.equal(matchesShortcut('mod+s', { key: 's', ctrl: true }, 'macos'), false);

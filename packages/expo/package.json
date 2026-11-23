@@ -36,6 +36,7 @@
     "./clipboard": "./src/clipboard.ts",
     "./crypto": "./src/crypto.ts",
     "./database": "./src/database.ts",
+    "./date-time-picker": "./src/date-time-picker.ts",
     "./document-picker": "./src/document-picker.ts",
     "./dom-component": "./src/dom-component.ts",
     "./expo-ui-components": "./src/expo-ui-components.ts",
@@ -61,6 +62,7 @@
     "./printing": "./src/printing.ts",
     "./screen-capture": "./src/screen-capture.ts",
     "./search-field": "./src/search-field.ts",
+    "./segmented-control": "./src/segmented-control.ts",
     "./secure-store": "./src/secure-store.ts",
     "./sensors": "./src/sensors.ts",
     "./splash-screen": "./src/splash-screen.ts",
@@ -147,6 +149,10 @@
       "./database": {
         "types": "./dist/database.d.ts",
         "default": "./dist/database.js"
+      },
+      "./date-time-picker": {
+        "types": "./dist/date-time-picker.d.ts",
+        "default": "./dist/date-time-picker.js"
       },
       "./document-picker": {
         "types": "./dist/document-picker.d.ts",
@@ -247,6 +253,10 @@
       "./search-field": {
         "types": "./dist/search-field.d.ts",
         "default": "./dist/search-field.js"
+      },
+      "./segmented-control": {
+        "types": "./dist/segmented-control.d.ts",
+        "default": "./dist/segmented-control.js"
       },
       "./secure-store": {
         "types": "./dist/secure-store.d.ts",

@@ -33,12 +33,38 @@ export interface ParsedShortcut {
 
 const MODIFIERS = new Set(['mod', 'cmd', 'meta', 'ctrl', 'alt', 'option', 'shift']);
 
+/**
+ * The keys named with a word, as `KeyboardEvent.key` spells them. The menu and key tables of the
+ * hosts (AppKit, GTK, UIKit and Android) are what these come from; `Space` is written as a word
+ * and read as the `' '` the web reports.
+ */
+const NAMED_KEYS: ReadonlySet<string> = new Set([
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowUp',
+  'ArrowDown',
+  'Enter',
+  'Escape',
+  'Backspace',
+  'Delete',
+  'Tab',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+  'Insert',
+  'Pause',
+  'ScrollLock',
+  'ContextMenu',
+  ...Array.from({ length: 20 }, (_, n) => `F${n + 1}`),
+]);
+
 /** Whether `os` is one of Apple's, where `mod` is Cmd. */
 const apple = (os: ShortcutOs): boolean => os === 'ios' || os === 'macos';
 
 /**
- * A shortcut read for `os`. Throws on one that names no key or a modifier it does not know, since
- * that is a mistake in the app, not something a user can press.
+ * A shortcut read for `os`. Throws on one that names no key, a modifier or a key it does not know,
+ * since that is a mistake in the app, not something a user can press.
  */
 export function parseShortcut(shortcut: string, os: ShortcutOs): ParsedShortcut {
   const { key, held } = split(shortcut);
@@ -67,6 +93,17 @@ function split(shortcut: string): { key: string; held: Set<string> } {
   }
   if (!key || MODIFIERS.has(key.toLowerCase())) {
     throw new Error(`[angular-native] '${shortcut}' names no key to press.`);
+  }
+  if (key === 'Space') return { key: ' ', held };
+  // A key longer than one character is a name from the table, spelt exactly: `enter` or `up`
+  // would register and never fire. Counted as the user sees it, so `é` is one.
+  if ([...key].length > 1 && !NAMED_KEYS.has(key)) {
+    const near = [...NAMED_KEYS].find((name) => name.toLowerCase() === key.toLowerCase());
+    throw new Error(
+      `[angular-native] '${shortcut}' has no key '${key}'.` +
+        (near ? ` Did you mean '${near}'?` : '') +
+        ` Named keys are spelt as KeyboardEvent.key does, such as ArrowUp, Enter, Escape, PageDown and F5.`,
+    );
   }
   return { key, held };
 }

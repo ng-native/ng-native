@@ -18,8 +18,13 @@ import { View } from './view.ts';
 import { ViewBase } from './view-base.ts';
 
 export type ModalPresentationStyle = 'fullScreen' | 'pageSheet' | 'formSheet' | 'overFullScreen';
-/** What `anchor` takes: an element, its `ElementRef`, or a component or directive with a `node`. */
-export type ModalAnchor = ElementRef | EngineNode | { readonly node: unknown } | null | undefined;
+/**
+ * What `anchor` takes: an element, its `ElementRef`, or a component such as a `<pressable>`. A
+ * template reference types as `HTMLElement` for an element and as its class for a component, so
+ * both are named; at run time an element is its engine node, and a component's is its `node`.
+ */
+export type ModalAnchor =
+  ElementRef | EngineNode | HTMLElement | ViewBase | { readonly node: unknown } | null | undefined;
 
 /** The engine node an anchor stands for. */
 function anchorNode(anchor: ModalAnchor): EngineNode | null {

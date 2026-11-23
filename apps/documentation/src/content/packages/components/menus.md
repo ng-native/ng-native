@@ -57,6 +57,19 @@ A `<menu-item>` takes `label`, `menuRole`, `shortcut`, `[disabled]`, `[(checked)
 go to a
 focused text input first, so a shortcut on one of them fires only while no text input has focus.
 
+A letter, digit or punctuation key is written as itself: `mod+s`, `mod+,`, `mod++` for the plus
+key. Any other key is written by the name `KeyboardEvent.key` gives it, spelt exactly, so `enter`
+and `up` are not names:
+
+- `ArrowLeft`, `ArrowRight`, `ArrowUp` and `ArrowDown`
+- `Enter`, `Escape`, `Backspace`, `Delete`, `Tab` and `Space`
+- `Home`, `End`, `PageUp` and `PageDown`
+- `F1` to `F12`
+
+Those work on every OS. A few more are named on some: `Insert` on Android and Linux, `F13` to `F20`
+in a macOS menu, and `Pause`, `ScrollLock` and `ContextMenu` on Android. A name the list does not
+have throws when the shortcut is read, with the name it is probably a misspelling of.
+
 On Android a shortcut works from a hardware keyboard once it has a modifier (Ctrl, Alt, Shift or
 Meta), and Meta-/ lists it in the Keyboard Shortcuts helper by its `shortcutLabel`, under the app's
 name. While a `<modal>` is open, the keyboard goes to the modal's own window, and on Android the
