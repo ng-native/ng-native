@@ -20,6 +20,7 @@ import {
   attributeOf,
   handsDownPaint,
   StyleResolver,
+  underOwnImage,
   underOwnShorthands,
   usesState,
   type StateUse,
@@ -13371,6 +13372,7 @@ export class Engine implements HostEngine {
     if (inline !== NO_STYLE) this.styles.overOtherForms(inline, style);
     if (inline !== NO_STYLE || node.boundByProp?.size) {
       underOwnShorthands(style, inline, node.boundByProp, node.styleCache?.important);
+      underOwnImage(style, inline, node.boundByProp, node.styleCache?.tiled);
     }
     nativePointerEvents(node, style, resolved);
     // Before an image's own size: `fit-content` is no size, so the image's is what it gets.

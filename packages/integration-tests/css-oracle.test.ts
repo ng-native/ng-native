@@ -228,6 +228,34 @@ function assertGradients(style: Record<string, unknown>, browser: string): void 
   assert.equal(drawn, browser.match(/gradient\(/g)?.length ?? 0, 'background-image');
 }
 
+/** A length or percentage of a background's placing, as the browser writes it. */
+const placed = (value: unknown): string => (typeof value === 'number' ? `${value}px` : `${value}`);
+
+/** Each layer of a background's size, position or repeat as the browser writes it, by property. */
+const PLACINGS: Readonly<Record<string, (layer: Record<string, unknown>) => string>> = {
+  'background-size': ({ x, y }) =>
+    x === 'auto' && y === 'auto' ? 'auto' : `${placed(x)} ${placed(y)}`,
+  'background-position': ({ left, top }) => `${placed(left)} ${placed(top)}`,
+  'background-repeat': ({ x, y }) =>
+    x === y ? `${x}` : y === 'no-repeat' && x === 'repeat' ? 'repeat-x' : `${x} ${y}`,
+};
+
+/** What a background is placed as when nothing places it, as the browser writes it. */
+const UNPLACED: Readonly<Record<string, string>> = {
+  'background-size': 'auto',
+  'background-position': '0% 0%',
+  'background-repeat': 'repeat',
+};
+
+/** A background's size, position or repeat here, against the browser's text for it. */
+const assertPlacing =
+  (property: ExtraProperty) =>
+  (style: Record<string, unknown>, browser: string): void => {
+    const layers = style[EXTRA_KEYS[property]] as Record<string, unknown>[] | undefined;
+    const written = layers?.map(PLACINGS[property]!).join(', ') ?? UNPLACED[property];
+    assert.equal(written, browser, property);
+  };
+
 /** One family by name here, and the whole stack, quoted where it needs to be, in the browser. */
 function assertFamily(style: Record<string, unknown>, browser: string): void {
   // Chrome quotes a family that needs it, and escapes a quote or a backslash inside.
@@ -252,6 +280,9 @@ const COMPARED: Partial<
   Record<ExtraProperty, (style: Record<string, unknown>, browser: string) => void>
 > = {
   'background-image': assertGradients,
+  'background-size': assertPlacing('background-size'),
+  'background-position': assertPlacing('background-position'),
+  'background-repeat': assertPlacing('background-repeat'),
   'box-shadow': assertShadows,
   'font-family': assertFamily,
 };

@@ -83,6 +83,9 @@ export const EXTRA_KEYS = {
   'font-family': 'fontFamily',
   'font-size': 'fontSize',
   'background-image': 'experimental_backgroundImage',
+  'background-size': 'experimental_backgroundSize',
+  'background-position': 'experimental_backgroundPosition',
+  'background-repeat': 'experimental_backgroundRepeat',
   'font-style': 'fontStyle',
   'font-weight': 'fontWeight',
   'outline-width': 'outlineWidth',
@@ -382,6 +385,72 @@ const BACKGROUND_TOKEN_CASES: OracleCase[] = [
   backgroundOver(
     'none 20px 20px / 10px 10px no-repeat, var(--x)',
     'linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))',
+  ),
+];
+
+const STRIPES = 'repeating-linear-gradient(90deg, rgb(255, 0, 0) 0 2px, rgb(0, 0, 255) 2px 4px)';
+/** The stripes in the shorthand, over a colour of their own so the colour is compared too. */
+const STRIPED = `${STRIPES} rgb(1, 2, 3)`;
+const PLACING = [
+  'background-image',
+  'background-size',
+  'background-position',
+  'background-repeat',
+] as const;
+
+/**
+ * A repeating gradient is drawn as a tile, whose size, position and repeat the compiler writes
+ * beside it. An ordinary image that wins over it takes none of them: a browser places it as the
+ * rules say, which is what was there before the tile, or what an author wrote after it.
+ */
+const TILE_PLACING_CASES: OracleCase[] = [
+  {
+    name: 'background: a tile under a stronger background-image places it as nothing set',
+    css: `#probe { background: ${STRIPED} } #probe.c { background-image: ${GRADIENT} }`,
+    tree: probe({ name: 'view', classes: ['c'] }),
+    extra: PLACING,
+  },
+  {
+    name: 'background-image: a tile under a stronger one gives back what a weaker rule placed',
+    css:
+      '.a { background-size: 10px 20px; background-position: 3px 4px; background-repeat: no-repeat } ' +
+      `.b { background-image: ${STRIPES} } .b.c { background-image: ${GRADIENT} }`,
+    tree: probe({ name: 'view', classes: ['a', 'b', 'c'] }),
+    extra: PLACING,
+  },
+  {
+    name: 'background-image: a size written after a tile stands for the image that beats it',
+    css:
+      `.b { background-image: ${STRIPES} } .b.s { background-size: 5px 6px } ` +
+      `.b.s.c { background-image: ${GRADIENT}; background-position: 1px 2px }`,
+    tree: probe({ name: 'view', classes: ['b', 's', 'c'] }),
+    extra: PLACING,
+  },
+  {
+    name: 'background-image: an important image places itself as nothing set over a later tile',
+    css: `.b.c { background: ${STRIPED} } .b { background-image: ${GRADIENT} !important }`,
+    tree: probe({ name: 'view', classes: ['b', 'c'] }),
+    extra: PLACING,
+  },
+  {
+    name: 'background-image: an image from a token places itself as nothing set over a tile',
+    css: `.b { background: ${STRIPED} } .b.c { --g: ${GRADIENT}; background-image: var(--g) }`,
+    tree: probe({ name: 'view', classes: ['b', 'c'] }),
+    extra: PLACING,
+  },
+  {
+    name: 'background: an image over a tile in the shorthand takes what the shorthand placed',
+    css:
+      `.b { background: ${GRADIENT} center / 10px 20px no-repeat, ${STRIPED} } ` +
+      `.b.c { background-image: ${GRADIENT}, ${GRADIENT} }`,
+    tree: probe({ name: 'view', classes: ['b', 'c'] }),
+    extra: PLACING,
+  },
+  inlineValue({ 'background-image': GRADIENT }, `#probe { background: ${STRIPED} }`, PLACING),
+  inlineValue(
+    { 'background-image': GRADIENT },
+    `#probe { background-size: 10px 20px } #probe { background-image: ${STRIPES} }`,
+    PLACING,
   ),
 ];
 
@@ -2037,6 +2106,7 @@ export const CASES: OracleCase[] = [
   ...INLINE_SHORTHAND_CASES,
   ...INLINE_VALUE_SHORTHAND_CASES,
   ...BACKGROUND_TOKEN_CASES,
+  ...TILE_PLACING_CASES,
   ...BACKGROUND_TOKEN_MORE_CASES,
   ...BACKGROUND_LAYER_TOKEN_CASES,
   ...SHADOW_COLOUR_CASES,

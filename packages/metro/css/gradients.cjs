@@ -73,8 +73,10 @@ const TILE_INSTEAD =
  * tile is anchored at the corner the gradient starts from, where the box's gradient line is at 0
  * too, so the stripes keep their phase whatever the box's size.
  *
- * Only stops in points can be laid out at build time: a percentage is of a gradient line whose
- * length only the laid-out box has, and a corner's angle hangs on the box's shape too.
+ * Stops in points are laid out at build time whichever way the stripes run. Stops in percentages
+ * are too along a side, where the gradient line is the box's height (or width): the band is the
+ * period's percentage of the box, and each stop its share of the period. At an angle the line's
+ * length hangs on the box's shape, and so does a corner's angle, so neither can be.
  */
 function repeatingTile(value, context) {
   const refuse = (why) => {
@@ -86,41 +88,70 @@ function repeatingTile(value, context) {
   const way = direction(value.direction, context);
   if (way.type !== 'angle') refuse("runs to a corner, whose angle depends on the box's shape");
   const stops = colorStops(value.items, context);
-  const placed = periodStops(stops, refuse);
+  const { placed, unit } = periodStops(stops, refuse);
   const period = placed.at(-1);
 
   const radians = (way.value * Math.PI) / 180;
   const sin = straight(Math.sin(radians));
   const cos = straight(Math.cos(radians));
-  const periods = sin === 0 || cos === 0 ? 1 : 2;
+  const along = sin === 0 || cos === 0;
+  if (unit === '%' && !along) {
+    refuse(
+      "has a percentage stop at an angle, where the gradient line's length depends on the box's shape",
+    );
+  }
+  if (unit === 'px' && period < 1) {
+    // Chrome samples stripes this fine once a device pixel, so what it paints is whichever stripe
+    // each pixel lands on, a different colour at each density, not their average.
+    throw new CssUnsupported(
+      `${context}: a repeating-linear-gradient repeats every ${round(period)}px, under 1px, which ` +
+        `is too fine to draw: Chrome paints whichever stripe each device pixel lands on, a ` +
+        `different colour at each screen density, and native would draw a tile for every ` +
+        `stripe. Use a background-color, or a period of 1px or more.`,
+    );
+  }
+  // Along a side the tile's own line is the band's length, where a percentage is of the period.
+  const at = unit === '%' ? (one) => percentage(one / period) : round;
+  const periods = along ? 1 : 2;
   const colorStopsOfTile = [];
   for (let each = 0; each < periods; each++) {
     stops.forEach((one, index) => {
-      colorStopsOfTile.push({ color: one.color, position: round(placed[index] + each * period) });
+      colorStopsOfTile.push({ color: one.color, position: at(placed[index] + each * period) });
     });
   }
+  const extent = (trig) => {
+    if (trig === 0) return '100%';
+    const long = period / Math.abs(trig);
+    return unit === '%' ? `${round(long)}%` : round(long);
+  };
   return {
     image: { type: 'linear-gradient', direction: way, colorStops: colorStopsOfTile },
-    size: {
-      x: sin === 0 ? '100%' : round(period / Math.abs(sin)),
-      y: cos === 0 ? '100%' : round(period / Math.abs(cos)),
-    },
+    size: { x: extent(sin), y: extent(cos) },
     position: { left: sin < 0 ? '100%' : '0%', top: cos > 0 ? '100%' : '0%' },
     repeat: { x: 'repeat', y: 'repeat' },
   };
 }
 
-/** Where each stop of one period falls, in points, refusing a period a tile cannot hold. */
+/**
+ * Where each stop of one period falls, as numbers of the one unit they share, px or %, refusing a
+ * period a tile cannot hold. A 0 is either, as CSS reads a bare 0.
+ */
 function periodStops(stops, refuse) {
   const positions = stops.map((one) => one.position);
-  if (positions.some((at) => at !== null && typeof at !== 'number')) {
-    refuse('has a stop that is not in px or rem, such as a percentage of the gradient line');
+  const percentages = positions.filter((at) => typeof at === 'string' && at.endsWith('%'));
+  if (positions.some((at) => at !== null && typeof at !== 'number' && !percentages.includes(at))) {
+    refuse('has a stop that is not in px, rem or %, such as one in em');
+  }
+  if (percentages.length && positions.some((at) => typeof at === 'number' && at !== 0)) {
+    refuse('mixes stops in px or rem with stops in %, a period only the laid-out box has');
   }
   if (positions.at(-1) === null) refuse('ends on a stop with no position, which is at 100%');
-  if ((positions[0] ?? 0) !== 0) refuse('starts its first stop somewhere other than 0');
-  const placed = placeStops(positions);
-  if (placed.at(-1) <= 0) refuse('repeats every 0px');
-  return placed;
+  const unit = percentages.length ? '%' : 'px';
+  const numbers = positions.map((at) => (typeof at === 'string' ? parseFloat(at) : at));
+  if ((numbers[0] ?? 0) !== 0) refuse('starts its first stop somewhere other than 0');
+  const placed = placeStops(numbers);
+  if (placed.at(-1) <= 0) refuse(`repeats every 0${unit}`);
+  return { placed, unit };
 }
 
 /** A sine or cosine, with the float noise of a right angle taken off: `sin(180deg)` is 0. */
@@ -187,11 +218,31 @@ function tilePlacing(images, context, placing = {}) {
       );
     }
   });
-  return {
+  const placed = {
     experimental_backgroundSize: each('size'),
     experimental_backgroundPosition: each('position'),
     experimental_backgroundRepeat: each('repeat'),
   };
+  // What the declaration places without the tile: the shorthand's own, or nothing.
+  TILE_PLACED.set(placed.experimental_backgroundSize, placing.size ?? null);
+  TILE_PLACED.set(placed.experimental_backgroundPosition, placing.position ?? null);
+  TILE_PLACED.set(placed.experimental_backgroundRepeat, placing.repeat ?? null);
+  return placed;
+}
+
+/** Each list `tilePlacing` wrote, to what its declaration places without the tile. */
+const TILE_PLACED = new WeakMap();
+
+/**
+ * Of a rule's declarations, the background placing props a repeating gradient's tile wrote and no
+ * declaration after it replaced, each to what the rule places without the tile: the shorthand's
+ * own list, or null for nothing. The engine puts that back where an ordinary image wins over the
+ * tile's, as a browser places it. Nothing when no tile wrote any.
+ */
+function tiledBy(declarations) {
+  const tiled = Object.entries(declarations).filter(([, value]) => TILE_PLACED.has(value));
+  if (!tiled.length) return undefined;
+  return Object.fromEntries(tiled.map(([key, value]) => [key, TILE_PLACED.get(value)]));
 }
 
 /**
@@ -563,4 +614,4 @@ function positionToken(term, context) {
 const ident = (term) =>
   term?.type === 'token' && term.value?.type === 'ident' ? term.value.value : null;
 
-module.exports = { backgroundImage, deferGradient, tilePlacing, GRADIENTS };
+module.exports = { backgroundImage, deferGradient, tilePlacing, tiledBy, GRADIENTS };

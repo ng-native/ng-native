@@ -14,8 +14,9 @@ import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import type { Type } from '@angular/core';
-import { StyleResolver, type StyleTarget } from '@ng-native/fabric';
-import { cleanup, render } from '@ng-native/testing';
+import { Engine, StyleResolver, type EngineNode, type StyleTarget } from '@ng-native/fabric';
+import { NativeRendererFactory } from '@ng-native/platform';
+import { cleanup, createFakeFabric, render, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
 const require = createRequire(import.meta.url);
@@ -332,6 +333,35 @@ describe('a repeating linear gradient', () => {
     );
   });
 
+  it('is a band a percentage of the box long, for percentage stops along a side', () => {
+    // Along a side the gradient line is the box's height (or width), so a period of 20% is a band
+    // 20% of the box, and each stop is its share of the period along the band's own line.
+    assert.deepEqual(
+      styleOf('background-image: repeating-linear-gradient(red 0 10%, blue 10% 20%)'),
+      tiled('linear-gradient(180deg, red 0% 50%, blue 50% 100%)', '100% 20%', '0% 0%'),
+    );
+    assert.deepEqual(
+      styleOf(
+        'background-image: repeating-linear-gradient(90deg, red 0 5%, lime 5% 15%, blue 15% 25%)',
+      ),
+      tiled('linear-gradient(90deg, red 0% 20%, lime 20% 60%, blue 60% 100%)', '25% 100%', '0% 0%'),
+    );
+    assert.deepEqual(
+      styleOf('background-image: repeating-linear-gradient(to left, red 0 10%, blue 10% 40%)'),
+      tiled('linear-gradient(270deg, red 0% 25%, blue 25% 100%)', '40% 100%', '100% 0%'),
+    );
+    // Settled as CSS settles them, a run with none spread out, before they are shared out.
+    assert.deepEqual(
+      styleOf('background-image: repeating-linear-gradient(to top, red, lime, blue 50%)'),
+      tiled('linear-gradient(0deg, red 0%, lime 50%, blue 100%)', '100% 50%', '0% 100%'),
+    );
+    // A period longer than the box is one band, which is what a browser draws.
+    assert.deepEqual(
+      styleOf('background-image: repeating-linear-gradient(red 0 60%, blue 60% 120%)'),
+      tiled('linear-gradient(180deg, red 0% 50%, blue 50% 100%)', '100% 120%', '0% 0%'),
+    );
+  });
+
   it('places the other layers as they start, beside a tiled one', () => {
     assert.deepEqual(
       styleOf(
@@ -377,9 +407,11 @@ describe('a repeating linear gradient', () => {
 
   it('refuses what a tile cannot draw, and names the tile to write instead', () => {
     for (const [image, why] of [
-      // A percentage is of the gradient line, whose length only the laid-out box has.
-      ['repeating-linear-gradient(red 0 10%, blue 10% 20%)', /not in px or rem/],
-      ['repeating-linear-gradient(red 0 1em, blue 1em 2em)', /not in px or rem/],
+      // At an angle, a percentage is of a gradient line whose length hangs on the box's shape.
+      ['repeating-linear-gradient(45deg, red 0 10%, blue 10% 20%)', /percentage.*at an angle/],
+      // A period of a length and a percentage together is a length only the laid-out box has.
+      ['repeating-linear-gradient(red 0 10px, blue 10px 20%)', /mixes/],
+      ['repeating-linear-gradient(red 0 1em, blue 1em 2em)', /not in px, rem or %/],
       // A last stop with no position is at 100%.
       ['repeating-linear-gradient(red 0 3px, blue)', /ends on a stop with no position/],
       // A corner's angle depends on the box's shape.
@@ -402,6 +434,28 @@ describe('a repeating linear gradient', () => {
     assert.throws(
       () => styleOf('background-image: repeating-radial-gradient(red 0 3px, blue 3px 6px)'),
       /repeating-radial-gradient has no native equivalent/,
+    );
+  });
+
+  it('refuses a period under a pixel, which Chrome samples rather than averages', () => {
+    // Chrome paints whichever stripe each device pixel's centre lands on: solid red at one
+    // density, solid blue at the next, uneven stripes at a third. There is no one colour to draw
+    // instead, and a device would draw a tile for every stripe.
+    for (const image of [
+      'repeating-linear-gradient(red 0 0.25px, blue 0.25px 0.5px)',
+      'repeating-linear-gradient(45deg, red 0 0.45px, blue 0.45px 0.9px)',
+      'repeating-linear-gradient(red 0 0.03rem, blue 0.03rem 0.06rem)',
+    ]) {
+      assert.throws(
+        () => styleOf(`background-image: ${image}`),
+        /repeating-linear-gradient repeats every [\d.]+px, under 1px.*background-color/s,
+        image,
+      );
+    }
+    // A period of one pixel is still drawn.
+    assert.deepEqual(
+      styleOf('background-image: repeating-linear-gradient(red 0 0.5px, blue 0.5px 1px)'),
+      tiled('linear-gradient(red 0 0.5px, blue 0.5px 1px)', '100% 1px', '0% 0%'),
     );
   });
 
@@ -431,15 +485,116 @@ describe('a repeating linear gradient', () => {
   });
 
   it('writes no placement for an ordinary image, so a later rule cannot clear what an author set', () => {
-    // The resolver merges size, position and repeat as props of their own, so a tile's placement
-    // from one rule outlives a plain gradient a stronger rule gives (documented). The cure is not
-    // to reset placement for every ordinary image, which would also drop an author's own
-    // `background-size`; this pins that the plain image writes none.
+    // An ordinary image that wins over a tile takes the tile's placing away in the cascade, which
+    // knows which rule wrote what. Resetting placement for every ordinary image instead would
+    // drop an author's own `background-size` too; this pins that the plain image writes none.
     assert.deepEqual(
       Object.keys(styleOf('background-image: linear-gradient(red, blue)')).filter((key) =>
         /^experimental_background(Size|Position|Repeat)$/.test(key),
       ),
       [],
+    );
+  });
+});
+
+describe("a tile's placing in the cascade", () => {
+  // What an ordinary image that wins over a tile is placed as is checked against Chrome in the
+  // oracle (`TILE_PLACING_CASES`). These are the cases where the tile wins, and keeps its own.
+  const styleOf = (css: string, classes: string[]): Record<string, unknown> => {
+    const resolver = new StyleResolver(compileCss(css), {
+      width: 400,
+      height: 800,
+      colorScheme: 'light',
+    });
+    const node: StyleTarget = {
+      tag: 'view',
+      parent: null,
+      classes: new Set(classes),
+      props: {},
+      templateSheet: null,
+      hostSheet: null,
+      styleCache: null,
+      styleDirty: true,
+    };
+    return resolver.resolve(node, 1).style;
+  };
+  const STRIPES = 'repeating-linear-gradient(90deg, red 0 2px, blue 2px 4px)';
+  const tile = styleOf(`.a { background-image: ${STRIPES} }`, ['a']);
+
+  it('keeps it for a tile that wins over an ordinary image', () => {
+    assert.deepEqual(
+      styleOf(
+        `.a { background: linear-gradient(red, blue) center / 10px 20px no-repeat } ` +
+          `.a.b { background-image: ${STRIPES} }`,
+        ['a', 'b'],
+      ),
+      { ...tile, backgroundColor: 'rgba(0, 0, 0, 0)' },
+    );
+  });
+
+  it('keeps it for an important tile under a later plain image', () => {
+    assert.deepEqual(
+      styleOf(
+        `.a { background-image: ${STRIPES} !important } .a.b { background-image: linear-gradient(red, blue) }`,
+        ['a', 'b'],
+      ),
+      tile,
+    );
+  });
+
+  it("gives an element's own image the placing under the tile, until it goes again", () => {
+    const fabric = createFakeFabric();
+    const sheet = compileCss(
+      `.a { background-size: 10px 20px } .a.b { background-image: ${STRIPES} }`,
+    );
+    const engine = new Engine(fabric, 1, { globalStyles: sheet });
+    const renderer = new NativeRendererFactory(engine).createRenderer(null, null);
+    const node = renderer.createElement('view') as EngineNode;
+    renderer.setAttribute(node, 'nativeID', 'probe');
+    renderer.setAttribute(node, 'class', 'a b');
+    renderer.appendChild(engine.root, node);
+    const flatten = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
+      nodes.flatMap((one) => [one, ...flatten(one.children)]);
+    const placing = () => {
+      engine.commit();
+      const { props } = flatten(fabric.committed).find((one) => one.props['nativeID'] === 'probe')!;
+      return ['Size', 'Position', 'Repeat'].map(
+        (part) => props[`experimental_background${part}`] ?? null,
+      );
+    };
+    const tiled = placing();
+    assert.deepEqual(tiled, [
+      tile['experimental_backgroundSize'],
+      tile['experimental_backgroundPosition'],
+      tile['experimental_backgroundRepeat'],
+    ]);
+    renderer.setStyle(node, 'background-image', 'linear-gradient(red, blue)');
+    assert.deepEqual(placing(), [[{ x: 10, y: 20 }], null, null]);
+    renderer.removeStyle(node, 'background-image');
+    assert.deepEqual(placing(), tiled);
+  });
+
+  it("takes an important tile's away for a stronger important image", () => {
+    const plain = 'background-image: linear-gradient(red, blue) !important';
+    assert.deepEqual(
+      styleOf(`.a { background-image: ${STRIPES} !important } .a.b { ${plain} }`, ['a', 'b']),
+      styleOf(`.a { ${plain} }`, ['a']),
+    );
+  });
+
+  it("keeps the first tile's underlay beneath a second tile", () => {
+    // Two tiles, then a plain image: what the first covered comes back, not the first tile's.
+    assert.deepEqual(
+      styleOf(
+        `.a { background-size: 10px 20px } .b { background-image: ${STRIPES} } ` +
+          `.b.c { background-image: repeating-linear-gradient(red 0 3px, blue 3px 6px) } ` +
+          `.b.c.d { background-image: linear-gradient(red, blue) }`,
+        ['a', 'b', 'c', 'd'],
+      ),
+      styleOf(
+        '.a { background-size: 10px 20px } .b { background-image: linear-gradient(red, blue) }',
+        ['a', 'b'],
+      ),
     );
   });
 });

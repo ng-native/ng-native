@@ -51,7 +51,7 @@ const {
   ALIASES,
   AXIS_SHORTHANDS,
 } = require('./properties.cjs');
-const { deferGradient, GRADIENTS } = require('./gradients.cjs');
+const { deferGradient, tiledBy, GRADIENTS } = require('./gradients.cjs');
 const { calcWithTokens, motionWithTokens } = require('./token-arithmetic.cjs');
 const { filter, undrawnOnIos, undrawnOnMacos } = require('./filters.cjs');
 const { expandShorthand } = require('./shorthands.cjs');
@@ -3948,6 +3948,9 @@ function compileCss(source, context = 'styles', options = {}) {
     // leaves several behind, because its theme rules are all custom properties and those are
     // substituted at build time.
     if (translatedToNothing(shared, important, tokens, deferred)) return null;
+    // The placing a repeating gradient's tile wrote, which belongs to its image alone.
+    const tiled = tiledBy(shared);
+    const importantTiled = tiledBy(important);
 
     return {
       declarations: shared,
@@ -3957,6 +3960,8 @@ function compileCss(source, context = 'styles', options = {}) {
       ...(deferred.length ? { deferred } : {}),
       ...(sides.mixed() ? { sides: sides.order } : {}),
       ...(importantSides.mixed() ? { importantSides: importantSides.order } : {}),
+      ...(tiled ? { tiled } : {}),
+      ...(importantTiled ? { importantTiled } : {}),
     };
   }
 

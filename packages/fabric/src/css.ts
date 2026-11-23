@@ -174,6 +174,15 @@ export interface StyleRule {
   readonly sides?: readonly string[];
   /** The same for the rule's important declarations. */
   readonly importantSides?: readonly string[];
+  /**
+   * The background placing props among the plain declarations that a repeating gradient's tile
+   * wrote, rather than the author, each to what the rule places without the tile: a `background`
+   * shorthand's own list, or null where the rule places nothing itself, so what a weaker rule
+   * placed stands. An ordinary image that wins over the tile takes these away (`TilePlacing`).
+   */
+  readonly tiled?: Readonly<Record<string, readonly unknown[] | null>>;
+  /** The same for the rule's important declarations. */
+  readonly importantTiled?: Readonly<Record<string, readonly unknown[] | null>>;
   /** The media query guarding this rule, if any. */
   readonly condition?: MediaCondition;
   /** Memo of the last condition evaluation, and the conditions version it was made against. */
@@ -699,7 +708,7 @@ export interface StyleSheet {
  * set. Keeping the two apart is what lets resolution go downwards.
  */
 /** What a node's matched rules come to: shared between nodes that match the same way. */
-type Styled = Pick<StyleCache, 'style' | 'inherited' | 'tokens' | 'important'>;
+type Styled = Pick<StyleCache, 'style' | 'inherited' | 'tokens' | 'important' | 'tiled'>;
 
 export interface StyleCache {
   epoch: number;
@@ -753,6 +762,12 @@ export interface StyleCache {
    * the plain declarations, so for these what the rules say stands over it.
    */
   important?: ReadonlySet<string>;
+  /**
+   * The background placing a repeating gradient's tile gave the style, each prop to what stands
+   * under it (undefined for nothing), where any did: an image the element sets itself wins over
+   * the tile's, and is placed by what is under it (`underOwnImage`).
+   */
+  tiled?: Readonly<Record<string, unknown>>;
 }
 
 /** Whether two sets of animated values are the same, key for key. */
@@ -2508,6 +2523,111 @@ function carryDeferred(
   return kept;
 }
 
+/** The props a background is placed by, which a repeating gradient's tile writes for its image. */
+const PLACING = [
+  'experimental_backgroundSize',
+  'experimental_backgroundPosition',
+  'experimental_backgroundRepeat',
+] as const;
+
+const isImportantImage = (one: DeferredDeclaration): boolean =>
+  one.important === true && one.props.includes(BACKGROUND_IMAGE);
+
+/** One tier of a rule: its declarations, and the placing a tile wrote among them. */
+const tierOf = (rule: StyleRule, important: boolean) =>
+  important
+    ? { tiled: rule.importantTiled, written: rule.important ?? EMPTY }
+    : { tiled: rule.tiled, written: rule.declarations };
+
+/** A node's style with the placing a tile gave it, where one did. */
+const withTiled = (styled: Styled, tiled: Record<string, unknown> | null): Styled =>
+  tiled ? { ...styled, tiled } : styled;
+
+/** Whether a rule gives an image in one tier, written out or settled on device. */
+function writesImage(rule: StyleRule, important: boolean): boolean {
+  const written = important ? rule.important : rule.declarations;
+  if (written && BACKGROUND_IMAGE in written) return true;
+  return (
+    rule.deferred?.some(
+      (one) => (one.important === true) === important && one.props.includes(BACKGROUND_IMAGE),
+    ) === true
+  );
+}
+
+/**
+ * One tier of a cascade's background placing that a repeating gradient's tile wrote (see
+ * `StyleRule.tiled`), each prop with what stands under it. The placing belongs to the tile's
+ * image: an ordinary image that wins over it is placed as a browser places it, by what a weaker
+ * rule said or what the author wrote after the tile, so the tile's placing goes again.
+ */
+class TilePlacing {
+  private readonly under = new Map<string, unknown>();
+
+  /** Before `rule` is applied to `into`, its tier of the style. */
+  before(rule: StyleRule, important: boolean, into: Record<string, unknown>): void {
+    const { tiled, written } = tierOf(rule, important);
+    // Most rules, and every rule until a tile's, have nothing to do here.
+    if (!this.under.size && !tiled) return;
+    // An ordinary image: what it places itself is applied over this next.
+    if (!tiled && writesImage(rule, important)) this.drop(into);
+    for (const prop of PLACING) {
+      if (!(prop in written)) continue;
+      const own = tiled?.[prop];
+      if (own === undefined) this.under.delete(prop);
+      else this.under.set(prop, own ?? this.beneath(prop, into));
+    }
+  }
+
+  /** What stands under a tile's placing of `prop`: under an earlier tile's, what that covered. */
+  private beneath(prop: string, into: Readonly<Record<string, unknown>>): unknown {
+    return this.under.has(prop) ? this.under.get(prop) : into[prop];
+  }
+
+  /** Once the cascade has run: an important image wins over a plain tile's, and takes none of it. */
+  underImportant(
+    important: Readonly<Record<string, unknown>>,
+    deferred: readonly DeferredDeclaration[] | null,
+    into: Record<string, unknown>,
+  ): void {
+    if (BACKGROUND_IMAGE in important || deferred?.some(isImportantImage)) this.drop(into);
+  }
+
+  /** The tile's placing gone from `into`, and what it covered back. */
+  drop(into: Record<string, unknown>): void {
+    for (const [prop, value] of this.under) {
+      if (value === undefined) delete into[prop];
+      else into[prop] = value;
+    }
+    this.under.clear();
+  }
+
+  /** The placing a tile wrote that stands, to what is under it, or null for none. */
+  standing(): Record<string, unknown> | null {
+    return this.under.size ? Object.fromEntries(this.under) : null;
+  }
+}
+
+/**
+ * Takes a tile's placing out of `style` where the element sets an image itself, inline or bound,
+ * which wins over the tile's image (`StyleCache.tiled`): what is under it stands, as it would
+ * under a rule's image. An element's own size, position or repeat is not committed as these
+ * props, so there is none of its own to keep.
+ */
+export function underOwnImage(
+  style: Record<string, unknown>,
+  inline: Readonly<Record<string, unknown>>,
+  bound: ReadonlyMap<string, unknown> | undefined,
+  tiled: Readonly<Record<string, unknown>> | undefined,
+): void {
+  if (!tiled) return;
+  if (inline[BACKGROUND_IMAGE] === undefined && !bound?.has(BACKGROUND_IMAGE)) return;
+  for (const prop in tiled) {
+    const value = tiled[prop];
+    if (value === undefined) delete style[prop];
+    else style[prop] = value;
+  }
+}
+
 const NO_DECLARATIONS: Readonly<Record<string, unknown>> = Object.freeze({});
 
 const pick = <T>(from: Readonly<Record<string, T>>, names: readonly string[]): Record<string, T> =>
@@ -2872,6 +2992,8 @@ interface CascadeResult {
   /** The custom properties among `tokens` declared `!important`, which the element's own do not take. */
   readonly importantTokens: Record<string, TokenValue> | null;
   readonly deferred: DeferredDeclaration[] | null;
+  /** The plain background placing a tile wrote, to what stands under it: see `TilePlacing`. */
+  readonly tiled: Record<string, unknown> | null;
 }
 
 /** What `em` falls back to when nothing in scope has set a font size. The web's default. */
@@ -4658,7 +4780,10 @@ export class StyleResolver {
     );
     const rtl = (style['direction'] ?? this.conditions.direction) === 'rtl';
     const important = importantNames(result, () => TWIN[rtl ? 'rtl' : 'ltr']);
-    return important ? { style, inherited, tokens, important } : { style, inherited, tokens };
+    return withTiled(
+      important ? { style, inherited, tokens, important } : { style, inherited, tokens },
+      result.tiled,
+    );
   }
 
   /** The rules that apply to a node, weakest first. */
@@ -4687,9 +4812,13 @@ export class StyleResolver {
     let importantTokens: Record<string, TokenValue> | null = null;
     let deferred: DeferredDeclaration[] | null = null;
     const forms = new OtherForms(() => this.directionOf(matched, parentInherited));
+    const plainTiles = new TilePlacing();
+    const importantTiles = new TilePlacing();
 
     for (const rule of this.layered ? byImportance(matched, this.layerPlaces) : matched) {
       deferred = forms.before(rule, normal, important, deferred);
+      plainTiles.before(rule, false, normal);
+      importantTiles.before(rule, true, important);
       Object.assign(normal, rule.declarations);
       if (rule.important) {
         Object.assign(important, rule.important);
@@ -4704,6 +4833,7 @@ export class StyleResolver {
     }
     if (importantTokens) Object.assign(tokens!, importantTokens);
     deferred = forms.after(normal, deferred);
+    plainTiles.underImportant(important, deferred, normal);
 
     return {
       declarations: hasImportant ? { ...normal, ...important } : normal,
@@ -4711,6 +4841,7 @@ export class StyleResolver {
       tokens,
       importantTokens,
       deferred,
+      tiled: plainTiles.standing(),
     };
   }
 

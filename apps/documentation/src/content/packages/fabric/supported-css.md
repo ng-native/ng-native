@@ -140,21 +140,23 @@ Native has no repeating gradient, so a `repeating-linear-gradient(...)` in a sty
 as the tile a browser draws the same stripes with: one plain linear gradient, repeated with
 `background-size` and `background-repeat`. Its stops must be in `px` or `rem`, the first at 0
 (or with no position) and the last with one, and its direction an angle or a side, as in
-`repeating-linear-gradient(135deg, rgba(29, 29, 31, 0.28) 0 3px, transparent 3px 6px)`. A
-percentage stop, an `em` or viewport stop, a first stop not at 0, a corner (`to top right`) or a
-`background-size` or a `background-position` in lengths (`1px 0`, `right 2px`) written beside it in
-the `background` shorthand is dropped with a build warning
-that names the tile to write instead, since each needs the laid-out box. A `var()` in it, a token
-holding it, `repeating-radial-gradient` and `repeating-conic-gradient` are dropped with a warning
-too. The tile sets the
-layer's background size, position and repeat, so a `background-size`, `background-position` or
-`background-repeat` declared for the same element, in the same rule after it or in a rule that
-wins over it, replaces the tile's and breaks the stripes, and one the tile wins over is replaced
-by the tile's. The tile's placement is not tied to its image: where a rule sets a repeating
-gradient and a stronger rule then sets an ordinary `background-image`, the tile's size, position
-and repeat still apply to it, so reset them there (`background-size: auto`,
-`background-position: 0 0`) or write the stronger rule as the `background` shorthand, which says
-them all.
+`repeating-linear-gradient(135deg, rgba(29, 29, 31, 0.28) 0 3px, transparent 3px 6px)`. Along a
+side (`to bottom`, `90deg`) the stops may instead all be percentages, and the tile is then that
+percentage of the box: `repeating-linear-gradient(red 0 10%, blue 10% 20%)`. A percentage stop at
+any other angle, stops mixing lengths and percentages, an `em` or viewport stop, a first stop not
+at 0, a corner (`to top right`) or a `background-size` or a `background-position` in lengths
+(`1px 0`, `right 2px`) written beside it in the `background` shorthand is dropped with a build
+warning that names the tile to write instead, since each needs the laid-out box. A period under
+1px is dropped with a warning too: Chrome paints whichever stripe each device pixel lands on,
+which changes with the screen's density, rather than their average color. A `var()` in it, a
+token holding it, `repeating-radial-gradient` and `repeating-conic-gradient` are dropped with a
+warning as well. The tile sets the layer's background size, position and repeat, so a
+`background-size`, `background-position` or `background-repeat` declared for the same element, in
+the same rule after it or in a rule that wins over it, replaces the tile's and breaks the stripes,
+and one the tile wins over is replaced by the tile's. The tile's placement belongs to its image:
+an ordinary `background-image` that wins over it, in a stronger rule, an important one or the
+element's own style, is placed as a browser places it, by what a weaker rule or a declaration
+after the tile says.
 
 The `background` shorthand takes the same gradients, one or several, with a position, size,
 repeat and color beside them: `background: linear-gradient(red, blue) center / cover no-repeat`.
