@@ -101,9 +101,9 @@ carries just the new string, matching React Native's `onChangeText`; `(change)`,
 device and in a browser alike. iOS reports no `Enter` from a single-line field, so use
 `(submitEditing)` for the return key there. On macOS and Linux it also names `Escape`, `Tab`,
 `ArrowUp`, `ArrowDown`, `ArrowLeft` and `ArrowRight`, alone or with Shift, as a browser names them,
-so a field can drive a suggestion list; iOS and Android do not send these. `(selectionChange)` carries
-`$event.nativeEvent.selection`, a `{ start, end }` that changes as the caret moves or a range is
-selected.
+so a field can drive a suggestion list; iOS and Android do not send these. `(selectionChange)`
+carries `$event.nativeEvent.selection`, a `{ start, end }` that changes as the caret moves or a
+range is selected.
 
 Bind `[selection]` to place the caret or select a range from your state: `{ start: 3 }` is a caret
 after the third character, and `{ start: 1, end: 4 }` a range. Whenever the bound selection
