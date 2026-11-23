@@ -16,6 +16,8 @@ import { VirtualList, VirtualListSeparator } from '../../components/src/virtual-
       [overscan]="1"
       [stickyHeader]="stickyHeader()"
       [stickyIndices]="sticky()"
+      [inverted]="inverted()"
+      [horizontal]="horizontal()"
       [style]="fill"
     >
       <text listHeader>Header</text>
@@ -36,6 +38,8 @@ export class Separated {
   readonly items = signal(['a', 'b', 'c', 'd', 'e']);
   readonly stickyHeader = signal(false);
   readonly sticky = signal<readonly number[]>([]);
+  readonly inverted = signal(false);
+  readonly horizontal = signal(false);
   readonly fill = { flex: 1 };
 }
 

@@ -52,6 +52,7 @@ export class Virtual {
       [stickyIndices]="sticky()"
       [itemVisiblePercentThreshold]="50"
       (viewableItemsChanged)="onViewable($event)"
+      (endReached)="ends.push($event.distanceFromEnd)"
       [style]="fill"
     >
       <text listHeader>list header</text>
@@ -73,6 +74,7 @@ export class VirtualOptions {
   sticky = signal<readonly number[]>([]);
   viewable = signal<readonly number[]>([]);
   changes = 0;
+  readonly ends: number[] = [];
 
   onViewable(event: {
     entered: readonly number[];

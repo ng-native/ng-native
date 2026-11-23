@@ -447,6 +447,7 @@ describe('windowed list options', () => {
     sticky: { set(value: readonly number[]): void };
     viewable: () => readonly number[];
     changes: number;
+    ends: number[];
     list(): { scrollToIndex(options: { index: number; animated?: boolean }): void };
   };
 
@@ -1159,6 +1160,44 @@ describe('windowed list options', () => {
     await fireEvent.scroll(host, { contentOffset: { y: 10 * ITEM_HEIGHT } });
     assert.equal(instance.viewable()[0], 10, 'the first fully-visible row');
     assert.ok(instance.changes > before);
+  });
+
+  describe('a header that changes size while the list is scrolled', () => {
+    // Native keeps its offset, so the rows move by the difference with no scroll event.
+    const header = () => scrollView().children[0]!.children[0]!;
+    const resize = (height: number) => fireEvent(header(), 'layout', { layout: { height } });
+
+    it('renders the rows the header moved onto the screen', async () => {
+      await boot({ height: VIEWPORT });
+      await resize(0);
+      await fireEvent.scroll(host, { contentOffset: { y: 100 * ITEM_HEIGHT } });
+      await resize(50 * ITEM_HEIGHT);
+      await settle();
+      const shown = labels(fabric);
+      assert.ok(shown.includes('row 50'), shown.join(', '));
+    });
+
+    it('announces the rows now on screen', async () => {
+      await boot({ height: VIEWPORT });
+      await resize(ITEM_HEIGHT);
+      await fireEvent.scroll(host, { contentOffset: { y: 11 * ITEM_HEIGHT } });
+      assert.equal(instance.viewable()[0], 10);
+      await resize(6 * ITEM_HEIGHT);
+      await settle();
+      assert.equal(instance.viewable()[0], 5);
+    });
+
+    it('fires endReached when the header shrinking brings the end within reach', async () => {
+      await boot({ height: VIEWPORT });
+      const rows = 1000 * ITEM_HEIGHT;
+      await resize(600);
+      // 900 from the end, past the 800 that endReachedThreshold 2 fires within.
+      await fireEvent.scroll(host, { contentOffset: { y: rows + 600 - VIEWPORT - 900 } });
+      assert.deepEqual(instance.ends, []);
+      await resize(0);
+      await settle();
+      assert.deepEqual(instance.ends, [300]);
+    });
   });
 });
 

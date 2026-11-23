@@ -263,7 +263,7 @@ interface Span {
   template: `
     <ng-content select="refresh-control" />
     <view [style]="content()" collapsable="false">
-      <view [style]="headerStyle()" (layout)="onHeaderLayout($event)"
+      <view #header [style]="headerStyle()" (layout)="onHeaderLayout($event)"
         ><ng-content select="[listHeader]"
       /></view>
       <view #rows [style]="canvas()" collapsable="false">
@@ -429,6 +429,7 @@ export class VirtualList<T> extends ScrollViewProps {
   });
   private fillTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly canvasView = viewChild.required('rows', { read: ElementRef });
+  private readonly headerView = viewChild.required('header', { read: ElementRef });
 
   /** The sticky rows and header: see `StickyRows`. */
   private readonly sticky = new StickyRows(this.engine, this.node, {
@@ -1093,7 +1094,11 @@ export class VirtualList<T> extends ScrollViewProps {
       (this.canvasView().nativeElement as HostNode).childList
         .filter((child) => child.nodeKind === 'element')
         .slice(this.measuring() ? 1 : 0);
-    this.sticky.drive(() => this.window(), views);
+    this.sticky.drive(
+      () => this.window(),
+      views,
+      () => this.headerView().nativeElement as HostNode,
+    );
   }
 
   /** Which recycling slot each rendered item holds, by key: its type, and the row it last drew. */
@@ -1418,13 +1423,18 @@ export class VirtualList<T> extends ScrollViewProps {
     // Not clamped to the items: an input set in the same task as this event has not reached the
     // list yet, and the window clamps when it renders.
     this.trackSpeed(content, event.nativeEvent?.timestamp);
+    this.follow(content);
+    this.sticky.scrolled(along);
+    this.checkEnd(along);
+    this.announceViewable(content);
+  }
+
+  /** Take the viewport's leading edge, in the rows' own space, as where the list is. */
+  private follow(content: number): void {
     const visible = this.indexAt(content);
     if (visible !== this.visible()) this.moveTo(visible);
     this.lastOffset = content;
     this.anchorAt(visible, content);
-    this.sticky.scrolled(along);
-    this.checkEnd(along);
-    this.announceViewable(content);
   }
 
   /**
@@ -1558,8 +1568,14 @@ export class VirtualList<T> extends ScrollViewProps {
     const layout = event.nativeEvent?.layout;
     const height = (this.horizontal() ? layout?.width : layout?.height) ?? 0;
     if (height === this.headerHeight()) return;
+    const along = this.headerHeight() + this.lastOffset;
     this.headerHeight.set(height);
-    this.holdPastHeader();
+    if (this.holdPastHeader()) return;
+    // Native keeps its offset and sends no scroll event, so the rows moved under the viewport by
+    // the difference: the window, the end and what is viewable are taken again from there.
+    this.follow(along - height);
+    this.checkEnd(along);
+    this.announceViewable(along - height);
   }
 
   /**
@@ -1569,10 +1585,11 @@ export class VirtualList<T> extends ScrollViewProps {
    * left to push the rows along. Made at once rather than after a render, because a layout arrives
    * outside change detection and nothing else may be about to render.
    */
-  private holdPastHeader(): void {
+  private holdPastHeader(): boolean {
     const hold = this.maintainVisibleContentPosition();
-    if (!hold || this.lastOffset <= (hold.autoscrollToTopThreshold ?? 0)) return;
+    if (!hold || this.lastOffset <= (hold.autoscrollToTopThreshold ?? 0)) return false;
     this.scrollToOffset({ offset: this.headerHeight() + this.lastOffset, animated: false });
+    return true;
   }
 
   protected onContentSize(event: NativeSyntheticEvent<{ width?: number; height?: number }>): void {

@@ -212,6 +212,20 @@ describe('virtual list with measured rows', () => {
     unmount();
   });
 
+  it('keeps the window on the held rows when the header grows by more than a screen', async () => {
+    const { instance, scroll, rendered, scrollView, unmount } = await boot('Measured');
+    instance.anchoring.set({ minIndexForVisible: 0, autoscrollToTopThreshold: 20 });
+    await settle();
+    const header = () => scrollView().children[0]!.children[0]!;
+    await fireEvent(header(), 'layout', { layout: { x: 0, y: 0, width: 400, height: 10 } });
+    await scroll(10 + 50 * ESTIMATE);
+    // Held: native is told to scroll by the difference, so the same rows stay on screen.
+    await fireEvent(header(), 'layout', { layout: { x: 0, y: 0, width: 400, height: 2010 } });
+    await settle();
+    assert.ok(rendered().includes(50), rendered().join(', '));
+    unmount();
+  });
+
   it('lets the header push the rows at the start, where the user is looking at it', async () => {
     const { instance, scroll, scrolls, scrollView, unmount } = await boot('Measured');
     instance.anchoring.set({ minIndexForVisible: 0, autoscrollToTopThreshold: 20 });

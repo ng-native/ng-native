@@ -52,6 +52,9 @@ interface StickyRow {
 
 const NONE: readonly number[] = [];
 
+/** A range native moves a view nowhere along. */
+const STILL: ScrollRange = { input: [0, 1], output: [0, 0] };
+
 /**
  * The zIndex of a level 0 row where rows have levels, each level further in one under it. Fixed,
  * not counted from the levels the list holds: a deeper level arriving would otherwise commit new
@@ -73,13 +76,13 @@ const FRONT = 100;
  * Pinning is not native: RN's `ScrollView.js` translates a sticky child against the scroll offset
  * in JavaScript, and a row here follows the offset the same way while it is the current one, by
  * its `top` when absolutely positioned and by a transform when in flow. Where native can move a
- * view by the scroll, each sticky row instead stays at its own place in the list and native
- * translates it on every frame the list scrolls, as RN's `ScrollViewStickyHeader` does; a
- * translate committed from each scroll event lands a frame or more late, and on a fast fling the
- * row shudders and comes away from the edge.
+ * view by the scroll, each sticky row, and a pinned header, instead stays at its own place in the
+ * list and native translates it on every frame the list scrolls, as RN's `ScrollViewStickyHeader`
+ * does; a translate committed from each scroll event lands a frame or more late, and on a fast
+ * fling the row shudders and comes away from the edge.
  */
 export class StickyRows {
-  /** Whether native moves sticky rows. */
+  /** Whether native moves sticky rows and the pinned header. */
   readonly native: boolean;
   /**
    * Where the scroll view is along its axis, header and all: 0 until native says otherwise, since
@@ -100,6 +103,11 @@ export class StickyRows {
   private settleTimer: ReturnType<typeof setTimeout> | undefined;
   /** What native is moving, by row view, with the transform kept beside the translate. */
   private readonly drives = new Map<HostNode, { drive: ScrollDrive; statics: string }>();
+  /**
+   * What native moves the header by, once it has been pinned. Kept, moving it nowhere, when it no
+   * longer is: native goes on drawing a translate it set after its drive is gone.
+   */
+  private headerDrive: { drive: ScrollDrive; statics: string; pinned: boolean } | null = null;
   /** The list scrolled itself, and native has not drawn its sticky rows there yet. */
   private jumped = false;
   /** Native has reported reaching the target, so this pass's drives are the last to need telling. */
@@ -216,15 +224,14 @@ export class StickyRows {
 
   /**
    * The header's translation while it is pinned: the scroll position, held back at zero by an
-   * overscroll and at the first sticky row, which pushes it off.
+   * overscroll and at the first sticky row, which pushes it off. Where native moves it, the
+   * translate native had reached when scrolling paused, as for a sticky row.
    */
   readonly headerStyle = computed(() => {
     const flip = this.list.flipText();
     if (!this.list.header()) return flip ? { transform: flip } : undefined;
-    const along = this.along();
-    const [first] = this.rows().keys();
-    const limit = first === undefined ? Infinity : this.list.topOf(first);
-    const shift = Math.min(Math.max(0, along), limit);
+    const along = this.native ? this.settled() : this.along();
+    const shift = Math.min(Math.max(0, along), this.headerLimit());
     const move =
       shift > 0 ? `${this.list.horizontal() ? 'translateX' : 'translateY'}(${shift}px)` : '';
     const transform = [move, flip ?? ''].filter(Boolean).join(' ');
@@ -346,12 +353,16 @@ export class StickyRows {
   }
 
   /**
-   * Hand each rendered sticky row's view to native to move, and let go of the rest. `views` are
-   * the rendered rows' views in the same order as `rows`. Each is only asked for where there is a
-   * drive to make or let go.
+   * Hand each rendered sticky row's view to native to move, and let go of the rest, and the
+   * header's view, `header`, while it is pinned. `views` are the rendered rows' views in the same
+   * order as `rows`. Each is only asked for where there is a drive to make or let go.
    */
-  drive(rows: () => readonly Row[], views: () => readonly HostNode[]): void {
-    if (!this.pinning() && this.drives.size === 0) return;
+  drive(
+    rows: () => readonly Row[],
+    views: () => readonly HostNode[],
+    header: () => HostNode,
+  ): void {
+    if (!this.pinning() && this.drives.size === 0 && !this.headerDrive) return;
     const rendered = views();
     const axis = this.list.horizontal() ? 'x' : 'y';
     const live = new Set<HostNode>();
@@ -392,12 +403,50 @@ export class StickyRows {
       held.drive.stop();
       this.drives.delete(view);
     }
+    this.driveHeader(header, axis, from);
     if (this.landed) this.jumped = this.landed = false;
+  }
+
+  /**
+   * Hand the header to native to move while it is pinned, by the scroll view's offset until the
+   * first sticky row pushes it off. Unpinned, it is moved nowhere.
+   */
+  private driveHeader(view: () => HostNode, axis: 'x' | 'y', from: number | undefined): void {
+    const pinned = this.list.header();
+    if (!pinned && !this.headerDrive) return;
+    const range = pinned ? this.headerRange() : STILL;
+    const held = this.headerDrive;
+    // Pinned or let go at rest, native has no new scroll event to draw it from: it is told where
+    // it last said it was.
+    const at = held?.pinned === pinned ? from : (from ?? this.nativeAt);
+    const statics = this.list.flip() ?? [];
+    // The axis too: a list turned horizontal moves the header along x.
+    const key = axis + JSON.stringify(statics);
+    if (held?.statics === key) {
+      held.pinned = pinned;
+      return held.drive.update(range, at);
+    }
+    held?.drive.stop();
+    const drive = this.engine.driveByScroll(view(), this.node, axis, range, statics, at);
+    this.headerDrive = drive && { drive, statics: key, pinned };
+  }
+
+  /** How native moves the pinned header. A first sticky row at the very top holds it in place. */
+  private headerRange(): ScrollRange {
+    const limit = this.headerLimit();
+    return limit > 0 ? pinnedRange(0, limit) : STILL;
+  }
+
+  /** How far the header moves before the first sticky row pushes it off: to that row's top. */
+  private headerLimit(): number {
+    const [first] = this.rows().keys();
+    return first === undefined ? Infinity : this.list.topOf(first);
   }
 
   destroy(): void {
     clearTimeout(this.settleTimer);
     for (const held of this.drives.values()) held.drive.stop();
+    this.headerDrive?.drive.stop();
   }
 
   /** The size of the rows a sticky row pins under, which is how far from the edge it holds. */
