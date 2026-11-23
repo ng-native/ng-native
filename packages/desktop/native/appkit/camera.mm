@@ -59,6 +59,8 @@
 // well: AVFoundation reports it as an error that says so.
 @interface NGNMovieRecording : NSObject <AVCaptureFileOutputRecordingDelegate>
 - (instancetype)initWithDone:(std::function<void(const std::string &)>)done;
+// Answers that the recording failed, for one the output refused to start.
+- (void)abandon:(const char *)reason;
 @end
 
 @implementation NGNMovieRecording {
@@ -73,6 +75,14 @@
     _keep = self;
   }
   return self;
+}
+
+- (void)abandon:(const char *)reason {
+  auto done = std::move(_done);
+  _keep = nil;
+  if (done) {
+    done(reason);
+  }
 }
 
 - (void)captureOutput:(AVCaptureFileOutput *)output
@@ -346,7 +356,14 @@ class AVSessionCapture final : public SessionCapture {
           (*answer)(message);
         });
       }];
-      [movie startRecordingToOutputFileURL:url recordingDelegate:delegate];
+      @try {
+        [movie startRecordingToOutputFileURL:url recordingDelegate:delegate];
+      } @catch (NSException *exception) {
+        // A session with no frames coming (one not running yet, a screen input while the screen is
+        // locked) refuses by an exception, and the delegate never hears.
+        const char *reason = exception.reason.UTF8String;
+        [delegate abandon:reason != nullptr ? reason : "the camera could not record"];
+      }
     });
   }
 

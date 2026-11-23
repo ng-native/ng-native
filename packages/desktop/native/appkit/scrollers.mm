@@ -84,6 +84,13 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
   BOOL _settleQueued;
 }
 
+- (instancetype)initWithFrame:(NSRect)frame {
+  if ((self = [super initWithFrame:frame])) {
+    _settleDuration = 0.25;
+  }
+  return self;
+}
+
 - (void)setPagingEnabled:(BOOL)pagingEnabled {
   _pagingEnabled = pagingEnabled;
   if (!pagingEnabled) {
@@ -242,9 +249,10 @@ NSEvent *NGNMirroredScroll(NSEvent *event, BOOL x, BOOL y) {
   _settleUnderway = YES;
   [self report:NGNScrollPhaseMomentumBegan];
   __weak NGNWheelScrollView *weakSelf = self;
+  NSTimeInterval duration = _settleDuration;
   [NSAnimationContext
       runAnimationGroup:^(NSAnimationContext *context) {
-        context.duration = 0.25;
+        context.duration = duration;
         context.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
         clip.animator.boundsOrigin = to;
       }

@@ -36,6 +36,9 @@ typedef NS_ENUM(NSInteger, NGNScrollPhase) {
 @property (nonatomic) BOOL scrollingDisabled;
 // `pagingEnabled`: a gesture's end settles on a page, the view's size along the axis.
 @property (nonatomic) BOOL pagingEnabled;
+// How long a page settling animates, 0.25 s. An animation only runs while the display draws, so a
+// test sets 0 to settle at once on a Mac whose screen is locked.
+@property (nonatomic) NSTimeInterval settleDuration;
 // Called as a trackpad gesture this view scrolls with begins and ends, and as its momentum, or a
 // page settling, begins and ends. `velocity` is the drag's at its end, in points a millisecond.
 @property (nonatomic, copy) void (^phaseChanged)(NGNScrollPhase phase, NSPoint velocity);

@@ -12,13 +12,15 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <unistd.h>
 
 namespace {
 
-// Black text on white, 600 by 200 pixels, its baseline 60 pixels from the bottom.
-std::string drawText(NSString *text) {
+// Black text on white, 600 by 200 pixels, its baseline 60 pixels from the bottom, written to a PNG
+// whose path it answers, or nothing when the PNG could not be written (a full disk).
+std::optional<std::string> drawText(NSString *text) {
   // Named for this process: a suite run beside this one (another checkout's, on the same Mac) draws
   // and removes its own file, and a shared name made each read the other's, or none.
   auto path = (std::filesystem::temp_directory_path() / ("ngn-text-recognition-" + std::to_string(getpid()) + ".png")).string();
@@ -36,15 +38,21 @@ std::string drawText(NSString *text) {
   CTLineDraw(line, context);
   CFRelease(line);
   CGImageRef image = CGBitmapContextCreateImage(context);
-  CGImageDestinationRef destination = CGImageDestinationCreateWithURL(
-      (__bridge CFURLRef)[NSURL fileURLWithPath:[NSString stringWithUTF8String:path.c_str()]],
-      (__bridge CFStringRef)UTTypePNG.identifier, 1, nullptr);
+  // Encoded in memory and written whole: ImageIO writing to a file on a full disk says it finished
+  // and leaves the PNG cut short, which Vision then reads no text in.
+  NSMutableData *png = [NSMutableData data];
+  CGImageDestinationRef destination =
+      CGImageDestinationCreateWithData((__bridge CFMutableDataRef)png, (__bridge CFStringRef)UTTypePNG.identifier, 1, nullptr);
   CGImageDestinationAddImage(destination, image, nullptr);
-  CGImageDestinationFinalize(destination);
+  bool encoded = CGImageDestinationFinalize(destination);
   CFRelease(destination);
   CGImageRelease(image);
   CGContextRelease(context);
   CGColorSpaceRelease(space);
+  REQUIRE(encoded);
+  if (![png writeToFile:[NSString stringWithUTF8String:path.c_str()] options:NSDataWritingAtomic error:nil]) {
+    return std::nullopt;
+  }
   return path;
 }
 
@@ -81,8 +89,13 @@ Result readNow(ngn::TextReader &reader, const std::string &path, bool fast = fal
 TEST_CASE("VisionTextReader reads text drawn into an image, with its box") {
   auto reader = ngn::appkit::makeTextReader();
   auto path = drawText(@"Hello Vision");
-  auto result = readNow(*reader, path);
-  std::filesystem::remove(path);
+  if (!path) {
+    MESSAGE("the test image could not be written to " << std::filesystem::temp_directory_path() << " (a full disk?); skipped");
+    return;
+  }
+  auto result = readNow(*reader, *path);
+  std::filesystem::remove(*path);
+  INFO("the reader answered: " << result.error);
   REQUIRE(result.reading);
   CHECK(result.reading->width == 600);
   CHECK(result.reading->height == 200);

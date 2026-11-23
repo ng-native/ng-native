@@ -59,6 +59,13 @@ std::function<void(const std::string &)> answerOnMain(std::shared_ptr<std::optio
   };
 }
 
+// Whether the screen is locked: a screen input gives no frames then, so the movie output refuses to
+// start, and a test that records from one skips.
+bool screenLocked() {
+  NSDictionary *session = CFBridgingRelease(CGSessionCopyCurrentDictionary());
+  return [session[@"CGSSessionScreenIsLocked"] boolValue];
+}
+
 } // namespace
 
 using Access = ngn::CameraHardware::Access;
@@ -157,8 +164,46 @@ TEST_CASE("A recording needs a running camera, and one with no video to record f
   session.fakeRunning = NO;
 }
 
+TEST_CASE("A recording the movie output refuses to start answers with the reason, and leaves the session as it was") {
+  // A screen input on a session that only says it runs: the connection is active, but no frame ever
+  // comes, so the movie output refuses by an exception, as it does for a screen input while the
+  // screen is locked.
+  AVCaptureScreenInput *screen = [[AVCaptureScreenInput alloc] initWithDisplayID:CGMainDisplayID()];
+  NGNRecordingSession *session = [NGNRecordingSession new];
+  if (screen == nil || ![session canAddInput:screen]) {
+    MESSAGE("no screen input here; skipped");
+    return;
+  }
+  [session addInput:screen];
+  session.sessionPreset = AVCaptureSessionPresetPhoto;
+  session.fakeRunning = YES;
+  auto capture = ngn::appkit::sessionCapture(session, [AVCapturePhotoOutput new]);
+  auto answer = std::make_shared<std::optional<std::string>>();
+  capture->startRecording({.path = "/tmp/ngn-camera-test-never-written.mov", .sound = false}, answerOnMain(answer));
+  // Before the fix, the exception ended the process on the session's queue.
+  REQUIRE(spinUntil([&] { return answer->has_value(); }));
+  // AVFoundation's own reason, which the OS words: "... No active/enabled connections".
+  CHECK_FALSE(answer->value().empty());
+  CHECK(answer->value() != "the camera gives no video to record");
+  MESSAGE("refused with: " << answer->value());
+  REQUIRE(spinUntil([&] { return !capture->recording(); }));
+  CHECK(session.outputs.count == 0);
+  CHECK([session.sessionPreset isEqualToString:AVCaptureSessionPresetPhoto]);
+  // Nothing is left running, so another recording can be asked for.
+  auto again = std::make_shared<std::optional<std::string>>();
+  capture->startRecording({.path = "/tmp/ngn-camera-test-never-written.mov", .sound = false}, answerOnMain(again));
+  REQUIRE(spinUntil([&] { return again->has_value(); }));
+  CHECK(again->value() != "a recording is already in progress");
+  session.fakeRunning = NO;
+  [session removeInput:screen];
+}
+
 TEST_CASE("A recording keeps its own copy of the request, which the caller may let go of at once, and answers at its limit") {
   // A screen input stands in for a camera: it gives the session video with no camera permission.
+  if (screenLocked()) {
+    MESSAGE("the screen is locked, so a screen input gives nothing to record; skipped");
+    return;
+  }
   AVCaptureScreenInput *screen = [[AVCaptureScreenInput alloc] initWithDisplayID:CGMainDisplayID()];
   AVCaptureSession *session = [AVCaptureSession new];
   if (screen == nil || ![session canAddInput:screen]) {
@@ -232,6 +277,10 @@ TEST_CASE("A recording keeps its own copy of the request, which the caller may l
 
 TEST_CASE("A recording is made at the preset its request names, or High for another or one the camera lacks, and is not mirrored") {
   // A screen input stands in for a camera: it gives the session video with no camera permission.
+  if (screenLocked()) {
+    MESSAGE("the screen is locked, so a screen input gives nothing to record; skipped");
+    return;
+  }
   AVCaptureScreenInput *screen = [[AVCaptureScreenInput alloc] initWithDisplayID:CGMainDisplayID()];
   struct Case {
     const char *preset;
@@ -298,6 +347,10 @@ TEST_CASE("A recording is made at the preset its request names, or High for anot
 }
 
 TEST_CASE("A recording set up ahead starts on that setup, and a setup taken down leaves the session as it was") {
+  if (screenLocked()) {
+    MESSAGE("the screen is locked, so a screen input gives nothing to record; skipped");
+    return;
+  }
   AVCaptureScreenInput *screen = [[AVCaptureScreenInput alloc] initWithDisplayID:CGMainDisplayID()];
   NGNPresetSession *session = [NGNPresetSession new];
   if (screen == nil || ![session canAddInput:screen] || ![session canSetSessionPreset:AVCaptureSessionPreset640x480]) {

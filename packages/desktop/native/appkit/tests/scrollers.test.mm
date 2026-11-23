@@ -235,6 +235,9 @@ TEST_CASE("a trackpad gesture reports its drag and its momentum") {
 TEST_CASE("a paged scroll view settles on a page as the gesture ends, and its momentum moves nothing") {
   Nested pager(NSMakeSize(600, 300));
   pager.scroll.pagingEnabled = YES;
+  CHECK(pager.scroll.settleDuration == doctest::Approx(0.25));
+  // At once: an animation's end never comes while the screen is locked.
+  pager.scroll.settleDuration = 0;
   pager.send(@[ trackpad(-10, 0, kCGScrollPhaseBegan), trackpad(-40, 0, kCGScrollPhaseChanged),
                 trackpad(0, 0, kCGScrollPhaseEnded), trackpad(-30, 0, 0, kCGMomentumScrollPhaseBegin),
                 trackpad(0, 0, 0, kCGMomentumScrollPhaseEnd) ]);
