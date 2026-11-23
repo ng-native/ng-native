@@ -152,8 +152,9 @@ layer's background size, position and repeat, so a `background-size`, `backgroun
 wins over it, replaces the tile's and breaks the stripes, and one the tile wins over is replaced
 by the tile's. The tile's placement is not tied to its image: where a rule sets a repeating
 gradient and a stronger rule then sets an ordinary `background-image`, the tile's size, position
-and repeat still apply to it, so reset them there (`background-size: auto`, `background-position: 0 0`) or write the stronger
-rule as the `background` shorthand, which says them all.
+and repeat still apply to it, so reset them there (`background-size: auto`,
+`background-position: 0 0`) or write the stronger rule as the `background` shorthand, which says
+them all.
 
 The `background` shorthand takes the same gradients, one or several, with a position, size,
 repeat and color beside them: `background: linear-gradient(red, blue) center / cover no-repeat`.
