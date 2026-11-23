@@ -128,6 +128,14 @@ describe('shapes drawn as they are', () => {
       outline('<path d="M1 1"><title>a</title></path><path d="M2 2"/>'),
     ],
     ['a radius in percent', outline('<circle r="10%"/><circle r="2"/>')],
+    [
+      'a gradient stroke, laid out by the box of each shape',
+      outline('<path d="M1 1L9 9" stroke="url(#g)"/><path d="M2 2L8 8" stroke="url(#g)"/>'),
+    ],
+    [
+      'a gradient stroke from the root',
+      '<svg fill="none" stroke="url(#g)"><path d="M1 1L9 9"/><path d="M2 2L8 8"/></svg>',
+    ],
   ];
   for (const [what, markup] of cases) {
     it(`with ${what}`, () => {
@@ -135,6 +143,13 @@ describe('shapes drawn as they are', () => {
       assert.equal(mergeShapes(root), root);
     });
   }
+
+  it('with points that are not all numbers, apart from the valid shapes after it', () => {
+    assert.deepEqual(
+      drawn(outline('<polyline points="0,0 1,bad"/><path d="M1 1"/><path d="M2 2"/>')),
+      ['polyline', 'M1 1M2 2'],
+    );
+  });
 
   it('in different strokes, each run its own', () => {
     assert.deepEqual(
@@ -164,6 +179,27 @@ describe('a closed shape no bigger than its stroke', () => {
       ),
       ['circle', 'circle'],
     );
+  });
+
+  it('is drawn as it is when exactly as wide as its stroke', () => {
+    assert.deepEqual(
+      drawn(
+        outline('<circle cx="5" cy="5" r="1"/><circle cx="9" cy="9" r="1"/>', ' stroke-width="2"'),
+      ),
+      ['circle', 'circle'],
+    );
+    assert.deepEqual(
+      drawn(outline('<path d="M1 1h2v2h-2z"/><path d="M5 5h2v2h-2z"/>', ' stroke-width="2"')),
+      ['M1 1h2v2h-2z', 'M5 5h2v2h-2z'],
+    );
+  });
+
+  it('takes the last stroke width its style declares, as the drawing does', () => {
+    const markup = outline(
+      '<circle cx="5" cy="5" r="1"/><circle cx="9" cy="9" r="1"/>',
+      ' style="stroke-width:1;stroke-width:4"',
+    );
+    assert.deepEqual(drawn(markup), ['circle', 'circle']);
   });
 
   it('takes its stroke from the width ng-icons hands the icon', () => {

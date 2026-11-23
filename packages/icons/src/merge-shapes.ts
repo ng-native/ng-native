@@ -77,7 +77,8 @@ function strokeOf(node: SvgNode, handed: number | string | undefined): number | 
   const declared = node.attrs['style']
     ?.split(';')
     .map((declaration) => declaration.split(':'))
-    .find(([name]) => name?.trim() === 'stroke-width')?.[1]
+    .filter(([name]) => name?.trim() === 'stroke-width')
+    .at(-1)?.[1]
     ?.trim();
   const written = declared ?? node.attrs['stroke-width'];
   if (written === undefined) return undefined;
@@ -87,18 +88,18 @@ function strokeOf(node: SvgNode, handed: number | string | undefined): number | 
 }
 
 /**
- * Whether a shape is closed and no wider or taller than its stroke: see `closesSmallerThan`. A
+ * Whether a shape is closed and no wider or taller than its stroke: see `closesWithinStroke`. A
  * stroke width not known here counts as wider than any closed shape.
  */
 function closedWithinStroke(node: SvgNode, stroke: number): boolean {
   const width = Number.isNaN(stroke) ? Number.POSITIVE_INFINITY : stroke;
   const size = SMALLEST_SIDE.get(node.tag);
-  if (size) return size(node.attrs) < width;
+  if (size) return size(node.attrs) <= width;
   if (node.tag !== 'path' && node.tag !== 'polygon') return false;
   const d =
     node.tag === 'path' ? (node.attrs['d'] ?? '') : pointsToPath(node.attrs['points'] ?? '', true);
   const segments = parsePath(d);
-  return segments === undefined || closesSmallerThan(segments, width);
+  return segments === undefined || closesWithinStroke(segments, width);
 }
 
 type Attributes = Readonly<Record<string, string>>;
@@ -156,7 +157,7 @@ function lineOf(a: Attributes): string | undefined {
 
 function pointsOf(a: Attributes, close: boolean): string | undefined {
   const d = pointsToPath(a['points'] ?? '', close);
-  return d.startsWith('M') ? d : undefined;
+  return d.startsWith('M') && wellFormed(d) ? d : undefined;
 }
 
 function ellipseOf(
@@ -253,7 +254,7 @@ export const wellFormed = (d: string): boolean => parsePath(d) !== undefined;
  * came out hollow. Measured by the points each command ends at, which is never more than the
  * part's size, so a part this calls large is.
  */
-function closesSmallerThan(segments: readonly Segment[], stroke: number): boolean {
+function closesWithinStroke(segments: readonly Segment[], stroke: number): boolean {
   let x = 0;
   let y = 0;
   let startX = 0;
@@ -270,7 +271,7 @@ function closesSmallerThan(segments: readonly Segment[], stroke: number): boolea
       relative ? [x + dx, y + dy] : [dx, dy];
     const lower = command.toLowerCase();
     if (lower === 'z') {
-      if (Math.min(box[2]! - box[0]!, box[3]! - box[1]!) < stroke) return true;
+      if (Math.min(box[2]! - box[0]!, box[3]! - box[1]!) <= stroke) return true;
       x = startX;
       y = startY;
       box = [x, y, x, y];
@@ -341,7 +342,9 @@ function paintKey(node: SvgNode, inherited: Inherited): string | undefined {
 function mergeableAttribute(name: string, value: string, referenced: ReadonlySet<string>): boolean {
   if (UNMERGEABLE.has(name)) return false;
   if (name === 'style') return mergeableStyle(value);
-  if (value.includes('var(')) return false;
+  // A gradient or pattern is laid out by the box of the shape it paints, by default: over a
+  // merged path it would spread across every shape in it.
+  if (value.includes('var(') || value.includes('url(')) return false;
   // An id nothing points at names nothing: the merged path goes without it.
   return name !== 'id' || !referenced.has(value);
 }
@@ -377,7 +380,10 @@ function handedDown(node: SvgNode, from: Inherited): Inherited {
   return {
     ...from,
     fill: own['fill'] ?? from.fill,
-    blocked: from.blocked || DRAWN_PER_SHAPE.some((name) => own[name] !== undefined),
+    blocked:
+      from.blocked ||
+      DRAWN_PER_SHAPE.some((name) => own[name] !== undefined) ||
+      own['stroke']?.includes('url(') === true,
     stroke: strokeOf(node, from.handed) ?? from.stroke,
   };
 }

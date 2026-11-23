@@ -96,6 +96,8 @@ const VIEW_BOX = ['minX', 'minY', 'vbWidth', 'vbHeight', 'align', 'meetOrSlice']
  */
 const drawings = new Map<string, Drawing | null>();
 const MAX_DRAWINGS = 500;
+/** The stroke widths a drawing keeps its shapes merged for. */
+const MAX_STROKE_WIDTHS = 8;
 
 /** An element's attributes and the native props they make. */
 interface Translation {
@@ -374,7 +376,11 @@ export class NgIcon {
     const strokeWidth = this.strokeWidth();
     const key = String(strokeWidth);
     let root = drawing.merged.get(key);
-    if (!root) drawing.merged.set(key, (root = mergeShapes(drawing.root, strokeWidth)));
+    if (!root) {
+      // ponytail: emptied when full, for an app that animates the width; a few are ever in use.
+      if (drawing.merged.size >= MAX_STROKE_WIDTHS) drawing.merged.clear();
+      drawing.merged.set(key, (root = mergeShapes(drawing.root, strokeWidth)));
+    }
 
     // The svg view itself holds no paint, so a root that says `stroke="currentColor"` needs its
     // children to inherit it from a group, which is how react-native-svg's own `Svg` does it. The
