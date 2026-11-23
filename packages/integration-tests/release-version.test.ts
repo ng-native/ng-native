@@ -6,24 +6,45 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 const script = new URL('../../scripts/release-version.mjs', import.meta.url);
-const { checkPublishing, compare, releaseVersion } = (await import(script.href)) as {
+const { checkPublishing, compare, lastTagged, releaseVersion } = (await import(script.href)) as {
   checkPublishing(packages: { name: string; versions: string[]; trusted?: boolean }[]): void;
   compare(a: string, b: string): number;
+  lastTagged(lsRemote: string): string;
   releaseVersion(bump: string, exact: string, published: string[], current: string): string;
 };
 
 // What npm has, across every package.
 const published = ['0.0.1', '0.17.0', '0.17.1', '0.18.0', '0.18.1'];
 
+// `main` never gets a release commit, so a bump starts from the highest tag, not the version on disk.
+describe('the last release', () => {
+  it("is the highest v<version> tag by semver, not by the tags' order", () => {
+    const lsRemote = [
+      'aaa\trefs/tags/v0.9.0',
+      'bbb\trefs/tags/v0.27.0',
+      'ccc\trefs/tags/v0.27.0^{}',
+      'ddd\trefs/tags/v0.28.0-rc.0',
+      'eee\trefs/tags/v0.3.0',
+      'fff\trefs/tags/vnext',
+    ].join('\n');
+    assert.equal(lastTagged(lsRemote), '0.28.0-rc.0');
+    assert.equal(lastTagged(lsRemote.replace('v0.28.0-rc.0', 'v0.26.0')), '0.27.0');
+  });
+
+  it('refuses a release with no tag to start from', () => {
+    assert.throws(() => lastTagged(''), /no v<version> tag/);
+  });
+});
+
 describe('the version a release takes', () => {
   // Every job takes this output as the version, the prebuilt desktop hosts' URLs included, so a
-  // bump comes out as the version nx release makes of it from the version on disk.
+  // bump comes out as the version nx release makes of it from the last release's.
   it('is the version the bump makes when no exact version is given', () => {
     assert.equal(releaseVersion('minor', '', published, '0.18.1'), '0.19.0');
     assert.equal(releaseVersion('patch', '  ', published, '0.18.1'), '0.18.2');
   });
 
-  it('bumps a prerelease on disk as semver does', () => {
+  it('bumps a prerelease as semver does', () => {
     const rc = [...published, '0.19.0-rc.0', '0.19.1-rc.0'];
     assert.equal(releaseVersion('minor', '', rc, '0.19.0-rc.0'), '0.19.0');
     assert.equal(releaseVersion('minor', '', rc, '0.19.1-rc.0'), '0.20.0');

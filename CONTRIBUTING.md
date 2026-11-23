@@ -227,8 +227,8 @@ See [RELEASING.md](./docs/RELEASING.md) for how an actual release goes out.
 - CI must be green.
 - Describe why the change is needed, not just what changed - the diff already says what.
 - A change someone using the packages would notice comes with a version plan in
-  `.nx/version-plans/` - `npx nx release plan` writes one. The release's `CHANGELOG.md` entry is
-  made from them; see [RELEASING.md](./docs/RELEASING.md#describing-changes).
+  `.nx/version-plans/` - `npx nx release plan` writes one. The release's notes on the
+  Releases page are made from them; see [RELEASING.md](./docs/RELEASING.md#describing-changes).
 - Commit messages here are sentence-case summaries of the change, often followed by a body
   explaining why (see `git log --oneline -20` for the style); there is no conventional-commits
   prefix convention (`feat:`, `fix:`, and so on) in use.

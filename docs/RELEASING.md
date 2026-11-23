@@ -13,13 +13,11 @@ one version. `.github/workflows/release.yml` does it, run by hand from the Actio
    organization `ng-native`, repository `ng-native`, workflow `release.yml`. The release publishes
    through OIDC and no npm token is stored anywhere. The first release must be above `0.0.1`:
    `0.1.0`, or a `minor` bump.
-4. **Set up the release App.** The release commit goes straight to `main`, past the "Protect main"
-   ruleset, which lets the `ng-native-release` GitHub App through and nothing else. The App is
-   owned by the `ng-native` organization, installed on this repository only, and asks for contents
-   read and write, beside the metadata read every App has. The `release` environment, which only
-   `main` can deploy to, holds its client ID as the variable `RELEASE_APP_CLIENT_ID` and its private
-   key as the secret `RELEASE_APP_PRIVATE_KEY`. The release job asks for a token from them before
-   it publishes, so a missing App or key stops a run before it publishes anything.
+
+A release never commits to `main`, so `main` can take pull requests alone. Its `Release <version>` commit
+is reachable only from the `v<version>` tag, so the versions in each `package.json` on `main` are
+not the released ones: the last release is the highest tag, and its notes are on the repository's
+Releases page.
 
 ## Adding a package
 
@@ -65,8 +63,9 @@ A virtual list recycles its rows when a template tracks them by slot.
 
 `__default__` covers every package, which is right while they are released in lockstep. `minor` is
 the bump for a breaking change under `0.x`, and `patch` for anything else. Each release turns the
-plans it finds into its `CHANGELOG.md` entry and deletes them, so the changelog says what the
-plans said, not what the commit messages did. Refactors, tests and docs need no plan.
+plans added since the last release into its notes on the Releases page, so the notes say what the
+plans said, not what the commit messages did. Released plans stay on `main`, where the next release
+skips every one that was there when the last was made; a pull request can delete them at any time. Refactors, tests and docs need no plan.
 
 ## Breaking changes and migrations
 
@@ -112,8 +111,8 @@ credentials and fails with a 404 after the packages before it are out. Every oth
 
 Tick **dry_run** to rehearse a release. It runs every job above, from any branch, versions, builds
 and packs every package, and runs `npm publish --dry-run` on each tarball. It pushes nothing, creates
-no GitHub release and deploys no docs. The run's summary lists the tarballs and the changelog entry
-the release would have. Dry runs queue only behind other dry runs, never behind a release. From the
+no GitHub release and deploys no docs. The run's summary lists the tarballs and the notes the
+release would have. Dry runs queue only behind other dry runs, never behind a release. From the
 command line:
 
 ```sh
@@ -134,23 +133,24 @@ The `storybook` job sets up the Storybook recipe from the web docs
 that page states, builds it with `storybook build` and checks it in Chromium. Once all of those
 pass, it runs the same gate CI does, then:
 
-- `nx release version` writes the version to every package and the template. The `sync-app-versions`
+- `nx release version` writes the version to every package and the template, in the runner's
+  checkout. The bump starts from the highest `v<version>` tag, not from the versions on `main`. The `sync-app-versions`
   migration in `packages/nx/migrations.json` and `packages/schematics/migrations.json` moves to the
   same version, so `nx migrate` and `ng update` run it on every upgrade. Every other migration keeps
-  the version of the release that brought it. `nx release changelog`
-  turns the version plans into the `CHANGELOG.md` entry, then commits all of it as
-  `Release <version>` and tags it `v<version>`.
+  the version of the release that brought it. The plans the last release was made from are
+  dropped, and `nx release changelog` turns the rest into this release's notes, then commits all of
+  it as `Release <version>` and tags it `v<version>`.
 - The `desktop-host` job, on two macOS runners beside the others, builds the prebuilt desktop
   hosts, debug and release ([docs/desktop-host.md](desktop-host.md#publishing-a-prebuilt-host)),
-  and the release job writes each one's SHA-256 into `packages/desktop/prebuilt.json` before the
-  packages are packed.
+  and the release job writes each one's SHA-256 into the last release's
+  `packages/desktop/prebuilt.json` before the packages are packed.
 - `nx run-many -t build` compiles each Angular package into its `dist`: partial-compiled
   JavaScript and declarations, which its `publishConfig.exports` point at.
 - `pnpm pack` turns each `workspace:*` dependency into that exact version, and `npm publish`
   publishes each tarball with provenance, on `latest`. A version with a prerelease suffix
   (`0.2.0-rc.0`) would go out under that suffix's dist-tag instead, so `latest` never moves to it.
-- The commit and tag are pushed with the release App's token, and a GitHub release is created with
-  the changelog entry as its notes and both prebuilt desktop hosts' archives attached.
+- Only the tag is pushed, and a GitHub release is created with the notes and every prebuilt desktop
+  host's archive attached.
 - The documentation site is built from the tag and deployed to production (`docs.yml`), so
   ng-native.com documents what is on npm, not what is on `main`. A documentation-only fix can go
   live sooner by running **Docs** by hand on `main`.
@@ -158,16 +158,10 @@ pass, it runs the same gate CI does, then:
 If it fails before publishing, nothing has left the runner: fix it and run it again. If it fails part
 way through publishing, run it again with the same exact version (not a bump): packages already on
 npm at that version are skipped, and the rest are published. `validate` lets that version through
-again because the `Release <version>` commit, pushed only after publishing, is not on `main` yet.
+again because its tag, pushed only after publishing, is not there yet.
 Once `@ng-native/desktop` is out, finish with **Re-run failed jobs** on the same run instead: its
 `prebuilt.json` names that run's desktop hosts by SHA-256, a new run builds others, and the release
 job stops rather than attach archives the published package would refuse.
-
-A missing App installation, client ID or key fails the release job's first step, before that run
-publishes anything. A push refused after publishing, when the rebase went through, means the App is
-no longer a bypass actor on the "Protect main" ruleset: add it back, then **Re-run failed jobs**. To
-replace its key, generate a new one on the App's settings page, set it with `gh secret set
-RELEASE_APP_PRIVATE_KEY --env release < key.pem`, delete the file and revoke the old key.
 
 ## Checking distribution locally
 

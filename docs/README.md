@@ -20,15 +20,14 @@ The root keeps these because something depends on them being there:
 - `README.md`, `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md` and `CODE_OF_CONDUCT.md`: GitHub links to
   them from the repository page and the new-issue and new-pull-request screens.
 - `AGENTS.md`: the convention coding agents read first.
-- `CHANGELOG.md`: written by `nx release changelog`; `.prettierignore` excludes it.
 
 Anything else that is project-internal goes in `docs/`.
 
 ## Rules for every Markdown file
 
 Version plans in `.nx/version-plans/` are the exception: they take no heading and are not wrapped,
-since `nx release changelog` turns each body into a `CHANGELOG.md` bullet under its own heading, and
-the first line becomes the bullet. [RELEASING.md](./RELEASING.md#describing-changes) gives their
+since `nx release changelog` turns each body into a bullet of the release's notes under its own
+heading, and the first line becomes the bullet. [RELEASING.md](./RELEASING.md#describing-changes) gives their
 format.
 
 - Prettier formats it (`pnpm format`, checked by `pnpm format:check`): 100 columns.

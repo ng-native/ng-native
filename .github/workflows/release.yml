@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  # The version commit, the tag, and the GitHub release.
+  # The tag and the GitHub release. Nothing is pushed to `main`: see docs/RELEASING.md.
   contents: write
   # npm provenance and trusted publishing.
   id-token: write
@@ -42,6 +42,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
+      previous: ${{ steps.version.outputs.previous }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -111,6 +112,15 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
 
+      # The last release's prebuilt.json: `main` keeps the one it had before releases stopped
+      # committing to it, and the reuse below compares against what the last release shipped.
+      - name: The last release's prebuilt.json
+        env:
+          PREVIOUS: ${{ needs.validate.outputs.previous }}
+        run: |
+          git fetch --depth=1 origin "refs/tags/$PREVIOUS"
+          git show FETCH_HEAD:packages/desktop/prebuilt.json > packages/desktop/prebuilt.json
+
       # The last release's archive when nothing it is built from changed, else a host kept from a
       # build with the same inputs, else a build through ccache: see the action.
       - uses: ./.github/actions/desktop-prebuilt
@@ -155,6 +165,14 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+      # The last release's prebuilt.json: `main` keeps the one it had before releases stopped
+      # committing to it, and the reuse below compares against what the last release shipped.
+      - name: The last release's prebuilt.json
+        env:
+          PREVIOUS: ${{ needs.validate.outputs.previous }}
+        run: |
+          git fetch --depth=1 origin "refs/tags/$PREVIOUS"
+          git show FETCH_HEAD:packages/desktop/prebuilt.json > packages/desktop/prebuilt.json
       - uses: ./.github/actions/desktop-prebuilt-linux
         with:
           flavour: ${{ matrix.flavour }}
@@ -248,24 +266,11 @@ jobs:
     needs: [validate, native, verify, generators, storybook, desktop-host, desktop-host-linux]
     if: github.ref == 'refs/heads/main' || inputs.dry_run
     runs-on: ubuntu-latest
-    # The environment holds the release App's key and only lets `main` in. A dry run, which can
-    # start from any branch, pushes nothing and runs outside it.
-    environment: ${{ !inputs.dry_run && 'release' || '' }}
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      # Only the release App gets past the ruleset on `main`. A token first, so a missing App or key
-      # stops the run before it publishes anything; the push mints its own, as one lives an hour.
-      - name: Check the release App
-        if: ${{ !inputs.dry_run }}
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          permission-contents: write
-
       # No credentials left in the git config: the build runs installed packages' code, and only
-      # the push step below gets the App's token. The repository is public, so fetching needs none.
+      # the tag push below gets a token. The repository is public, so fetching needs none.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -286,9 +291,16 @@ jobs:
         id: version
         env:
           VERSION: ${{ needs.validate.outputs.version }}
+          PREVIOUS: ${{ needs.validate.outputs.previous }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # The release commit goes out only under its tag, never onto `main`, so `main` still has
+          # the version plans earlier releases consumed: every plan the last release was made from
+          # is dropped here. And the last release's prebuilt.json, which the hosts below go into.
+          git ls-tree --name-only "$PREVIOUS^" .nx/version-plans/ |
+            xargs -r git rm -q --ignore-unmatch --
+          git show "$PREVIOUS:packages/desktop/prebuilt.json" > packages/desktop/prebuilt.json
           # Lockstep: every package and the template move to the same version, in one commit and
           # one tag. `--preid` only matters for a bump; an exact version already carries it.
           npx nx release version "$VERSION" --preid alpha
@@ -317,8 +329,9 @@ jobs:
             writeFileSync(file, JSON.stringify(manifest, null, 2) + '\\n');
           "
           git add packages/desktop/prebuilt.json
-          # The version plans in .nx/version-plans become this release's CHANGELOG.md entry and are
-          # deleted; the versions staged above go into the same `Release <version>` commit and tag.
+          # The version plans left in .nx/version-plans become this release's notes, in a CHANGELOG.md
+          # that only this runner has; the versions staged above go into the `Release <version>`
+          # commit and tag Nx makes here, of which only the tag is pushed.
           npx nx release changelog "$version"
           # A prerelease goes out under its own dist-tag, so `npm install` keeps resolving the last
           # stable release (or nothing, before the first) instead of an alpha.
@@ -376,32 +389,14 @@ jobs:
             npm publish "$tarball" "$DRY_RUN" --access public --tag '${{ steps.version.outputs.tag }}'
           done
 
-      - id: app-token
-        if: ${{ !inputs.dry_run }}
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          permission-contents: write
-
-      - name: Push the version commit and tag
+      # Only the tag: nothing on `main` needs the release commit, so the release never pushes there.
+      - name: Push the tag
         if: ${{ !inputs.dry_run }}
         env:
-          TOKEN: ${{ steps.app-token.outputs.token }}
+          TOKEN: ${{ github.token }}
         run: |
           git remote set-url origin "https://x-access-token:$TOKEN@github.com/$GITHUB_REPOSITORY.git"
-          # Pull requests can merge while a release runs. Replay the release commit on top of them
-          # and tag where it lands. A rebase conflict (a merge that touched a version, the
-          # changelog or a migrations.json) fails the step rather than guessing.
-          tag='v${{ steps.version.outputs.version }}'
-          for attempt in 1 2 3; do
-            git fetch origin main
-            git rebase origin/main
-            git tag -f -a "$tag" -m "$tag"
-            if git push origin HEAD:main; then break; fi
-            if [ "$attempt" = 3 ]; then exit 1; fi
-          done
-          git push origin "refs/tags/$tag"
+          git push origin 'refs/tags/v${{ steps.version.outputs.version }}'
 
       - name: GitHub release
         if: ${{ !inputs.dry_run }}

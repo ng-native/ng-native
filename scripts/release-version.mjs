@@ -5,8 +5,8 @@
  * over the bump. An exact version must be a plain semver version, on the major already released
  * (a new major is a decision, not a typo to publish), and above the highest version any released
  * package has on npm. The one exception is that highest version itself while it is above the
- * version on disk: `main` gets the release commit only once every package is published, so that is
- * a release that failed part way through, run again with the same version to finish it.
+ * last release's tag: the tag is pushed only once every package is published, so that is a release
+ * that failed part way through, run again with the same version to finish it.
  *
  * It also refuses a release that would stop part way through publishing: one with a package that
  * has never been published, or whose trusted publisher on npmjs.com doesn't name this workflow.
@@ -19,10 +19,11 @@
  *
  *   node scripts/release-version.mjs <bump> [exact version]
  *
- * Prints the version to give `nx release version`, a bump resolved against the version on disk
- * as Nx resolves it, and writes it to the step's outputs as `version`, which every later job takes:
- * the prebuilt desktop hosts' archive names and URLs among them. Exits non-zero with the reason
- * when the inputs are refused.
+ * Prints the version to give `nx release version`, a bump resolved against the last release's tag
+ * (`main` never gets a release commit, so the versions on disk are not the last release's), and
+ * writes it to the step's outputs as `version`, which every later job takes: the prebuilt desktop
+ * hosts' archive names and URLs among them. The last release's tag goes out as `previous`. Exits
+ * non-zero with the reason when the inputs are refused.
  */
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
@@ -88,7 +89,7 @@ export function compare(a, b) {
 
 /**
  * The version to release, from the workflow's inputs, every version the released packages
- * have on npm, and the version on disk. Throws with the reason when the inputs are refused.
+ * have on npm, and the last release's tag's version. Throws with the reason when the inputs are refused.
  */
 export function releaseVersion(bump, exact, published, current) {
   const highest = published.filter(parse).reduce((a, b) => (compare(a, b) >= 0 ? a : b), '0.0.0');
@@ -168,6 +169,15 @@ function versionsOnNpm(name) {
   }
 }
 
+/** The highest `v<version>` tag's version on origin. Throws when there is none. */
+export function lastTagged(lsRemote) {
+  const versions = [...lsRemote.matchAll(/\trefs\/tags\/v([^\s^]+)$/gm)]
+    .map(([, version]) => version)
+    .filter(parse);
+  if (!versions.length) throw new Error('origin has no v<version> tag to release after.');
+  return versions.reduce((a, b) => (compare(a, b) >= 0 ? a : b));
+}
+
 /**
  * The ID token GitHub Actions gives this job for npm, or undefined outside Actions or without the
  * `id-token: write` permission.
@@ -214,9 +224,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       packages.push({ name, versions, trusted });
     }
     checkPublishing(packages);
-    // Every package moves in lockstep, so any one's version is the last finished release.
-    const { version: current } = JSON.parse(
-      readFileSync(path.join(root, 'packages/fabric/package.json'), 'utf8'),
+    // The tag is pushed last, so the highest one is the last finished release.
+    const current = lastTagged(
+      execFileSync('git', ['ls-remote', '--tags', 'origin', 'v*'], { cwd: root, encoding: 'utf8' }),
     );
     const version = releaseVersion(
       bump,
@@ -226,7 +236,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     );
     console.log(version);
     if (process.env['GITHUB_OUTPUT']) {
-      appendFileSync(process.env['GITHUB_OUTPUT'], `version=${version}\n`);
+      appendFileSync(process.env['GITHUB_OUTPUT'], `version=${version}\nprevious=v${current}\n`);
     }
   } catch (error) {
     // Annotations, so each reason shows on the run's summary page.
