@@ -1246,12 +1246,23 @@ function drawnOver(
   if (had === undefined && drawn === undefined) return box;
   const keys = new Set([...Object.keys(had ?? {}), ...Object.keys(drawn ?? {})]);
   for (const key of keys) {
-    const was = had && key in had ? had[key] : inner.has(key) ? undefined : before[key];
-    const now = drawn && key in drawn ? drawn[key] : inner.has(key) ? undefined : after[key];
+    const was = outerValue(key, before, had, inner);
+    const now = outerValue(key, after, drawn, inner);
     if (Object.is(was, now)) delete box[key];
     else box[key] = now ?? null;
   }
   return box;
+}
+
+/** What a two-view element's outer view is committed with for `key`: see `drawnOver`. */
+function outerValue(
+  key: string,
+  own: Readonly<Record<string, unknown>>,
+  drawn: Readonly<Record<string, unknown>> | undefined,
+  inner: ReadonlySet<string>,
+): unknown {
+  if (drawn && key in drawn) return drawn[key];
+  return inner.has(key) ? undefined : own[key];
 }
 
 /** The props of a payload, or null where there are none. */
@@ -16026,23 +16037,33 @@ export class Engine implements HostEngine {
     const inside = this.clonedWrapper(held, content, moved ? childHandles : null);
     const around = [inside, ...beside];
     const aroundMoved = !sameHandles(around, previous.childHandles);
-    const drawn = node.uiThreadProps;
-    const box = someProps(
-      drawnOver(
-        splitWrapped(payload ?? {}).box,
-        previous.props,
-        props,
-        previous.drawn,
-        drawn,
-        CHILD_PLACING,
-      ),
-    );
-    const boxPayload = this.paintNatively(node, viewName, props, box, aroundMoved);
+    const boxPayload = this.wrappedBox(node, viewName, previous, props, payload, aroundMoved);
     const handle = this.clonedFor(previous.handle, boxPayload, aroundMoved ? around : null);
+    const drawn = node.uiThreadProps;
     node.committed = { handle, tag: previous.tag, props, childHandles: around, viewName, drawn };
     node.inside = { handle: inside, childHandles, props: content };
     this.clearFlags(node);
     return handle;
+  }
+
+  /**
+   * What a wrapped element's own view is cloned with: its share of the payload, with what the UI
+   * thread drew on it (`drawnOver`), less what native paints.
+   */
+  private wrappedBox(
+    node: EngineNode,
+    viewName: string,
+    previous: Committed,
+    props: Record<string, unknown>,
+    payload: Record<string, unknown> | null,
+    aroundMoved: boolean,
+  ): Record<string, unknown> | null {
+    const drawn = node.uiThreadProps;
+    const box = splitWrapped(payload ?? {}).box;
+    drawnOver(box, previous.props, props, previous.drawn, drawn, CHILD_PLACING);
+    // Native paints the outer view as it is committed: with what the UI thread drew on it.
+    const outer = drawn ? { ...props, ...drawn } : props;
+    return this.paintNatively(node, viewName, outer, someProps(box), aroundMoved);
   }
 
   /** `noteClone` for a wrapped element, whose children are counted in its wrapper. */

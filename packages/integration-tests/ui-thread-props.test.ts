@@ -11,6 +11,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Engine, scrollsOverflow, type EngineNode, type StyleSheet } from '@ng-native/fabric';
 import { compileCss, createFakeFabric } from '@ng-native/testing';
+import { createLaidOutFabric } from './laid-out-fabric.ts';
+import { recorder } from './native-animated.ts';
 
 function scene(css = '') {
   const fabric = createFakeFabric();
@@ -183,3 +185,29 @@ for (const [name, css, key, ownKey, own, drawn, wrap] of [
     });
   });
 }
+
+it('has native paint them on a wrapped element changed again and again, not its own value', () => {
+  const rec = recorder();
+  const fabric = createLaidOutFabric();
+  let now = 0;
+  const engine = new Engine(fabric, 1, {
+    globalStyles: compileCss(`.c { width: 200px; height: 10px; opacity: 0.2 }`) as StyleSheet,
+    nativeAnimated: rec.native,
+    now: () => now,
+  });
+  const box: EngineNode = engine.createElement('view');
+  engine.setClasses(box, 'c');
+  engine.wrapChildren(box, { viewName: 'RCTView', props: {} });
+  engine.appendChild(box, engine.createElement('view'));
+  engine.appendChild(engine.root, box);
+  engine.commit();
+  for (const opacity of [0.4, 0.6, 0.8]) {
+    now += 50;
+    engine.advanceAnimations();
+    engine.setUiThreadProps(box, { opacity });
+    engine.commit();
+  }
+  const painted = rec.painted(engine.tagOf(box)!)['opacity'];
+  const shown = painted ?? fabric.committed[0]!.props['opacity'];
+  assert.equal(shown, 0.8);
+});
