@@ -709,15 +709,16 @@ describe('an icon in the tree', () => {
 
   it('draws geometry and a polyline from raw markup, with the stroke width the app set', () => {
     const shapes = flatten([byId('raw')]).map((node) => node.viewName);
-    assert.deepEqual(shapes, [
-      'RNSVGSvgView',
-      'RNSVGGroup',
-      'RNSVGCircle',
-      'RNSVGCircle',
-      'RNSVGPath',
-    ]);
+    // Two circles and a polyline in one stroke and no fill: one path draws all three alike.
+    assert.deepEqual(shapes, ['RNSVGSvgView', 'RNSVGGroup', 'RNSVGPath']);
     const group = byId('raw').children[0]!;
-    assert.equal(group.children.length, 3, 'siblings, not one inside the next');
+    assert.equal(
+      group.children[0]?.props['d'],
+      'M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z' +
+        'M6 12a6 6 0 1 0 12 0a6 6 0 1 0 -12 0z' +
+        'M4,4L8,8L12,4',
+      'siblings, not one inside the next, each as the path it draws',
+    );
     assert.equal(
       byId('raw').children[0]?.props['strokeWidth'],
       '3',

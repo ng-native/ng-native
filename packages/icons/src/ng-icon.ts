@@ -50,6 +50,7 @@ import {
   NgIconsToken,
   type NgIconLoader,
 } from '@ng-icons/core';
+import { mergeShapes } from './merge-shapes.ts';
 import { parseSvg, type SvgNode } from './parse-svg.ts';
 import { registerSvgComponents } from './svg-elements.ts';
 import {
@@ -73,6 +74,8 @@ const reported = new Set<string>();
 /** What an icon draws from its markup, worked out once for every icon that draws the same. */
 interface Drawing {
   readonly root: SvgNode;
+  /** The root with its shapes merged, for each stroke width it has been drawn at. */
+  readonly merged: Map<string, SvgNode>;
   /**
    * Whether its shapes need nothing from the cascade: no text to take a font from it, and no
    * paint from a token. Native paints a `currentColor` shape from the drawing it is in, so a
@@ -114,6 +117,7 @@ function drawingOf(markup: string): Drawing | null {
   const root = parseSvg(markup);
   drawing = root && {
     root,
+    merged: new Map(),
     selfContained: selfContained(root),
     viewBox: viewBoxProps(root.attrs['viewBox']),
   };
@@ -365,7 +369,12 @@ export class NgIcon {
     // Here rather than as six host bindings: they change only with the drawing.
     for (const prop of VIEW_BOX) this.renderer.setProperty(this.host, prop, drawing?.viewBox[prop]);
     if (!drawing) return;
-    const { root, selfContained } = drawing;
+    const { selfContained } = drawing;
+    // Merged for the stroke width it draws at, which decides whether a small closed shape can be.
+    const strokeWidth = this.strokeWidth();
+    const key = String(strokeWidth);
+    let root = drawing.merged.get(key);
+    if (!root) drawing.merged.set(key, (root = mergeShapes(drawing.root, strokeWidth)));
 
     // The svg view itself holds no paint, so a root that says `stroke="currentColor"` needs its
     // children to inherit it from a group, which is how react-native-svg's own `Svg` does it. The
