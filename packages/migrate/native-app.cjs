@@ -36,7 +36,7 @@ const dependencies = {
   'expo-system-ui': '~58.0.6',
   react: '19.3.0',
   'react-native': '0.88.0',
-  'react-native-safe-area-context': '~5.10.1',
+  'react-native-safe-area-context': '~5.11.1',
 };
 
 /** @type {Record<string, string>} */
@@ -181,7 +181,7 @@ const desktopOnlyDependencies = Object.fromEntries(
     ...desktopDependencies,
     '@ng-native/expo': version,
     // Exactly the version the prebuilt desktop host is built with, so the app runs on it.
-    'react-native-safe-area-context': '5.10.1',
+    'react-native-safe-area-context': '5.11.1',
   })
     .filter(([name]) => name !== 'expo-status-bar' && name !== 'expo-system-ui')
     .sort(([a], [b]) => (a < b ? -1 : 1)),

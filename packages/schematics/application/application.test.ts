@@ -124,7 +124,7 @@ describe('ng add', () => {
     const manifest = json(tree, 'projects/native/package.json');
     assert.equal(manifest.main, 'src/main.ts');
     assert.equal(manifest.dependencies['react-native'], '0.88.0');
-    assert.equal(manifest.dependencies['react-native-safe-area-context'], '~5.10.1');
+    assert.equal(manifest.dependencies['react-native-safe-area-context'], '~5.11.1');
     assert.equal(manifest.dependencies['expo-status-bar'], '~58.0.3');
   });
 

@@ -351,7 +351,7 @@ describe('in an integrated workspace', () => {
     const app = readJson(tree, 'apps/mobile/package.json');
     assert.equal(app.main, 'src/main.ts');
     assert.equal(app.dependencies['react-native'], '0.88.0');
-    assert.equal(app.dependencies['react-native-safe-area-context'], '~5.10.1');
+    assert.equal(app.dependencies['react-native-safe-area-context'], '~5.11.1');
     assert.equal(app.dependencies['@angular/core'], '~22.2.0');
   });
 
