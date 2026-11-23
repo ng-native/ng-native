@@ -98,6 +98,28 @@ jobs:
           path: examples/canary/src/device-tests/**/__screenshots__
           if-no-files-found: ignore
 
+      # The pool sees only the app's stdout and whether it exited. React Native logs to os_log, which
+      # is kept on the simulator, still booted, after the pool uninstalled the app.
+      - name: Collect the simulator's logs
+        if: failure()
+        run: |
+          out="$RUNNER_TEMP/simulator-logs"
+          mkdir -p "$out"
+          xcrun simctl spawn booted log show --last 60m --info --style compact \
+            --predicate 'process == "canary" OR subsystem BEGINSWITH "com.facebook.react"' \
+            > "$out/app.log" 2>&1 || true
+          find "$HOME/Library/Logs/DiagnosticReports" -name '*.ips' -mmin -60 \
+            -exec cp {} "$out" \; 2>/dev/null || true
+          { sysctl hw.ncpu hw.memsize; vm_stat; top -l 1 -n 15; } > "$out/machine.txt" 2>&1 || true
+
+      - name: Upload the simulator's logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: simulator-logs-ios
+          path: ${{ runner.temp }}/simulator-logs
+          if-no-files-found: ignore
+
   android:
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
