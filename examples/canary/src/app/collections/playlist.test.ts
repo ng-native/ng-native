@@ -134,11 +134,13 @@ describe('queue', () => {
 
   test('filters, and shows the tracks again as they were', async () => {
     const { consistent } = await boot();
-    const before = new Map(consistent().map((row) => [row.key, row.tag]));
+    const before = consistent().map((row) => row.key);
     await userEvent.type(screen.getByLabelText('Filter'), 'naima');
     expect(consistent().every((row) => row.text.includes('Naima'))).toBe(true);
     await userEvent.clear(screen.getByLabelText('Filter'));
-    const after = consistent();
-    expect(after.length).toBe(before.size);
+    // Every track shown before is shown again. The list fills more of the window each time the JS
+    // thread is idle for a moment, so it can show more rows than before, never fewer.
+    const after = new Set(consistent().map((row) => row.key));
+    expect(before.filter((key) => !after.has(key))).toEqual([]);
   });
 });
