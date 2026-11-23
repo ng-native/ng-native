@@ -107,7 +107,12 @@ export class StickyRows {
    * What native moves the header by, once it has been pinned. Kept, moving it nowhere, when it no
    * longer is: native goes on drawing a translate it set after its drive is gone.
    */
-  private headerDrive: { drive: ScrollDrive; statics: string; pinned: boolean } | null = null;
+  private headerDrive: {
+    drive: ScrollDrive;
+    statics: string;
+    pinned: boolean;
+    range: string;
+  } | null = null;
   /** The list scrolled itself, and native has not drawn its sticky rows there yet. */
   private jumped = false;
   /** Native has reported reaching the target, so this pass's drives are the last to need telling. */
@@ -120,6 +125,8 @@ export class StickyRows {
   private reported: number | undefined;
   /** Where native's latest event of all said it was, header and all. */
   private nativeAt = 0;
+  /** No scroll event has come for `STICKY_SETTLE_MS`, so none is on its way to draw a new graph. */
+  private resting = true;
   /**
    * Scroll end events still to come, one for each jump that moved native, as iOS sends one. Kept
    * across jumps: one that landed has its end still to come, and must not be taken for the next's.
@@ -317,9 +324,14 @@ export class StickyRows {
     this.along.set(along);
     if (!this.native) return;
     clearTimeout(this.settleTimer);
-    if (!this.pinning()) return this.settled.set(along);
+    this.resting = false;
+    const settle = () => {
+      this.resting = true;
+      this.settled.set(along);
+    };
+    if (!this.pinning()) return settle();
     // See `STICKY_SETTLE_MS`.
-    this.settleTimer = setTimeout(() => this.settled.set(along), STICKY_SETTLE_MS);
+    this.settleTimer = setTimeout(settle, STICKY_SETTLE_MS);
   }
 
   /** The list is scrolling itself, to `to` in the scroll view, where native has not drawn yet. */
@@ -416,19 +428,31 @@ export class StickyRows {
     if (!pinned && !this.headerDrive) return;
     const range = pinned ? this.headerRange() : STILL;
     const held = this.headerDrive;
-    // Pinned or let go at rest, native has no new scroll event to draw it from: it is told where
-    // it last said it was.
-    const at = held?.pinned === pinned ? from : (from ?? this.nativeAt);
+    const moved = JSON.stringify(range);
+    const at = this.headerFrom(pinned, moved, from);
     const statics = this.list.flip() ?? [];
     // The axis too: a list turned horizontal moves the header along x.
     const key = axis + JSON.stringify(statics);
     if (held?.statics === key) {
       held.pinned = pinned;
+      held.range = moved;
       return held.drive.update(range, at);
     }
     held?.drive.stop();
     const drive = this.engine.driveByScroll(view(), this.node, axis, range, statics, at);
-    this.headerDrive = drive && { drive, statics: key, pinned };
+    this.headerDrive = drive && { drive, statics: key, pinned, range: moved };
+  }
+
+  /**
+   * Where native is told the scroll view is for the header's drive, `pinned` and moved by the range
+   * `moved`. Pinned, let go, or moved by a new range at rest, native has no new scroll event to draw
+   * it from: it is told where it last said it was. Mid-scroll the next event draws it, and what
+   * native last said trails it. After a jump, `from`, where the list scrolled itself.
+   */
+  private headerFrom(pinned: boolean, moved: string, from: number | undefined): number | undefined {
+    const held = this.headerDrive;
+    const changed = held?.pinned !== pinned || (this.resting && held.range !== moved);
+    return changed ? (from ?? this.nativeAt) : from;
   }
 
   /** How native moves the pinned header. A first sticky row at the very top holds it in place. */

@@ -293,6 +293,36 @@ describe('virtual list sticky header', () => {
       assert.equal(named('set').length, told, 'and only then, not on every render after');
       unmount();
     });
+
+    it('draws a new limit at rest from where native is, and mid-scroll leaves it to native', async () => {
+      const { fabric, instance, range, named, unmount } = await pinned([4]);
+      fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 100 } });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await frame();
+      let before = named('set').length;
+      instance.sticky.set([6]);
+      await frame();
+      assert.deepEqual(range()?.inputRange, [0, 240]);
+      assert.deepEqual(
+        named('set')
+          .slice(before)
+          .map(([, , value]) => value),
+        [100],
+        'at rest no scroll event comes to draw the new limit',
+      );
+      const told = named('set').length;
+      instance.items.set(Array.from({ length: 300 }, (_, i) => 'r' + i));
+      await frame();
+      assert.equal(named('set').length, told, 'not told again while the limit holds');
+      fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 120 } });
+      await frame();
+      before = named('set').length;
+      instance.sticky.set([4]);
+      await frame();
+      assert.deepEqual(range()?.inputRange, [0, 160]);
+      assert.equal(named('set').length, before, 'mid-scroll the next event draws it');
+      unmount();
+    });
   });
 
   it('is pushed off by the next sticky row, as RN s headers push each other', async () => {
