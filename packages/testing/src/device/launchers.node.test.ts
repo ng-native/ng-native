@@ -127,6 +127,7 @@ describe('the bundle a launcher waits on', () => {
   async function slowMetro(log: string) {
     let closed = false;
     const metro = createServer(async (request, response) => {
+      if (request.url === '/status') return void response.end('packager-status:running');
       const deadline = Date.now() + 10_000;
       while (!closed && Date.now() < deadline && !readFileSync(log, 'utf8').includes('ready')) {
         await new Promise((resolve) => setTimeout(resolve, 20));

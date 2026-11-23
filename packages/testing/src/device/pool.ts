@@ -236,36 +236,70 @@ class DeviceWorker implements PoolWorker {
         ? null
         : await metroFor(this.projectRoot, { coverage: this.coverage, poolPort: this.bridge.port });
     const metroPort = this.options.metroPort ?? metro!.port;
-    this.launchedAt = Date.now();
-    const app = await launch.start({
-      port: this.bridge.port,
-      runId: randomUUID(),
-      stateDir: mkdtempSync(path.join(tmpdir(), 'ng-native-device-tests-')),
-      projectRoot: this.projectRoot,
-      metroPort,
-      signal: this.shutdown.signal,
-    });
-    this.launched = app;
+    const launchApp = async (): Promise<LaunchedApp> => {
+      this.launchedAt = Date.now();
+      const app = await launch.start({
+        port: this.bridge.port,
+        runId: randomUUID(),
+        stateDir: mkdtempSync(path.join(tmpdir(), 'ng-native-device-tests-')),
+        projectRoot: this.projectRoot,
+        metroPort,
+        signal: this.shutdown.signal,
+      });
+      this.launched = app;
+      return app;
+    };
+    let app = await launchApp();
     // Where the app stopped: what it and Metro last printed.
     const lastOutputs = () =>
-      lastOutput("Metro's", metro?.output()) + lastOutput("The app's", app.output?.());
-    const early = app.exited.then((how) => {
-      const error = new Error(`The app exited before it connected (${how}).${lastOutputs()}`);
-      return crashReportOf(launch, this.launchedAt).then((report) => {
-        if (report) error.message += `\n${report}`;
-        throw error;
-      });
-    });
-    // An app that ended takes its claim with it: a claim left waiting would take the next app.
+      lastOutput("Metro's", metro?.output()) + lastOutput("The app's", this.launched?.output?.());
+    // One claim for the whole wait: whichever app launched for it connects takes it.
     const claiming = new AbortController();
-    early.catch(() => claiming.abort());
-    this.session = await Promise.race([
-      claim(claiming.signal, true).catch((error: Error) => {
-        error.message += lastOutputs();
+    const claimed = claim(claiming.signal, true).catch((error: Error) => {
+      error.message += lastOutputs();
+      throw error;
+    });
+    claimed.catch(() => {});
+    const timeout = this.options.connectTimeout ?? 600_000;
+    const window = Math.min(RELAUNCH_MS, timeout / LAUNCHES);
+    for (let launches = 1; ; launches++) {
+      // An app that ended takes the claim with it: a claim left waiting would take the next app.
+      const launched = app;
+      const early = launched.exited.then((how) => {
+        const error = new Error(`The app exited before it connected (${how}).${lastOutputs()}`);
+        return crashReportOf(launch, this.launchedAt).then((report) => {
+          if (report) error.message += `\n${report}`;
+          throw error;
+        });
+      });
+      early.catch(() => {});
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      // An app that does not connect in its window is launched afresh, but for the last: one whose
+      // first look for Metro failed, on a runner too busy for Metro to answer, never asks again.
+      const relaunch =
+        launches < LAUNCHES
+          ? new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), window)))
+          : new Promise<never>(() => {});
+      try {
+        const session = await Promise.race([claimed, early, relaunch]);
+        if (session) {
+          this.session = session;
+          break;
+        }
+      } catch (error) {
+        claiming.abort();
         throw error;
-      }),
-      early,
-    ]);
+      } finally {
+        clearTimeout(timer);
+      }
+      progress(
+        this.options.platform ?? 'app',
+        `not connected after ${Math.round(window / 1000)}s; launching it again`,
+        this.launchedAt,
+      );
+      await launched.stop();
+      app = await launchApp();
+    }
     progress(this.options.platform ?? 'app', 'connected', this.launchedAt);
     // From here a process that ends is a lost app at once, not after the silence is waited out.
     void app.exited.then((how) => {
@@ -566,6 +600,9 @@ class AppLost extends Error {
 
 /** How long a worker's start waits for a launch before it lets requests wait instead. */
 const START_WAIT_MS = 20_000;
+/** How long a launched app has to connect before it is launched afresh, and how many launches. */
+const RELAUNCH_MS = 90_000;
+const LAUNCHES = 3;
 
 /** The platforms a reference screenshot can be named for. */
 const SCREENSHOT_PLATFORMS = new Set(['ios', 'android', 'macos']);

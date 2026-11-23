@@ -127,22 +127,32 @@ export async function warmBundle(
       { signal: AbortSignal.any([AbortSignal.timeout(WARM_MS), ...(signal ? [signal] : [])]) },
     );
     await response.arrayBuffer();
-    return response.ok;
+    if (!response.ok) return false;
   } catch {
     // Not warmed: the app's request bundles it instead.
     return false;
   }
+  // The app asks Metro's status first and gives up for good after three slow answers, which a
+  // Metro still busy after the bundle, on a loaded runner, can give: wait for one at once.
+  const deadline = Date.now() + PROMPT_WAIT_MS;
+  while (Date.now() < deadline && !signal?.aborted && !(await running(port, PROMPT_MS))) {
+    // Asked again at once: `running` waited its own second.
+  }
+  return true;
 }
 
 /** How long a warm-up may take before the app is launched anyway. */
 const WARM_MS = 5 * 60_000;
+/** An answer to the status this quick is one the app takes, and how long to wait for one. */
+const PROMPT_MS = 1000;
+const PROMPT_WAIT_MS = 60_000;
 
-async function running(port: number): Promise<boolean> {
+async function running(port: number, within = 2000): Promise<boolean> {
   try {
     // Bounded, the body included: a Metro that takes the connection and never answers is not one
     // to wait on past the start's own deadline.
     const response = await fetch(`http://127.0.0.1:${port}/status`, {
-      signal: AbortSignal.timeout(2000),
+      signal: AbortSignal.timeout(within),
     });
     return (await response.text()).includes('packager-status:running');
   } catch {

@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { describe, it } from 'node:test';
-import { metroFor, stopMetro } from './metro-server.ts';
+import { metroFor, stopMetro, warmBundle } from './metro-server.ts';
 
 /** A project whose `expo start` is a stand-in server that answers Metro's status. */
 function project(): { root: string; started: () => string[]; done: () => void } {
@@ -114,6 +116,26 @@ describe('the Metro a device run starts', () => {
     } finally {
       await stopMetro();
       done();
+    }
+  });
+});
+
+describe('warming the bundle', () => {
+  it('waits until Metro answers its status at once, as the app asks it first', async () => {
+    // The app gives up after three slow answers: a Metro still busy is waited out before launch.
+    let asked = 0;
+    const metro = createServer((request, response) => {
+      if (request.url !== '/status') return void response.end('bundle');
+      asked++;
+      setTimeout(() => response.end('packager-status:running'), asked <= 2 ? 1500 : 0);
+    });
+    await new Promise<void>((resolve) => metro.listen(0, '127.0.0.1', resolve));
+    try {
+      assert.equal(await warmBundle((metro.address() as AddressInfo).port, 'ios'), true);
+      assert.equal(asked, 3, 'asked until an answer came at once');
+    } finally {
+      metro.close();
+      metro.closeAllConnections();
     }
   });
 });
