@@ -136,7 +136,7 @@ function selfContained(node: SvgNode): boolean {
 
 /** The root's attributes as a child of it would inherit them, or null where a group has to stay. */
 function paintOf(root: SvgNode): SvgNode | null {
-  if (!root.children.every((child) => SHAPES.has(child.tag))) return null;
+  if (!root.children.every((child) => SHAPES.has(child.tag) || UNDRAWN.has(child.tag))) return null;
   const names = [...Object.keys(root.attrs), ...Object.keys(written(root))];
   const drawn = (name: string) => GROUP_ONLY.has(name) || own(PRESENTATION, name) !== undefined;
   if (names.some((name) => drawn(name) && !HANDED_DOWN.has(name))) return null;
@@ -145,8 +145,14 @@ function paintOf(root: SvgNode): SvgNode | null {
   for (const paint of PAINT) if (isTokenPaint(attrs[paint])) return null;
   const paint: Record<string, string> = {};
   for (const [name, value] of Object.entries(root.attrs)) {
-    if (HANDED_DOWN.has(name) || name === 'style') paint[name] = value;
+    if (HANDED_DOWN.has(name)) paint[name] = value;
   }
+  // Only the paint in it: a `width` there sizes the drawing, and a `rect` with none of its own would take it.
+  const style = (root.attrs['style'] ?? '')
+    .split(';')
+    .filter((declaration) => HANDED_DOWN.has(declaration.split(':')[0]!.trim()))
+    .join(';');
+  if (style) paint['style'] = style;
   return { tag: 'svg', attrs: paint, children: [] };
 }
 

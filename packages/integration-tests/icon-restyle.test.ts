@@ -104,4 +104,17 @@ describe("an icon's root paint", () => {
       ['RNSVGCircle', 'RNSVGCircle'],
     );
   });
+
+  it('hands down only the paint in the root style, past a title that draws nothing', async () => {
+    const { fabric } = await render(Fixture);
+    const view = icon(fabric, 'titled');
+    assert.deepEqual(
+      view.children.map((child) => child.viewName),
+      ['RNSVGRect'],
+    );
+    const [rect] = view.children as [FakeFabricNode];
+    assert.deepEqual(rect.props['fill'], { type: 0, payload: 'red' });
+    assert.notEqual(rect.props['width'], '24px', "the root's size is not the rect's");
+    assert.notEqual(rect.props['height'], '24px');
+  });
 });

@@ -13,6 +13,11 @@ const faded =
   '<svg viewBox="0 0 24 24" fill="currentColor" opacity="0.5">' +
   '<circle cx="8" cy="8" r="6"/><circle cx="12" cy="12" r="6"/></svg>';
 
+/** A root with a label and a size in its style: the label draws nothing, and the size is not paint. */
+const titled =
+  '<svg viewBox="0 0 24 24" fill="red" style="width:24px;height:24px">' +
+  '<title>Box</title><rect x="2" y="2"/></svg>';
+
 @Component({
   selector: 'x-icon-restyle',
   imports: [NgIcon, View],
@@ -20,12 +25,14 @@ const faded =
     <view style="color: rgb(1, 2, 3); font-size: 18px">
       <ng-icon nativeID="outline" [svg]="outline" [size]="size()" [color]="colour()" />
       <ng-icon nativeID="faded" [svg]="faded" />
+      <ng-icon nativeID="titled" [svg]="titled" />
     </view>
   `,
 })
 export class IconRestyle {
   readonly outline = outline;
   readonly faded = faded;
+  readonly titled = titled;
   readonly size = signal(24);
   readonly colour = signal('#ff9f0a');
 }
