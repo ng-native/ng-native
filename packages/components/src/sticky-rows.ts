@@ -125,6 +125,8 @@ export class StickyRows {
   private reported: number | undefined;
   /** Where native's latest event of all said it was, header and all. */
   private nativeAt = 0;
+  /** The axis the list scrolled along when native said so, until then none. */
+  private nativeAxis: 'x' | 'y' | undefined;
   /** No scroll event has come for `STICKY_SETTLE_MS`, so none is on its way to draw a new graph. */
   private resting = true;
   /**
@@ -312,6 +314,7 @@ export class StickyRows {
   /** The list scrolled, to `along` in the scroll view. */
   scrolled(along: number): void {
     this.nativeAt = along;
+    this.nativeAxis = this.list.horizontal() ? 'x' : 'y';
     if (this.jumped) {
       this.reported = along;
       // An event from before the jump, or on the way, is not where it lands.
@@ -406,7 +409,7 @@ export class StickyRows {
         axis,
         next.range,
         next.statics,
-        from,
+        held ? this.remadeFrom(axis, from) : from,
       );
       if (drive) this.drives.set(view, { drive, statics });
     });
@@ -439,7 +442,14 @@ export class StickyRows {
       return held.drive.update(range, at);
     }
     held?.drive.stop();
-    const drive = this.engine.driveByScroll(view(), this.node, axis, range, statics, at);
+    const drive = this.engine.driveByScroll(
+      view(),
+      this.node,
+      axis,
+      range,
+      statics,
+      held ? (at ?? this.remadeFrom(axis, from)) : at,
+    );
     this.headerDrive = drive && { drive, statics: key, pinned, range: moved };
   }
 
@@ -453,6 +463,16 @@ export class StickyRows {
     const held = this.headerDrive;
     const changed = held?.pinned !== pinned || (this.resting && held.range !== moved);
     return changed ? (from ?? this.nativeAt) : from;
+  }
+
+  /**
+   * Where native is told the scroll view is for a drive made again along `axis`, as for a flip. The
+   * one it replaces may have been the last to read the offset, so the new one starts from nothing,
+   * and at rest no scroll event comes to draw it: it is told where native last said it was, unless
+   * that was along the other axis. After a jump, `from`.
+   */
+  private remadeFrom(axis: 'x' | 'y', from: number | undefined): number | undefined {
+    return from ?? (this.resting && this.nativeAxis === axis ? this.nativeAt : undefined);
   }
 
   /** How native moves the pinned header. A first sticky row at the very top holds it in place. */

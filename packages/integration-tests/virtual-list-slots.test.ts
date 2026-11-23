@@ -264,6 +264,72 @@ describe('virtual list sticky header', () => {
       unmount();
     });
 
+    it('draws the header from where native is when the list flips at rest, and mid-scroll leaves it to native', async () => {
+      const { fabric, instance, named, unmount } = await pinned([]);
+      fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 100 } });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await frame();
+      let before = named('set').length;
+      instance.inverted.set(true);
+      await frame();
+      assert.deepEqual(
+        named('set')
+          .slice(before)
+          .map(([, , value]) => value),
+        [100],
+        'the new drive starts where the list is, not at the top',
+      );
+      fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 120 } });
+      await frame();
+      before = named('set').length;
+      instance.inverted.set(false);
+      await frame();
+      assert.equal(named('set').length, before, 'mid-scroll the next event draws it');
+      unmount();
+    });
+
+    it('tells native no offset along the old axis when the list turns horizontal at rest', async () => {
+      const { fabric, instance, named, unmount } = await pinned([]);
+      fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 100 } });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await frame();
+      const before = named('set').length;
+      instance.horizontal.set(true);
+      await frame();
+      assert.deepEqual(
+        named('set')
+          .slice(before)
+          .map(([, , value]) => value),
+        [],
+        'where native was along y says nothing of where it is along x',
+      );
+      unmount();
+    });
+
+    it('draws a lone sticky row from where native is when the list flips at rest', async () => {
+      const { native, named } = recorder();
+      const { fabric, instance, unmount } = await boot<Separated>('Separated', 400, {
+        nativeAnimated: native,
+      });
+      instance.sticky.set([4]);
+      instance.items.set(Array.from({ length: 200 }, (_, i) => 'r' + i));
+      await fireEvent(header(fabric), 'layout', { layout: { height: 50 } });
+      fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 100 } });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await frame();
+      const before = named('set').length;
+      instance.inverted.set(true);
+      await frame();
+      assert.deepEqual(
+        named('set')
+          .slice(before)
+          .map(([, , value]) => value),
+        [100],
+        'the new drive starts where the list is, not at the top',
+      );
+      unmount();
+    });
+
     it('lets native go of it when the list goes', async () => {
       const { fabric, drives, unmount } = await pinned([]);
       const tag = header(fabric).reactTag;
