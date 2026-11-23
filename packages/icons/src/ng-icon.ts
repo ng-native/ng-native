@@ -27,6 +27,7 @@
 import {
   Component,
   ElementRef,
+  DestroyRef,
   ErrorHandler,
   HostAttributeToken,
   Injector,
@@ -42,7 +43,7 @@ import {
   untracked,
   type Signal,
 } from '@angular/core';
-import { claimHost, type Engine, type EngineNode, HostEngine } from '@ng-native/fabric';
+import { claimHost, type Engine, type EngineNode, HostEngine, parseColor } from '@ng-native/fabric';
 import {
   NgIconCacheToken,
   NgIconConfigToken,
@@ -140,6 +141,27 @@ function selfContained(node: SvgNode): boolean {
   for (const paint of PAINT) if (isTokenPaint(attrs[paint])) return false;
   return node.children.every(selfContained);
 }
+
+/**
+ * Whether a colour is opaque, or undefined where it is not one read here: a token, a platform
+ * colour. None at all is black, which native draws where nothing gives the icon a colour.
+ */
+function opacityOf(colour: unknown): boolean | undefined {
+  if (colour === undefined) return true;
+  if (typeof colour !== 'string') return undefined;
+  let opaque = opacities.get(colour);
+  if (opaque === undefined && !opacities.has(colour)) {
+    const channels = parseColor(colour);
+    opaque = channels ? channels[3] >= 1 : undefined;
+    // ponytail: emptied when full; an app paints its icons in a handful of colours.
+    if (opacities.size >= 256) opacities.clear();
+    opacities.set(colour, opaque);
+  }
+  return opaque;
+}
+
+/** Each colour read, for the thousand icons in a list that are all painted in it. */
+const opacities = new Map<string, boolean | undefined>();
 
 /** The inputs Angular writes on the host from a static attribute, named as the template does. */
 let inputNames: readonly string[] | undefined;
@@ -293,6 +315,28 @@ export class NgIcon {
     return markup === undefined ? null : drawingOf(markup);
   });
 
+  /** Whether the colour the engine settled for the icon at its last commit is opaque. */
+  private readonly settledOpaque = signal<boolean | undefined>(undefined);
+
+  /**
+   * Whether the colour `currentColor` paints in is opaque, which decides whether shapes painted
+   * in it can be drawn as one path: see `mergeShapes`. A colour on the input that is not opaque
+   * decides it at once, since shapes apart are right in any colour. Otherwise what the engine
+   * settled, which a stylesheet's `!important` can make other than the input; before it has, the
+   * input's colour, or the engine's best guess, which its commit checks.
+   */
+  private readonly opaque = computed(() => {
+    const colour = this.color();
+    const written = colour === undefined ? undefined : opacityOf(colour);
+    if (written === false) return false;
+    return (
+      this.settledOpaque() ??
+      written ??
+      opacityOf(untracked(() => this.engine.colour(this.host))) ??
+      true
+    );
+  });
+
   constructor() {
     // Before the first shape is created, which is before this component's own commit.
     registerSvgComponents();
@@ -304,6 +348,12 @@ export class NgIcon {
     // The shapes are created rather than templated: an icon's tree is data, and a template that
     // could express it would be a component per tag with a recursive switch between them.
     effect(() => this.draw());
+    // A colour that turns out, or turns, not to be opaque draws its shapes apart again.
+    inject(DestroyRef).onDestroy(
+      this.engine.watchColour(this.host, (colour) =>
+        this.settledOpaque.set(opacityOf(colour) ?? false),
+      ),
+    );
     // The loader is fixed for the icon's life: with none, an icon has nothing to ask.
     if (this.loader) effect(() => this.load());
   }
@@ -372,14 +422,16 @@ export class NgIcon {
     for (const prop of VIEW_BOX) this.renderer.setProperty(this.host, prop, drawing?.viewBox[prop]);
     if (!drawing) return;
     const { selfContained } = drawing;
-    // Merged for the stroke width it draws at, which decides whether a small closed shape can be.
+    // Merged for the stroke width it draws at, which decides whether a small closed shape can be,
+    // and for whether its colour is opaque, which decides whether crossing strokes can be.
     const strokeWidth = this.strokeWidth();
-    const key = String(strokeWidth);
+    const opaque = this.opaque();
+    const key = `${strokeWidth}|${opaque}`;
     let root = drawing.merged.get(key);
     if (!root) {
       // ponytail: emptied when full, for an app that animates the width; a few are ever in use.
       if (drawing.merged.size >= MAX_STROKE_WIDTHS) drawing.merged.clear();
-      drawing.merged.set(key, (root = mergeShapes(drawing.root, strokeWidth)));
+      drawing.merged.set(key, (root = mergeShapes(drawing.root, strokeWidth, opaque)));
     }
 
     // The svg view itself holds no paint, so a root that says `stroke="currentColor"` needs its

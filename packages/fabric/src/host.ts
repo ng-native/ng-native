@@ -134,6 +134,22 @@ export abstract class HostEngine {
   }
 
   /**
+   * The colour `node` draws `currentColor` in, as its last commit settled it, or the best answer
+   * before its first: undefined where nothing sets one, and from a host that keeps no cascade.
+   */
+  colour(_node: HostNode): unknown {
+    return undefined;
+  }
+
+  /**
+   * Call `listener` with `node`'s colour, as `colour` reads it, after each commit that changes
+   * it. The function returned stops it. A host that keeps no cascade never calls it.
+   */
+  watchColour(_node: HostNode, _listener: (value: unknown) => void): () => void {
+    return () => {};
+  }
+
+  /**
    * Call `listener` with a prop's new value each time `setProp` changes it on `node`, taking it
    * away included. The function returned stops it. A host that keeps no props never calls it.
    */

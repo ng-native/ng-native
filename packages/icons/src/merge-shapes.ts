@@ -12,6 +12,7 @@
  * at. Those shapes are drawn as they are, and so is a shape with a paint from a custom property,
  * which the cascade settles per shape.
  */
+import { parseColor } from '@ng-native/fabric';
 import type { SvgNode } from './parse-svg.ts';
 import { pointsToPath, styleAttributes } from './svg-props.ts';
 
@@ -70,6 +71,28 @@ interface Inherited {
   readonly stroke: number;
   /** The width ng-icons hands the icon, for a `var(--ng-icon__stroke-width)`. */
   readonly handed: number | string | undefined;
+  /** The stroke it paints with, `none` where nothing above it says one. */
+  readonly paint: string;
+  /** What `currentColor` is under it, where an SVG `color` attribute above it says. */
+  readonly current: string | undefined;
+  /** Whether the colour the icon draws `currentColor` in is known to be opaque. */
+  readonly opaque: boolean;
+}
+
+/**
+ * Whether a stroke paints each pixel it covers once, as two shapes crossing are covered twice
+ * only where it is not opaque: a stroke with any transparency in it shows the crossing darker
+ * drawn as two shapes, and as one path does not. A colour not read here counts as not opaque.
+ */
+function opaquePaint(paint: string, current: string | undefined, opaque: boolean): boolean {
+  if (paint === 'none') return true;
+  if (/^currentcolor$/i.test(paint)) {
+    return current === undefined || /^currentcolor$/i.test(current)
+      ? opaque
+      : opaquePaint(current, undefined, opaque);
+  }
+  const colour = parseColor(paint);
+  return colour !== null && colour[3] >= 1;
 }
 
 /** An element's own stroke width, or undefined where it has none and takes its parent's. */
@@ -354,13 +377,20 @@ function mergeableAttribute(name: string, value: string, referenced: ReadonlySet
  * merged. Only a run: a shape between them in another paint is drawn over the first and under the
  * last, and would not be if they were one.
  */
-export function mergeShapes(root: SvgNode, handed?: number | string): SvgNode {
+export function mergeShapes(
+  root: SvgNode,
+  handed: number | string | undefined,
+  opaque: boolean,
+): SvgNode {
   return merged(root, {
     fill: undefined,
     blocked: false,
     referenced: referenced(root),
     stroke: 1,
     handed,
+    paint: 'none',
+    current: undefined,
+    opaque,
   });
 }
 
@@ -385,6 +415,8 @@ function handedDown(node: SvgNode, from: Inherited): Inherited {
       DRAWN_PER_SHAPE.some((name) => own[name] !== undefined) ||
       own['stroke']?.includes('url(') === true,
     stroke: strokeOf(node, from.handed) ?? from.stroke,
+    paint: own['stroke'] ?? from.paint,
+    current: own['color'] ?? from.current,
   };
 }
 
@@ -392,6 +424,9 @@ function handedDown(node: SvgNode, from: Inherited): Inherited {
 function mergeable(child: SvgNode, inherited: Inherited): { key: string; d: string } | undefined {
   const stroke = strokeOf(child, inherited.handed) ?? inherited.stroke;
   if (closedWithinStroke(child, stroke)) return undefined;
+  const paint = child.attrs['stroke'] ?? inherited.paint;
+  const current = child.attrs['color'] ?? inherited.current;
+  if (!opaquePaint(paint, current, inherited.opaque)) return undefined;
   const key = paintKey(child, inherited);
   const d = key === undefined ? undefined : pathData(child);
   return key === undefined || d === undefined ? undefined : { key, d };

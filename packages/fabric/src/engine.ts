@@ -200,6 +200,12 @@ const SPEC_FIELDS = [
 ] as const satisfies readonly (keyof AnimationSpec)[];
 
 /** A custom property `watchToken` reports on, and what it last reported. */
+interface ColourWatch {
+  readonly node: EngineNode;
+  readonly listener: (value: unknown) => void;
+  heard: unknown;
+}
+
 interface TokenWatch {
   readonly name: string;
   readonly node: EngineNode | undefined;
@@ -4560,6 +4566,12 @@ function styleKey(value: unknown, key: string): unknown {
     if (found !== undefined) return found;
   }
   return undefined;
+}
+
+/** Whether two colours as the cascade settles them are the same: a platform colour is an object. */
+function sameColour(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  return typeof a === 'object' && typeof b === 'object' && JSON.stringify(a) === JSON.stringify(b);
 }
 
 /** What a node's own style says for `key`, as `ownLayout` answers it, without an allocation. */
@@ -9420,6 +9432,50 @@ export class Engine implements HostEngine {
 
   private readonly tokenWatches = new Set<TokenWatch>();
 
+  /**
+   * The colour `node` draws `currentColor` in, its `color`, as its last commit settled it:
+   * undefined where nothing sets one, which native draws black. Before its first commit, the
+   * colour its own style gives it, or else its nearest committed ancestor's, which is the best
+   * answer there is without settling it, as only a commit may: `watchColour` hears the settled
+   * one.
+   */
+  colour(node: EngineNode): unknown {
+    for (let at: EngineNode | null = node; at; at = at.parent) {
+      // Left out of the cascade, it shares an empty style that says nothing of its colour.
+      if (at.outsideCascade) continue;
+      if (at.styleCache) return at.styleCache.inherited['color'];
+      const own = ownStyle(at, 'color');
+      if (own !== undefined) return own;
+    }
+    return undefined;
+  }
+
+  /**
+   * Call `listener` with `node`'s colour, as `colour` reads it, after each commit that changes
+   * it, the first that settles it included. The function returned stops it.
+   */
+  watchColour(node: EngineNode, listener: (value: unknown) => void): () => void {
+    const watch: ColourWatch = { node, listener, heard: this.colour(node) };
+    this.colourWatches.add(watch);
+    return () => this.colourWatches.delete(watch);
+  }
+
+  private readonly colourWatches = new Set<ColourWatch>();
+
+  private reportColours(): void {
+    // One listener that throws stops neither the rest nor what the commit does after them.
+    for (const watch of this.colourWatches) {
+      const value = this.colour(watch.node);
+      if (sameColour(value, watch.heard)) continue;
+      watch.heard = value;
+      try {
+        watch.listener(value);
+      } catch (error) {
+        this.reportEventError(error, 'colour');
+      }
+    }
+  }
+
   private reportTokens(): void {
     // One listener that throws stops neither the rest nor what the commit does after them.
     for (const watch of this.tokenWatches) {
@@ -10177,6 +10233,7 @@ export class Engine implements HostEngine {
     this.paintedInBatch(() => this.commitAsAsked());
     if (this.paintedOnly(sent)) {
       this.reportTokens();
+      this.reportColours();
       return false;
     }
     // Each a layout of the engine's, which an app of plain flex has asked for none of.
@@ -10190,6 +10247,7 @@ export class Engine implements HostEngine {
     this.flushTransitionEvents();
     this.reportPaint();
     this.reportTokens();
+    this.reportColours();
     this.playSized();
     this.scrollDriver?.afterCommit();
     // Read first: the commit that settles keyframes starts by clearing it.

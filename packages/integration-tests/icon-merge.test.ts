@@ -3,14 +3,20 @@
  * four shapes on average, and each is a native view.
  */
 import assert from 'node:assert/strict';
-import { afterEach, describe, it } from 'node:test';
-import type { Type } from '@angular/core';
-import { cleanup, render, type FakeFabricNode } from '@ng-native/testing';
+import { afterEach, before, describe, it } from 'node:test';
+import type { Type, WritableSignal } from '@angular/core';
+import { cleanup, render, settle, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { mergeShapes, pathData, wellFormed } from '../icons/src/merge-shapes.ts';
 import { parseSvg, type SvgNode } from '../icons/src/parse-svg.ts';
 import { compileFixture } from './compile.ts';
 
-const merge = (markup: string) => mergeShapes(parseSvg(markup)!);
+const flattenAll = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
+  nodes.flatMap((node) => [node, ...flattenAll(node.children)]);
+let Colours: Type<{ colour: WritableSignal<string>; tone: WritableSignal<string> }>;
+before(async () => {
+  Colours = (await compileFixture('fixtures/icon-merge.ts'))['IconColours'] as typeof Colours;
+});
+const merge = (markup: string) => mergeShapes(parseSvg(markup)!, undefined, true);
 /** The tags of the root's children after merging, with a merged path's data. */
 const drawn = (markup: string) =>
   merge(markup).children.map((child) => (child.tag === 'path' ? child.attrs['d'] : child.tag));
@@ -40,7 +46,7 @@ describe('shapes in one stroke and no fill', () => {
 
   it('are left as they are where only one would be in the path', () => {
     const root = parseSvg(outline('<circle cx="5" cy="5" r="1"/>'))!;
-    assert.equal(mergeShapes(root), root, 'the same tree, so nothing is copied');
+    assert.equal(mergeShapes(root, undefined, true), root, 'the same tree, so nothing is copied');
   });
 
   it('merge inside a group, apart from the shapes beside it', () => {
@@ -140,7 +146,7 @@ describe('shapes drawn as they are', () => {
   for (const [what, markup] of cases) {
     it(`with ${what}`, () => {
       const root = parseSvg(markup)!;
-      assert.equal(mergeShapes(root), root);
+      assert.equal(mergeShapes(root, undefined, true), root);
     });
   }
 
@@ -208,7 +214,7 @@ describe('a closed shape no bigger than its stroke', () => {
       ' style="stroke-width:var(--ng-icon__stroke-width, 1)"',
     );
     const merged = (width?: number) =>
-      mergeShapes(parseSvg(markup)!, width).children.map((child) => child.tag);
+      mergeShapes(parseSvg(markup)!, width, true).children.map((child) => child.tag);
     assert.deepEqual(merged(), ['path'], 'the fallback, 1, inside a circle 2 across');
     assert.deepEqual(merged(3), ['circle', 'circle'], 'the app asked for 3');
   });
@@ -293,6 +299,102 @@ describe('an outline icon on screen', () => {
     assert.equal(
       icon.children[0]!.children[0]!.props['d'],
       'M1 1L2 2M4 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0z',
+    );
+  });
+});
+
+describe('an outline icon in a colour that is not opaque', () => {
+  // Two strokes crossing cover the crossing twice drawn apart, and once drawn as one path: with
+  // any transparency in the colour, the crossing shows darker apart, as the web draws it.
+  afterEach(cleanup);
+  const shapesOf = (fabric: FakeFabric, id: string) =>
+    flattenAll(fabric.committed)
+      .find((node) => node.props['nativeID'] === id)!
+      .children[0]!.children.map((node) => node.viewName);
+
+  it('draws its shapes apart for a colour on its input, and as one path once it is opaque', async () => {
+    const { fabric, instance } = await render(Colours);
+    assert.deepEqual(shapesOf(fabric, 'input'), ['RNSVGPath', 'RNSVGCircle']);
+    instance.colour.set('#0a84ff');
+    await settle();
+    assert.deepEqual(shapesOf(fabric, 'input'), ['RNSVGPath']);
+  });
+
+  it('never commits its shapes as one path in a colour that is not opaque', async () => {
+    const { fabric, instance } = await render(Colours);
+    instance.colour.set('#0a84ff');
+    instance.tone.set('solid');
+    await settle();
+    const seen: string[][] = [];
+    const complete = fabric.completeRoot.bind(fabric);
+    fabric.completeRoot = ((...args: Parameters<typeof complete>) => {
+      complete(...args);
+      seen.push(shapesOf(fabric, 'input'), shapesOf(fabric, 'css'));
+    }) as typeof complete;
+    instance.colour.set('rgba(0, 0, 0, 0.5)');
+    instance.tone.set('faint');
+    await settle();
+    assert.ok(seen.length > 0);
+    // The input's colour is known as the icon draws. A stylesheet's is settled by the commit, so
+    // its icon is drawn apart from the commit after: the one commit between is the guess.
+    const inputs = seen.filter((_, i) => i % 2 === 0);
+    assert.ok(
+      inputs.every((shapes) => shapes.length > 1),
+      'the icon coloured on its input is never one path once faint',
+    );
+    assert.deepEqual(seen.at(-1), ['RNSVGPath', 'RNSVGCircle']);
+    assert.deepEqual(seen.at(-2), ['RNSVGPath', 'RNSVGCircle']);
+  });
+
+  it('draws them apart for a stylesheet colour it only learns of from its first commit', async () => {
+    const { fabric } = await render(Colours);
+    assert.deepEqual(shapesOf(fabric, 'css'), ['RNSVGPath', 'RNSVGCircle']);
+  });
+
+  it('follows a stylesheet colour that changes, each way', async () => {
+    const { fabric, instance } = await render(Colours);
+    instance.tone.set('solid');
+    await settle();
+    assert.deepEqual(shapesOf(fabric, 'css'), ['RNSVGPath']);
+    instance.tone.set('faint');
+    await settle();
+    assert.deepEqual(shapesOf(fabric, 'css'), ['RNSVGPath', 'RNSVGCircle']);
+  });
+});
+
+describe('a stroke paint that is not opaque', () => {
+  const cases: [string, string][] = [
+    ['currentColor, where the icon is not', outline('<path d="M1 1"/><path d="M2 2"/>')],
+    [
+      'written with alpha',
+      '<svg fill="none" stroke="rgba(0,0,0,.5)"><path d="M1 1"/><path d="M2 2"/></svg>',
+    ],
+    [
+      'written as #rrggbbaa',
+      '<svg fill="none" stroke="#00000080"><path d="M1 1"/><path d="M2 2"/></svg>',
+    ],
+    [
+      'a form not read here',
+      '<svg fill="none" stroke="context-stroke"><path d="M1 1"/><path d="M2 2"/></svg>',
+    ],
+    [
+      'currentColor under an SVG color with alpha',
+      '<svg fill="none" stroke="currentColor" color="rgba(0,0,0,.5)"><path d="M1 1"/><path d="M2 2"/></svg>',
+    ],
+  ];
+  for (const [what, markup] of cases) {
+    it(`keeps shapes apart: ${what}`, () => {
+      const root = parseSvg(markup)!;
+      assert.equal(mergeShapes(root, undefined, !what.startsWith('currentColor, where')), root);
+    });
+  }
+
+  it('does not keep apart shapes painted in an opaque colour, whatever the icon is', () => {
+    const markup =
+      '<svg fill="none" stroke="currentColor" color="red"><path d="M1 1"/><path d="M2 2"/></svg>';
+    assert.deepEqual(
+      mergeShapes(parseSvg(markup)!, undefined, false).children.map((c) => c.attrs['d']),
+      ['M1 1M2 2'],
     );
   });
 });
