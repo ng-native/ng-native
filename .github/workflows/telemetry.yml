@@ -1,0 +1,57 @@
+name: CI telemetry
+
+# Sends each finished workflow run, and each closed pull request, to Coralogix through
+# scripts/ci-telemetry.mjs. Both triggers run the base branch's copy of the script, never code from
+# a pull request, which is what makes the secret safe to use for runs from forks.
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Desktop host
+      - Desktop host nightly
+      - Device tests
+      - Docs
+      - Latest versions
+      - Native builds
+      - Preview
+      - Release
+      - Web Platform Tests
+    types: [completed]
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+jobs:
+  send:
+    if: github.repository == 'ng-native/ng-native'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: |
+            scripts/ci-telemetry.mjs
+            .nvmrc
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CORALOGIX_SEND_DATA_KEY: ${{ secrets.CORALOGIX_SEND_DATA_KEY }}
+          CORALOGIX_INGRESS: ${{ vars.CORALOGIX_INGRESS }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_run ]; then
+            node scripts/ci-telemetry.mjs run "$RUN_ID" "$RUN_ATTEMPT"
+          else
+            node scripts/ci-telemetry.mjs pr "$PR_NUMBER"
+          fi
