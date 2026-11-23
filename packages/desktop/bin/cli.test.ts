@@ -533,6 +533,13 @@ describe('run', () => {
     });
     await run({ bundle: 'dist/main.hbc', module: 'main', universal: false }, mismatched.sys);
     assert.ok(mismatched.calls[0]!.command.endsWith('build.sh'), 'built from source');
+    // And says why, before the build starts.
+    assert.deepEqual(mismatched.warnings, [
+      'The prebuilt desktop host is not used (the prebuilt host has react-native-svg ' +
+        '15.16.0, the app 15.0.0), so the host builds from source: about 4 minutes on an Apple ' +
+        'silicon Mac (about 6 for a universal release build) the first time for this app, then only ' +
+        'what changed.',
+    ]);
 
     // With native code of its own linked, the app builds its host.
     const linked = fakeSystem({

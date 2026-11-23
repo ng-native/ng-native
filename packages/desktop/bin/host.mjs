@@ -419,12 +419,24 @@ function hostBuildDir(sys, reactNative, build) {
         `prebuilt Linux ${arch} host fits this app (${prebuilt.reason}). Run this on Linux on ${arch}.`,
     );
   }
+  // The reason says how long a build from source takes, so the first build's note is not repeated.
+  const explained = prebuilt.reason !== NO_PREBUILT_HOSTS;
+  if (explained) {
+    const first =
+      os === 'linux'
+        ? 'many minutes'
+        : 'about 4 minutes on an Apple silicon Mac (about 6 for a universal release build)';
+    sys.warn(
+      `The prebuilt desktop host is not used (${prebuilt.reason}), so the host builds ` +
+        `from source: ${first} the first time for this app, then only what changed.`,
+    );
+  }
   return {
     dir: buildHost(
       sys,
       reactNative,
       hostLibraries.map(({ dir }) => dir),
-      build,
+      { ...build, explained },
       build.link,
     ),
     prebuilt: false,
@@ -544,6 +556,9 @@ function versionIn(sys, dir) {
   }
 }
 
+/** Why a package without `prebuilt.json` builds its host, which is nothing to point out. */
+const NO_PREBUILT_HOSTS = 'this package lists no prebuilt hosts';
+
 /**
  * The prebuilt host's build folder when `prebuilt.json` has one for this OS and architecture that
  * this app can run on (see `choosePrebuilt`), downloaded into the cache once; otherwise why there
@@ -557,7 +572,7 @@ function versionIn(sys, dir) {
  */
 function prebuiltHost(sys, reactNative, { flavour, deny, linked, hostLibraries, os, arch }) {
   const text = readPrebuiltManifest(sys);
-  if (!text) return { dir: null, reason: 'this package lists no prebuilt hosts' };
+  if (!text) return { dir: null, reason: NO_PREBUILT_HOSTS };
   const version = versionIn(sys, reactNative);
   if (!version) return { dir: null, reason: 'react-native has no version' };
   const libraries = Object.fromEntries(
@@ -589,13 +604,15 @@ function prebuiltHost(sys, reactNative, { flavour, deny, linked, hostLibraries, 
  * @param {typeof system} sys
  * @param {string} reactNative
  * @param {string[]} libraries
- * @param {{ universal: boolean, release?: boolean, os: import('./autolink.mjs').DesktopOs }} options
+ * @param {{ universal: boolean, release?: boolean, os: import('./autolink.mjs').DesktopOs, explained?: boolean }} options
+ *   `explained` when the reason it builds from source, with how long that takes, is already printed
  * @param {string} link the file `linkFile` names
  */
-function buildHost(sys, reactNative, libraries, { universal, release, os }, link) {
+function buildHost(sys, reactNative, libraries, { universal, release, os, explained }, link) {
   checkToolchain(sys, os);
   const version = versionIn(sys, reactNative);
   if (
+    !explained &&
     version &&
     !sys.exists(path.join(cacheDir(version, { env: sys.env, platform: sys.platform }), 'host'))
   ) {
