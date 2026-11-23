@@ -8,8 +8,8 @@
  * eased by nothing, and kept by every later commit until they are taken away.
  */
 import assert from 'node:assert/strict';
-import { it } from 'node:test';
-import { Engine, type EngineNode, type StyleSheet } from '@ng-native/fabric';
+import { describe, it } from 'node:test';
+import { Engine, scrollsOverflow, type EngineNode, type StyleSheet } from '@ng-native/fabric';
 import { compileCss, createFakeFabric } from '@ng-native/testing';
 
 function scene(css = '') {
@@ -97,3 +97,89 @@ it('commits nothing for the same props set again', () => {
   engine.commit();
   assert.equal(fabric.calls.completeRoot, commits);
 });
+
+/**
+ * An element committed as two views, a scroll view and its content or an element and its wrapper,
+ * splits its props between them by key. Reanimated drew on the outer view, the one its tag names,
+ * so what it settled on goes there whatever the key, and the inner view keeps the element's own.
+ */
+function split(css: string, wrap: boolean) {
+  const fabric = createFakeFabric();
+  const engine = new Engine(fabric, 1, { globalStyles: compileCss(css) as StyleSheet });
+  const box: EngineNode = engine.createElement('view');
+  engine.setClasses(box, 'c');
+  if (wrap) engine.wrapChildren(box, { viewName: 'RCTView', props: {} });
+  else scrollsOverflow(box);
+  engine.appendChild(box, engine.createElement('view'));
+  engine.appendChild(engine.root, box);
+  const outer = () => fabric.committed[0]!;
+  const inner = () => outer().children[0]!;
+  return { engine, box, outer, inner };
+}
+
+for (const [name, css, key, ownKey, own, drawn, wrap] of [
+  [
+    'a scroll view',
+    `.c { overflow: scroll; height: 50px; padding: 4px }`,
+    'padding',
+    'paddingTop',
+    4,
+    10,
+    false,
+  ],
+  [
+    'a wrapped element',
+    `.c { align-items: flex-start }`,
+    'alignItems',
+    'alignItems',
+    'flex-start',
+    'center',
+    true,
+  ],
+] as const) {
+  describe(`on ${name}`, () => {
+    it('commits them on the outer view, from its first commit', () => {
+      const { engine, box, outer, inner } = split(css, wrap);
+      engine.setUiThreadProps(box, { [key]: drawn });
+      engine.commit();
+      assert.equal(outer().props[key], drawn);
+      assert.equal(inner().props[ownKey], own, 'and the inner view keeps the element its own');
+      assert.notEqual(inner().props[key], drawn, 'nor takes them itself');
+      engine.setUiThreadProps(box, null);
+      engine.commit();
+      assert.equal(outer().props[key] ?? null, null, 'and taken away from its first commit too');
+    });
+
+    it('commits them on the outer view once set, and takes them away again', () => {
+      const { engine, box, outer, inner } = split(css, wrap);
+      engine.commit();
+      engine.setUiThreadProps(box, { [key]: drawn, opacity: 0.5 });
+      engine.commit();
+      assert.equal(outer().props[key], drawn);
+      assert.equal(outer().props['opacity'], 0.5);
+      assert.equal(inner().props[ownKey], own);
+      assert.notEqual(inner().props[key], drawn);
+      engine.setUiThreadProps(box, { opacity: 0.6 });
+      engine.commit();
+      assert.equal(outer().props[key] ?? null, null, 'a prop only they set on it is removed');
+      assert.equal(outer().props['opacity'], 0.6);
+      engine.setUiThreadProps(box, null);
+      engine.commit();
+      assert.equal(outer().props['opacity'] ?? null, null);
+      assert.equal(inner().props[ownKey], own);
+    });
+
+    it('keeps them over a later change to the same prop of its own', () => {
+      const { engine, box, outer } = split(css, wrap);
+      engine.setProp(box, 'style', { opacity: 0.2 });
+      engine.setUiThreadProps(box, { opacity: 0.9 });
+      engine.commit();
+      engine.setProp(box, 'style', { opacity: 0.3 });
+      engine.commit();
+      assert.equal(outer().props['opacity'], 0.9);
+      engine.setUiThreadProps(box, null);
+      engine.commit();
+      assert.equal(outer().props['opacity'], 0.3, 'and its own value is back once they go');
+    });
+  });
+}

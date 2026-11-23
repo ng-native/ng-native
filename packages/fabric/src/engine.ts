@@ -691,6 +691,11 @@ interface Committed {
   childHandles: FabricNode[];
   /** The native view it was created as, which a clone cannot change. */
   viewName: string;
+  /**
+   * What the UI thread had drawn its outer view with, for an element committed as two views,
+   * where those are kept out of `props`: see `drawnOver`.
+   */
+  drawn?: Readonly<Record<string, unknown>>;
 }
 
 export interface EngineNode extends HostNode {
@@ -1217,6 +1222,36 @@ function scrollerProps(props: Record<string, unknown>): {
     box: { nestedScrollEnabled: true, ...box },
     content: { collapsable: false, ...content },
   };
+}
+
+/** Whether a node is committed as two views, which split its props between them. */
+const splitsViews = (node: EngineNode): boolean => node.scrollView === true || !!node.wrapper;
+
+/**
+ * A two-view element's outer payload with what the UI thread drew on it (`setUiThreadProps`).
+ * Reanimated drew on the view its tag names, the outer one, whatever the key, so those props are
+ * kept out of the merge the split routes by key, and set here over the outer view's own: each
+ * that came, changed or went is in the payload, as its own value where it went, and a change of
+ * the element's own value under one is not.
+ */
+function drawnOver(
+  box: Record<string, unknown>,
+  before: Readonly<Record<string, unknown>>,
+  after: Readonly<Record<string, unknown>>,
+  had: Readonly<Record<string, unknown>> | undefined,
+  drawn: Readonly<Record<string, unknown>> | undefined,
+  inner: ReadonlySet<string>,
+): Record<string, unknown> {
+  // Asked first, without a set: nearly no element committed as two views is drawn on.
+  if (had === undefined && drawn === undefined) return box;
+  const keys = new Set([...Object.keys(had ?? {}), ...Object.keys(drawn ?? {})]);
+  for (const key of keys) {
+    const was = had && key in had ? had[key] : inner.has(key) ? undefined : before[key];
+    const now = drawn && key in drawn ? drawn[key] : inner.has(key) ? undefined : after[key];
+    if (Object.is(was, now)) delete box[key];
+    else box[key] = now ?? null;
+  }
+  return box;
 }
 
 /** The props of a payload, or null where there are none. */
@@ -13324,8 +13359,11 @@ export class Engine implements HostEngine {
       contentAsBorderBox(merged, this.styles.readsRightToLeft(merged));
     }
     keptForPaint(node, merged);
-    // Last, over everything the engine worked out, as Reanimated's commit hook applied them.
-    if (node.uiThreadProps !== undefined) Object.assign(merged, node.uiThreadProps);
+    // Last, over everything the engine worked out, as Reanimated's commit hook applied them. An
+    // element committed as two views takes them on its outer view after the split: `drawnOver`.
+    if (node.uiThreadProps !== undefined && !splitsViews(node)) {
+      Object.assign(merged, node.uiThreadProps);
+    }
     // Asked first, without a call: nearly no node merged sets paint in its own style.
     const ownStyle = node.props['style'] as Record<string, unknown> | undefined;
     if (node.paintPassed !== undefined || setsPaint(ownStyle)) {
@@ -15946,6 +15984,8 @@ export class Engine implements HostEngine {
     if (this.asked & LAYOUTS) this.noteHow(node, payload);
     const moved = this.childrenMoved(node, childHandles, held.childHandles);
     const { box, content } = splitScroller(payload ?? {});
+    const drawn = node.uiThreadProps;
+    drawnOver(box, previous.props, props, previous.drawn, drawn, CONTENT_KEYS);
     // All of it: the content's padding moves what it holds, and can resize the element.
     if (this.notesMoves) this.noteClone(node, payload, moved, childHandles, previous);
     const inside = this.clonedFor(held.handle, someProps(content), moved ? childHandles : null);
@@ -15954,7 +15994,7 @@ export class Engine implements HostEngine {
       someProps(box),
       inside === held.handle ? null : [inside],
     );
-    node.committed = { handle, tag: previous.tag, props, childHandles, viewName };
+    node.committed = { handle, tag: previous.tag, props, childHandles, viewName, drawn };
     node.inside = { handle: inside, childHandles };
     this.clearFlags(node);
     return handle;
@@ -15986,10 +16026,20 @@ export class Engine implements HostEngine {
     const inside = this.clonedWrapper(held, content, moved ? childHandles : null);
     const around = [inside, ...beside];
     const aroundMoved = !sameHandles(around, previous.childHandles);
-    const box = payload && someProps(splitWrapped(payload).box);
+    const drawn = node.uiThreadProps;
+    const box = someProps(
+      drawnOver(
+        splitWrapped(payload ?? {}).box,
+        previous.props,
+        props,
+        previous.drawn,
+        drawn,
+        CHILD_PLACING,
+      ),
+    );
     const boxPayload = this.paintNatively(node, viewName, props, box, aroundMoved);
     const handle = this.clonedFor(previous.handle, boxPayload, aroundMoved ? around : null);
-    node.committed = { handle, tag: previous.tag, props, childHandles: around, viewName };
+    node.committed = { handle, tag: previous.tag, props, childHandles: around, viewName, drawn };
     node.inside = { handle: inside, childHandles, props: content };
     this.clearFlags(node);
     return handle;
@@ -16028,6 +16078,8 @@ export class Engine implements HostEngine {
     const wrapper = node.wrapper!;
     const props = this.mergeProps(node, viewName);
     const { box, content } = splitWrapped(props, wrapper.props);
+    const drawn = node.uiThreadProps;
+    if (drawn) Object.assign(box, drawn);
     // A touch on the wrapper lands on the element, as one on a scroll view's content does.
     const inside = this.fabric.createNode(
       nextTag(),
@@ -16039,7 +16091,7 @@ export class Engine implements HostEngine {
     this.stats.createdNodes++;
     for (const child of childHandles) this.fabric.appendChild(inside, child);
     const handle = this.create(node, viewName, box, [inside, ...beside]);
-    node.committed = { ...node.committed!, props };
+    node.committed = { ...node.committed!, props, drawn };
     node.inside = { handle: inside, childHandles, props: content };
     return handle;
   }
@@ -16061,6 +16113,8 @@ export class Engine implements HostEngine {
   ): FabricNode {
     const props = this.mergeProps(node, viewName);
     const { box, content } = scrollerProps(props);
+    const drawn = node.uiThreadProps;
+    if (drawn) Object.assign(box, drawn);
     // The element is what a touch on its content lands on.
     const inside = this.fabric.createNode(
       nextTag(),
@@ -16072,7 +16126,7 @@ export class Engine implements HostEngine {
     this.stats.createdNodes++;
     for (const child of childHandles) this.fabric.appendChild(inside, child);
     const handle = this.create(node, viewName, box, [inside]);
-    node.committed = { ...node.committed!, props, childHandles };
+    node.committed = { ...node.committed!, props, childHandles, drawn };
     node.inside = { handle: inside, childHandles };
     return handle;
   }
