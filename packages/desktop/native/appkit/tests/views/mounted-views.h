@@ -63,7 +63,10 @@ inline facebook::react::Props::Shared datePickerProps(folly::dynamic raw) {
 struct MountedViews {
   static constexpr facebook::react::SurfaceId kSurface = 1;
 
-  NoInput input;
+  // The sink the surface view, and a split view's pane containers, tell as they go. AppKit can keep
+  // a view past its test and free it in a later one, so the sink lives as long as the process, as
+  // the host's does.
+  static inline NoInput &input = *new NoInput;
   std::shared_ptr<appkit::AppKitBackend> backend = std::make_shared<appkit::AppKitBackend>();
   std::shared_ptr<MountingManager> mounting = std::make_shared<MountingManager>(backend, backend);
   NSWindow *window = nil;
