@@ -136,19 +136,20 @@ navigates. Use `nativeRouterLink` from `@ng-native/router` on a `<pressable>`.
 sends them too.
 
 `(mouseenter)`, `(mouseleave)`, `(mousemove)`, `(mouseover)`, `(mouseout)`, `(dblclick)`,
-`(contextmenu)` and `(wheel)` fire on macOS, and on no other OS. The rule reads `expo.platforms`
-from the nearest `app.json`: where it lists no desktop OS, as by default, they are reported here,
-since they never fire. Where it lists `macos`, they are left to `desktop-only-events`.
+`(contextmenu)` and `(wheel)` fire on macOS and Linux, and on no other OS. The rule reads
+`expo.platforms` from the nearest `app.json`: where it lists no desktop OS, as by default, they are
+reported here, since they never fire. Where it lists a desktop OS, they are left to
+`desktop-only-events`.
 
 ### desktop-only-events
 
-In a project whose `app.json` lists `macos` in `expo.platforms` beside `ios` or `android`, warns
-of a binding to an event only macOS sends: `(mouseenter)`, `(mouseleave)`, `(mousemove)`,
-`(mouseover)`, `(mouseout)`, `(dblclick)`, `(contextmenu)` and `(wheel)`. The handler runs on a Mac
-and never on iOS or Android, so where it has to work there too, it needs the event the
-`no-dom-events` table names beside it. A project that lists no phone, such as a desktop-only app
-with `macos` and `linux`, is not warned: the event fires on every OS it builds for.
-`recommended` turns it on as a warning.
+In a project whose `app.json` lists a desktop OS (`macos` or `linux`) in `expo.platforms` beside
+`ios` or `android`, warns of a binding to an event only a desktop OS sends: `(mouseenter)`,
+`(mouseleave)`, `(mousemove)`, `(mouseover)`, `(mouseout)`, `(dblclick)`, `(contextmenu)` and
+`(wheel)`. The handler runs on a desktop OS and never on iOS or Android, so where it has to work
+there too, it needs the event the `no-dom-events` table names beside it. A project that lists no
+phone, such as a desktop-only app with `macos` and `linux`, is not warned: the event fires on every
+OS it builds for. `recommended` turns it on as a warning.
 
 `eslint --fix` renames `(click)` to `(press)` on a `<pressable>`, a `<touchable-opacity>` and a
 `<text pressable>`, unless the handler reads `$event`: that is a mouse event in a browser and a

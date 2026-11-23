@@ -82,8 +82,13 @@ describe('the generated app', () => {
     assert.equal(resolves({ vitest: '~4.1.0' }), true);
     assert.equal(resolves({ vitest: '^5.0.0' }), true);
     assert.equal(resolves({ vitest: '~4.0.8' }), false);
-    // A Vite it lists decides, whatever the Vitest.
-    assert.equal(resolves({ vite: '^8.0.0', vitest: '~4.0.8' }), true);
+    // A Vite it lists decides, unless the Vitest it lists is one that takes an older Vite of its
+    // own (4.0 depends on Vite 6 or 7), which is the Vite that loads the config.
+    assert.equal(resolves({ vite: '^8.0.0', vitest: '~4.0.8' }), false);
+    assert.equal(resolves({ vite: '^8.0.0', vitest: '^4.0.8 || ^5.0.0' }), false);
+    assert.equal(resolves({ vite: '^8.0.0', vitest: '~4.1.0' }), true);
+    assert.equal(resolves({ vite: '^8.0.0', vitest: 'latest' }), true);
+    assert.equal(resolves({ vite: '^7.3.0', vitest: '~4.1.0' }), false);
   });
 
   it('adds vite-tsconfig-paths to it when there are, as Nx 24 writes its own Vite configs', () => {
