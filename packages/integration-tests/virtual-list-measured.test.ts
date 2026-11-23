@@ -385,6 +385,29 @@ describe('virtual list with measured rows', () => {
     assert.equal(pinned.props['zIndex'], 1);
     unmount();
   });
+
+  it('pushes a pinned row in flow off with the next sticky row as it arrives', async () => {
+    const { instance, scroll, measureAll, row, unmount } = await boot('Measured');
+    instance.sticky!.set([0, 5]);
+    await settle();
+    await measureAll(() => ESTIMATE);
+    // Row 5 is half a row short of the edge, so it has pushed row 0 half way off.
+    await scroll(4.5 * ESTIMATE);
+    await measureAll(() => ESTIMATE);
+    // Above the window, row 0 is in flow just before the window's first row, and moved from there.
+    const first = instance
+      .list()
+      .window()
+      .find((each) => each.index !== 0)!.index;
+    const pinned = row(0)!;
+    assert.equal(pinned.props['zIndex'], 1);
+    assert.deepEqual(
+      pinned.props['transform'],
+      [{ translateY: 4 * ESTIMATE - (first - 1) * ESTIMATE }],
+      'row 0 ends where row 5 starts',
+    );
+    unmount();
+  });
 });
 
 describe('virtual list sticky rows moved on the native side', () => {

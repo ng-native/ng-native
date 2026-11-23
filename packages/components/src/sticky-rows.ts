@@ -147,16 +147,19 @@ export class StickyRows {
   });
 
   /**
-   * Where a pinned row placed by its `top` is: at the leading edge, until the next sticky row
-   * reaches it there and pushes it off.
+   * Where a pinned row is along the list: at the leading edge, until the next sticky row reaches
+   * it there and pushes it off.
    */
   pinnedAt(index: number): number {
     return Math.min(this.offset(), this.stopOf(index));
   }
 
-  /** A pinned row in flow, moved from where flow put it to the leading edge by a transform. */
-  flowStyle(at: number): Record<string, unknown> {
-    const shift = Math.max(0, this.offset() - at);
+  /**
+   * The pinned row `index` in flow, moved by a transform from `at`, where flow put it, to the leading
+   * edge, until the next sticky row reaches it there and pushes it off.
+   */
+  flowStyle(index: number, at: number): Record<string, unknown> {
+    const shift = Math.max(0, this.pinnedAt(index) - at);
     const move = `${this.list.horizontal() ? 'translateX' : 'translateY'}(${shift}px)`;
     const flip = this.list.flipText();
     return { ...this.list.flowSpacing(), zIndex: 1, transform: flip ? `${move} ${flip}` : move };

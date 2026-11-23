@@ -1030,7 +1030,10 @@ export class VirtualList<T> extends ScrollViewProps {
           style: this.sticky.native
             ? this.sticky.style(pinned)
             : this.measuring()
-              ? this.sticky.flowStyle(this.topOf(first) - this.heightOf(pinned) - this.rowGap())
+              ? this.sticky.flowStyle(
+                  pinned,
+                  this.topOf(first) - this.heightOf(pinned) - this.rowGap(),
+                )
               : this.slotStyle(pinned, this.sticky.pinnedAt(pinned)),
         }),
       );
@@ -1068,7 +1071,7 @@ export class VirtualList<T> extends ScrollViewProps {
   private styleFor(index: number, pinned: boolean): Record<string, unknown> {
     if (this.sticky.native && this.sticky.next().has(index)) return this.sticky.style(index);
     if (this.measuring()) {
-      return pinned ? this.sticky.flowStyle(this.topOf(index)) : this.flowStyle();
+      return pinned ? this.sticky.flowStyle(index, this.topOf(index)) : this.flowStyle();
     }
     return pinned ? this.slotStyle(index, this.sticky.pinnedAt(index)) : this.slotStyle(index);
   }
