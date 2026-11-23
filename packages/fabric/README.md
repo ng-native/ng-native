@@ -48,8 +48,8 @@ const platform = nativePlatform(); // 'ios' | 'android'
 - [The CSS engine](https://ng-native.com/packages/fabric/css-engine),
   [what CSS reaches a device](https://ng-native.com/packages/fabric/supported-css) and
   [animation](https://ng-native.com/packages/fabric/animation)
-- [Root README](https://github.com/ng-native/ng-native/blob/main/README.md) and
-  [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/docs/ARCHITECTURE.md)
+- [Root README](https://github.com/coralogix/ng-native/blob/main/README.md) and
+  [ARCHITECTURE.md](https://github.com/coralogix/ng-native/blob/main/docs/ARCHITECTURE.md)
 
 ## License
 

@@ -79,8 +79,8 @@ export class App {
 
 - [Router](https://ng-native.com/packages/router)
 - [File routes](https://ng-native.com/packages/router/file-routes)
-- [Root README](https://github.com/ng-native/ng-native/blob/main/README.md) and
-  [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/docs/ARCHITECTURE.md)
+- [Root README](https://github.com/coralogix/ng-native/blob/main/README.md) and
+  [ARCHITECTURE.md](https://github.com/coralogix/ng-native/blob/main/docs/ARCHITECTURE.md)
 
 ## License
 

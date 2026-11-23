@@ -31,9 +31,9 @@ them can break it:
 
 Money is not the only thing that keeps a project alive:
 
-- **Star it on [GitHub](https://github.com/ng-native/ng-native)**, which is how other
+- **Star it on [GitHub](https://github.com/coralogix/ng-native)**, which is how other
   people find it.
-- **[Report what breaks](https://github.com/ng-native/ng-native/issues)**, with the
+- **[Report what breaks](https://github.com/coralogix/ng-native/issues)**, with the
   device and versions it broke on.
 - **Tell people.** A blog post, a talk or a message to your team does more than you would expect.
 - **Contribute** a fix, an example or a page of documentation.

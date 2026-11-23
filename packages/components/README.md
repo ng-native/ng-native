@@ -72,8 +72,8 @@ package under Node (tests, tooling).
   [gestures](https://ng-native.com/packages/components/gestures),
   [modal](https://ng-native.com/packages/components/modal) and
   [animation](https://ng-native.com/packages/components/animation)
-- [Root README](https://github.com/ng-native/ng-native/blob/main/README.md) and
-  [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/docs/ARCHITECTURE.md)
+- [Root README](https://github.com/coralogix/ng-native/blob/main/README.md) and
+  [ARCHITECTURE.md](https://github.com/coralogix/ng-native/blob/main/docs/ARCHITECTURE.md)
 
 ## License
 

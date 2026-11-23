@@ -41,7 +41,7 @@ one: 0.18.2 stopped part way through publishing on `@ng-native/nativescript`, it
    with `npm trust` (npm 11.19 has it), which needs `--allow-publish` and asks to confirm:
 
    ```sh
-   npm trust github @ng-native/<name> --repo ng-native/ng-native --file release.yml --allow-publish
+   npm trust github @ng-native/<name> --repo coralogix/ng-native --file release.yml --allow-publish
    ```
 
 Release's `validate` job refuses to start until both are done (see below). A dry run checks the

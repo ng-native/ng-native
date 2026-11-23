@@ -27,7 +27,7 @@ call it through and an element to show a UIView in.
   ></iframe>
 </div>
 
-[`examples/nativescript`](https://github.com/ng-native/ng-native/tree/main/examples/nativescript) is
+[`examples/nativescript`](https://github.com/coralogix/ng-native/tree/main/examples/nativescript) is
 a small app using everything on this page.
 [`nstudio/ng-native-with-ns`](https://github.com/nstudio/ng-native-with-ns) is a complete project on
 the same runtime: a real-time 3D `SceneKit` viewport and `UIKit` controls on iOS, and an interactive

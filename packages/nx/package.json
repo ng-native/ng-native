@@ -73,11 +73,11 @@
   "license": "MIT",
   "homepage": "https://ng-native.com/packages/nx",
   "bugs": {
-    "url": "https://github.com/ng-native/ng-native/issues"
+    "url": "https://github.com/coralogix/ng-native/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ng-native/ng-native.git",
+    "url": "git+https://github.com/coralogix/ng-native.git",
     "directory": "packages/nx"
   },
   "files": [

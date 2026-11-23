@@ -101,4 +101,4 @@ how. A migration that runs a second time changes nothing.
   and Expo Go carry only the native modules they were built with. See
   [Deployment](/guide/deployment).
 - **Read the changelog** for the release, on the
-  [releases page](https://github.com/ng-native/ng-native/releases), for changes no migration covers.
+  [releases page](https://github.com/coralogix/ng-native/releases), for changes no migration covers.

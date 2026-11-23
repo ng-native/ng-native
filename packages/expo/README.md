@@ -60,7 +60,7 @@ constructed. See [Using a module](https://ng-native.com/packages/expo/using-a-mo
 - [Expo](https://ng-native.com/packages/expo), with the full module list by category
 - [Using a module](https://ng-native.com/packages/expo/using-a-module) and
   [permissions](https://ng-native.com/packages/expo/permissions)
-- [Root README](https://github.com/ng-native/ng-native/blob/main/README.md)
+- [Root README](https://github.com/coralogix/ng-native/blob/main/README.md)
 
 ## License
 

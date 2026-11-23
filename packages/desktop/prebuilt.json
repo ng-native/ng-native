@@ -4,7 +4,7 @@
     {
       "reactNative": "0.88.0",
       "flavour": "debug",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-macos-universal-debug.tar.gz",
+      "url": "https://github.com/coralogix/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-macos-universal-debug.tar.gz",
       "sha256": "c6547c9ecdec30e5568afb2cd5c3f2d5212f483f98e985a5e2b56fef0c4ff419",
       "libraries": {
         "react-native-screens": "4.30.0",
@@ -18,7 +18,7 @@
     {
       "reactNative": "0.88.0",
       "flavour": "release",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-macos-universal.tar.gz",
+      "url": "https://github.com/coralogix/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-macos-universal.tar.gz",
       "sha256": "fd6da08b299895489cf2ad12ce290c2c69f88997767fd1514f5cb8a234200fa2",
       "libraries": {
         "react-native-screens": "4.30.0",
@@ -34,7 +34,7 @@
       "flavour": "debug",
       "os": "linux",
       "arch": "x64",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-linux-x64-debug.tar.gz",
+      "url": "https://github.com/coralogix/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-linux-x64-debug.tar.gz",
       "sha256": "96555986cb7e7f156d1fd2826587cc36451ea94ba93de635bd8daf6c72eef6fe",
       "libraries": {
         "react-native-screens": "4.30.0",
@@ -50,7 +50,7 @@
       "flavour": "release",
       "os": "linux",
       "arch": "x64",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-linux-x64.tar.gz",
+      "url": "https://github.com/coralogix/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-linux-x64.tar.gz",
       "sha256": "979c07198c6138a704c91649aed13c1a877d80b8e247bb2d0a3dbbf39c54ab7c",
       "libraries": {
         "react-native-screens": "4.30.0",
@@ -66,7 +66,7 @@
       "flavour": "debug",
       "os": "linux",
       "arch": "arm64",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-linux-arm64-debug.tar.gz",
+      "url": "https://github.com/coralogix/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-linux-arm64-debug.tar.gz",
       "sha256": "f578ecf89b55634be13a9030a78c1895ef3979ce7f5ef7b187c2fe3fe038f07f",
       "libraries": {
         "react-native-screens": "4.30.0",
@@ -82,7 +82,7 @@
       "flavour": "release",
       "os": "linux",
       "arch": "arm64",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-linux-arm64.tar.gz",
+      "url": "https://github.com/coralogix/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-linux-arm64.tar.gz",
       "sha256": "928595e25100de9aeb195284a61f5196b779109f75077e9e8ff673838834b5eb",
       "libraries": {
         "react-native-screens": "4.30.0",

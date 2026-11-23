@@ -29,7 +29,7 @@ those versions to the new release, and prints each file it changed and anything 
 
 - [Updating an app](https://ng-native.com/guide/updating) for every way to update and what each
   migration does
-- [Root README](https://github.com/ng-native/ng-native/blob/main/README.md)
+- [Root README](https://github.com/coralogix/ng-native/blob/main/README.md)
 
 ## License
 

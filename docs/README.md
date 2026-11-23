@@ -39,7 +39,7 @@ gives their format.
   app's tools document, such as `npx expo install`.
 - Link to another file with a relative path. Inside `docs/` that includes the `.md` extension:
   `[Architecture](./ARCHITECTURE.md)`. A package README links to `docs/` with a full
-  `https://github.com/ng-native/ng-native/blob/main/docs/...` URL, because npm renders it away from
+  `https://github.com/coralogix/ng-native/blob/main/docs/...` URL, because npm renders it away from
   the repository.
 - When a file is moved or renamed, update every link to it in the same change. Search for the old
   name (`grep -rn "OLD.md" --exclude-dir=node_modules .`), because comments in source files and

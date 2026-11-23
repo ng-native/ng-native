@@ -48,8 +48,8 @@ setup, and one nobody injects is never constructed.
 - [Device](https://ng-native.com/packages/device)
 - [Testing with services](https://ng-native.com/packages/testing/testing-services), for
   overriding a service's `SOURCE` token without a device underneath it
-- [Root README](https://github.com/ng-native/ng-native/blob/main/README.md) and
-  [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/docs/ARCHITECTURE.md)
+- [Root README](https://github.com/coralogix/ng-native/blob/main/README.md) and
+  [ARCHITECTURE.md](https://github.com/coralogix/ng-native/blob/main/docs/ARCHITECTURE.md)
 
 ## License
 

@@ -67,7 +67,7 @@ or is rate limited proves nothing: stop and ask again, and do not merge on it.
 - No unresolved review threads. This prints the id of each one, and nothing when there are none:
 
   ```sh
-  gh api graphql --paginate -F n=<n> -f query='query($n:Int!,$endCursor:String){repository(owner:"ng-native",name:"ng-native"){pullRequest(number:$n){reviewThreads(first:100,after:$endCursor){nodes{id isResolved} pageInfo{hasNextPage endCursor}}}}}' \
+  gh api graphql --paginate -F n=<n> -f query='query($n:Int!,$endCursor:String){repository(owner:"coralogix",name:"ng-native"){pullRequest(number:$n){reviewThreads(first:100,after:$endCursor){nodes{id isResolved} pageInfo{hasNextPage endCursor}}}}}' \
     --jq '.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved|not)|.id'
   ```
 

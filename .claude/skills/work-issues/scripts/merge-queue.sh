@@ -7,7 +7,7 @@
 #
 # REST except for one thread count, so it keeps working while the GraphQL rate limit is spent. A PR that fails CI or conflicts
 # drops out of the queue; one still waiting for review or CI stays in it.
-R=repos/ng-native/ng-native
+R=repos/coralogix/ng-native
 queue=($@)
 # The PR's own added and removed lines against the main it branched from, per file. Hunk positions are
 # left out because a rebase shifts them without changing the PR. Prints nothing, so the PR waits, when the
@@ -21,7 +21,7 @@ own_changes() {
 # PR waits. (ponytail: no pagination; a PR here has never had 100 threads.)
 open_threads() {
   local n
-  n=$(gh api graphql -f query="{repository(owner:\"ng-native\",name:\"ng-native\"){pullRequest(number:$1){reviewThreads(first:100){pageInfo{hasNextPage} nodes{isResolved}}}}}" \
+  n=$(gh api graphql -f query="{repository(owner:\"coralogix\",name:\"ng-native\"){pullRequest(number:$1){reviewThreads(first:100){pageInfo{hasNextPage} nodes{isResolved}}}}}" \
     --jq '.data.repository.pullRequest.reviewThreads|if .pageInfo.hasNextPage then "?" else [.nodes[]|select(.isResolved|not)]|length end' 2>/dev/null)
   # A rate-limited call prints its error JSON on stdout, so only a bare count is an answer. REST can't see
   # whether a thread is resolved, so while GraphQL is limited the PR waits ("?") rather than guess.

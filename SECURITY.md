@@ -8,7 +8,7 @@ is supported; there are no older release lines to backport a fix to.
 ## Reporting a vulnerability
 
 Report a vulnerability privately through GitHub's
-[private security advisories](https://github.com/ng-native/ng-native/security/advisories/new)
+[private security advisories](https://github.com/coralogix/ng-native/security/advisories/new)
 ("Report a vulnerability" on the repository's Security tab). Do not open a public issue for a
 security report.
 

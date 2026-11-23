@@ -204,7 +204,7 @@ Expo Go hides config plugin and native module problems, so also:
 
 ## 6. Report and file
 
-Before filing, search for duplicates: `gh issue list -R ng-native/ng-native --state all --search
+Before filing, search for duplicates: `gh issue list -R coralogix/ng-native --state all --search
 "<keywords>"`. File each confirmed problem as its own issue with the route, the versions from step 2,
 the exact commands, what happened, and what the docs say should happen. Prefix the title with the
 package or `docs:`, and label it (`bug`, `documentation`, `pkg: <name>`).

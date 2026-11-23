@@ -37,7 +37,7 @@ cd projects/native && ng generate component profile-card   # src/app/profile-car
 ## Docs
 
 - [Angular CLI](https://ng-native.com/packages/schematics)
-- [Root README](https://github.com/ng-native/ng-native/blob/main/README.md)
+- [Root README](https://github.com/coralogix/ng-native/blob/main/README.md)
 
 ## License
 

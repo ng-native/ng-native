@@ -7,7 +7,7 @@ summary: Create an Expo app, render an Angular component as native views, and ru
 
 Angular Native is in alpha. Every effort has gone into making it stable and accurate, but you may
 still hit bugs. If you do, please
-[open an issue](https://github.com/ng-native/ng-native/issues/new/choose).
+[open an issue](https://github.com/coralogix/ng-native/issues/new/choose).
 
 ## Create the app
 

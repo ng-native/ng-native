@@ -9,10 +9,10 @@ Pod::Spec.new do |s|
   s.description    = package['description']
   s.license        = package['license']
   s.author         = 'Angular Native'
-  s.homepage       = 'https://github.com/ng-native/ng-native'
+  s.homepage       = 'https://github.com/coralogix/ng-native'
   s.platforms      = { :ios => '16.4' }
   s.swift_version  = '5.9'
-  s.source         = { git: 'https://github.com/ng-native/ng-native.git' }
+  s.source         = { git: 'https://github.com/coralogix/ng-native.git' }
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'

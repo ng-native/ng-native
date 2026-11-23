@@ -100,7 +100,7 @@ describe('make-prebuilt.mjs', () => {
       '--manifest',
       MANIFEST,
       '--base-url',
-      'https://github.com/ng-native/ng-native/releases/download/v1',
+      'https://github.com/coralogix/ng-native/releases/download/v1',
     ]);
     // Stopped by the empty app instead.
     assert.match(result.stderr, /react-native is not installed/);

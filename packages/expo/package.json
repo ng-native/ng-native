@@ -313,7 +313,7 @@
   "license": "MIT",
   "homepage": "https://ng-native.com/packages/expo",
   "bugs": {
-    "url": "https://github.com/ng-native/ng-native/issues"
+    "url": "https://github.com/coralogix/ng-native/issues"
   },
   "peerDependencies": {
     "@angular/core": "^22.0.0",
@@ -550,7 +550,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ng-native/ng-native.git",
+    "url": "git+https://github.com/coralogix/ng-native.git",
     "directory": "packages/expo"
   },
   "files": [
