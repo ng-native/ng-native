@@ -9,7 +9,13 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Engine, scrollsOverflow, type EngineNode, type StyleSheet } from '@ng-native/fabric';
+import {
+  Engine,
+  registerPlatformComponents,
+  scrollsOverflow,
+  type EngineNode,
+  type StyleSheet,
+} from '@ng-native/fabric';
 import { compileCss, createFakeFabric } from '@ng-native/testing';
 import { createLaidOutFabric } from './laid-out-fabric.ts';
 import { recorder } from './native-animated.ts';
@@ -249,4 +255,24 @@ it('keeps them when native paints a wrapped element again after an unrelated com
   const tag = engine.tagOf(box)!;
   const painted = rec.painted(tag)['transform'];
   assert.deepEqual(painted ?? fabric.committed[0]!.props['transform'], [{ translateX: 60 }]);
+});
+
+it('names a monospace generic as the platform reads it, as a style does', () => {
+  try {
+    for (const [platform, written, committedAs] of [
+      ['ios', 'monospace', 'ui-monospace'],
+      ['android', 'ui-monospace', 'monospace'],
+    ] as const) {
+      registerPlatformComponents(platform);
+      const fabric = createFakeFabric();
+      const engine = new Engine(fabric, 1, { globalStyles: compileCss('') as StyleSheet });
+      const text: EngineNode = engine.createElement('text');
+      engine.appendChild(engine.root, text);
+      engine.setUiThreadProps(text, { fontFamily: written });
+      engine.commit();
+      assert.equal(fabric.committed[0]!.props['fontFamily'], committedAs, platform);
+    }
+  } finally {
+    registerPlatformComponents('ios');
+  }
 });

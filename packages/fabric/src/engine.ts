@@ -13422,7 +13422,11 @@ export class Engine implements HostEngine {
     // Last, over everything the engine worked out, as Reanimated's commit hook applied them. An
     // element committed as two views takes those its inner view would on its outer one instead,
     // after the split: `drawnOver`.
-    if (node.uiThreadProps !== undefined) this.mergeDrawn(node, merged, node.uiThreadProps);
+    if (node.uiThreadProps !== undefined) {
+      this.mergeDrawn(node, merged, node.uiThreadProps);
+      // What the UI thread drew is read as a style is: its family is named as the platform reads it.
+      if (node.uiThreadProps['fontFamily'] !== undefined) monospaceGeneric(merged);
+    }
     // Asked first, without a call: nearly no node merged sets paint in its own style.
     const ownStyle = node.props['style'] as Record<string, unknown> | undefined;
     if (node.paintPassed !== undefined || setsPaint(ownStyle)) {
