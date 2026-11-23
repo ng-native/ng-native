@@ -81,14 +81,21 @@ const FRONT = 100;
 export class StickyRows {
   /** Whether native moves sticky rows. */
   readonly native: boolean;
-  /** The leading edge of the viewport in content space, kept only while anything is pinned. */
-  private readonly leading = signal(0);
-  readonly offset = this.leading.asReadonly();
+  /**
+   * Where the scroll view is along its axis, header and all: 0 until native says otherwise, since
+   * Android sends no scroll event until the list moves.
+   */
+  private readonly along = signal(0);
+  /** The leading edge of the viewport in content space, past the header at its current size. */
+  readonly offset = computed(() => this.along() - this.list.headerHeight());
 
   private readonly engine: HostEngine;
   private readonly node: HostNode;
   private readonly list: StickyRowsList;
-  /** The offset once scrolling pauses, which the settled translate of a native-moved row is from. */
+  /**
+   * Where the scroll view is once scrolling pauses, header and all, which the settled translate of
+   * a native-moved row is from.
+   */
   private readonly settled = signal(0);
   private settleTimer: ReturnType<typeof setTimeout> | undefined;
   /** What native is moving, by row view, with the transform kept beside the translate. */
@@ -214,7 +221,7 @@ export class StickyRows {
   readonly headerStyle = computed(() => {
     const flip = this.list.flipText();
     if (!this.list.header()) return flip ? { transform: flip } : undefined;
-    const along = this.offset() + this.list.headerHeight();
+    const along = this.along();
     const [first] = this.rows().keys();
     const limit = first === undefined ? Infinity : this.list.topOf(first);
     const shift = Math.min(Math.max(0, along), limit);
@@ -259,7 +266,8 @@ export class StickyRows {
       : { ...this.list.slotStyle(index) };
     style['zIndex'] = this.zIndexOf(index);
     const start = this.startOf(index);
-    const shift = Math.min(Math.max(0, this.settled() - start), this.stopOf(index) - start);
+    const settled = this.settled() - this.list.headerHeight();
+    const shift = Math.min(Math.max(0, settled - start), this.stopOf(index) - start);
     const move = shift > 0 ? `${horizontal ? 'translateX' : 'translateY'}(${shift}px)` : '';
     const transform = [move, this.list.flipText() ?? ''].filter(Boolean).join(' ');
     if (transform) style['transform'] = transform;
@@ -287,8 +295,8 @@ export class StickyRows {
     return this.types.has(type);
   }
 
-  /** The list scrolled, to `offset` in content space and `along` in the scroll view. */
-  scrolled(offset: number, along: number): void {
+  /** The list scrolled, to `along` in the scroll view. */
+  scrolled(along: number): void {
     this.nativeAt = along;
     if (this.jumped) {
       this.reported = along;
@@ -299,12 +307,12 @@ export class StickyRows {
     // until a row or the header is pinned, so without them this stays out of change detection,
     // and a fling that moves no row in or out of the window costs none. It is kept all the same:
     // a row that turns sticky in a scrolled list is pinned where the list is, not where it was.
-    this.leading.set(offset);
+    this.along.set(along);
     if (!this.native) return;
     clearTimeout(this.settleTimer);
-    if (!this.pinning()) return this.settled.set(offset);
+    if (!this.pinning()) return this.settled.set(along);
     // See `STICKY_SETTLE_MS`.
-    this.settleTimer = setTimeout(() => this.settled.set(offset), STICKY_SETTLE_MS);
+    this.settleTimer = setTimeout(() => this.settled.set(along), STICKY_SETTLE_MS);
   }
 
   /** The list is scrolling itself, to `to` in the scroll view, where native has not drawn yet. */

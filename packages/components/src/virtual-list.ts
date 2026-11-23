@@ -1422,7 +1422,7 @@ export class VirtualList<T> extends ScrollViewProps {
     if (visible !== this.visible()) this.moveTo(visible);
     this.lastOffset = content;
     this.anchorAt(visible, content);
-    this.sticky.scrolled(content, along);
+    this.sticky.scrolled(along);
     this.checkEnd(along);
     this.announceViewable(content);
   }

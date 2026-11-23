@@ -118,6 +118,29 @@ describe('virtual list sticky header', () => {
     unmount();
   });
 
+  it('leaves the header in place before the list has scrolled', async () => {
+    // Android sends no scroll event until the list moves, so nothing has said where it is yet.
+    const { fabric, instance, unmount } = await boot<Separated>('Separated');
+    instance.stickyHeader.set(true);
+    instance.items.set(Array.from({ length: 200 }, (_, i) => 'r' + i));
+    await fireEvent(header(fabric), 'layout', { layout: { height: 50 } });
+
+    assert.equal(header(fabric).props['transform'] ?? null, null, 'not moved down by its height');
+    unmount();
+  });
+
+  it('keeps the header at the offset when its height changes', async () => {
+    const { fabric, instance, unmount } = await boot<Separated>('Separated');
+    instance.stickyHeader.set(true);
+    instance.items.set(Array.from({ length: 200 }, (_, i) => 'r' + i));
+    await fireEvent(header(fabric), 'layout', { layout: { height: 50 } });
+    await fireEvent.scroll(scrollView(fabric), { contentOffset: { y: 200 } });
+    await fireEvent(header(fabric), 'layout', { layout: { height: 80 } });
+
+    assert.deepEqual(header(fabric).props['transform'], [{ translateY: 200 }]);
+    unmount();
+  });
+
   it('is pushed off by the next sticky row, as RN s headers push each other', async () => {
     const { fabric, instance, unmount } = await boot<Separated>('Separated');
     instance.stickyHeader.set(true);

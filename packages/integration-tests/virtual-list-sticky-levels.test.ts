@@ -456,6 +456,20 @@ describe('sticky rows at several levels, moved on the native side', () => {
     assert.equal(moved(20), undefined, 'a row not pinned yet has none');
   });
 
+  it('counts the header in where a settled row is, at the size it is now', async () => {
+    const { native } = recorder();
+    const { row, scroll, header } = await boot(undefined, { nativeAnimated: native });
+    await fireEvent(header(), 'layout', { layout: { x: 0, y: 0, width: WIDTH, height: 60 } });
+    await scroll(60 + 650);
+    await pause();
+    await settle();
+    assert.deepEqual(row(0)?.props['transform'], [{ translateY: 650 }]);
+    // The header grows by 20 and the scroll view stays put: the leading edge is 20 less far in.
+    await fireEvent(header(), 'layout', { layout: { x: 0, y: 0, width: WIDTH, height: 80 } });
+    await settle();
+    assert.deepEqual(row(0)?.props['transform'], [{ translateY: 630 }]);
+  });
+
   it('holds a settled row where the next pushed it to', async () => {
     const { native } = recorder();
     const { row, scroll } = await boot(undefined, { nativeAnimated: native });
