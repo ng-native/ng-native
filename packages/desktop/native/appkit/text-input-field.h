@@ -65,6 +65,16 @@ NSTextView *NGNFieldEditorFor(ngn::FontSmoothing smoothing, NGNSmoothedFieldEdit
 // A cell's interior drawn as `draw` draws it, with its text smoothed as `smoothing` says.
 void NGNDrawSmoothed(ngn::FontSmoothing smoothing, void (^draw)(void));
 
+// Editing in `control` ended and begun again, so it edits in the field editor its cell gives now,
+// with its text and selection kept, and `*restarting` YES meanwhile, for the focus and blur that
+// session sends to be left out. NO, with nothing done, while text is being composed, which ending
+// would commit: call it again once the text changes.
+BOOL NGNRestartEditing(NSTextField *control, BOOL *restarting);
+
+// The field editor `control` is being edited in, or nil: the window's first responder, as
+// `currentEditor` answers nil for it once the control is marked to be drawn again.
+NSText *NGNEditorOf(NSControl *control);
+
 // A single-line field: an NSTextField, or an NSSecureTextField for secure entry, in a box that swaps
 // one for the other.
 @interface NGNTextField : NSView
@@ -76,8 +86,8 @@ void NGNDrawSmoothed(ngn::FontSmoothing smoothing, void (^draw)(void));
 // An NSSecureTextField in place of the NSTextField (or back), keeping the text, its look, and the
 // keyboard and selection while editing.
 @property (nonatomic) BOOL secure;
-// True while `secure` swaps the control, as the editing session that ends and starts again is not the
-// user's.
+// True while `secure` swaps the control, or `fontSmoothing` the field editor, as the editing session
+// that ends and starts again is not the user's.
 @property (nonatomic, readonly) BOOL swapping;
 // Focuses the field the first time it is in a window.
 @property (nonatomic) BOOL autoFocus;

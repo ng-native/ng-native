@@ -33,6 +33,18 @@ NSTextView *editor(NGNTextField *field) {
   return [field.currentEditor isKindOfClass:NSTextView.class] ? (NSTextView *)field.currentEditor : nil;
 }
 
+// Runs the main queue up to a block queued now, so every block queued before it has run.
+void settle() {
+  __block bool drained = false;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    drained = true;
+  });
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5];
+  while (!drained && deadline.timeIntervalSinceNow > 0) {
+    [NSRunLoop.currentRunLoop runMode:NSDefaultRunLoopMode beforeDate:deadline];
+  }
+}
+
 void type(NSTextView *text, NSString *typed) {
   [text insertText:typed replacementRange:NSMakeRange(NSNotFound, 0)];
 }
@@ -526,6 +538,58 @@ TEST_CASE("a field edits in a field editor that smooths as it does, and in the s
   CHECK((shared == [window fieldEditor:YES forObject:nil]));
   [shared setSelectedRange:NSMakeRange(0, 0)];
   CHECK(antialiased.total < inkOf(shared).total);
+  [window close];
+}
+
+TEST_CASE("a field editing under auto moves to its own field editor once smoothed, its text and selection kept") {
+  NSWindow *window = offscreenWindow();
+  NGNTextField *field = addField(window, NSMakeRect(10, 10, 200, 30));
+  field.stringValue = @"Hamburgefonstiv";
+  __block int focuses = 0;
+  field.focused = ^{
+    ++focuses;
+  };
+  REQUIRE([window makeFirstResponder:field.control]);
+  NSTextView *shared = editor(field);
+  REQUIRE((shared != nil));
+  CHECK_FALSE([shared isKindOfClass:NGNSmoothedFieldEditor.class]);
+  [shared setSelectedRange:NSMakeRange(15, 0)];
+  type(shared, @"!");
+  [shared setSelectedRange:NSMakeRange(2, 3)];
+  field.fontSmoothing = FontSmoothing::None;
+  NSTextView *own = editor(field);
+  REQUIRE((own != nil));
+  REQUIRE([own isKindOfClass:NGNSmoothedFieldEditor.class]);
+  CHECK(((NGNSmoothedFieldEditor *)own).fontSmoothing == FontSmoothing::None);
+  CHECK([own.string isEqualToString:@"Hamburgefonstiv!"]);
+  CHECK(NSEqualRanges(own.selectedRange, NSMakeRange(2, 3)));
+  CHECK(focuses == 1);
+  CHECK_FALSE(field.swapping);
+  [window makeFirstResponder:nil];
+  [window close];
+}
+
+TEST_CASE("a field composing under auto moves to its own field editor once the composition ends") {
+  NSWindow *window = offscreenWindow();
+  NGNTextField *field = addField(window, NSMakeRect(10, 10, 200, 30));
+  field.stringValue = @"ab";
+  REQUIRE([window makeFirstResponder:field.control]);
+  NSTextView *shared = editor(field);
+  REQUIRE((shared != nil));
+  [shared setSelectedRange:NSMakeRange(2, 0)];
+  [shared setMarkedText:@"k" selectedRange:NSMakeRange(1, 0) replacementRange:NSMakeRange(NSNotFound, 0)];
+  field.fontSmoothing = FontSmoothing::Antialiased;
+  // Ending the session now would commit what is being composed.
+  CHECK((window.firstResponder == shared));
+  CHECK(shared.hasMarkedText);
+  [shared insertText:@"k" replacementRange:shared.markedRange];
+  settle();
+  NSTextView *own = editor(field);
+  REQUIRE((own != nil));
+  CHECK([own isKindOfClass:NGNSmoothedFieldEditor.class]);
+  CHECK([own.string isEqualToString:@"abk"]);
+  CHECK(NSEqualRanges(own.selectedRange, NSMakeRange(3, 0)));
+  [window makeFirstResponder:nil];
   [window close];
 }
 

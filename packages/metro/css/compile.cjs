@@ -51,7 +51,7 @@ const {
   ALIASES,
   AXIS_SHORTHANDS,
 } = require('./properties.cjs');
-const { deferGradient, tiledBy, GRADIENTS } = require('./gradients.cjs');
+const { deferGradient, isTilePlaced, tiledBy, GRADIENTS } = require('./gradients.cjs');
 const { calcWithTokens, motionWithTokens } = require('./token-arithmetic.cjs');
 const { filter, undrawnOnIos, undrawnOnMacos } = require('./filters.cjs');
 const { expandShorthand } = require('./shorthands.cjs');
@@ -3346,15 +3346,22 @@ function assertVariantsKnown(tokens, deferred, from) {
  * left to the device: `flex: var(--g); flex-shrink: 0` shrinks by 0, as the web's source order
  * says. A rule's deferred values are applied after its written ones, so without this the earlier
  * one won.
+ *
+ * A placing a repeating gradient's tile wrote belongs to the tile's image, so what the earlier
+ * declaration places is kept as `underTile`: an ordinary image that wins over the tile's is
+ * placed by it, as a browser places it (`TilePlacing` in the engine).
  */
-function supersede(deferred, before, written) {
+function supersede(deferred, before, written, out) {
   if (!written.size) return;
   for (let i = before - 1; i >= 0; i--) {
     const one = deferred[i];
     if (!one.props?.some((prop) => written.has(prop))) continue;
     const props = one.props.filter((prop) => !written.has(prop));
-    if (props.length) deferred[i] = { ...one, props };
-    else deferred.splice(i, 1);
+    const tiled = one.props.filter((prop) => written.has(prop) && isTilePlaced(out[prop]));
+    const underTile = [...(one.underTile ?? []), ...tiled];
+    if (props.length || underTile.length) {
+      deferred[i] = { ...one, props, ...(underTile.length ? { underTile } : {}) };
+    } else deferred.splice(i, 1);
   }
 }
 
@@ -3591,7 +3598,7 @@ function compileCss(source, context = 'styles', options = {}) {
       assertDrawnEverywhere(declaration, out, tokens, deferred, before, platforms, context);
       // The whole rule: a slot can be set after the declaration that reads it.
       assertVariantsKnown(tokens, deferred, 0);
-      supersede(deferred, before, written);
+      supersede(deferred, before, written, out);
       noteReads(name, tokens, deferred.slice(before), context);
     } catch (error) {
       if (!onUnsupported || !(error instanceof CssUnsupported)) throw error;
@@ -3646,7 +3653,7 @@ function compileCss(source, context = 'styles', options = {}) {
     });
     try {
       if (!readAsABrowser(declaration, tracked, deferred, context)) return false;
-      supersede(deferred, before, written);
+      supersede(deferred, before, written, out);
     } catch (error) {
       if (!onUnsupported || !(error instanceof CssUnsupported)) throw error;
       // A declaration with a token in it is `unparsed`, named by the property it is for.

@@ -531,6 +531,58 @@ describe('a value a shorthand does not take', () => {
     assert.equal(props()['experimental_backgroundSize'], null);
   });
 
+  for (const [background, image, size] of [
+    ['center / cover no-repeat', 'linear-gradient(red, blue)', ['cover']],
+    [
+      'center / cover, top / 4px',
+      'linear-gradient(red, blue), linear-gradient(red, blue)',
+      ['cover', { x: 4, y: 'auto' }],
+    ],
+  ] as const) {
+    it(`keeps the placing of background: ${background} for an image set after it`, () => {
+      const declaration = `background: ${background}; background-image: ${image}`;
+      const expected = sheetProps(declaration);
+      assert.deepEqual(expected['experimental_backgroundSize'], size);
+      assert.deepEqual(attributeProps(declaration), expected);
+      const { renderer, node, props } = scene('.a { }');
+      renderer.setStyle(node, 'background', background);
+      renderer.setStyle(node, 'background-image', image);
+      assert.deepEqual(drawn(props()), expected);
+    });
+  }
+
+  for (const [token, position] of [
+    ['10px 20px', { left: 10, top: 20 }],
+    ['10px', { left: 10, top: '50%' }],
+    ['1rem 25%', { left: 16, top: '25%' }],
+  ] as const) {
+    it(`places an image where a background: var() of ${token} set on the element says`, () => {
+      const { renderer, node, props } = scene('.a { background-position: 1px 2px }');
+      renderer.setStyle(node, '--x', token);
+      renderer.setStyle(node, 'background', 'var(--x)');
+      renderer.setStyle(node, 'background-image', 'linear-gradient(red, blue)');
+      assert.deepEqual(props()['experimental_backgroundPosition'], [position]);
+    });
+  }
+
+  it('keeps a background placing set before one whose layer has a no-break space at an end', (t) => {
+    const warn = mock.method(console, 'warn', () => {});
+    t.after(() => warn.mock.restore());
+    const { renderer, node, props } = scene('.a { background-image: linear-gradient(red, blue) }');
+    renderer.setStyle(node, 'background-size', '10px 20px');
+    for (const value of ['10px,\u00a020px', '10px\u00a0, 20px', '\u00a010px', '10px\u00a0']) {
+      renderer.setStyle(node, 'background-size', value);
+      assert.deepEqual(props()['experimental_backgroundSize'], [{ x: 10, y: 20 }], value);
+    }
+    for (const value of [
+      'linear-gradient(red, blue),\u00a0green',
+      '\u00a0linear-gradient(red, blue)',
+    ]) {
+      renderer.setStyle(node, 'background', value);
+      assert.deepEqual(props()['experimental_backgroundSize'], [{ x: 10, y: 20 }], value);
+    }
+  });
+
   it('keeps the value set before a refused one', () => {
     const { renderer, node, props } = scene('.a { }');
     renderer.setStyle(node, 'border', '2px solid red');

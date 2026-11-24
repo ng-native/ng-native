@@ -4962,6 +4962,39 @@
     }
   },
   {
+    "name": "inline background-size, then a second layer after a no-break space, keeps the first",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "4px 5px",
+      "background-position": "0% 0%",
+      "background-repeat": "repeat"
+    }
+  },
+  {
+    "name": "inline background: center / cover no-repeat rgb(1, 2, 3); background-image: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) over #probe { background-size: 10px 20px }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(1, 2, 3)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "cover",
+      "background-position": "50% 50%",
+      "background-repeat": "no-repeat"
+    }
+  },
+  {
+    "name": "inline background: center / cover, 3px 4px / 4px rgb(1, 2, 3); background-image: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) over ",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(1, 2, 3)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "cover, 4px auto",
+      "background-position": "50% 50%, 3px 4px",
+      "background-repeat": "repeat, repeat"
+    }
+  },
+  {
     "name": "background: var() of a colour places a stronger rule image as nothing set",
     "expected": {
       "color": "rgb(0, 0, 0)",
@@ -5028,6 +5061,72 @@
     }
   },
   {
+    "name": "inline background: var(--x); background-image: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) over #probe { --x: 10px 20px; background-position: 1px 2px }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "auto",
+      "background-position": "10px 20px",
+      "background-repeat": "repeat"
+    }
+  },
+  {
+    "name": "inline background: var(--x); background-image: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) over #probe { --x: 10px; background-position: 1px 2px }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "auto",
+      "background-position": "10px 50%",
+      "background-repeat": "repeat"
+    }
+  },
+  {
+    "name": "background: var() of two lengths places a stronger rule image there",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "auto",
+      "background-position": "10px 20px",
+      "background-repeat": "repeat"
+    }
+  },
+  {
+    "name": "background: var() of a placing, then a tile in a stronger rule, places the image that beats the tile",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "auto",
+      "background-position": "50% 100%",
+      "background-repeat": "no-repeat"
+    }
+  },
+  {
+    "name": "inline background-image: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) over #probe { --x: 50% 100% no-repeat; background: var(--x); background-image: repeating-linear-gradient(90deg, rgb(255, 0, 0) 0 2px, rgb(0, 0, 255) 2px 4px) }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "auto",
+      "background-position": "50% 100%",
+      "background-repeat": "no-repeat"
+    }
+  },
+  {
+    "name": "background: var() of a placing, then a tile in its rule, places the image that beats the tile",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "auto",
+      "background-position": "50% 100%",
+      "background-repeat": "no-repeat"
+    }
+  },
+  {
     "name": "-webkit-font-smoothing: a token",
     "expected": {
       "color": "rgb(0, 0, 0)",
@@ -5049,6 +5148,22 @@
       "color": "rgb(0, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)",
       "-webkit-font-smoothing": "auto"
+    }
+  },
+  {
+    "name": "-webkit-font-smoothing: an unset token with a fallback of initial",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "-webkit-font-smoothing": "auto"
+    }
+  },
+  {
+    "name": "-webkit-font-smoothing: a token of initial takes the inherited value",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "-webkit-font-smoothing": "none"
     }
   },
   {
@@ -5101,6 +5216,14 @@
   },
   {
     "name": "-webkit-font-smoothing: a value of no keyword set after one",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "-webkit-font-smoothing": "antialiased"
+    }
+  },
+  {
+    "name": "-webkit-font-smoothing: inherit after a no-break space set after one",
     "expected": {
       "color": "rgb(0, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)",

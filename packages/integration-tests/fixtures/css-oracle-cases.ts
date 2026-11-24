@@ -538,6 +538,26 @@ const OWN_PLACING_CASES: OracleCase[] = [
     name: 'inline background-size, then a size no browser takes, keeps the first',
     then: { 'background-size': '-1px' },
   },
+  {
+    ...inlineValue({ 'background-size': '4px 5px' }, `#probe { background-image: ${GRADIENT} }`, [
+      ...PLACING,
+    ]),
+    name: 'inline background-size, then a second layer after a no-break space, keeps the first',
+    then: { 'background-size': '4px,\u00a05px' },
+  },
+  inlineValue(
+    { background: 'center / cover no-repeat rgb(1, 2, 3)', 'background-image': GRADIENT },
+    '#probe { background-size: 10px 20px }',
+    PLACING,
+  ),
+  inlineValue(
+    {
+      background: 'center / cover, 3px 4px / 4px rgb(1, 2, 3)',
+      'background-image': `${GRADIENT}, ${GRADIENT}`,
+    },
+    '',
+    PLACING,
+  ),
 ];
 
 /**
@@ -585,6 +605,45 @@ const TOKEN_SHORTHAND_PLACING_CASES: OracleCase[] = [
     '#probe { --x: left 3px top 4px / 10px no-repeat }',
     PLACING,
   ),
+  inlineValue(
+    { background: 'var(--x)', 'background-image': GRADIENT },
+    '#probe { --x: 10px 20px; background-position: 1px 2px }',
+    PLACING,
+  ),
+  inlineValue(
+    { background: 'var(--x)', 'background-image': GRADIENT },
+    '#probe { --x: 10px; background-position: 1px 2px }',
+    PLACING,
+  ),
+  {
+    name: 'background: var() of two lengths places a stronger rule image there',
+    css:
+      '#probe.b { --x: 10px 20px; background: var(--x) } ' +
+      `#probe.b.c { background-image: ${GRADIENT} }`,
+    tree: probe({ name: 'view', classes: ['b', 'c'] }),
+    extra: PLACING,
+  },
+  {
+    name: 'background: var() of a placing, then a tile in a stronger rule, places the image that beats the tile',
+    css:
+      '.b { --x: 50% 100% no-repeat; background: var(--x) } ' +
+      `.b.c { background-image: ${STRIPES} } .b.c.d { background-image: ${GRADIENT} }`,
+    tree: probe({ name: 'view', classes: ['b', 'c', 'd'] }),
+    extra: PLACING,
+  },
+  inlineValue(
+    { 'background-image': GRADIENT },
+    `#probe { --x: 50% 100% no-repeat; background: var(--x); background-image: ${STRIPES} }`,
+    PLACING,
+  ),
+  {
+    name: 'background: var() of a placing, then a tile in its rule, places the image that beats the tile',
+    css:
+      `.b { --x: 50% 100% no-repeat; background: var(--x); background-image: ${STRIPES} } ` +
+      `.b.c { background-image: ${GRADIENT} }`,
+    tree: probe({ name: 'view', classes: ['b', 'c'] }),
+    extra: PLACING,
+  },
 ];
 
 const TOKEN_GRADIENT = 'linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))';
@@ -611,6 +670,15 @@ const FONT_SMOOTHING_CASES: OracleCase[] = [
   ),
   smoothed('an unset token with a fallback', '#probe { -webkit-font-smoothing: var(--y, auto) }'),
   smoothed(
+    'an unset token with a fallback of initial',
+    'text { -webkit-font-smoothing: antialiased } #probe { -webkit-font-smoothing: var(--y, initial) }',
+  ),
+  smoothed(
+    'a token of initial takes the inherited value',
+    'text { -webkit-font-smoothing: antialiased } .p { --x: initial } ' +
+      '#probe { -webkit-font-smoothing: var(--x) }',
+  ),
+  smoothed(
     'inherit over a weaker rule',
     'text { -webkit-font-smoothing: antialiased } #probe { -webkit-font-smoothing: inherit }',
   ),
@@ -629,6 +697,10 @@ const FONT_SMOOTHING_CASES: OracleCase[] = [
   smoothed('a value of no keyword set after one', '', {
     inline: { '-webkit-font-smoothing': 'antialiased' },
     then: { '-webkit-font-smoothing': 'grayscale' },
+  }),
+  smoothed('inherit after a no-break space set after one', '', {
+    inline: { '-webkit-font-smoothing': 'antialiased' },
+    then: { '-webkit-font-smoothing': '\u00a0inherit' },
   }),
 ];
 

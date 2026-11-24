@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { afterEach, describe, it } from 'node:test';
+import { afterEach, describe, it, mock } from 'node:test';
 import {
   Engine,
   registerPlatformComponents,
@@ -33,10 +33,12 @@ const CSS =
   '.app { -webkit-font-smoothing: antialiased } .auto { -webkit-font-smoothing: auto }' +
   ' .none { -webkit-font-smoothing: none }';
 
-function scene(platform: string) {
+function scene(platform: string, css = '') {
   registerPlatformComponents(platform);
   const fabric = createFakeFabric();
-  const engine = new Engine(fabric, 1, { globalStyles: compileCss(CSS, 'app.css') as never });
+  const engine = new Engine(fabric, 1, {
+    globalStyles: compileCss(CSS + css, 'app.css') as never,
+  });
   const renderer = new NativeRendererFactory(engine).createRenderer(null, null);
   const add = (id: string, classes: string, element = 'text', parent = engine.root): EngineNode => {
     const node = renderer.createElement(element) as EngineNode;
@@ -136,6 +138,51 @@ describe('-webkit-font-smoothing on the macOS host', () => {
     assert.equal(s.smoothing().byId['label'], null);
     s.renderer.setStyle(label, '-webkit-font-smoothing', 'None');
     assert.equal(s.smoothing().byId['label'], 'none');
+  });
+
+  it('keeps an inline value set before one with a no-break space, which is no keyword', (t) => {
+    const warn = mock.method(console, 'warn', () => {});
+    t.after(() => warn.mock.restore());
+    const s = scene('macos');
+    const app = s.add('root', 'app', 'view');
+    const label = s.add('label', '', 'text', app);
+    s.renderer.setStyle(label, '-webkit-font-smoothing', 'none');
+    for (const value of ['\u00a0inherit', 'unset\u00a0', '\u00a0antialiased', 'auto\u00a0']) {
+      s.renderer.setStyle(label, '-webkit-font-smoothing', value);
+      assert.equal(s.smoothing().byId['label'], 'none', value);
+    }
+    s.renderer.setStyle(label, '-webkit-font-smoothing', '\tauto ');
+    assert.equal(s.smoothing().byId['label'], 'auto');
+  });
+
+  it("is auto for a token's fallback of initial, and the parent's for a token set to initial", () => {
+    const s = scene(
+      'macos',
+      ' .fallback { -webkit-font-smoothing: var(--missing, initial) }' +
+        ' .initial { --s: initial; -webkit-font-smoothing: var(--s) }' +
+        ' .inherit { -webkit-font-smoothing: var(--missing, inherit) }',
+    );
+    const app = s.add('root', 'app', 'view');
+    s.add('fallback', 'fallback', 'text', app);
+    s.add('initial', 'initial', 'text', app);
+    s.add('inherit', 'inherit', 'text', app);
+    const { byId } = s.smoothing();
+    assert.equal(byId['fallback'], 'auto');
+    assert.equal(byId['initial'], 'antialiased');
+    assert.equal(byId['inherit'], 'antialiased');
+  });
+
+  it("is auto for a fallback of initial set on the element, and the parent's for a token of it", () => {
+    const s = scene('macos');
+    const app = s.add('root', 'app', 'view');
+    const fallback = s.add('fallback', '', 'text', app);
+    const token = s.add('token', '', 'text', app);
+    s.renderer.setStyle(fallback, '-webkit-font-smoothing', 'var(--missing, initial)');
+    s.renderer.setStyle(token, '--s', 'initial');
+    s.renderer.setStyle(token, '-webkit-font-smoothing', 'var(--s)');
+    const { byId } = s.smoothing();
+    assert.equal(byId['fallback'], 'auto');
+    assert.equal(byId['token'], 'antialiased');
   });
 
   it("is a text input's, inherited as a paragraph's is", () => {

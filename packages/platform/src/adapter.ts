@@ -187,8 +187,7 @@ const declaredValue = (key: string, value: unknown): unknown =>
   key === 'fontFamily' && typeof value === 'string'
     ? (firstFamily(value) ?? value)
     : key === 'fontSmoothing' && typeof value === 'string'
-      ? value
-          .trim()
+      ? cssTrim(value)
           .toLowerCase()
           .replace(/^initial$/, 'auto')
       : (platformColour(key, value) ?? styleValue(key, value));

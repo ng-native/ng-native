@@ -238,6 +238,9 @@ function tilePlacing(images, context, placing = {}) {
 /** Each list `tilePlacing` wrote, to what its declaration places without the tile. */
 const TILE_PLACED = new WeakMap();
 
+/** Whether a value is a list `tilePlacing` wrote. */
+const isTilePlaced = (value) => TILE_PLACED.has(value);
+
 /**
  * What a rule's declarations so far, `out`, place a background by, as `tilePlacing` takes it: what
  * the author wrote, and under a tile's own, what that tile's declaration placed without it.
@@ -632,4 +635,12 @@ function positionToken(term, context) {
 const ident = (term) =>
   term?.type === 'token' && term.value?.type === 'ident' ? term.value.value : null;
 
-module.exports = { backgroundImage, deferGradient, placedBefore, tilePlacing, tiledBy, GRADIENTS };
+module.exports = {
+  backgroundImage,
+  deferGradient,
+  isTilePlaced,
+  placedBefore,
+  tilePlacing,
+  tiledBy,
+  GRADIENTS,
+};

@@ -32,6 +32,33 @@ NSTextView *NGNFieldEditorFor(FontSmoothing smoothing, NGNSmoothedFieldEditor *_
   return *editor;
 }
 
+NSText *NGNEditorOf(NSControl *control) {
+  id responder = control.window.firstResponder;
+  if ([responder isKindOfClass:NSText.class] && ((NSText *)responder).delegate == (id)control) {
+    return responder;
+  }
+  return control.currentEditor;
+}
+
+BOOL NGNRestartEditing(NSTextField *control, BOOL *restarting) {
+  NSText *editor = NGNEditorOf(control);
+  if (editor == nil) {
+    return YES;
+  }
+  if ([editor isKindOfClass:NSTextView.class] && ((NSTextView *)editor).hasMarkedText) {
+    return NO;
+  }
+  NSRange selection = editor.selectedRange;
+  *restarting = YES;
+  [control.window makeFirstResponder:nil];
+  [control.window makeFirstResponder:control];
+  if (control.currentEditor && NSMaxRange(selection) <= control.stringValue.length) {
+    control.currentEditor.selectedRange = selection;
+  }
+  *restarting = NO;
+  return YES;
+}
+
 void NGNDrawSmoothed(FontSmoothing smoothing, void (^draw)(void)) {
   CGContextRef context = NSGraphicsContext.currentContext.CGContext;
   CGContextSaveGState(context);
@@ -206,6 +233,7 @@ NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
 @interface NGNTextField ()
 - (void)controlDidBecomeFirstResponder;
 - (void)controlDidEndEditing;
+- (void)controlTextDidChange;
 - (void)reportTyped:(NSString *)replacement editor:(NSTextView *)editor;
 @end
 
@@ -239,6 +267,10 @@ NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
   -(void)textDidEndEditing : (NSNotification *)note {                                                      \
     [super textDidEndEditing:note];                                                                        \
     [self.box controlDidEndEditing];                                                                       \
+  }                                                                                                        \
+  -(void)textDidChange : (NSNotification *)note {                                                          \
+    [super textDidChange:note];                                                                            \
+    [self.box controlTextDidChange];                                                                       \
   }                                                                                                        \
   -(BOOL)textView : (NSTextView *)textView shouldChangeTextInRange : (NSRange)range replacementString      \
       : (NSString *)string {                                                                               \
@@ -357,6 +389,8 @@ NGN_FIELD_CELL_METHODS
   NSColor *_placeholderColor;
   NSTextAlignment _alignment;
   NSWritingDirection _writingDirection;
+  // An editing session begun in the shared field editor, to begin again in the field's own.
+  BOOL _restartPending;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame {
@@ -410,10 +444,37 @@ NGN_FIELD_CELL_METHODS
   }
   _fontSmoothing = fontSmoothing;
   _control.needsDisplay = YES;
-  if ([_control.currentEditor isKindOfClass:NGNSmoothedFieldEditor.class]) {
-    ((NGNSmoothedFieldEditor *)_control.currentEditor).fontSmoothing = fontSmoothing;
-    _control.currentEditor.needsDisplay = YES;
+  NSText *editor = NGNEditorOf(_control);
+  if ([editor isKindOfClass:NGNSmoothedFieldEditor.class]) {
+    ((NGNSmoothedFieldEditor *)editor).fontSmoothing = fontSmoothing;
+    editor.needsDisplay = YES;
+  } else {
+    _restartPending = YES;
+    [self restartInOwnEditor];
   }
+}
+
+// Editing begun under auto, in the shared field editor, which draws as the system smooths, moves
+// to the field's own once its text is smoothed otherwise; a secure field keeps AppKit's.
+- (void)restartInOwnEditor {
+  NSText *editor = NGNEditorOf(_control);
+  if (!_restartPending || editor == nil || _secure || _fontSmoothing == FontSmoothing::Auto ||
+      [editor isKindOfClass:NGNSmoothedFieldEditor.class]) {
+    _restartPending = NO;
+    return;
+  }
+  _restartPending = !NGNRestartEditing(_control, &_swapping);
+}
+
+- (void)controlTextDidChange {
+  if (!_restartPending) {
+    return;
+  }
+  // A turn later, out of the text system's change.
+  __weak NGNTextField *weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [weakSelf restartInOwnEditor];
+  });
 }
 
 - (void)setSecure:(BOOL)secure {

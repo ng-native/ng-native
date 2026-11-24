@@ -749,3 +749,73 @@ describe('background-image: var()', () => {
     assert.equal(count(important.image()), 1);
   });
 });
+
+describe('background: var() of a placing under a tile', () => {
+  const STRIPES = 'repeating-linear-gradient(90deg, red 0 2px, blue 2px 4px)';
+  const PLACING = [
+    'experimental_backgroundSize',
+    'experimental_backgroundPosition',
+    'experimental_backgroundRepeat',
+  ];
+  const placing = (fabric: ReturnType<typeof createFakeFabric>) =>
+    Object.fromEntries(
+      PLACING.map((prop) => [prop, fabric.committed[0]!.children[0]!.props[prop]]),
+    );
+  const TOKEN = '--x: 50% 100% no-repeat';
+  const PLACED = {
+    experimental_backgroundSize: [{ x: 'auto', y: 'auto' }],
+    experimental_backgroundPosition: [{ left: '50%', top: '100%' }],
+    experimental_backgroundRepeat: [{ x: 'no-repeat', y: 'no-repeat' }],
+  };
+  const sheets = [
+    ['in its rule', `.a { ${TOKEN}; background: var(--x); background-image: ${STRIPES} }`],
+    [
+      'in a stronger rule',
+      `.a { ${TOKEN}; background: var(--x) } .a.t { background-image: ${STRIPES} }`,
+    ],
+  ];
+
+  for (const [where, css] of sheets) {
+    it(`leaves the tile's own placing standing, ${where}`, () => {
+      const alone = tree(`.a { background-image: ${STRIPES} }`);
+      const { engine, node, fabric, warnings } = tree(css!);
+      engine.addClass(node, 't');
+      engine.commit();
+      assert.deepEqual(warnings, []);
+      assert.deepEqual(placing(fabric), placing(alone.fabric));
+    });
+
+    it(`places an image that beats the tile where the token says, ${where}, and goes back`, () => {
+      const { engine, node, fabric } = tree(
+        `${css} .a.t.over { background-image: linear-gradient(red, blue) }`,
+      );
+      engine.addClass(node, 't');
+      engine.commit();
+      const tiled = placing(fabric);
+      engine.addClass(node, 'over');
+      engine.commit();
+      assert.deepEqual(placing(fabric), PLACED);
+      engine.setCustomProperty(node, '--x', '3px 4px');
+      engine.commit();
+      assert.deepEqual(
+        placing(fabric)['experimental_backgroundPosition'],
+        [{ left: 3, top: 4 }],
+        'the token set on the element',
+      );
+      engine.setCustomProperty(node, '--x', null);
+      engine.removeClass(node, 'over');
+      engine.commit();
+      assert.deepEqual(placing(fabric), tiled);
+    });
+
+    it(`places an image the element sets itself where the token says, ${where}`, () => {
+      const { engine, node, fabric } = tree(css!);
+      engine.addClass(node, 't');
+      engine.setProp(node, 'style', {
+        experimental_backgroundImage: [{ type: 'linear-gradient' }],
+      });
+      engine.commit();
+      assert.deepEqual(placing(fabric), PLACED);
+    });
+  }
+});

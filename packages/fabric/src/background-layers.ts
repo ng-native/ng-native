@@ -36,6 +36,9 @@ const SIDES: Readonly<Record<string, number>> = {
   'to left': 270,
 };
 
+/** CSS whitespace at either end; a no-break space is part of the value, where `trim()` drops it. */
+const cssTrim = (text: string): string => text.replace(/^[ \t\n\r\f]+|[ \t\n\r\f]+$/g, '');
+
 /** Split at the commas that are not inside brackets. */
 export function splitLayers(text: string): string[] {
   const parts: string[] = [];
@@ -46,11 +49,11 @@ export function splitLayers(text: string): string[] {
     if (char === '(') depth++;
     else if (char === ')') depth--;
     else if (char === ',' && depth === 0) {
-      parts.push(text.slice(from, at).trim());
+      parts.push(cssTrim(text.slice(from, at)));
       from = at + 1;
     }
   }
-  parts.push(text.slice(from).trim());
+  parts.push(cssTrim(text.slice(from)));
   return parts;
 }
 
@@ -97,7 +100,7 @@ function linear(layer: string): object | undefined {
 
 /** The layers a background's text holds, or nothing where any of it is not read. */
 export function backgroundLayers(text: string): BackgroundLayers | undefined {
-  const layers = splitLayers(text.trim());
+  const layers = splitLayers(text);
   const last = layers.at(-1)!;
   const color = isLayerColour(last) ? last : undefined;
   const images = (color === undefined ? layers : layers.slice(0, -1)).map(linear);
@@ -370,7 +373,7 @@ const PLACING_READERS: Readonly<Record<string, (terms: readonly string[]) => unk
  */
 export function placingList(prop: string, text: string): readonly unknown[] | undefined {
   const read = PLACING_READERS[prop]!;
-  const list = splitLayers(text.trim()).map((layer) => read(layerTerms(layer)));
+  const list = splitLayers(text).map((layer) => read(layerTerms(layer)));
   return list.some((each) => each === undefined) ? undefined : list;
 }
 
@@ -450,17 +453,18 @@ function placedLayer(terms: readonly string[], last: boolean): PlacedLayer | und
 /**
  * A `background` written out on an element: gradients, each with a position, a size and a repeat
  * or none, and the last layer's colour, as a stylesheet compiles the same text. A layer with no
- * image draws nothing, so its placing goes with it. An attachment and a box are read and left, as
+ * image draws nothing, so its placing goes with it, unless no layer has one: then each layer's
+ * placing is kept for a `background-image` set after it. An attachment and a box are read and left, as
  * a stylesheet leaves them. Nothing for text any part of which is not read.
  */
 export function placedBackground(text: string): PlacedLayers | undefined {
-  const layers = splitLayers(text.trim());
+  const layers = splitLayers(text);
   const read = layers.map((layer, at) => placedLayer(layerTerms(layer), at === layers.length - 1));
   if (read.some((layer) => layer === undefined)) return undefined;
   const drawn = (read as PlacedLayer[]).filter((layer) => layer.image !== undefined);
   return {
     images: drawn.map((layer) => layer.image!),
-    placing: drawn.map((layer) => layer.placing),
+    placing: (drawn.length ? drawn : (read as PlacedLayer[])).map((layer) => layer.placing),
     color: read.at(-1)!.color,
   };
 }

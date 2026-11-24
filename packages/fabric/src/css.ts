@@ -436,6 +436,11 @@ export interface DeferredDeclaration {
    * makes the shorthand invalid.
    */
   readonly over?: Readonly<Record<string, readonly unknown[]>>;
+  /**
+   * The placing props a repeating gradient's tile later in the same rule wrote over, which this
+   * places an ordinary image by where one wins over the tile's: see `TilePlacing`.
+   */
+  readonly underTile?: readonly string[];
   /** The fallback of such a token as a token, for what it makes of the last layer. */
   readonly fallbackLayer?: TokenValue;
   /**
@@ -2558,54 +2563,111 @@ function writesImage(rule: StyleRule, important: boolean): boolean {
 }
 
 /**
+ * What stands under a tile's placing that a declaration settles on device: a `background: var()`
+ * before the tile, whose token places an image that beats the tile's.
+ */
+class UnderDeferred {
+  readonly declaration: DeferredDeclaration;
+  constructor(declaration: DeferredDeclaration) {
+    this.declaration = declaration;
+  }
+}
+
+/** Of `deferred`, the last of one tier that places `prop`, or under a tile, `underTile` does. */
+function lastPlacing(
+  deferred: readonly DeferredDeclaration[] | null | undefined,
+  prop: string,
+  important: boolean,
+  key: 'props' | 'underTile',
+): DeferredDeclaration | undefined {
+  if (!deferred) return undefined;
+  for (let at = deferred.length - 1; at >= 0; at--) {
+    const one = deferred[at]!;
+    if ((one.important === true) === important && one[key]?.includes(prop)) return one;
+  }
+  return undefined;
+}
+
+/**
  * One tier of a cascade's background placing that a repeating gradient's tile wrote (see
  * `StyleRule.tiled`), each prop with what stands under it. The placing belongs to the tile's
  * image: an ordinary image that wins over it is placed as a browser places it, by what a weaker
- * rule said or what the author wrote after the tile, so the tile's placing goes again.
+ * rule said or what the author wrote after the tile, so the tile's placing goes again. What
+ * stands under it may be a declaration settled on device, which comes back when the tile goes.
  */
 class TilePlacing {
   private readonly under = new Map<string, unknown>();
 
-  /** Before `rule` is applied to `into`, its tier of the style. */
-  before(rule: StyleRule, important: boolean, into: Record<string, unknown>): void {
+  /**
+   * Before `rule` is applied to `into`, its tier of the style, with `deferred` the declarations
+   * settled on device so far. The ones that come back, where an image beats a tile.
+   */
+  before(
+    rule: StyleRule,
+    important: boolean,
+    into: Record<string, unknown>,
+    deferred: readonly DeferredDeclaration[] | null,
+  ): DeferredDeclaration[] | null {
     const { tiled, written } = tierOf(rule, important);
     // Most rules, and every rule until a tile's, have nothing to do here.
-    if (!this.under.size && !tiled) return;
+    if (!this.under.size && !tiled) return null;
     // An ordinary image: what it places itself is applied over this next.
-    if (!tiled && writesImage(rule, important)) this.drop(into);
+    const back = !tiled && writesImage(rule, important) ? this.drop(into) : null;
     for (const prop of PLACING) {
       if (!(prop in written)) continue;
       const own = tiled?.[prop];
       if (own === undefined) this.under.delete(prop);
-      else this.under.set(prop, own ?? this.beneath(prop, into));
+      else {
+        this.under.set(prop, own ?? this.beneath(prop, into, rule, important, deferred));
+      }
     }
+    return back;
   }
 
-  /** What stands under a tile's placing of `prop`: under an earlier tile's, what that covered. */
-  private beneath(prop: string, into: Readonly<Record<string, unknown>>): unknown {
+  /**
+   * What stands under a tile's placing of `prop`: what its own rule settles before it, or an
+   * earlier rule does, then under an earlier tile's, what that covered.
+   */
+  private beneath(
+    prop: string,
+    into: Readonly<Record<string, unknown>>,
+    rule: StyleRule,
+    important: boolean,
+    deferred: readonly DeferredDeclaration[] | null,
+  ): unknown {
+    const settled =
+      lastPlacing(rule.deferred, prop, important, 'underTile') ??
+      lastPlacing(deferred, prop, important, 'props');
+    if (settled) return new UnderDeferred({ ...settled, props: [prop], underTile: undefined });
     return this.under.has(prop) ? this.under.get(prop) : into[prop];
   }
 
   /**
    * Once the cascade has run: an important image wins over a plain tile's, and takes none of it,
    * and an important size, position or repeat wins over the tile's, so nothing is put back for it.
+   * The declarations that come back.
    */
   underImportant(
     important: Readonly<Record<string, unknown>>,
     deferred: readonly DeferredDeclaration[] | null,
     into: Record<string, unknown>,
-  ): void {
-    if (BACKGROUND_IMAGE in important || deferred?.some(isImportantImage)) this.drop(into);
+  ): DeferredDeclaration[] | null {
+    const back =
+      BACKGROUND_IMAGE in important || deferred?.some(isImportantImage) ? this.drop(into) : null;
     for (const prop of PLACING) if (prop in important) this.under.delete(prop);
+    return back;
   }
 
-  /** The tile's placing gone from `into`, and what it covered back. */
-  drop(into: Record<string, unknown>): void {
+  /** The tile's placing gone from `into`, what it covered back, and the declarations that come back. */
+  drop(into: Record<string, unknown>): DeferredDeclaration[] | null {
+    let back: DeferredDeclaration[] | null = null;
     for (const [prop, value] of this.under) {
-      if (value === undefined) delete into[prop];
+      if (value instanceof UnderDeferred) (back ??= []).push(value.declaration);
+      if (value === undefined || value instanceof UnderDeferred) delete into[prop];
       else into[prop] = value;
     }
     this.under.clear();
+    return back;
   }
 
   /** The placing a tile wrote that stands, to what is under it, or null for none. */
@@ -2613,6 +2675,12 @@ class TilePlacing {
     return this.under.size ? Object.fromEntries(this.under) : null;
   }
 }
+
+/** `deferred` with the declarations a tile gave way to after it, where any did. */
+const withBack = (
+  deferred: DeferredDeclaration[] | null,
+  back: readonly DeferredDeclaration[] | null,
+): DeferredDeclaration[] | null => (back ? [...(deferred ?? []), ...back] : deferred);
 
 /**
  * Takes a tile's placing out of `style` where the element sets an image itself, inline or bound,
@@ -4790,8 +4858,26 @@ export class StyleResolver {
     const important = importantNames(result, () => TWIN[rtl ? 'rtl' : 'ltr']);
     return withTiled(
       important ? { style, inherited, tokens, important } : { style, inherited, tokens },
-      result.tiled,
+      this.settledUnder(result.tiled, tokens, parentInherited),
     );
+  }
+
+  /** A tile's placing with what stands under it settled, where a declaration settles it. */
+  private settledUnder(
+    tiled: Record<string, unknown> | null,
+    tokens: Readonly<Record<string, TokenValue>>,
+    parentInherited: Record<string, unknown>,
+  ): Record<string, unknown> | null {
+    if (!tiled) return null;
+    let settled: Record<string, unknown> | null = null;
+    for (const prop in tiled) {
+      const value = tiled[prop];
+      if (!(value instanceof UnderDeferred)) continue;
+      const own: Record<string, unknown> = {};
+      this.applyDeferred([value.declaration], own, tokens, parentInherited, null);
+      (settled ??= { ...tiled })[prop] = own[prop];
+    }
+    return settled ?? tiled;
   }
 
   /** The rules that apply to a node, weakest first. */
@@ -4825,8 +4911,8 @@ export class StyleResolver {
 
     for (const rule of this.layered ? byImportance(matched, this.layerPlaces) : matched) {
       deferred = forms.before(rule, normal, important, deferred);
-      plainTiles.before(rule, false, normal);
-      importantTiles.before(rule, true, important);
+      deferred = withBack(deferred, plainTiles.before(rule, false, normal, deferred));
+      deferred = withBack(deferred, importantTiles.before(rule, true, important, deferred));
       Object.assign(normal, rule.declarations);
       if (rule.important) {
         Object.assign(important, rule.important);
@@ -4841,7 +4927,7 @@ export class StyleResolver {
     }
     if (importantTokens) Object.assign(tokens!, importantTokens);
     deferred = forms.after(normal, deferred);
-    plainTiles.underImportant(important, deferred, normal);
+    deferred = withBack(deferred, plainTiles.underImportant(important, deferred, normal));
 
     return {
       declarations: hasImportant ? { ...normal, ...important } : normal,
@@ -6028,11 +6114,13 @@ const FONT_SMOOTHING: ReadonlySet<string> = new Set([
 
 /**
  * A token's word where `prop` takes it, in any case, and nothing where it does not: invalid where
- * it is used, which unsets the property, so an inherited one is the parent's.
+ * it is used, which unsets the property, so an inherited one is the parent's. A fallback of
+ * `initial`, `var(--missing, initial)`, is the initial value, `auto`.
  */
 function taken(prop: string, value: unknown): unknown {
   if (prop !== 'fontSmoothing' || value === undefined) return value;
   const word = typeof value === 'string' ? value.toLowerCase() : undefined;
+  if (word === 'initial') return 'auto';
   return word !== undefined && FONT_SMOOTHING.has(word) ? word : undefined;
 }
 
@@ -6140,9 +6228,16 @@ function withCurrentColour(
   return { ...layers, color: (own['color'] ?? parentInherited['color'] ?? 'black') as string };
 }
 
-/** A token set on an element as a layer with no image: a length, two lengths, or such words. */
+/**
+ * A token set on an element as a layer with no image: a length, two lengths, or such words. The
+ * lengths are a position, where an image another rule declares is drawn.
+ */
 function imagelessTokenLayer(token: TokenValue): BackgroundLayers | undefined {
-  if (token.length !== undefined || token.lengths?.length === 2) return { images: [] };
+  const lengths = token.length === undefined ? token.lengths : [token.length];
+  if (lengths?.length === 1 || lengths?.length === 2) {
+    const text = lengths.map((one) => (typeof one === 'number' ? `${one}px` : one)).join(' ');
+    return imagelessLayer(text) ?? { images: [] };
+  }
   return token.keyword === undefined ? undefined : imagelessLayer(token.keyword);
 }
 
@@ -6255,7 +6350,7 @@ export function boundRefusal(prop: string, text: string): string | undefined {
 
 /** What `-webkit-font-smoothing` is set to on an element: a keyword, a CSS-wide one, or a token. */
 const SMOOTHING_SET =
-  /^\s*(?:auto|none|antialiased|subpixel-antialiased|inherit|initial|unset)\s*$|var\(/i;
+  /^[ \t\n\r\f]*(?:auto|none|antialiased|subpixel-antialiased|inherit|initial|unset)[ \t\n\r\f]*$|var\(/i;
 
 /** A number CSS takes as a side of a ratio, the whole text: `16`, `1.5`, `1e2`. */
 const RATIO_SIDE = new RegExp(String.raw`^\s*\+?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?\s*$`, 'i');

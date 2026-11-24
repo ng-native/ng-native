@@ -299,7 +299,10 @@ const background = (
     ([prop, rest]) =>
       [
         prop,
-        Array.from({ length: Math.max(images.length, 1) }, (_, at) => placing[at]?.[prop] ?? rest),
+        Array.from(
+          { length: Math.max(images.length, placing.length, 1) },
+          (_, at) => placing[at]?.[prop] ?? rest,
+        ),
       ] as const,
   ),
 ];

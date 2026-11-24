@@ -254,7 +254,8 @@ or as its last layer. In these, `background` is a color or linear gradients, eac
 size and repeat or none, `linear-gradient(red, blue) center / cover no-repeat green`, with no
 `url()` and no token in a gradient, and `background-image` is linear gradients or `none`, or a
 token as all of it. A background's position and size are in `px`, `rem` or percentages, with no
-token. `box-shadow` takes a
+token. A `background` with no image, `center / cover no-repeat`, places a `background-image` set
+after it. `box-shadow` takes a
 token only as all of it, lengths in `px` or `rem` only, and a color written out, not a
 `color-mix()`. `font` has no `small-caps`, stretch, keyword size or system font.
 A value outside that is dropped, with a warning in development, and what was set before it stays,
@@ -663,7 +664,10 @@ ones, at the initial position, size and repeat. A `currentColor` in the token's 
 `center currentColor`, is the text color where the token is used.
 A bare `background: var(--surface)` takes away an image a weaker rule declared, whatever its token
 holds, and puts a weaker rule's `background-size`, `background-position` and `background-repeat`
-back at their initial values, as in a browser.
+back at their initial values where the token does not say them, as in a browser. A token that is a
+layer with no image and says where one goes, `center / cover` or `10px 20px`, places an image a
+stronger rule declares there, and where a stronger rule's repeating gradient is drawn in tiles, an
+image that beats those tiles.
 `flex: var(--grow)` is `flex: <number>`: it grows by the token, shrinks by 1, and starts from a
 basis of 0, once the token is set. With no token it is `flex`'s initial value, `0 1 auto`, whatever
 a weaker rule set, as on the web, where a `var()` that cannot be substituted gives the property its

@@ -340,3 +340,29 @@ TEST_CASE("-webkit-font-smoothing draws a search field's text thinner when antia
   settle();
   [window close];
 }
+
+TEST_CASE("a search field editing under auto moves to its own field editor once smoothed, as no blur or focus") {
+  NSWindow *window = offscreenWindow();
+  auto events = std::make_shared<Events>();
+  NGNSearchField *search = makeField(window, events);
+  NativeControlProps props;
+  props.text = "Hamburgefonstiv";
+  [search apply:props];
+  REQUIRE([window makeFirstResponder:search.field]);
+  NSText *shared = search.field.currentEditor;
+  REQUIRE((shared != nil));
+  CHECK_FALSE([shared isKindOfClass:NGNSmoothedFieldEditor.class]);
+  shared.selectedRange = NSMakeRange(2, 3);
+  props.desktop.fontSmoothing = ngn::FontSmoothing::None;
+  [search apply:props];
+  NSText *own = search.field.currentEditor;
+  REQUIRE([own isKindOfClass:NGNSmoothedFieldEditor.class]);
+  CHECK(((NGNSmoothedFieldEditor *)own).fontSmoothing == ngn::FontSmoothing::None);
+  CHECK([own.string isEqualToString:@"Hamburgefonstiv"]);
+  CHECK(NSEqualRanges(own.selectedRange, NSMakeRange(2, 3)));
+  settle();
+  CHECK((events->log == std::vector<std::string>{"focus"}));
+  [window makeFirstResponder:nil];
+  settle();
+  [window close];
+}

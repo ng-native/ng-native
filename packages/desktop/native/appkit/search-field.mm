@@ -184,6 +184,10 @@ NSSize NGNSearchFieldSize(const NativeControlProps &p) {
   CGFloat _height;
   // Counts the editing ends: only the latest one's turn-later check may report a blur.
   NSUInteger _endings;
+  // An editing session begun in the shared field editor, to begin again in the field's own, and
+  // whether it is beginning again, which is no focus.
+  BOOL _restartPending;
+  BOOL _restarting;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame {
@@ -216,9 +220,13 @@ NSSize NGNSearchFieldSize(const NativeControlProps &p) {
   if (p.desktop.fontSmoothing != _fontSmoothing) {
     _fontSmoothing = p.desktop.fontSmoothing;
     _field.needsDisplay = YES;
-    if ([_field.currentEditor isKindOfClass:NGNSmoothedFieldEditor.class]) {
-      ((NGNSmoothedFieldEditor *)_field.currentEditor).fontSmoothing = _fontSmoothing;
-      _field.currentEditor.needsDisplay = YES;
+    NSText *editor = NGNEditorOf(_field);
+    if ([editor isKindOfClass:NGNSmoothedFieldEditor.class]) {
+      ((NGNSmoothedFieldEditor *)editor).fontSmoothing = _fontSmoothing;
+      editor.needsDisplay = YES;
+    } else {
+      _restartPending = YES;
+      [self restartInOwnEditor];
     }
   }
   NSString *placeholder = string(p.placeholder);
@@ -278,7 +286,7 @@ NSSize NGNSearchFieldSize(const NativeControlProps &p) {
 
 - (void)fieldDidBecomeFirstResponder {
   [self applyTint];
-  if (self.began) {
+  if (!_restarting && self.began) {
     self.began();
   }
 }
@@ -302,6 +310,25 @@ NSSize NGNSearchFieldSize(const NativeControlProps &p) {
 
 - (void)controlTextDidChange:(NSNotification *)note {
   [self changedTo:_field.stringValue];
+  if (_restartPending) {
+    // A turn later, out of the text system's change.
+    __weak NGNSearchField *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [weakSelf restartInOwnEditor];
+    });
+  }
+}
+
+// Editing begun under auto, in the shared field editor, which draws as the system smooths, moves
+// to the field's own once its text is smoothed otherwise.
+- (void)restartInOwnEditor {
+  NSText *editor = NGNEditorOf(_field);
+  if (!_restartPending || editor == nil || _fontSmoothing == ngn::FontSmoothing::Auto ||
+      [editor isKindOfClass:NGNSmoothedFieldEditor.class]) {
+    _restartPending = NO;
+    return;
+  }
+  _restartPending = !NGNRestartEditing(_field, &_restarting);
 }
 
 // A turn later, and only when the field no longer edits: a click into the field ends its editing
