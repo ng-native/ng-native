@@ -198,10 +198,15 @@ function tilePlacing(images, context, placing = {}) {
       : null,
   );
   if (!tiles.some(Boolean)) return {};
+  // A list shorter than the images repeats over them, as CSS repeats it.
+  const layer = (part, index) => {
+    const list = placing[part];
+    return list?.length ? list[index % list.length] : undefined;
+  };
   const each = (part) =>
-    tiles.map((tile, index) => tile?.[part] ?? placing[part]?.[index] ?? UNPLACED[part]);
+    tiles.map((tile, index) => tile?.[part] ?? layer(part, index) ?? UNPLACED[part]);
   tiles.forEach((tile, index) => {
-    const at = placing.position?.[index];
+    const at = layer('position', index);
     // A length moves the box-sized image (and clips it, with no-repeat), where a percentage of the
     // free space, which there is none of, moves nothing. A tile drawn from 0 cannot say a shift.
     if (tile && at && Object.values(at).some((one) => typeof one === 'number' && one !== 0)) {
@@ -210,7 +215,7 @@ function tilePlacing(images, context, placing = {}) {
           `shifts the stripes, which native cannot do to a tile. ${TILE_INSTEAD}`,
       );
     }
-    const size = placing.size?.[index];
+    const size = layer('size', index);
     if (tile && size && (size.x !== 'auto' || size.y !== 'auto')) {
       throw new CssUnsupported(
         `${context}: a repeating-linear-gradient given a background-size is drawn in tiles of ` +

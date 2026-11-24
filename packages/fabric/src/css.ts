@@ -2614,8 +2614,8 @@ class TilePlacing {
 /**
  * Takes a tile's placing out of `style` where the element sets an image itself, inline or bound,
  * which wins over the tile's image (`StyleCache.tiled`): what is under it stands, as it would
- * under a rule's image. An element's own size, position or repeat is not committed as these
- * props, so there is none of its own to keep.
+ * under a rule's image. A size, position or repeat the element sets itself, as its `background`
+ * shorthand does, stands over both.
  */
 export function underOwnImage(
   style: Record<string, unknown>,
@@ -2626,6 +2626,7 @@ export function underOwnImage(
   if (!tiled) return;
   if (inline[BACKGROUND_IMAGE] === undefined && !bound?.has(BACKGROUND_IMAGE)) return;
   for (const prop in tiled) {
+    if (inline[prop] !== undefined || bound?.has(prop)) continue;
     const value = tiled[prop];
     if (value === undefined) delete style[prop];
     else style[prop] = value;

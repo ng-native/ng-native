@@ -453,6 +453,11 @@ const TILE_PLACING_CASES: OracleCase[] = [
     PLACING,
   ),
   inlineValue(
+    { background: GRADIENT, 'background-color': 'rgb(1, 2, 3)' },
+    `#probe { background-size: 10px 20px } #probe { background-image: ${STRIPES} }`,
+    PLACING,
+  ),
+  inlineValue(
     { 'background-image': GRADIENT },
     `#probe { background-image: ${STRIPES} } #probe { background-size: 10px 20px !important; ` +
       'background-position: 3px 4px !important; background-repeat: no-repeat !important }',
@@ -465,6 +470,15 @@ const TILE_PLACING_CASES: OracleCase[] = [
       `.b.c { background-image: ${GRADIENT} }`,
     tree: probe({ name: 'view', classes: ['b', 'c'] }),
     extra: PLACING,
+  },
+  {
+    name: 'background-image: a tile in a later layer than a size in its rule is refused, and the size stands',
+    css:
+      `.b { background-size: 10px 20px; background-image: ${GRADIENT}, ${STRIPES} } ` +
+      `.b.c { background-image: ${GRADIENT} }`,
+    tree: probe({ name: 'view', classes: ['b', 'c'] }),
+    extra: PLACING,
+    warns: true,
   },
   {
     name: 'background-image: a tile after a size in its rule is refused, and the size stands',

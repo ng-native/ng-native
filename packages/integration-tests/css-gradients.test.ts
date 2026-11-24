@@ -496,7 +496,27 @@ describe('a repeating linear gradient', () => {
         /repeating-linear-gradient.*background-(size|position)/s,
         before,
       );
+      // A list shorter than the images repeats over them, so it places a later layer too.
+      assert.throws(
+        () =>
+          styleOf(
+            `${before}; background-image: linear-gradient(red, blue), ` +
+              'repeating-linear-gradient(red 0 2px, blue 2px 4px)',
+          ),
+        /repeating-linear-gradient.*background-(size|position)/s,
+        `${before}, second layer`,
+      );
     }
+    assert.deepEqual(
+      styleOf(
+        'background-repeat: no-repeat; background-image: ' +
+          'repeating-linear-gradient(red 0 2px, blue 2px 4px), linear-gradient(red, blue)',
+      )['experimental_backgroundRepeat'],
+      [
+        { x: 'repeat', y: 'repeat' },
+        { x: 'no-repeat', y: 'no-repeat' },
+      ],
+    );
     // A keyword position, or a repeat, changes nothing a browser draws, so the tile's stand.
     assert.deepEqual(
       styleOf(
@@ -605,6 +625,15 @@ describe("a tile's placing in the cascade", () => {
     renderer.setStyle(node, 'background-image', 'linear-gradient(red, blue)');
     assert.deepEqual(placing(), [[{ x: 10, y: 20 }], null, null]);
     renderer.removeStyle(node, 'background-image');
+    assert.deepEqual(placing(), tiled);
+    // The `background` shorthand sets the placing too, and what an element sets stands.
+    renderer.setStyle(node, 'background', 'linear-gradient(red, blue)');
+    assert.deepEqual(placing(), [
+      [{ x: 'auto', y: 'auto' }],
+      [{ left: '0%', top: '0%' }],
+      [{ x: 'repeat', y: 'repeat' }],
+    ]);
+    renderer.removeStyle(node, 'background');
     assert.deepEqual(placing(), tiled);
   });
 
