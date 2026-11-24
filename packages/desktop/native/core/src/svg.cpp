@@ -1009,7 +1009,8 @@ class Renderer {
   }
 
   // `within` holds the uses being expanded, so a use that leads back to itself, directly or
-  // through others, is an invalid reference that adds nothing, as SVG has it.
+  // through others, is an invalid reference that adds nothing, as SVG has it. Each use expanded
+  // counts against the bound on uses a drawing expands, as a drawn one does.
   void collectClip(const SvgNode &node, const SvgMatrix &outer, SvgPath &out, std::unordered_set<const SvgNode *> &within) const {
     if (node.element.hidden) {
       return;
@@ -1021,7 +1022,7 @@ class Renderer {
     }
     if (node.element.kind == SvgKind::Use) {
       if (const auto *target = named(node.element.href);
-          target != nullptr && within.size() < kMaxDepth && within.insert(&node).second) {
+          target != nullptr && within.size() < kMaxDepth && ++usesDrawn_ <= kMaxUses && within.insert(&node).second) {
         double x = length(node.element, "x", Axis::X), y = length(node.element, "y", Axis::Y);
         collectClip(*target, m * SvgMatrix::translate(x, y), out, within);
         within.erase(&node);
@@ -1723,7 +1724,7 @@ class Renderer {
   std::unordered_set<const SvgNode *> active_;
   // The uses drawn so far, and how many one drawing draws: far more than any icon or chart has.
   static constexpr int kMaxUses = 1 << 16;
-  int usesDrawn_{0};
+  mutable int usesDrawn_{0};
   // How deep nodes being drawn, or uses in a clip being expanded, nest: four times the markup's own
   // depth, so references can nest well past any icon while staying far from the end of the stack.
   static constexpr size_t kMaxDepth = 256;

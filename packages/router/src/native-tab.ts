@@ -360,6 +360,9 @@ export class NativeTab implements OnInit {
    * Shown while this tab is the selected one: in an iOS or Android tab bar, and in the tab's
    * sidebar row when it is SVG (`{ svg }`), on macOS and Linux, or an SF Symbol, on macOS. Absent
    * leaves the platform to tint `icon`.
+   *
+   * `icon` and `selectedIcon` must be the same kind: an SF Symbol with an SVG, or the reverse,
+   * throws, and so does a `selectedIcon` without an `icon`.
    */
   readonly selectedIcon = input<TabIcon>();
 

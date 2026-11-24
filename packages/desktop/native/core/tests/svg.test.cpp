@@ -401,6 +401,27 @@ TEST_CASE("uses in a clip path nested deeper than any drawing stop at a bound, r
   CHECK(clipOf(40000).find('M') == std::string::npos);
 }
 
+TEST_CASE("uses in a clip path that each expand the one before twice stop at the bound on uses, rather than doubling twenty-two times") {
+  std::vector<SvgNode> defs;
+  auto g0 = rect(0, 0, 1, 1);
+  g0.name = "g0";
+  defs.push_back(node(g0));
+  for (int i = 1; i <= 22; i++) {
+    SvgElement use{.kind = SvgKind::Use};
+    use.href = "g" + std::to_string(i - 1);
+    defs.push_back(node(SvgElement{.kind = SvgKind::Group, .name = "g" + std::to_string(i)}, {node(use), node(use)}));
+  }
+  SvgElement clip{.kind = SvgKind::ClipPath, .name = "c"};
+  SvgElement top{.kind = SvgKind::Use};
+  top.href = "g22";
+  auto clipped = rect(0, 0, 10, 10);
+  clipped.clipPath = "c";
+  auto lines = drawn(node(svg(), {node(SvgElement{.kind = SvgKind::Defs}, std::move(defs)), node(clip, {node(top)}), node(clipped)}));
+  // One square is 17 characters of path: the clip holds at most the 65,536 uses a drawing expands.
+  REQUIRE_FALSE(lines.empty());
+  CHECK(lines.front().size() <= (1 << 16) * 20);
+}
+
 TEST_CASE("clip and mask references that lead back to themselves draw nothing rather than recursing") {
   // Two uses in a clip path that refer to each other.
   SvgElement clip{.kind = SvgKind::ClipPath, .name = "c"};
