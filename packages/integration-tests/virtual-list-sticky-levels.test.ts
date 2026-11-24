@@ -8,7 +8,7 @@
  * 19m` and that month's day `d` row `58y + 2 + 19m + 6d`. `top` below is where a row starts.
  */
 import assert from 'node:assert/strict';
-import { before, describe, it } from 'node:test';
+import { afterEach, before, beforeEach, describe, it } from 'node:test';
 import type { Type, WritableSignal } from '@angular/core';
 import {
   fireEvent,
@@ -19,6 +19,7 @@ import {
 } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 import { recorder } from './native-animated.ts';
+import { holdStickySettle, type StickySettleClock } from './sticky-settle-clock.ts';
 
 const WIDTH = 300;
 const VIEWPORT = 400;
@@ -49,6 +50,13 @@ interface Instance {
   levelOf: WritableSignal<LevelOf | null | undefined>;
   maxLevels: WritableSignal<number | undefined>;
 }
+
+/** A scroll stays mid-scroll until a test calls `clock.rest()`, however slow the runner is. */
+let clock: StickySettleClock;
+beforeEach(() => {
+  clock = holdStickySettle();
+});
+afterEach(() => clock.restore());
 
 let mod: Record<string, unknown>;
 let entries: () => Entry[];
@@ -332,8 +340,6 @@ describe('a windowed list with sticky rows at several levels', () => {
 });
 
 describe('sticky rows at several levels, moved on the native side', () => {
-  const pause = () => new Promise((resolve) => setTimeout(resolve, 100));
-
   it('leaves each row at its own place, moved from where it meets the rows it pins under', async () => {
     const { native, drives } = recorder();
     const { row, at, scroll } = await boot(undefined, { nativeAnimated: native });
@@ -447,7 +453,7 @@ describe('sticky rows at several levels, moved on the native side', () => {
     const { native } = recorder();
     const { row, scroll } = await boot(undefined, { nativeAnimated: native });
     await scroll(650);
-    await pause();
+    clock.rest();
     await settle();
     const moved = (index: number) => row(index)?.props['transform'];
     assert.deepEqual(moved(0), [{ translateY: 650 }]);
@@ -461,7 +467,7 @@ describe('sticky rows at several levels, moved on the native side', () => {
     const { row, scroll, header } = await boot(undefined, { nativeAnimated: native });
     await fireEvent(header(), 'layout', { layout: { x: 0, y: 0, width: WIDTH, height: 60 } });
     await scroll(60 + 650);
-    await pause();
+    clock.rest();
     await settle();
     assert.deepEqual(row(0)?.props['transform'], [{ translateY: 650 }]);
     // The header grows by 20 and the scroll view stays put: the leading edge is 20 less far in.
@@ -475,7 +481,7 @@ describe('sticky rows at several levels, moved on the native side', () => {
     const { row, scroll } = await boot(undefined, { nativeAnimated: native });
     // 20 short of where the second month pins: the first month and its day are being pushed off.
     await scroll(top(20) - YEAR - 20);
-    await pause();
+    clock.rest();
     await settle();
     assert.deepEqual(row(1)?.props['transform'], [{ translateY: top(20) - MONTH - top(1) }]);
     assert.deepEqual(row(14)?.props['transform'], [{ translateY: top(20) - DAY - top(14) }]);

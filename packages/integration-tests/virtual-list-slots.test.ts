@@ -4,7 +4,7 @@
  * header by translating it against the scroll offset, and that is what is done here too.
  */
 import assert from 'node:assert/strict';
-import { before, describe, it } from 'node:test';
+import { afterEach, before, beforeEach, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import {
   fireEvent,
@@ -15,6 +15,7 @@ import {
 } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 import { recorder } from './native-animated.ts';
+import { holdStickySettle, type StickySettleClock } from './sticky-settle-clock.ts';
 
 /** A write outside change detection is committed on the next frame, which Node spells as 16ms. */
 const frame = () => new Promise((resolve) => setTimeout(resolve, 20));
@@ -37,6 +38,13 @@ interface Separated {
   inverted: { set(value: boolean): void };
   horizontal: { set(value: boolean): void };
 }
+
+/** A scroll stays mid-scroll until a test calls `clock.rest()`, however slow the runner is. */
+let clock: StickySettleClock;
+beforeEach(() => {
+  clock = holdStickySettle();
+});
+afterEach(() => clock.restore());
 
 let mod: Record<string, unknown>;
 before(async () => {
@@ -185,7 +193,7 @@ describe('virtual list sticky header', () => {
       fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 100 } });
       await frame();
       assert.equal(header(fabric).props['transform'] ?? null, null, 'nothing from JavaScript');
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      clock.rest();
       await frame();
       assert.deepEqual(header(fabric).props['transform'], [{ translateY: 100 }]);
       unmount();
@@ -267,7 +275,7 @@ describe('virtual list sticky header', () => {
     it('draws the header from where native is when the list flips at rest, and mid-scroll leaves it to native', async () => {
       const { fabric, instance, named, unmount } = await pinned([]);
       fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 100 } });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      clock.rest();
       await frame();
       let before = named('set').length;
       instance.inverted.set(true);
@@ -291,7 +299,7 @@ describe('virtual list sticky header', () => {
     it('tells native no offset along the old axis when the list turns horizontal at rest', async () => {
       const { fabric, instance, named, unmount } = await pinned([]);
       fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 100 } });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      clock.rest();
       await frame();
       const before = named('set').length;
       instance.horizontal.set(true);
@@ -309,7 +317,7 @@ describe('virtual list sticky header', () => {
     it('tells native no offset along the old axis when the list turns horizontal as the header s range changes', async () => {
       const { fabric, instance, named, unmount } = await pinned([]);
       fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 100 } });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      clock.rest();
       await frame();
       const before = named('set').length;
       instance.horizontal.set(true);
@@ -333,7 +341,7 @@ describe('virtual list sticky header', () => {
       instance.items.set(Array.from({ length: 200 }, (_, i) => 'r' + i));
       await fireEvent(header(fabric), 'layout', { layout: { height: 50 } });
       fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 100 } });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      clock.rest();
       await frame();
       const before = named('set').length;
       instance.inverted.set(true);
@@ -381,7 +389,7 @@ describe('virtual list sticky header', () => {
     it('draws a new limit at rest from where native is, and mid-scroll leaves it to native', async () => {
       const { fabric, instance, range, named, unmount } = await pinned([4]);
       fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 100 } });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      clock.rest();
       await frame();
       let before = named('set').length;
       instance.sticky.set([6]);
@@ -465,7 +473,7 @@ describe('scroll view sticky headers', () => {
     fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 50 } });
     await frame();
     assert.equal(first().props['transform'], undefined, 'nothing from JavaScript mid-scroll');
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    clock.rest();
     await frame();
     assert.deepEqual(first().props['transform'], [{ translateY: 50 }]);
     unmount();
