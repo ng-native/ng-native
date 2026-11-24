@@ -127,7 +127,7 @@ describe('fetch on macOS', () => {
     assert.equal(sent.data, '{"a":1}');
     assert.equal(sent.headers['x-token'], 't');
     assert.equal(sent.headers['content-type'], 'text/plain;charset=UTF-8');
-    assert.equal(sent.responseType, 'base64');
+    assert.equal(sent.responseType, 'base64-chunks');
     assert.equal(sent.incrementalUpdates, true);
     assert.equal(sent.withCredentials, false);
   });

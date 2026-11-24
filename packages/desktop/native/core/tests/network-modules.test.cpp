@@ -188,6 +188,24 @@ TEST_CASE("a base64 response with incremental updates streams chunks whose text 
   CHECK(f.events.back() == "didCompleteNetworkResponse [2,null,false]");
 }
 
+TEST_CASE("a base64-chunks response sends each chunk whole, as it arrives, holding nothing back") {
+  Fixture f;
+  auto networking = f.make(ngn::makeNetworking(f.services));
+  f.send(*networking, query(dynamic::object("responseType", "base64-chunks")("incrementalUpdates", true)));
+  auto &cb = f.http->sent[0]->callbacks;
+  cb.onResponse({.status = 200, .headers = {{"content-type", "text/event-stream"}}});
+  // An event ends in a blank line, which has to arrive with it, not with the next one.
+  cb.onData("data: 1\n\n", 20);
+  cb.onData("data: 22\n\n", 20);
+  cb.onComplete("", false);
+  CHECK(f.events == std::vector<std::string>{
+                        R"(didReceiveNetworkResponse [1,200,{"content-type":"text/event-stream"},""])",
+                        R"(didReceiveNetworkIncrementalData [1,"ZGF0YTogMQoK",9,20])",
+                        R"(didReceiveNetworkIncrementalData [1,"ZGF0YTogMjIKCg==",19,20])",
+                        "didCompleteNetworkResponse [1,null,false]",
+                    });
+}
+
 TEST_CASE("a failed or timed-out request completes with its error") {
   Fixture f;
   auto networking = f.make(ngn::makeNetworking(f.services));

@@ -3,9 +3,9 @@
  * Expo's `fetch` does on iOS and Android, over React Native's Networking module rather than
  * Expo's native fetch module, which a desktop host does not have.
  *
- * Each request asks Networking for a base64 response with incremental updates, which the desktop
- * host streams: every `didReceiveNetworkIncrementalData` event is one chunk of the body in base64,
- * decoded here to its bytes, so `body`, `bytes()` and `arrayBuffer()` are byte-exact for any
+ * Each request asks Networking for a `base64-chunks` response with incremental updates, which the
+ * desktop host streams: every `didReceiveNetworkIncrementalData` event is one chunk of the body, as
+ * it arrived, in base64 of its own, decoded here to its bytes, so `body`, `bytes()` and `arrayBuffer()` are byte-exact for any
  * content. A host that sends the body whole in `didReceiveNetworkData` instead, as React Native
  * iOS does, still gives the same bytes, all at the end. `blob()` is made from the body as text,
  * since React Native's `Blob` takes no bytes, and refuses a body that is not UTF-8 text.
@@ -437,7 +437,7 @@ function createFetch(networking) {
           url,
           headerObject(headers),
           body,
-          'base64',
+          'base64-chunks',
           true,
           0,
           (requestId) => {

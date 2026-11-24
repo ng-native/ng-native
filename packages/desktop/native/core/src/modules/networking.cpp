@@ -5,7 +5,12 @@
 // A base64 response with incremental updates streams too, where React Native iOS sends only
 // progress and then the whole body: each chunk encodes whole groups of three bytes, so it decodes
 // on its own and the chunks joined are the body's base64, which is what XMLHttpRequest builds from
-// them. Streaming fetch rides on it for a byte-exact body. A blob response stays as iOS has it.
+// them. A blob response stays as iOS has it.
+//
+// Streaming fetch asks for `base64-chunks` instead: each chunk is sent whole as it arrives, padded,
+// so it decodes on its own. The joined text is no body's base64, but nothing is held back for the
+// next chunk, which would leave a stream's last bytes, such as an event's closing blank line, until
+// more arrived.
 #include "ngn/core-modules.h"
 
 #include <atomic>
@@ -242,6 +247,10 @@ std::shared_ptr<NativeModule> makeNetworking(const CoreModuleServices &s) {
       if (responseType.empty()) {
         responseType = "text";
       }
+      bool wholeChunks = responseType == "base64-chunks";
+      if (wholeChunks) {
+        responseType = "base64";
+      }
       auto incremental = query.getDefault("incrementalUpdates", false);
       bool incrementalUpdates = incremental.isBool() && incremental.asBool();
 
@@ -271,7 +280,7 @@ std::shared_ptr<NativeModule> makeNetworking(const CoreModuleServices &s) {
                 }
               },
           .onData =
-              [weak, id, response, responseType, incrementalUpdates](std::string chunk, int64_t expected) {
+              [weak, id, response, responseType, incrementalUpdates, wholeChunks](std::string chunk, int64_t expected) {
                 auto self = weak.lock();
                 if (!self) {
                   return;
@@ -281,6 +290,12 @@ std::shared_ptr<NativeModule> makeNetworking(const CoreModuleServices &s) {
                   self->emit(
                       "didReceiveNetworkIncrementalData",
                       folly::dynamic::array(id, response->text.push(std::move(chunk)), response->received, expected));
+                  return;
+                }
+                if (responseType == "base64" && incrementalUpdates && wholeChunks) {
+                  self->emit(
+                      "didReceiveNetworkIncrementalData",
+                      folly::dynamic::array(id, base64Encode(chunk), response->received, expected));
                   return;
                 }
                 if (responseType == "base64" && incrementalUpdates) {
