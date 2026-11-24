@@ -22,7 +22,14 @@ extern const CGFloat NgNativeButtonImagePadding;
 // The symbol drawn beside the title, or nil for none or a name the OS lacks.
 UIImage *_Nullable NgNativeButtonSymbol(NSString *sfSymbol, NSString *controlSize);
 
-// The button's natural size: one line of title, the symbol, and the insets.
-CGSize NgNativeButtonNaturalSize(NSString *title, NSString *controlSize, NSString *sfSymbol);
+// The side of an icon image drawn beside the title, in points: a symbol's height in the title's font.
+CGFloat NgNativeButtonImageSide(NSString *controlSize);
+
+// An icon image from a PNG `data:` URI, a template image `NgNativeButtonImageSide` square that the
+// button tints as it does a symbol, or nil for none or data that is no image.
+UIImage *_Nullable NgNativeButtonImage(NSString *uri, NSString *controlSize);
+
+// The button's natural size: one line of title, the symbol or else an icon image, and the insets.
+CGSize NgNativeButtonNaturalSize(NSString *title, NSString *controlSize, NSString *sfSymbol, BOOL hasImage);
 
 NS_ASSUME_NONNULL_END

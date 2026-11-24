@@ -18,6 +18,7 @@ NgNativeButtonProps::NgNativeButtonProps(
       kind(convertRawProp(context, rawProps, "kind", sourceProps.kind, {})),
       controlSize(convertRawProp(context, rawProps, "controlSize", sourceProps.controlSize, {})),
       sfSymbol(convertRawProp(context, rawProps, "sfSymbol", sourceProps.sfSymbol, {})),
+      iconImage(convertRawProp(context, rawProps, "iconImage", sourceProps.iconImage, {})),
       enabled(convertRawProp(context, rawProps, "enabled", sourceProps.enabled, true))
 {
 }
@@ -32,7 +33,8 @@ Size NgNativeButtonShadowNode::measureContent(
     const LayoutConstraints &layoutConstraints) const
 {
   const auto &props = getConcreteProps();
-  CGSize size = NgNativeButtonNaturalSize(string(props.title), string(props.controlSize), string(props.sfSymbol));
+  CGSize size = NgNativeButtonNaturalSize(
+      string(props.title), string(props.controlSize), string(props.sfSymbol), !props.iconImage.empty());
   // A narrower box truncates the title rather than wrapping it.
   return layoutConstraints.clamp({.width = (Float)size.width, .height = (Float)size.height});
 }

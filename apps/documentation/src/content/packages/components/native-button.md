@@ -31,21 +31,29 @@ greys it out.
   Return, as GTK's fields do, so it goes to `(submitEditing)` instead.
 - **`controlSize`** - `mini`, `small`, `regular` or `large`: AppKit's control sizes on macOS, and
   UIKit's button sizes on iOS. Android and the web ignore it. `regular` when unset.
-- **`sfSymbol`** - an SF Symbol beside the label, on iOS and macOS.
-- **`drawable`** - a drawable resource beside the label, on Android.
+- **`sfSymbol`** - an SF Symbol before the label, on iOS and macOS.
+- **`drawable`** - a drawable resource before the label, on Android, tinted in the label's colour.
+  It is drawn through React Native's image view, which draws a bitmap drawable, a PNG or WebP, and
+  nothing for a vector drawable written in XML.
 - **`icon`** - either of the two as one value, `{ sfSymbol }` or `{ drawable }`, as on
-  `<native-tab>`, or on macOS and Linux an icon's SVG markup, `{ svg }`, such as an `@ng-icons`
-  icon:
+  `<native-tab>`, or an icon's SVG markup, `{ svg }`, such as an `@ng-icons` icon:
 
   ```html
   <native-button [icon]="{ svg: lucidePlus }">Add</native-button>
   ```
 
-  The host draws it as it draws a symbol: a template image AppKit tints on macOS, and in the
-  button's text colour on Linux. iOS, Android and the web show no SVG icon, and in development
-  the button says so once. The host draws the shapes icon sets use, in one colour: paths,
-  rectangles, circles, ellipses, lines, polylines and polygons, the groups around them, and a shape
-  in `<defs>` or a `<symbol>` where a `<use>` draws it. It leaves out text, clips and masks.
+  It is drawn before the label as a symbol is, in the label's colour. The macOS and Linux hosts
+  draw the markup themselves: a template image AppKit tints on macOS, and in the button's text
+  colour on Linux. They draw the shapes icon sets use, in one colour: paths, rectangles, circles,
+  ellipses, lines, polylines and polygons, the groups around them, and a shape in `<defs>` or a
+  `<symbol>` where a `<use>` draws it. They leave out text, clips and masks.
+
+  iOS and Android draw it once as an image, through the renderer the app provides, as an SVG
+  [tab icon](/packages/router/tabs) is: `withSvgIcons(SvgImages)` in `provideNativeRouter`, or
+  `SVG_ICON_RENDERER` from `@ng-native/device` in an app without the router. Without one the button
+  shows no icon, and in development it says so once. The button has no icon until it has been
+  drawn, a frame or two after it appears. On iOS the image is a symbol's height in the title's
+  font, and on Android it is 18 points square. The web shows no SVG icon.
 
 `(press)` fires once for each click, tap or key that activates it. On Android it takes
 `android_ripple` and the rest of a `<pressable>`'s press inputs.

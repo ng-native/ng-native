@@ -3,7 +3,7 @@
 // button, the long press a view inside a context menu takes, `NgNativeHook`'s call-through, which
 // first responders answer the
 // shared undo manager, the undo steps, what a dropped item is, the split view's delegate, and which
-// scene a window opens in. The hooks installed on UIApplication and the app delegate, and the
+// scene a window opens in, and the native button's icon image. The hooks installed on UIApplication and the app delegate, and the
 // modules themselves, need React Native and are not here. Run by `run-tests.sh` on a simulator,
 // through XCTest's own runner; no CI job runs them.
 #import <React/RCTViewComponentView.h>
@@ -19,6 +19,7 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import "../NgNativeViewBinder.h"
 #import "../NgNativePressMenu.h"
+#import "../NgNativeButtonMetrics.h"
 
 @implementation RCTViewComponentView
 @end
@@ -680,6 +681,60 @@ static UIAction *itemOf(UIButton *button, NSUInteger index)
   XCTAssertEqual(NgNativeSessionForKey(kept, sessions, @"library"), (NSUInteger)NSNotFound);
   XCTAssertEqual(NgNativeSessionForKey(kept, sessions, nil), (NSUInteger)NSNotFound, @"not a session kept for no key");
   XCTAssertEqual(NgNativeSessionForKey(kept, @[ @"a", @"b" ], @"main"), (NSUInteger)NSNotFound, @"only among those given");
+}
+
+@end
+
+#pragma mark - The native button's icon image
+
+@interface NgNativeButtonImageTests : XCTestCase
+@end
+
+// A square PNG `pixels` wide, as a `data:` URI, as `SvgImages` answers.
+static NSString *pngURI(CGFloat pixels)
+{
+  UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
+  format.scale = 1;
+  UIGraphicsImageRenderer *renderer =
+      [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(pixels, pixels) format:format];
+  NSData *png = [renderer PNGDataWithActions:^(UIGraphicsImageRendererContext *context) {
+    [UIColor.blackColor setFill];
+    [context fillRect:CGRectMake(0, 0, pixels, pixels)];
+  }];
+  return [@"data:image/png;base64," stringByAppendingString:[png base64EncodedStringWithOptions:0]];
+}
+
+@implementation NgNativeButtonImageTests
+
+- (void)testDrawsThePNGAsATemplateImageASymbolsHeightSquareWhateverItWasDrawnAt
+{
+  CGFloat side = NgNativeButtonImageSide(@"");
+  XCTAssertEqual(side, round([UIFont preferredFontForTextStyle:UIFontTextStyleBody].pointSize * 1.2));
+  for (NSNumber *pixels in @[ @120, @54 ]) {
+    UIImage *image = NgNativeButtonImage(pngURI(pixels.doubleValue), @"");
+    XCTAssertNotNil(image);
+    XCTAssertEqual(image.renderingMode, UIImageRenderingModeAlwaysTemplate, @"tinted as a symbol is");
+    XCTAssertEqualWithAccuracy(image.size.width, side, 0.001);
+    XCTAssertEqualWithAccuracy(image.size.height, side, 0.001);
+  }
+  XCTAssertLessThan(NgNativeButtonImageSide(@"mini"), side, @"smaller with the title's font");
+}
+
+- (void)testDrawsNoImageForNoneOrDataThatIsNoImage
+{
+  XCTAssertNil(NgNativeButtonImage(@"", @""));
+  XCTAssertNil(NgNativeButtonImage(@"data:image/png;base64,AAAA", @""));
+  XCTAssertNil(NgNativeButtonImage(@"https://example.com/a.png", @""));
+}
+
+- (void)testMeasuresTheImageBesideTheTitleAndASymbolInsteadOfIt
+{
+  CGSize title = NgNativeButtonNaturalSize(@"Add", @"", @"", NO);
+  CGSize image = NgNativeButtonNaturalSize(@"Add", @"", @"", YES);
+  XCTAssertEqualWithAccuracy(
+      image.width - title.width, NgNativeButtonImageSide(@"") + NgNativeButtonImagePadding, 0.001);
+  CGSize symbol = NgNativeButtonNaturalSize(@"Add", @"", @"star", NO);
+  XCTAssertEqualWithAccuracy(NgNativeButtonNaturalSize(@"Add", @"", @"star", YES).width, symbol.width, 0.001);
 }
 
 @end

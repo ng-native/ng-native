@@ -159,7 +159,8 @@ A place that takes an image and not a view, such as a tab bar item, takes an ico
 asks react-native-svg for it as a PNG, and takes the view away again. It answers with an image
 source, a PNG data URI with the screen's scale, or null when react-native-svg is not in the build
 or does not answer. Android draws nothing off screen, so `at` has to be on screen. The router uses
-it for an SVG tab icon: see [Tabs](/packages/router/tabs).
+it for an SVG tab icon, and `<native-button>` for an SVG icon on iOS and Android: see
+[Tabs](/packages/router/tabs) and [Native button](/packages/components/native-button).
 
 ## Accessibility
 

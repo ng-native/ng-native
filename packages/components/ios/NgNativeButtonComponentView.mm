@@ -11,8 +11,10 @@ using namespace facebook::react;
  `<native-button>` on iOS: a UIButton drawn from a button configuration, the glass ones on iOS 26
  and later. `kind` picks the style (`default` the prominent one, `destructive` in red, `plain`
  borderless, anything else the plain push button), `controlSize` UIButton's own size with the
- metrics the shadow node measures with, and a tap sends `topButtonPress`. The title follows the
- user's text size: the button is configured again as it changes, and React Native measures it again.
+ metrics the shadow node measures with, and a tap sends `topButtonPress`. The picture before the
+ title is the SF Symbol, or else `iconImage`, an icon's SVG markup drawn as a PNG, tinted as the
+ title is. The title follows the user's text size: the button is configured again as it changes,
+ and React Native measures it again.
  Return and Escape press no button on iOS: `default` and `cancel` are only styles there.
  */
 @interface NgNativeButtonComponentView : RCTViewComponentView
@@ -78,7 +80,8 @@ static UIButtonConfiguration *configurationForKind(NSString *kind)
   const auto &newProps = static_cast<const NgNativeButtonProps &>(*props);
   const auto &previous = static_cast<const NgNativeButtonProps &>(*_props);
   BOOL changed = newProps.title != previous.title || newProps.kind != previous.kind ||
-      newProps.controlSize != previous.controlSize || newProps.sfSymbol != previous.sfSymbol;
+      newProps.controlSize != previous.controlSize || newProps.sfSymbol != previous.sfSymbol ||
+      newProps.iconImage != previous.iconImage;
   [super updateProps:props oldProps:oldProps];
   if (changed) {
     [self ngn_configureWith:newProps];
@@ -95,7 +98,8 @@ static UIButtonConfiguration *configurationForKind(NSString *kind)
   configuration.contentInsets = NgNativeButtonInsets(controlSize);
   configuration.title = string(props.title);
   configuration.titleLineBreakMode = NSLineBreakByTruncatingTail;
-  configuration.image = NgNativeButtonSymbol(string(props.sfSymbol), controlSize);
+  configuration.image = NgNativeButtonSymbol(string(props.sfSymbol), controlSize)
+      ?: NgNativeButtonImage(string(props.iconImage), controlSize);
   configuration.imagePadding = NgNativeButtonImagePadding;
   UIFont *font = NgNativeButtonFont(controlSize);
   configuration.titleTextAttributesTransformer = ^NSDictionary<NSAttributedStringKey, id> *(

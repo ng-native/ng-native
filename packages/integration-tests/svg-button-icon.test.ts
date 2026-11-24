@@ -67,13 +67,25 @@ for (const os of ['macos', 'linux'] as const) {
 }
 
 describe('on iOS', () => {
-  it('commits no icon for a drawn row, and says once that a button shows none there', async () => {
+  it('commits no icon for a drawn row, and draws a button one through a renderer', async () => {
     registerPlatformComponents('ios');
     const { getByTestId } = await render(Fixture);
     assert.equal(getByTestId('skills').props['svgIcon'], undefined, 'a row drawn here');
     assert.equal(getByTestId('add').props['svgIcon'], blocks);
-    const said = warned.filter((message) => message.includes('macOS and Linux only'));
+    assert.deepEqual(
+      warned.filter((message) => message.includes(' only')),
+      [],
+      'native-button-mobile-icon.test.ts covers the renderer',
+    );
+  });
+});
+
+describe('on a platform that draws no SVG', () => {
+  it('says once that a button shows none there, naming where it does', async () => {
+    registerPlatformComponents('web');
+    await render(Fixture);
+    const said = warned.filter((message) => message.includes('<native-button>'));
     assert.equal(said.length, 1, warned.join('\n'));
-    assert.match(said[0]!, /<native-button>/);
+    assert.match(said[0]!, /macOS, Linux, iOS and Android only, so on web/);
   });
 });

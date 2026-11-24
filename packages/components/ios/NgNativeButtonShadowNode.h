@@ -30,6 +30,8 @@ class NgNativeButtonProps final : public ViewProps {
   // `mini`, `small`, `regular` or `large`; empty is `regular`.
   std::string controlSize{};
   std::string sfSymbol{};
+  // An icon's SVG markup drawn as a PNG, as a `data:` URI, which a symbol wins over.
+  std::string iconImage{};
   bool enabled{true};
 };
 

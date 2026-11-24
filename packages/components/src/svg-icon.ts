@@ -21,12 +21,13 @@ function warnOnce(key: string, message: string): void {
  * The markup to commit as `svgIcon` for an icon, or undefined when it is not `{ svg }`. Says once,
  * in development, when the markup is no `<svg>` element (the icon's name in place of its markup is
  * the usual slip), and with `offDesktop` when the platform running draws a symbol or a drawable for
- * the element but no SVG, since either shows no icon.
+ * the element but no SVG, since either shows no icon. `drawnOn` names the OSes that draw it.
  */
 export function svgIconMarkup(
   icon: { readonly svg?: string } | object | undefined,
   element: string,
   offDesktop = false,
+  drawnOn = 'macOS and Linux',
 ): string | undefined {
   if (!icon || !('svg' in icon) || typeof icon.svg !== 'string') return undefined;
   const markup = icon.svg;
@@ -42,7 +43,7 @@ export function svgIconMarkup(
   if (offDesktop && os !== 'macos' && os !== 'linux') {
     warnOnce(
       `platform:${element}:${os}`,
-      `<${element}> draws an SVG icon on macOS and Linux only, so on ${os} it shows none. ` +
+      `<${element}> draws an SVG icon on ${drawnOn} only, so on ${os} it shows none. ` +
         `Give it { sfSymbol } or { drawable } there.`,
     );
   }

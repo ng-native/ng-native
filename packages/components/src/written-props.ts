@@ -96,6 +96,7 @@ export const WRITTEN_PROPS: readonly string[] = [
   'hidesWhenStopped',
   'hitSlop',
   'horizontal',
+  'iconImage',
   'importantForAutofill',
   'indeterminate',
   'indicatorStyle',

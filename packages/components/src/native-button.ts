@@ -1,13 +1,38 @@
-import { Component, computed, forwardRef, input } from '@angular/core';
+import {
+  Component,
+  ErrorHandler,
+  ViewContainerRef,
+  computed,
+  effect,
+  forwardRef,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import {
   isApplePlatform,
   nativePlatform,
   registerViewName,
   type HostNode,
 } from '@ng-native/fabric';
-import type { ControlSize } from '@ng-native/device';
+import { SVG_ICON_RENDERER, type ControlSize } from '@ng-native/device';
+import { Image, type ImageURISource } from './image.ts';
 import { ControlBase, TouchableBase } from './pressable.ts';
 import { svgIconMarkup } from './svg-icon.ts';
+
+declare const ngDevMode: unknown;
+
+/** Platforms already told that a button's SVG icon has nothing to draw it. */
+const warnedNoRenderer = new Set<string>();
+
+/**
+ * The side of an SVG icon drawn for iOS, in points. The button sizes it to its title's font, so
+ * it is drawn large enough for the largest text size to scale it down rather than up.
+ */
+const IOS_SVG_SIZE = 40;
+
+/** The side of an Android button's icon, in points: Material's for an icon in a button. */
+const ANDROID_ICON_SIZE = 18;
 
 /**
  * What a button does in its window: on macOS, Return presses `default` and Escape presses `cancel`.
@@ -17,8 +42,9 @@ export type ButtonKind = 'default' | 'cancel' | 'destructive' | 'plain';
 
 /**
  * A button's picture, as on `<native-tab>`: an SF Symbol on Apple's OSes, a drawable on Android, or
- * an icon's SVG markup, such as an `@ng-icons` set's, on macOS and Linux. The host draws the markup
- * in the button's text colour, as it does a symbol, and an SF Symbol given too wins on macOS.
+ * an icon's SVG markup, such as an `@ng-icons` set's. macOS and Linux draw the markup themselves,
+ * and iOS and Android draw it through the renderer `SVG_ICON_RENDERER` provides. It is drawn in the
+ * button's text colour, as a symbol is, and an SF Symbol given too wins on macOS.
  */
 export type ButtonIcon =
   { readonly sfSymbol: string } | { readonly drawable: string } | { readonly svg: string };
@@ -47,14 +73,24 @@ registerViewName(
  */
 @Component({
   selector: 'native-button',
-  template: '<ng-content />',
+  imports: [Image],
+  template: `
+    @if (androidPicture(); as source) {
+      <image [source]="source" [tintColor]="tint()" style="width: 18px; height: 18px" />
+    }
+    <ng-content />
+  `,
   providers: [{ provide: TouchableBase, useExisting: forwardRef(() => NativeButton) }],
   host: {
     '[kind]': 'kind()',
     '[controlSize]': 'controlSize()',
     '[sfSymbol]': 'symbol()',
-    '[drawable]': 'drawableResource()',
+    '[drawable]': 'android ? undefined : drawableResource()',
     '[svgIcon]': 'svgIcon()',
+    '[iconImage]': 'iosPicture()?.uri',
+    '[style.flexDirection]': 'androidPicture() ? "row" : undefined',
+    '[style.alignItems]': 'androidPicture() ? "center" : undefined',
+    '[style.gap]': 'androidPicture() ? "8px" : undefined',
     '[enabled]': '!pressDisabled()',
   },
 })
@@ -83,7 +119,69 @@ export class NativeButton extends ControlBase {
     return this.drawableName() ?? (icon && 'drawable' in icon ? icon.drawable : undefined);
   });
 
-  protected readonly svgIcon = computed(() => svgIconMarkup(this.icon(), 'native-button', true));
+  private readonly svgRenderer = inject(SVG_ICON_RENDERER);
+  private readonly svgHost = inject(ViewContainerRef);
+  private readonly errors = inject(ErrorHandler);
+  protected readonly android = nativePlatform() === 'android';
+  /** Where the markup is drawn here, by the app's renderer, as an image. */
+  private readonly drawsSvg = this.android || nativePlatform() === 'ios';
+
+  protected readonly svgIcon = computed(() =>
+    svgIconMarkup(this.icon(), 'native-button', !this.drawsSvg, 'macOS, Linux, iOS and Android'),
+  );
+
+  /** The markup drawn as an image, on iOS and Android, once the renderer has answered. */
+  private readonly drawnSvg = this.drawSvg();
+
+  /** The image iOS draws before the title, tinted as a symbol is. */
+  protected readonly iosPicture = computed(() =>
+    this.android ? undefined : (this.drawnSvg() as ImageURISource | undefined),
+  );
+
+  /** Android: the image before the label, a drawable's or the drawn markup. */
+  protected readonly androidPicture = computed((): ImageURISource | undefined => {
+    if (!this.android) return undefined;
+    const drawable = this.drawableResource();
+    if (drawable) return { uri: drawable };
+    return this.drawnSvg() as ImageURISource | undefined;
+  });
+
+  /** The label's colour, which an Android icon is tinted in: black, as text is, where none is set. */
+  protected readonly tint = signal<string | undefined>(undefined);
+
+  constructor() {
+    super();
+    // Only a button with an icon follows its colour: a watch is a look at every commit.
+    effect((onCleanup) => {
+      if (!this.androidPicture()) return;
+      const follow = (colour: unknown) => this.tint.set((colour as string | undefined) ?? 'black');
+      follow(this.engine.colour(this.node));
+      onCleanup(this.engine.watchColour(this.node, follow));
+    });
+  }
+
+  /**
+   * The markup drawn once by the app's renderer, where the platform draws no SVG itself. An answer
+   * for an icon the button no longer has is dropped.
+   */
+  private drawSvg() {
+    const drawn = signal<unknown>(undefined);
+    if (!this.drawsSvg) return drawn;
+    effect((onCleanup) => {
+      const markup = this.svgIcon();
+      drawn.set(undefined);
+      if (!markup) return;
+      if (!this.svgRenderer) return warnNoRenderer();
+      let current = true;
+      onCleanup(() => (current = false));
+      const size = this.android ? ANDROID_ICON_SIZE : IOS_SVG_SIZE;
+      this.svgRenderer.render(markup, size, this.svgHost).then(
+        (source) => current && drawn.set(source ?? undefined),
+        (error: unknown) => this.errors.handleError(error),
+      );
+    });
+    return drawn;
+  }
 
   /**
    * Where the host draws the button (AppKit, UIKit, GTK), it presses it: the responder would press
@@ -129,4 +227,16 @@ export class NativeButton extends ControlBase {
     super.ngOnDestroy();
     this.stopPress?.();
   }
+}
+
+/** Says once, in development, that a button's SVG icon has nothing to draw it, so it shows none. */
+function warnNoRenderer(): void {
+  const os = nativePlatform();
+  if ((typeof ngDevMode !== 'undefined' && !ngDevMode) || warnedNoRenderer.has(os)) return;
+  warnedNoRenderer.add(os);
+  console.warn(
+    `[angular-native] <native-button> has an SVG icon and nothing to draw it on ${os}, so it ` +
+      `shows none. Add withSvgIcons(SvgImages) from @ng-native/icons to provideNativeRouter, or ` +
+      `provide SVG_ICON_RENDERER.`,
+  );
 }
