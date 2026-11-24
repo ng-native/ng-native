@@ -208,6 +208,21 @@ describe('a background-size below zero', () => {
     assert.equal(noted.sheet.rules[0].declarations.width, 10);
   });
 
+  it('is refused with a priority written against it, on its own and in the shorthand', () => {
+    for (const css of [
+      '.a { background-size: 2px; background-size: -1px!important }',
+      '.a { background-size: 2px; background: linear-gradient(red, blue) 0 0 / -1px!important }',
+    ]) {
+      const { sheet, warnings } = compiled(css);
+      assert.match(warnings[0]!, /nothing below zero/, css);
+      assert.deepEqual(
+        sheet.rules[0].declarations.experimental_backgroundSize,
+        [{ x: 2, y: 'auto' }],
+        css,
+      );
+    }
+  });
+
   it('leaves a layer with two slashes for the parser to refuse', () => {
     const { sheet, warnings } = compiled(
       '.a { background: red; background: linear-gradient(blue, blue) 0 0 / 4px / 5px }',

@@ -1393,6 +1393,7 @@ const WRITTEN_NEGATIVE_CASES = (
     ['line-height', '-1', 'line-height'],
     ['line-height', '-1px', 'line-height'],
     ['aspect-ratio', '-1', 'aspect-ratio'],
+    ['background-size', '-1px', 'background-size'],
   ] as const
 ).flatMap(([property, value, measured]): OracleCase[] => [
   inRule(property, value, measured, true),

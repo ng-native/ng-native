@@ -4704,7 +4704,8 @@ const NEGATIVE = /^-(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:%|[a-z]+)?$/i;
 function tagNegatives(value) {
   let depth = 0;
   let out = '';
-  for (const token of value.split(/(\/\*[\s\S]*?\*\/|\s+|,|\(|\))/)) {
+  // `!` too, so a priority written against the value, `-1px!important`, leaves the value bare.
+  for (const token of value.split(/(\/\*[\s\S]*?\*\/|\s+|,|\(|\)|!)/)) {
     if (token === '(') depth++;
     else if (token === ')') depth--;
     const negative = depth === 0 && NEGATIVE.test(token) && parseFloat(token) !== 0;

@@ -1480,6 +1480,22 @@
     }
   },
   {
+    "name": "a rule's background-size: -1px, read as background-size",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-size": "7px auto"
+    }
+  },
+  {
+    "name": "an inline background-size: -1px, read as background-size, over a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-size": "7px auto"
+    }
+  },
+  {
     "name": "a rule's width: calc(1px + 2), read as width",
     "expected": {
       "color": "rgb(0, 0, 0)",
