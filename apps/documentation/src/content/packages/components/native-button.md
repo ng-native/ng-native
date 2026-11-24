@@ -53,8 +53,9 @@ greys it out.
   `SVG_ICON_RENDERER` from `@ng-native/device` in an app without the router. Without one the button
   shows no icon, and in development it says so once. `SvgImages` draws through react-native-svg, so
   the app's native build needs that package: without it the button shows no icon and says nothing.
-  A renderer of the app's own has to return a base64 `data:` URI for iOS, where the button draws no
-  other kind of URI. The button has no icon until it has been drawn, a frame or two after it
+  A renderer of the app's own resolves to an image source such as `{ uri, scale }`, and for iOS its
+  `uri` has to be a base64 `data:` URI, as the button there draws no other kind. The button has no
+  icon until the renderer has drawn it, which `SvgImages` does a frame or two after the button
   appears. On iOS the image is a symbol's height in the title's font, and on Android it is 18
   points square. The web shows no SVG icon.
 
