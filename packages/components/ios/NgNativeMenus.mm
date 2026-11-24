@@ -3,6 +3,7 @@
 #import <UIKit/UIKit.h>
 
 #import "NgNativeMenuBuilding.h"
+#import "NgNativePressMenu.h"
 #import "NgNativeResponderHooks.h"
 #import "NgNativeViewBinder.h"
 
@@ -21,9 +22,14 @@
    that `nativeID`, added once the view is mounted, its menu read as it opens, and removed with
    null, or as the view is unmounted, recycled or renamed. A long press opens it, and a secondary
    click from an iPad pointer.
+ - `setPressMenu(nativeID, entries)`: a menu a press opens on React Native's view with that
+   `nativeID`, as a clear button over the view (NgNativePressMenu.h), added once the view is
+   mounted, its menu made again as the entries change, and removed with null, or as the view is
+   unmounted, recycled or renamed.
  - Events on `ngNativeMenus`: `menuSelect` for a menu bar item, `shortcut` with
-   `textInputFocused`, `navigate` for the Back and Forward roles, and `contextMenuSelect` with the
-   view's `nativeID` and the item's `id`, since React Native's view sends no event it does not know.
+   `textInputFocused`, `navigate` for the Back and Forward roles, and `contextMenuSelect` and
+   `pressMenuSelect` with the view's `nativeID` and the item's `id`, since React Native's view sends
+   no event it does not know.
  - `menuBar` is true on an iPad and false on an iPhone; `appName` is the bundle's display name.
  */
 @interface NgNativeMenus : NSObject <RCTBridgeModule, RCTInvalidating, NgNativeMenusHost>
@@ -106,6 +112,8 @@ static UIMenuIdentifier standardMenu(NSString *role)
   NSArray<UIKeyCommand *> *_shortcuts;
   NSMutableDictionary<NSString *, NSArray *> *_contextMenus;
   NgNativeViewBinder *_contextMenuViews;
+  NSMutableDictionary<NSString *, NSArray *> *_pressMenus;
+  NgNativeViewBinder *_pressMenuViews;
   // The views inside a context menu's that take a long press themselves, by `nativeID`.
   NSMutableSet<NSString *> *_longPressTakers;
 }
@@ -146,6 +154,21 @@ RCT_EXPORT_MODULE()
         detach:^(UIView *view, NgNativeContextMenuTarget *target) {
           [view removeInteraction:target.interaction];
         }];
+    _pressMenus = [NSMutableDictionary dictionary];
+    _pressMenuViews = [[NgNativeViewBinder alloc]
+        initWithAttach:^id(UIView *view, NSString *nativeID) {
+          NgNativeMenus *module = weakSelf;
+          NSArray *entries = module == nil ? nil : module->_pressMenus[nativeID];
+          if (entries == nil) {
+            return nil;
+          }
+          return NgNativeAddPressMenu(view, entries, ^(NSString *itemId) {
+            [weakSelf send:@{@"type" : @"pressMenuSelect", @"nativeID" : nativeID, @"id" : itemId}];
+          });
+        }
+        detach:^(UIView *view, NgNativePressMenuButton *button) {
+          [button removeFromSuperview];
+        }];
     dispatch_async(dispatch_get_main_queue(), ^{
       NgNativeInstallResponderHooks();
       NgNativeSetMenusHost(self);
@@ -161,6 +184,8 @@ RCT_EXPORT_MODULE()
   dispatch_async(dispatch_get_main_queue(), ^{
     [self->_contextMenuViews unbindAll];
     [self->_contextMenus removeAllObjects];
+    [self->_pressMenuViews unbindAll];
+    [self->_pressMenus removeAllObjects];
     [self->_longPressTakers removeAllObjects];
     self->_menuBar = @[];
     self->_shortcuts = @[];
@@ -220,6 +245,21 @@ RCT_EXPORT_METHOD(setContextMenu : (NSString *)nativeID entries : (nullable NSAr
   } else {
     [_contextMenus removeObjectForKey:nativeID];
     [_contextMenuViews unbind:nativeID];
+  }
+}
+
+RCT_EXPORT_METHOD(setPressMenu : (NSString *)nativeID entries : (nullable NSArray *)entries)
+{
+  if (![nativeID isKindOfClass:[NSString class]] || nativeID.length == 0) {
+    return;
+  }
+  if ([entries isKindOfClass:[NSArray class]] && entries.count > 0) {
+    _pressMenus[nativeID] = entries;
+    ((NgNativePressMenuButton *)[_pressMenuViews tokenFor:nativeID]).entries = entries;
+    [_pressMenuViews bind:nativeID];
+  } else {
+    [_pressMenus removeObjectForKey:nativeID];
+    [_pressMenuViews unbind:nativeID];
   }
 }
 

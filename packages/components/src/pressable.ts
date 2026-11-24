@@ -270,6 +270,7 @@ export abstract class TouchableBase extends ViewBase {
         },
       };
     };
+    this.pressMenu?.disableWhile(() => this.pressDisabled());
   }
 
   /** Called as a press starts and ends, for a subclass that shows it natively. `Text` does. */
@@ -572,7 +573,7 @@ export abstract class TouchableBase extends ViewBase {
   ): void {
     const observers = interactionObservers(this.injector);
     const interaction = observers && this.describeInteraction(type, event, source);
-    if (output !== this.press || !this.pressMenu?.open()) output.emit(event);
+    if (output !== this.press || !this.pressMenu?.takePress()) output.emit(event);
     if (observers && interaction) notifyInteraction(observers, interaction);
   }
 

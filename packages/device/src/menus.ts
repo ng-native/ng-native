@@ -17,7 +17,9 @@
  *   since React Native's Android view drops a `contextMenu` prop it does not know.
  * - On iOS it is a TurboModule with `setContextMenu(nativeID, entries)` too, for the same reason.
  *   React Native's iOS view sends no event it does not know either, so the module sends the item
- *   chosen as `{ type: 'contextMenuSelect', nativeID, id }`.
+ *   chosen as `{ type: 'contextMenuSelect', nativeID, id }`. Its `setPressMenu(nativeID, entries)`
+ *   lays a menu a press opens over that view, and sends the item chosen as
+ *   `{ type: 'pressMenuSelect', nativeID, id }`: UIKit opens a menu on a touch, but not from code.
  * - Where it draws menus on a press, `popUpMenu(view, entries)` draws one under the view with that
  *   tag now, and sends the item chosen as the view's `topContextMenuSelect`, as a context menu's
  *   (the desktop host, and Android).
@@ -144,6 +146,8 @@ export type NativeMenuEvent =
   | { readonly type: 'shortcut'; readonly id: string; readonly textInputFocused?: boolean }
   /** An item chosen in the context menu of the view with `nativeID` (iOS). */
   | { readonly type: 'contextMenuSelect'; readonly nativeID: string; readonly id: string }
+  /** An item chosen in the press menu of the view with `nativeID` (iOS). */
+  | { readonly type: 'pressMenuSelect'; readonly nativeID: string; readonly id: string }
   /**
    * Back or forward, from whichever input the OS has for it: View > Back and Forward and their
    * keys, a two-finger swipe, mouse buttons 4 and 5, the toolbar's chevrons and their history
@@ -188,6 +192,11 @@ export interface NativeMenus {
    * `topContextMenuSelect`. The desktop host, and Android.
    */
   popUpMenu?(view: number, entries: readonly NativeMenuEntry[]): void;
+  /**
+   * The menu a press opens on the view with `nativeID`, or null to take it away. iOS, which opens
+   * one on a touch but has no way to open one from code.
+   */
+  setPressMenu?(nativeID: string, entries: readonly NativeMenuEntry[] | null): void;
   subscribe(listener: (event: NativeMenuEvent) => void): () => void;
 }
 
@@ -202,6 +211,7 @@ interface MenusModule {
   setContextMenu?(nativeID: string, entries: unknown): void;
   setTakesLongPress?(nativeID: string, takes: boolean): void;
   popUpMenu?(view: number, entries: unknown): void;
+  setPressMenu?(nativeID: string, entries: unknown): void;
   /** An Expo module's own events. */
   addListener?(event: string, listener: (event: unknown) => void): { remove(): void };
 }
@@ -245,18 +255,20 @@ export function menusSource(): NativeMenus | null {
 
 /**
  * The menu methods a module may lack, bound, and none it lacks: a host without the context menu
- * ones reads props, and one without `popUpMenu` leaves a press to `(press)`.
+ * ones reads props, and one without `popUpMenu` or `setPressMenu` leaves a press to `(press)`.
  */
 function contextMenuMethods(
   module: MenusModule,
-): Pick<NativeMenus, 'setContextMenu' | 'setTakesLongPress' | 'popUpMenu'> {
+): Pick<NativeMenus, 'setContextMenu' | 'setTakesLongPress' | 'popUpMenu' | 'setPressMenu'> {
   const setContextMenu = module.setContextMenu?.bind(module);
   const setTakesLongPress = module.setTakesLongPress?.bind(module);
   const popUpMenu = module.popUpMenu?.bind(module);
+  const setPressMenu = module.setPressMenu?.bind(module);
   return {
     ...(setContextMenu && { setContextMenu }),
     ...(setTakesLongPress && { setTakesLongPress }),
     ...(popUpMenu && { popUpMenu }),
+    ...(setPressMenu && { setPressMenu }),
   };
 }
 
@@ -343,6 +355,29 @@ export class Menus {
    */
   popUpMenu(view: number, entries: readonly NativeMenuEntry[]): void {
     this.native?.popUpMenu?.(view, entries);
+  }
+
+  /**
+   * Whether the host takes a menu a press opens by the view's `nativeID` (`setPressMenu`), and
+   * opens it on a touch itself: iOS.
+   */
+  readonly pressMenuByNativeId: boolean = this.native?.setPressMenu !== undefined;
+
+  /** What choosing an item does, by the `nativeID` of the view whose press menu it is in. */
+  private readonly pressMenuChoices = new Map<string, (id: string) => void>();
+
+  /**
+   * Send the menu a press opens on the view with `nativeID`, or null to take it away. `choose`
+   * runs with the item's `id` as the host sends the choice.
+   */
+  setPressMenu(
+    nativeID: string,
+    entries: readonly NativeMenuEntry[] | null,
+    choose: (id: string) => void,
+  ): void {
+    if (entries) this.pressMenuChoices.set(nativeID, choose);
+    else this.pressMenuChoices.delete(nativeID);
+    this.native?.setPressMenu?.(nativeID, entries);
   }
 
   /** What choosing an item does, by the `nativeID` of the view whose menu it is in. */
@@ -525,6 +560,10 @@ export class Menus {
     }
     if (event.type === 'contextMenuSelect') {
       this.contextMenuChoices.get(event.nativeID)?.(event.id);
+      return;
+    }
+    if (event.type === 'pressMenuSelect') {
+      this.pressMenuChoices.get(event.nativeID)?.(event.id);
       return;
     }
     const { presses, editing } = this.sentShortcuts();

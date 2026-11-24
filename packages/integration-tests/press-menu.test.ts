@@ -2,10 +2,11 @@
  * `<pressable [menu]>`: a menu a press opens under the element, instead of firing `(press)`.
  *
  * The host contract (`NativeMenus.popUpMenu` in `@ng-native/device`, the `NgNativeMenus` module's
- * `popUpMenu(view, entries)`): the view's tag and the menu as `serializeMenu` makes it. The host draws it under the view and sends the item
- * chosen as the view's `topContextMenuSelect` with `{ id }`, as a context menu's. A host without the
- * method (iOS, Expo Go and the web for now) leaves the press to `(press)`, with one warning in
- * development.
+ * `popUpMenu(view, entries)`): the view's tag and the menu as `serializeMenu` makes it. The host
+ * draws it under the view and sends the item chosen as the view's `topContextMenuSelect` with
+ * `{ id }`, as a context menu's. iOS's module takes `setPressMenu(nativeID, entries)` instead, opens
+ * the menu on a touch itself, and sends the choice as a `pressMenuSelect` event. A host with neither
+ * (Expo Go and the web for now) leaves the press to `(press)`, with one warning in development.
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
@@ -19,7 +20,14 @@ import {
   Pressable,
   Text,
 } from '@ng-native/components';
-import { Menus, OS, menusSource, type NativeMenuEntry, type NativeMenus } from '@ng-native/device';
+import {
+  Menus,
+  OS,
+  menusSource,
+  type NativeMenuEntry,
+  type NativeMenuEvent,
+  type NativeMenus,
+} from '@ng-native/device';
 import { cleanup, fireEvent, render, screen, settle } from '@ng-native/testing';
 
 afterEach(cleanup);
@@ -196,9 +204,155 @@ describe('a press menu with no host to draw it', () => {
   });
 });
 
-// After the warning test: the warning is given once in a run.
+/** iOS's module: menus by `nativeID`, and the choice as an `ngNativeMenus` event. */
+function iosHost() {
+  const pressMenus: { nativeID: string; entries: NativeMenuEntry[] | null }[] = [];
+  let hear: (event: NativeMenuEvent) => void = () => {};
+  const native: NativeMenus = {
+    menuBar: false,
+    appName: 'Notes',
+    setMenuBar: () => {},
+    setShortcuts: () => {},
+    setContextMenu: () => {},
+    setTakesLongPress: () => {},
+    setPressMenu: (nativeID, entries) =>
+      void pressMenus.push({ nativeID, entries: entries && [...entries] }),
+    subscribe: (listener) => {
+      hear = listener;
+      return () => {};
+    },
+  };
+  return { native, pressMenus, say: (event: NativeMenuEvent) => hear(event) };
+}
+
+async function openOnIos() {
+  const host = iosHost();
+  const said: string[] = [];
+  const sort = signal('name');
+  const shown = signal(true);
+  const present = signal(true);
+  const disabled = signal(false);
+  await render(
+    `@if (present()) {
+      <pressable testID="sort" #sorter="pressMenu" [menu]="shown() ? sortMenu : null"
+        [contextMenu]="rowMenu" [disabled]="disabled()" (press)="said.push('press')"></pressable>
+      <pressable testID="opener" (press)="said.push('opened ' + sorter.open())"></pressable>
+    }
+    <ng-template #sortMenu>
+      <menu-item label="Name" [checked]="sort() === 'name'" (select)="sort.set('name')" />
+      <menu-item label="Date" [checked]="sort() === 'date'" (select)="sort.set('date')" />
+    </ng-template>
+    <ng-template #rowMenu>
+      <menu-item label="Delete" (select)="said.push('delete')" />
+    </ng-template>`,
+    {
+      imports: [ContextMenu, MenuItem, PressMenu, Pressable],
+      providers: [
+        { provide: Menus.SOURCE, useValue: host.native },
+        { provide: OS, useValue: 'ios' },
+      ],
+      componentProperties: { said, sort, shown, present, disabled },
+    },
+  );
+  await settle();
+  const node = screen.getByTestId('sort');
+  return { host, said, sort, shown, present, disabled, node, nativeID: node.props['nativeID'] };
+}
+
 describe('a press menu on ios', () => {
-  it('fires (press) where the module has no popUpMenu', async () => {
+  it("lays the menu over the view by its nativeID, and a press doesn't fire (press)", async () => {
+    const { host, said, node, nativeID } = await openOnIos();
+    assert.equal(typeof nativeID, 'string');
+    assert.deepEqual(
+      host.pressMenus.map((sent) => ({ ...sent, entries: byPlace(sent.entries ?? undefined) })),
+      [
+        {
+          nativeID,
+          entries: [
+            { id: 'action', label: 'Name', checked: true },
+            { id: 'action', label: 'Date', checked: false },
+          ],
+        },
+      ],
+    );
+    // React Native's touch, should UIKit not cancel it as the menu opens.
+    await fireEvent.press(node);
+    await settle();
+    assert.deepEqual(said, []);
+  });
+
+  it('runs the item chosen, and sends the menu again as it changes', async () => {
+    const { host, sort, said, nativeID } = await openOnIos();
+    const entries = host.pressMenus[0]!.entries!;
+    host.say({ type: 'pressMenuSelect', nativeID: String(nativeID), id: idOf(entries, 'Date') });
+    await settle();
+    assert.equal(sort(), 'date');
+    assert.deepEqual(said, [], "the context menu's item did not run");
+    assert.deepEqual(byPlace(host.pressMenus.at(-1)!.entries!), [
+      { id: 'action', label: 'Name', checked: false },
+      { id: 'action', label: 'Date', checked: true },
+    ]);
+  });
+
+  it("leaves a choice from the element's context menu to it", async () => {
+    const { host, sort, said, nativeID } = await openOnIos();
+    const name = idOf(host.pressMenus[0]!.entries!, 'Date');
+    host.say({ type: 'contextMenuSelect', nativeID: String(nativeID), id: name });
+    await settle();
+    assert.equal(sort(), 'name');
+    assert.deepEqual(said, []);
+  });
+
+  it('takes the menu away while the pressable is disabled, which then fires nothing', async () => {
+    const { host, said, sort, disabled, node, nativeID } = await openOnIos();
+    const date = idOf(host.pressMenus[0]!.entries!, 'Date');
+    disabled.set(true);
+    await settle();
+    assert.deepEqual(host.pressMenus.at(-1), { nativeID, entries: null });
+    await fireEvent.press(node);
+    assert.deepEqual(said, []);
+    // From a menu still open as it was disabled.
+    host.say({ type: 'pressMenuSelect', nativeID: String(nativeID), id: date });
+    assert.equal(sort(), 'name');
+    disabled.set(false);
+    await settle();
+    assert.equal(host.pressMenus.at(-1)!.entries?.length, 2);
+  });
+
+  it('takes the menu away with [menu], and as the element goes', async () => {
+    const { host, said, shown, present, node, nativeID } = await openOnIos();
+    shown.set(false);
+    await settle();
+    assert.deepEqual(host.pressMenus.at(-1), { nativeID, entries: null });
+    await fireEvent.press(node);
+    await settle();
+    assert.deepEqual(said, ['press'], 'with no menu, the press is the press');
+    shown.set(true);
+    await settle();
+    assert.equal(host.pressMenus.at(-1)!.entries?.length, 2);
+    present.set(false);
+    await settle();
+    assert.deepEqual(host.pressMenus.at(-1), { nativeID, entries: null });
+  });
+
+  it('opens nothing from code, and warns once', async () => {
+    const warnings: unknown[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => void warnings.push(args.join(' '));
+    try {
+      const { said } = await openOnIos();
+      await fireEvent.press(screen.getByTestId('opener'));
+      await fireEvent.press(screen.getByTestId('opener'));
+      assert.deepEqual(said, ['opened false', 'opened false']);
+      assert.equal(warnings.length, 1);
+      assert.match(String(warnings[0]), /iOS .* no way to open one from code/);
+    } finally {
+      console.warn = warn;
+    }
+  });
+
+  // After the warning test: the warning is given once in a run.
+  it('fires (press) where the module has no setPressMenu', async () => {
     const warn = console.warn;
     console.warn = () => {};
     try {
@@ -300,7 +454,10 @@ describe("the menus' platform source", () => {
   it('passes popUpMenu through from a module that has it, and none from one without', () => {
     const calls: unknown[] = [];
     const host = globalThis as Record<string, unknown>;
-    const withIt = { popUpMenu: (view: number, entries: unknown) => calls.push([view, entries]) };
+    const withIt = {
+      popUpMenu: (view: number, entries: unknown) => calls.push([view, entries]),
+      setPressMenu: (nativeID: string, entries: unknown) => calls.push([nativeID, entries]),
+    };
     const modules: Record<string, unknown> = { NgNativeMenus: withIt };
     host['require'] = (id: string) =>
       id === 'react-native'
@@ -309,9 +466,17 @@ describe("the menus' platform source", () => {
     host['nativeFabricUIManager'] = {};
     try {
       menusSource()!.popUpMenu?.(7, []);
-      assert.deepEqual([...calls], [[7, []]]);
+      menusSource()!.setPressMenu?.('sort', null);
+      assert.deepEqual(
+        [...calls],
+        [
+          [7, []],
+          ['sort', null],
+        ],
+      );
       modules['NgNativeMenus'] = {};
       assert.equal(menusSource()!.popUpMenu, undefined);
+      assert.equal(menusSource()!.setPressMenu, undefined);
       // Android's Expo module.
       delete modules['NgNativeMenus'];
       host['expo'] = { modules: { NgNativeMenus: withIt } };

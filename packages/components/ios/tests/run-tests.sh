@@ -30,11 +30,11 @@ xcrun --sdk iphonesimulator clang++ -std=c++20 -fobjc-arc -fmodules -bundle \
   -target arm64-apple-ios16.4-simulator -isysroot "$sdk" \
   -I "$here/stubs" -F "$platform/Developer/Library/Frameworks" \
   -Xlinker -rpath -Xlinker "$platform/Developer/Library/Frameworks" \
-  -framework XCTest -framework UIKit -framework QuartzCore -framework UniformTypeIdentifiers \
+  -framework XCTest -framework UIKit -framework CoreGraphics -framework QuartzCore -framework UniformTypeIdentifiers \
   "$here/NgNativeComponentsTests.mm" "$ios/NgNativeViewBinder.mm" "$ios/NgNativeMenuBuilding.mm" \
   "$ios/NgNativeResponderHooks.mm" "$ios/NgNativeUndoSteps.mm" "$ios/NgNativeDropItems.mm" \
   "$ios/NgNativeSplitViewDelegate.mm" \
-  "$ios/NgNativeSceneKeys.mm" \
+  "$ios/NgNativeSceneKeys.mm" "$ios/NgNativePressMenu.mm" \
   -o "$bundle/NgNativeComponentsTests"
 
 xcrun simctl spawn "$udid" "$platform/Developer/Library/Xcode/Agents/xctest" "$bundle"

@@ -142,12 +142,23 @@ choices like this one is a pop-up select. `open()` opens it from code, named in 
 `#sort="pressMenu"`, and says whether it asked the host to open it: it answers `true` even when the
 host then draws nothing, for an element not on screen.
 
-macOS draws it as a menu under the element, Linux as a popover menu below it, and Android as a
-PopupMenu below it, from its leading edge. On Android that takes the native side of
-`@ng-native/components`, which a development build has and Expo Go does not. Linux has no key
-that presses a focused element, so there the keyboard does not open it. iOS, Expo Go and the web
-host draw none yet: there a press fires `(press)` as it would without `[menu]`, and a warning in
-development says so once. A menu that shows no item opens nothing, and the press fires `(press)`.
+macOS draws it as a menu under the element, Linux as a popover menu below it, Android as a
+PopupMenu below it, from its leading edge, and iOS as a menu from the element, which UIKit places.
+On Android and iOS that takes the native side of `@ng-native/components`, which a development
+build has and Expo Go does not. Linux has no key that presses a focused element, so there the
+keyboard does not open it.
+
+On iOS, UIKit opens a menu only from a touch on a control of its own, so the element gets a clear
+button laid over it, which opens the menu on a touch or a VoiceOver press. The element stays what
+VoiceOver reads, with its own label, role and state. Two things follow. `open()` cannot open the
+menu on iOS: it returns `false`, and a warning in development says so once. And the button covers
+the element, so a touchable inside it gets no touch of its own. A hardware keyboard's Space or
+Return does not open the menu on iOS, as it does not press a `<pressable>` there either. A disabled
+element has no button, and opens nothing.
+
+Expo Go and the web host draw none yet: there a press fires `(press)` as it would without `[menu]`,
+and a warning in development says so once. A menu that shows no item opens nothing, and the press
+fires `(press)`.
 
 ## Reference
 

@@ -1,6 +1,7 @@
 // Unit tests for the iOS code of @ng-native/components that runs without React Native: the view
-// binder, the menu building (the iPad menu bar's duplicate keys among it), the long press a view
-// inside a context menu takes, `NgNativeHook`'s call-through, which first responders answer the
+// binder, the menu building (the iPad menu bar's duplicate keys among it), the press menu's
+// button, the long press a view inside a context menu takes, `NgNativeHook`'s call-through, which
+// first responders answer the
 // shared undo manager, the undo steps, what a dropped item is, the split view's delegate, and which
 // scene a window opens in. The hooks installed on UIApplication and the app delegate, and the
 // modules themselves, need React Native and are not here. Run by `run-tests.sh` on a simulator,
@@ -17,6 +18,7 @@
 #import "../NgNativeSceneKeys.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import "../NgNativeViewBinder.h"
+#import "../NgNativePressMenu.h"
 
 @implementation RCTViewComponentView
 @end
@@ -259,6 +261,76 @@ static RCTViewComponentView *viewNamed(NSString *nativeID)
   UIMenuElement *inner = ((UIMenu *)elements[0]).children[0];
   XCTAssertFalse([inner isKindOfClass:[UIKeyCommand class]]);
   XCTAssertEqualObjects(((UICommand *)inner).propertyList, @"u");
+}
+
+@end
+
+#pragma mark - The press menu
+
+// React Native's view while its style clips overflow ink: its children in a view of its own.
+@interface NgNativeContainedView : UIView
+@property (nonatomic, strong) UIView *currentContainerView;
+@end
+
+@implementation NgNativeContainedView
+@end
+
+@interface NgNativePressMenuTests : XCTestCase
+@end
+
+@implementation NgNativePressMenuTests
+
+static NSArray *sortEntries(BOOL byName)
+{
+  return @[
+    @{@"id" : @"a1", @"label" : @"Name", @"checked" : @(byName)},
+    @{@"id" : @"a2", @"label" : @"Date", @"checked" : @(!byName)},
+  ];
+}
+
+static UIAction *itemOf(UIButton *button, NSUInteger index)
+{
+  return (UIAction *)button.menu.children[index];
+}
+
+- (void)testLaysAClearButtonThatOpensTheMenuOverTheWholeViewAboveItsChildren
+{
+  UIView *view = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 120, 44)];
+  UIView *child = [UIView new];
+  [view addSubview:child];
+  NgNativePressMenuButton *button = NgNativeAddPressMenu(view, sortEntries(YES), ^(NSString *itemId) {
+  });
+  XCTAssertEqual(view.subviews.lastObject, button);
+  XCTAssertTrue(CGRectEqualToRect(button.frame, view.bounds));
+  XCTAssertTrue(button.showsMenuAsPrimaryAction);
+  XCTAssertEqualObjects(button.backgroundColor, UIColor.clearColor);
+  XCTAssertFalse(button.isAccessibilityElement, @"React Native's view stays the accessibility element");
+  view.frame = CGRectMake(0, 0, 200, 60);
+  [view layoutIfNeeded];
+  XCTAssertTrue(CGRectEqualToRect(button.frame, view.bounds), @"it follows the view's size");
+}
+
+- (void)testGoesInTheViewThatHoldsTheChildren
+{
+  NgNativeContainedView *view = [[NgNativeContainedView alloc] initWithFrame:CGRectMake(0, 0, 120, 44)];
+  view.currentContainerView = [[UIView alloc] initWithFrame:view.bounds];
+  [view addSubview:view.currentContainerView];
+  NgNativePressMenuButton *button = NgNativeAddPressMenu(view, sortEntries(YES), ^(NSString *itemId) {
+  });
+  XCTAssertEqual(button.superview, view.currentContainerView, @"React Native hit-tests only its children");
+}
+
+- (void)testShowsTheItemsCheckedAsSentAndMakesTheMenuAgainAsTheyChange
+{
+  NgNativePressMenuButton *button = NgNativeAddPressMenu([UIView new], sortEntries(YES), ^(NSString *itemId) {
+  });
+  XCTAssertEqual(button.menu.children.count, 2u);
+  XCTAssertEqualObjects(itemOf(button, 0).title, @"Name");
+  XCTAssertEqual(itemOf(button, 0).state, UIMenuElementStateOn);
+  XCTAssertEqual(itemOf(button, 1).state, UIMenuElementStateOff);
+  button.entries = sortEntries(NO);
+  XCTAssertEqual(itemOf(button, 0).state, UIMenuElementStateOff);
+  XCTAssertEqual(itemOf(button, 1).state, UIMenuElementStateOn);
 }
 
 @end
