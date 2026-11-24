@@ -55,11 +55,13 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: node scripts/release-version.mjs "$BUMP" "$VERSION"
 
-  # Both native builds, on the commit being released, as every ready pull request and main has
-  # them: see native.yml.
+  # Both native builds on the commit being released, even for a docs-only change.
   native:
     needs: validate
     if: github.ref == 'refs/heads/main' || inputs.dry_run
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/native.yml
 
   # The same gate CI runs, on exactly the commit being released. Its own job, so it runs beside

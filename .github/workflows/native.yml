@@ -5,9 +5,9 @@ name: Native builds
 # emulator and driven through a short Maestro flow, because an app that builds can still crash
 # the moment it opens: a runtime feature Hermes lacks, or a native module nobody linked.
 #
-# Both halves run on every pull request that is ready for review, on main, by hand, and when the
-# release workflow calls this before publishing. Each launches a release build, which carries its
-# bundle, and walks examples/canary/.maestro/release: iOS on a simulator, Android on an emulator.
+# Both halves run on ready pull requests and pushes to main that change mobile inputs, by hand,
+# and when the release workflow calls this before publishing. Each launches a release build with
+# its bundle and walks examples/canary/.maestro/release: iOS on a simulator, Android on an emulator.
 # Both are built to be quick: each app is kept by Expo's fingerprint of its native half, so a run
 # that changes only JavaScript puts a new bundle into the kept app; and a build that is needed is
 # one architecture, with a cache that carries the compiled C++ (ccache on iOS, Gradle's on
@@ -17,27 +17,6 @@ on:
     branches: [main]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    # Words alone cannot break a build or a launch, and nor can what the canary does not use: the
-    # generators, the migrations, tests, and the other workflows. A push to main runs it whatever
-    # changed.
-    paths-ignore:
-      - '**/*.md'
-      - 'apps/documentation/**'
-      - 'packages/integration-tests/**'
-      - 'packages/migrate/**'
-      - 'packages/nx/**'
-      - 'packages/schematics/**'
-      - 'template/**'
-      - 'template-desktop/**'
-      - 'scripts/**'
-      - '**/*.test.ts'
-      - '.github/workflows/ci.yml'
-      - '.github/workflows/docs.yml'
-      - '.github/workflows/latest.yml'
-      - '.github/workflows/release.yml'
-      - '.github/workflows/triage.yml'
-      - '.github/workflows/wpt.yml'
-      - '.nx/version-plans/**'
   workflow_dispatch:
   workflow_call:
 
@@ -49,8 +28,33 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
+  changes:
+    if: >-
+      github.event.pull_request.draft != true &&
+      ((github.event_name == 'pull_request' || github.event_name == 'push') &&
+      contains(github.workflow_ref, '/.github/workflows/native.yml@'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      native: ${{ steps.classify.outputs.native }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+          persist-credentials: false
+      - uses: ./.github/actions/ci-changes
+        id: classify
+        with:
+          token: ${{ github.token }}
+
   ios:
-    if: github.event.pull_request.draft != true
+    needs: changes
+    if: >-
+      !cancelled() && github.event.pull_request.draft != true &&
+      needs.changes.outputs.native != 'false'
     runs-on: macos-latest
     # The build, cold, is most of it; with a cached app, the bundle, simulator and flow are a few
     # minutes, and up to three more while the simulator's first boot settles (smoke-ios.sh).
@@ -164,7 +168,10 @@ jobs:
           if-no-files-found: ignore
 
   android:
-    if: github.event.pull_request.draft != true
+    needs: changes
+    if: >-
+      !cancelled() && github.event.pull_request.draft != true &&
+      needs.changes.outputs.native != 'false'
     runs-on: ubuntu-latest
     # The build, cold, is most of it; the emulator and the flow add about five minutes.
     timeout-minutes: 40

@@ -1,6 +1,6 @@
 name: Preview
 
-# Every package `nx release` publishes, built from the pull request and published to pkg.pr.new,
+# When distribution inputs change, build every package `nx release` publishes and send it to pkg.pr.new,
 # so a change can be installed and tried before it is released. The pkg.pr.new GitHub app posts
 # the install commands as one comment on the pull request and updates it on each push.
 on:
@@ -13,12 +13,36 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  changes:
+    if: >-
+      github.event.pull_request.draft != true &&
+      (github.event_name == 'pull_request' || github.event_name == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      published: ${{ steps.classify.outputs.published }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+          persist-credentials: false
+      - uses: ./.github/actions/ci-changes
+        id: classify
+        with:
+          token: ${{ github.token }}
+
   publish:
-    if: github.event.pull_request.draft != true
+    needs: changes
+    if: >-
+      !cancelled() && github.event.pull_request.draft != true &&
+      needs.changes.outputs.published != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

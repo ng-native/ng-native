@@ -29,9 +29,10 @@ pnpm verify         # that, with the format check, the builds and the release bu
 pnpm export         # a release bundle of every example for iOS and Android, one at a time
 ```
 
-`pnpm verify` is the one to run before opening a pull request: it is every check CI makes of a
-change but `pnpm coverage` and the native builds. `pnpm coverage` runs the browser suite too, which
-needs Chromium once, and on Linux the system libraries it links:
+Run `pnpm verify` before opening a pull request with workspace changes. CI selects its jobs from
+the diff. Public documentation prose gets Markdown and sample checks plus a site build. Run
+`pnpm coverage` when coverage inputs change. It runs the browser suite, which needs Chromium and,
+on Linux, the system libraries it links:
 `pnpm --filter @ng-native/web exec playwright install --with-deps chromium`.
 
 Lint must go through `nx run-many -t lint` (what `pnpm lint` does): `@nx/enforce-module-boundaries`
@@ -232,8 +233,8 @@ See [RELEASING.md](./docs/RELEASING.md) for how an actual release goes out.
 - Commit messages here are sentence-case summaries of the change, often followed by a body
   explaining why (see `git log --oneline -20` for the style); there is no conventional-commits
   prefix convention (`feat:`, `fix:`, and so on) in use.
-- Every package is built from a ready pull request and published to
-  [pkg.pr.new](https://pkg.pr.new) (`.github/workflows/preview.yml`); a comment on the pull request
+- When a ready pull request changes distribution inputs, CI builds the packages and publishes them
+  to [pkg.pr.new](https://pkg.pr.new) (`.github/workflows/preview.yml`). The pull request comment
   gives the install commands for trying the change in another project.
 
 ### Checking a change against main

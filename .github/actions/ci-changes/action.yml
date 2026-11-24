@@ -1,0 +1,62 @@
+name: Classify CI changes
+description: Compare the checked-out tree with the PR base or this workflow's last successful push.
+inputs:
+  token:
+    description: A token with actions read permission for push runs.
+    default: ''
+  compare-desktop-pins:
+    description: Compare desktop native dependency pins when the lockfile changes.
+    default: 'false'
+outputs:
+  base:
+    description: The verified base commit for affected targets.
+    value: ${{ steps.classify.outputs.base }}
+  head:
+    description: The checked-out commit for affected targets.
+    value: ${{ steps.classify.outputs.head }}
+  workspace:
+    description: Run Nx checks in CI.
+    value: ${{ steps.classify.outputs.workspace }}
+  coverage:
+    description: Run the coverage shards and Node compatibility tests.
+    value: ${{ steps.classify.outputs.coverage }}
+  published:
+    description: Build or smoke-test package distribution.
+    value: ${{ steps.classify.outputs.published }}
+  docs:
+    description: Build the documentation website.
+    value: ${{ steps.classify.outputs.docs }}
+  check-markdown:
+    description: Run tests that compile examples and validate repository Markdown.
+    value: ${{ steps.classify.outputs.check-markdown }}
+  native:
+    description: Build and smoke-test the release canary on mobile.
+    value: ${{ steps.classify.outputs.native }}
+  device:
+    description: Run the development canary's mobile device tests.
+    value: ${{ steps.classify.outputs.device }}
+  desktop-core:
+    description: Test the desktop core on Linux.
+    value: ${{ steps.classify.outputs.desktop-core }}
+  desktop-linux:
+    description: Build and test the GTK host.
+    value: ${{ steps.classify.outputs.desktop-linux }}
+  desktop-macos:
+    description: Build and test the AppKit host.
+    value: ${{ steps.classify.outputs.desktop-macos }}
+  desktop-prebuilt-linux:
+    description: Build Linux prebuilt hosts.
+    value: ${{ steps.classify.outputs.desktop-prebuilt-linux }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+    - id: classify
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        COMPARE_DESKTOP_PINS: ${{ inputs.compare-desktop-pins }}
+      run: node "$GITHUB_ACTION_PATH/changes.mjs"

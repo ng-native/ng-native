@@ -53,7 +53,6 @@ env:
   CCACHE_SLOPPINESS: include_file_mtime,include_file_ctime,time_macros
 
 jobs:
-  # Check desktop inputs for pull requests and pushes. A manual run builds every desktop job.
   changes:
     if: >-
       github.event.pull_request.draft != true &&
@@ -62,37 +61,22 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      pull-requests: read
+      actions: read
     outputs:
-      desktop: ${{ steps.filter.outputs.desktop }}
-      pins: ${{ steps.pins.outputs.pins }}
+      desktop-core: ${{ steps.classify.outputs.desktop-core }}
+      desktop-linux: ${{ steps.classify.outputs.desktop-linux }}
+      desktop-macos: ${{ steps.classify.outputs.desktop-macos }}
+      desktop-prebuilt-linux: ${{ steps.classify.outputs.desktop-prebuilt-linux }}
     steps:
       - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        id: filter
-        # The REST API caps the file list at 3,000. The jobs build without a filter result.
-        if: github.event_name != 'pull_request' || github.event.pull_request.changed_files < 3000
         with:
-          filters: |
-            desktop:
-              - 'packages/desktop/**'
-              - 'packages/testing/device/fake-portals.py'
-              - 'packages/testing/src/device/fake-portals.node.test.ts'
-              - 'packages/testing/src/device/linux-launcher.ts'
-              - '.github/workflows/desktop.yml'
-              - 'scripts/desktop-host-pins.mjs'
-              - '.github/actions/desktop-prebuilt*/**'
-              - '.github/actions/setup/**'
-              - 'pnpm-workspace.yaml'
-
-      # A lockfile edit reaches the host only through the version of a package it builds from.
-      - id: pins
-        if: steps.filter.outputs.desktop == 'false'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          git fetch --no-tags --depth=1 origin "$BASE_SHA"
-          node scripts/desktop-host-pins.mjs "$BASE_SHA"
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+          persist-credentials: false
+      - uses: ./.github/actions/ci-changes
+        id: classify
+        with:
+          token: ${{ github.token }}
+          compare-desktop-pins: 'true'
 
   core-linux:
     needs: changes
@@ -100,8 +84,7 @@ jobs:
       !cancelled() && github.event.pull_request.draft != true &&
       (github.event_name == 'workflow_dispatch' ||
       ((github.event_name == 'push' || github.event_name == 'pull_request') &&
-      (needs.changes.result != 'success' || needs.changes.outputs.desktop != 'false' ||
-      needs.changes.outputs.pins != 'false')))
+      (needs.changes.outputs.desktop-core != 'false')))
     runs-on: ubuntu-latest
     # React Native's renderer and the core, cold, are a few minutes on four cores.
     timeout-minutes: 30
@@ -148,8 +131,7 @@ jobs:
       !cancelled() && github.event.pull_request.draft != true &&
       (github.event_name == 'workflow_dispatch' ||
       ((github.event_name == 'push' || github.event_name == 'pull_request') &&
-      (needs.changes.result != 'success' || needs.changes.outputs.desktop != 'false' ||
-      needs.changes.outputs.pins != 'false')))
+      (needs.changes.outputs.desktop-linux != 'false')))
     strategy:
       fail-fast: false
       matrix:
@@ -365,8 +347,7 @@ jobs:
       !cancelled() && github.event.pull_request.draft != true &&
       (github.event_name == 'workflow_dispatch' ||
       ((github.event_name == 'push' || github.event_name == 'pull_request') &&
-      (needs.changes.result != 'success' || needs.changes.outputs.desktop != 'false' ||
-      needs.changes.outputs.pins != 'false')))
+      (needs.changes.outputs.desktop-macos != 'false')))
     runs-on: macos-latest
     # Budget: a cold dev build within 10 minutes on this runner (spec, performance budget).
     timeout-minutes: 40
@@ -447,8 +428,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-      (needs.changes.result != 'success' || needs.changes.outputs.desktop != 'false' ||
-      needs.changes.outputs.pins != 'false')))
+      (needs.changes.outputs.desktop-prebuilt-linux != 'false')))
     strategy:
       fail-fast: false
       matrix:

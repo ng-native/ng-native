@@ -8,11 +8,8 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
-# `actions: read` is what nx-set-shas needs to find the last green run on main; without it the
-# step fails with "Resource not accessible by integration" and so does the job.
 permissions:
   contents: read
-  actions: read
 
 # A newer push to a pull request, or to main, makes the older run of the same workflow pointless: the
 # newest run on main is the one a release waits for. A run started by hand, or called by the Release
@@ -22,17 +19,49 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
+  changes:
+    if: >-
+      github.event.pull_request.draft != true &&
+      (github.event_name == 'pull_request' || github.event_name == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      base: ${{ steps.classify.outputs.base }}
+      head: ${{ steps.classify.outputs.head }}
+      workspace: ${{ steps.classify.outputs.workspace }}
+      check-markdown: ${{ steps.classify.outputs.check-markdown }}
+      coverage: ${{ steps.classify.outputs.coverage }}
+      published: ${{ steps.classify.outputs.published }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+          persist-credentials: false
+      - uses: ./.github/actions/ci-changes
+        id: classify
+        with:
+          token: ${{ github.token }}
+
   verify:
-    if: github.event.pull_request.draft != true
+    needs: changes
+    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
     # Linux, not macOS: nothing here needs a Mac (Node, a headless Chromium and a Metro bundle), and
     # a macOS minute bills as ten. The native builds, which do need one, are in native.yml.
     runs-on: ubuntu-latest
     # A few minutes when healthy; a hung step otherwise bills until GitHub's six-hour limit.
     timeout-minutes: 15
+    env:
+      NX_BASE: ${{ needs.changes.outputs.base }}
+      NX_HEAD: ${{ needs.changes.outputs.head }}
+      # Without a verified base, run the targets across the workspace.
+      NX_COMMAND: ${{ needs.changes.outputs.base != '' && 'affected' || 'run-many' }}
     steps:
       - uses: actions/checkout@v7
         with:
-          # Nx compares against the merge base, which needs more than a shallow clone.
+          # Nx reads both sides of the same comparison used to select jobs.
           fetch-depth: 0
 
       - uses: ./.github/actions/setup
@@ -41,30 +70,52 @@ jobs:
       # and it takes under a second.
       - run: pnpm run format:check
 
-      - uses: nrwl/nx-set-shas@e602fada7ad5987b0f7b1905e7a99ea1c661514c # v5.1.0
+      - name: Test change classification
+        run: node --test .github/actions/ci-changes/changes.test.mjs
+
+      # These tests also run in coverage, but some read the Markdown as an input.
+      - name: Validate Markdown and compile documentation samples
+        if: needs.changes.outputs.coverage == 'false' && needs.changes.outputs.check-markdown == 'true'
+        run: >-
+          pnpm --filter @ng-native/integration-tests exec node --import ./register-linker.mjs --test
+          app-plugin.test.ts docs-samples.test.ts expo-runtime.test.ts forms-guide.test.ts
+          getting-started-guide.test.ts layout-guide.test.ts manual-setup-guide.test.ts
+          markdown-files.test.ts markdown-line-length.test.ts offline-guide.test.ts
+          os-support.test.ts service-platforms.test.ts theming-guide.test.ts watch-conditions-stop.test.ts
 
       # Through Nx, always: `@nx/enforce-module-boundaries` needs the project graph and skips
       # itself with only a warning when there is none, which is silent enforcement of nothing.
       # The template is a project too, so this is also what typechecks the starter.
       - name: Lint and typecheck what changed
-        run: npx nx affected -t lint typecheck --parallel=4
+        if: needs.changes.outputs.workspace != 'false'
+        run: pnpm nx "$NX_COMMAND" -t lint typecheck --parallel=4
 
       # What the packages publish, so a change that only the compiler rejects fails here. The
       # documentation is the one build that is not a package, and its own workflow builds it.
       - name: Build the packages that changed
-        run: npx nx affected -t build --exclude=documentation
+        if: needs.changes.outputs.coverage != 'false'
+        run: pnpm nx "$NX_COMMAND" -t build --exclude=documentation
 
       # Builds a real release bundle and asserts the compiler, the HMR wiring and the component
       # CSS all stayed out of it. Minutes rather than seconds, so it only runs when something it
       # depends on actually changed.
       - name: Check the release bundle
-        run: npx nx affected -t check-bundle
+        if: needs.changes.outputs.coverage != 'false'
+        run: pnpm nx "$NX_COMMAND" -t check-bundle
 
   # Cold test runs compile lazy screens, so they have their own time budget beside `verify`.
   tests:
-    if: github.event.pull_request.draft != true
+    needs: changes
+    if: >-
+      !cancelled() && github.event.pull_request.draft != true &&
+      needs.changes.outputs.workspace != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      NX_BASE: ${{ needs.changes.outputs.base }}
+      NX_HEAD: ${{ needs.changes.outputs.head }}
+      # Without a verified base, run the targets across the workspace.
+      NX_COMMAND: ${{ needs.changes.outputs.base != '' && 'affected' || 'run-many' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -72,21 +123,21 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      - uses: nrwl/nx-set-shas@e602fada7ad5987b0f7b1905e7a99ea1c661514c # v5.1.0
-
       # Coverage runs the integration and web suites. The remaining test targets include the
       # generators, docs, examples, template, and testing's own Vitest runner checks.
       - name: Test the remaining projects that changed
-        run: pnpm nx affected -t test --exclude=@ng-native/integration-tests,@ng-native/web --parallel=2
+        run: pnpm nx "$NX_COMMAND" -t test --exclude=@ng-native/integration-tests,@ng-native/web --parallel=2
 
       # The `node --test` hook on the oldest Node the packages support, which nothing else here
       # runs. Node 22 cannot `require` an ES module that imports anything on the thread that runs
       # `module.register`'s hooks, and the compiler does. `@ng-native/testing/register`, then the
       # web suite for `@ng-native/testing/loader` registered with options. Under a minute.
       - uses: actions/setup-node@v7
+        if: needs.changes.outputs.coverage != 'false'
         with:
           node-version: '22.18'
       - name: Test the node:test hook on Node 22.18
+        if: needs.changes.outputs.coverage != 'false'
         run: |
           pnpm --filter @ng-native/testing exec node --import ./runner/register.mjs --test "src/**/*.node.test.ts"
           pnpm --filter @ng-native/web test
@@ -95,7 +146,10 @@ jobs:
   # so those are split across four runners and the rest spread over them (see `sharded` in
   # scripts/coverage.mjs). `coverage` below merges what they measured and holds the floor.
   coverage-shard:
-    if: github.event.pull_request.draft != true
+    needs: changes
+    if: >-
+      !cancelled() && github.event.pull_request.draft != true &&
+      needs.changes.outputs.coverage != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -129,7 +183,7 @@ jobs:
         timeout-minutes: 5
         run: pnpm --filter @ng-native/web exec playwright install chromium
 
-      # Every suite, always, rather than what changed: the floor is on the merged number, and a
+      # On changes to coverage inputs, measure every suite: the floor is on the merged number, and a
       # change in one package moves the coverage of another.
       - name: Test, measuring coverage
         run: node scripts/coverage.mjs --shard ${{ matrix.shard }}/${{ strategy.job-total }}
@@ -145,7 +199,7 @@ jobs:
   # then on the report that shard never uploaded: skipped, it would read as a check that passed.
   coverage:
     needs: coverage-shard
-    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    if: ${{ !cancelled() && needs.coverage-shard.result != 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -165,35 +219,6 @@ jobs:
       - name: Hold the coverage floor
         run: node scripts/coverage.mjs --report --shards 4 --min 95
 
-  # Which parts of the tree a pull request touched, for the jobs that only matter to some of it.
-  # A push to main runs everything regardless.
-  changes:
-    if: github.event.pull_request.draft != true && github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
-    outputs:
-      published: ${{ steps.filter.outputs.published }}
-    steps:
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        id: filter
-        with:
-          filters: |
-            published:
-              - 'packages/**'
-              - '!packages/integration-tests/**'
-              - '!packages/**/*.md'
-              - 'template/**'
-              - 'template-desktop/**'
-              - 'scripts/verify-publish.mjs'
-              - 'verdaccio.yaml'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'tsconfig*.json'
-
   # What nothing else checks: that the packages publish, find each other by version through a
   # registry, that `create-expo-app --template` gives an app that typechecks and bundles, and that a
   # browser app on `@ng-native/web` renders. Only when something it publishes could have changed:
@@ -201,8 +226,8 @@ jobs:
   distribution:
     needs: changes
     if: >-
-      always() && github.event.pull_request.draft != true &&
-      (github.event_name != 'pull_request' || needs.changes.outputs.published == 'true')
+      !cancelled() && github.event.pull_request.draft != true &&
+      needs.changes.outputs.published != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
