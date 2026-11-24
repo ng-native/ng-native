@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/firebase-messaging",
-  "version": "0.27.0",
+  "version": "0.28.0",
   "description": "Firebase Cloud Messaging by installation ID for Angular Native: registers the app's Firebase Installation ID with FCM, for a backend that sends through FCM's HTTP v1 API.",
   "keywords": [
     "angular",

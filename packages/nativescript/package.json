@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/nativescript",
-  "version": "0.27.0",
+  "version": "0.28.0",
   "description": "NativeScript's iOS and Android APIs in Angular Native: provideNativeScript, a NativeScript service and a <native-view> for a UIView built in TypeScript.",
   "keywords": [
     "angular",
