@@ -7,6 +7,7 @@
  */
 import {
   createEnvironmentInjector,
+  ɵEffectScheduler as EffectScheduler,
   ɵINJECTOR_SCOPE as INJECTOR_SCOPE,
   type ComponentRef,
   type EnvironmentInjector,
@@ -66,9 +67,15 @@ export async function render<T>(
 ): Promise<RenderResult<T>> {
   // Each render is a root of its own: a `providedIn: 'root'` service is made afresh for it and goes
   // with it, as when a unit test mounts an app per render, rather than living on in the host app.
+  const parent = harness().app.applicationRef.injector;
   const environmentInjector = createEnvironmentInjector(
-    [{ provide: INJECTOR_SCOPE, useValue: 'root' }, ...(options.providers ?? [])],
-    harness().app.applicationRef.injector,
+    [
+      { provide: INJECTOR_SCOPE, useValue: 'root' },
+      // The host's ApplicationRef flushes its own scheduler when it runs change detection.
+      { provide: EffectScheduler, useFactory: () => parent.get(EffectScheduler) },
+      ...(options.providers ?? []),
+    ],
+    parent,
   );
   injectors.push(environmentInjector);
   const componentRef = harness().slot().createComponent(component, { environmentInjector });
