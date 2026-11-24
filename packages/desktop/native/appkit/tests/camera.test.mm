@@ -3,10 +3,9 @@
 #include "../camera.h"
 
 #import <ImageIO/ImageIO.h>
+#import <objc/runtime.h>
 
 #include <doctest/doctest.h>
-
-#include <unistd.h>
 
 #include <atomic>
 #include <optional>
@@ -65,6 +64,44 @@ bool screenLocked() {
   NSDictionary *session = CFBridgingRelease(CGSessionCopyCurrentDictionary());
   return [session[@"CGSSessionScreenIsLocked"] boolValue];
 }
+
+// A movie path of the test's own, removed as it goes: runs of the suite at once share the
+// temporary folder, so a fixed name finds another run's file.
+struct TempMovie {
+  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"ngn-camera-test-%@.mov", NSUUID.UUID.UUIDString]];
+  TempMovie() = default;
+  TempMovie(const TempMovie &) = delete;
+  TempMovie &operator=(const TempMovie &) = delete;
+  ~TempMovie() {
+    [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+  }
+  std::string string() const {
+    return path.UTF8String;
+  }
+  bool exists() const {
+    return [NSFileManager.defaultManager fileExistsAtPath:path];
+  }
+};
+
+// While it lives, a movie output refuses to start a recording by an exception, as AVFoundation's
+// does with no frames coming (a screen input while the screen is locked). Whether the real one
+// refuses a session that only says it runs depends on the screen and the machine: with the screen
+// unlocked it may start, and then waits for frames that never come.
+struct RefusingMovieOutputs {
+  static constexpr const char *reason = "refused for the test";
+  Method method = class_getInstanceMethod(object_getClass([AVCaptureMovieFileOutput new]), @selector(startRecordingToOutputFileURL:recordingDelegate:));
+  IMP refusing = imp_implementationWithBlock(^(id, NSURL *, id) {
+    [NSException raise:NSInvalidArgumentException format:@"%s", reason];
+  });
+  IMP original = method_setImplementation(method, refusing);
+  RefusingMovieOutputs() = default;
+  RefusingMovieOutputs(const RefusingMovieOutputs &) = delete;
+  RefusingMovieOutputs &operator=(const RefusingMovieOutputs &) = delete;
+  ~RefusingMovieOutputs() {
+    method_setImplementation(method, original);
+    imp_removeBlock(refusing);
+  }
+};
 
 } // namespace
 
@@ -135,7 +172,8 @@ TEST_CASE("A recording needs a running camera, and one with no video to record f
   // Sound asked for, which without the microphone allowed adds no microphone (and so asks for
   // nothing); with it allowed, none is asked for, so no real microphone joins the session.
   bool microphoneAllowed = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio] == AVAuthorizationStatusAuthorized;
-  ngn::CameraRecordingRequest request{.path = "/tmp/ngn-camera-test-never-written.mov", .sound = !microphoneAllowed};
+  TempMovie movie;
+  ngn::CameraRecordingRequest request{.path = movie.string(), .sound = !microphoneAllowed};
 
   std::optional<std::string> answered;
   capture->startRecording(request, [&](const std::string &error) { answered = error; });
@@ -158,16 +196,15 @@ TEST_CASE("A recording needs a running camera, and one with no video to record f
   CHECK(session.outputs.count == 0);
   CHECK(session.inputs.count == 0);
   CHECK([session.sessionPreset isEqualToString:AVCaptureSessionPresetPhoto]);
-  CHECK_FALSE([NSFileManager.defaultManager fileExistsAtPath:@"/tmp/ngn-camera-test-never-written.mov"]);
+  CHECK_FALSE(movie.exists());
   // Stopping with no recording does nothing.
   capture->stopRecording();
   session.fakeRunning = NO;
 }
 
 TEST_CASE("A recording the movie output refuses to start answers with the reason, and leaves the session as it was") {
-  // A screen input on a session that only says it runs: the connection is active, but no frame ever
-  // comes, so the movie output refuses by an exception, as it does for a screen input while the
-  // screen is locked.
+  // A screen input on a session that only says it runs gives the movie output an active video
+  // connection, and the output refuses to start by an exception.
   AVCaptureScreenInput *screen = [[AVCaptureScreenInput alloc] initWithDisplayID:CGMainDisplayID()];
   NGNRecordingSession *session = [NGNRecordingSession new];
   if (screen == nil || ![session canAddInput:screen]) {
@@ -177,23 +214,23 @@ TEST_CASE("A recording the movie output refuses to start answers with the reason
   [session addInput:screen];
   session.sessionPreset = AVCaptureSessionPresetPhoto;
   session.fakeRunning = YES;
+  RefusingMovieOutputs refusing;
+  TempMovie movie;
   auto capture = ngn::appkit::sessionCapture(session, [AVCapturePhotoOutput new]);
   auto answer = std::make_shared<std::optional<std::string>>();
-  capture->startRecording({.path = "/tmp/ngn-camera-test-never-written.mov", .sound = false}, answerOnMain(answer));
+  capture->startRecording({.path = movie.string(), .sound = false}, answerOnMain(answer));
   // Before the fix, the exception ended the process on the session's queue.
   REQUIRE(spinUntil([&] { return answer->has_value(); }));
-  // AVFoundation's own reason, which the OS words: "... No active/enabled connections".
-  CHECK_FALSE(answer->value().empty());
-  CHECK(answer->value() != "the camera gives no video to record");
-  MESSAGE("refused with: " << answer->value());
+  CHECK(answer->value() == RefusingMovieOutputs::reason);
   REQUIRE(spinUntil([&] { return !capture->recording(); }));
   CHECK(session.outputs.count == 0);
   CHECK([session.sessionPreset isEqualToString:AVCaptureSessionPresetPhoto]);
   // Nothing is left running, so another recording can be asked for.
   auto again = std::make_shared<std::optional<std::string>>();
-  capture->startRecording({.path = "/tmp/ngn-camera-test-never-written.mov", .sound = false}, answerOnMain(again));
+  capture->startRecording({.path = movie.string(), .sound = false}, answerOnMain(again));
   REQUIRE(spinUntil([&] { return again->has_value(); }));
-  CHECK(again->value() != "a recording is already in progress");
+  CHECK(again->value() == RefusingMovieOutputs::reason);
+  CHECK_FALSE(movie.exists());
   session.fakeRunning = NO;
   [session removeInput:screen];
 }
@@ -220,8 +257,8 @@ TEST_CASE("A recording keeps its own copy of the request, which the caller may l
     capture->stop();
     return;
   }
-  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"ngn-camera-test-copy-%d.mov", getpid()]];
-  [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+  TempMovie movie;
+  NSString *path = movie.path;
   // Shared, so a late answer has somewhere to go.
   auto answer = std::make_shared<std::optional<std::string>>();
   {
@@ -242,7 +279,6 @@ TEST_CASE("A recording keeps its own copy of the request, which the caller may l
   CHECK([NSFileManager.defaultManager fileExistsAtPath:path]);
   capture->stop();
   spinUntil([&] { return !capture->recording(); });
-  [NSFileManager.defaultManager removeItemAtPath:path error:nil];
 }
 
 // A session that keeps each preset it is set to, refuses one as a camera without it would, and
@@ -316,7 +352,8 @@ TEST_CASE("A recording is made at the preset its request names, or High for anot
       capture->stop();
       return;
     }
-    NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"ngn-camera-test-preset-%d.mov", getpid()]];
+    TempMovie movie;
+    NSString *path = movie.path;
     auto answer = std::make_shared<std::optional<std::string>>();
     capture->startRecording({.path = path.UTF8String, .maxDuration = 0.3, .sound = false, .preset = preset},
                             answerOnMain(answer));
@@ -342,7 +379,6 @@ TEST_CASE("A recording is made at the preset its request names, or High for anot
     // overlap stopRunning.
     REQUIRE(spinUntil([&] { return !session.running; }));
     [session removeInput:screen];
-    [NSFileManager.defaultManager removeItemAtPath:path error:nil];
   }
 }
 
@@ -361,7 +397,8 @@ TEST_CASE("A recording set up ahead starts on that setup, and a setup taken down
   session.sessionPreset = AVCaptureSessionPresetPhoto;
   session.presets = @[];
   auto capture = ngn::appkit::sessionCapture(session, [AVCapturePhotoOutput new]);
-  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"ngn-camera-test-prepared-%d.mov", getpid()]];
+  TempMovie file;
+  NSString *path = file.path;
   ngn::CameraRecordingRequest request{.path = path.UTF8String, .maxDuration = 0.3, .sound = false, .preset = "640x480"};
 
   capture->prepareRecording(request);
@@ -420,7 +457,6 @@ TEST_CASE("A recording set up ahead starts on that setup, and a setup taken down
   capture->stop();
   REQUIRE(spinUntil([&] { return !session.running; }));
   [session removeInput:screen];
-  [NSFileManager.defaultManager removeItemAtPath:path error:nil];
 }
 
 // A photo output that notes, instead of taking a still, what the session's preset was as it was
@@ -463,7 +499,8 @@ TEST_CASE("A photo asked for just after the camera's setup changes is taken once
     capture->stop();
     return;
   }
-  capture->prepareRecording({.path = "/tmp/ngn-camera-test-never-written.mov", .sound = false, .preset = "640x480"});
+  TempMovie movie;
+  capture->prepareRecording({.path = movie.string(), .sound = false, .preset = "640x480"});
   capture->unprepareRecording();
   capture->capturePhoto([](CGImageRef, NSDictionary *, const std::string &) {});
   REQUIRE(spinUntil([&] { return output.asked; }));
