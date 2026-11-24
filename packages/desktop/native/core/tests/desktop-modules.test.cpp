@@ -77,6 +77,7 @@ TEST_CASE("addDesktopModules registers or names as absent each desktop module, u
       "NgNativeSqlite",
       "NgNativeStoreReview",
       "NgNativeSymbol",
+      "NgNativeTesting",
       "NgNativeTextRecognition",
       "NgNativeTrackingTransparency",
       "NgNativeTray",

@@ -33,6 +33,7 @@
 #include "ngn/printing.h"
 #include "ngn/processes.h"
 #include "ngn/screen-capture.h"
+#include "ngn/testing-capture.h"
 #include "ngn/sharing.h"
 #include "ngn/splash-screen.h"
 #include "ngn/store-review.h"
@@ -103,6 +104,8 @@ struct DesktopModuleSources {
   std::shared_ptr<VideoOutput> videoOutput;
   std::shared_ptr<LanguageModelEngine> languageModel;
   std::shared_ptr<CaptureShield> captureShield;
+  // What device tests capture the app's window with (NgNativeTesting).
+  std::shared_ptr<WindowCapture> windowCapture;
   std::shared_ptr<SplashGate> splash;
   std::shared_ptr<PhotoLibrary> photos;
   // A picker with no photo library behind it (makeFilePhotoPicker), for ImagePicker's library half

@@ -43,6 +43,7 @@
 #import "video.h"
 #import "language-model.h"
 #import "screen-capture.h"
+#import "testing-capture.h"
 #import "photo-library.h"
 #import "tracking.h"
 #import "image-manipulator.h"
@@ -1218,6 +1219,9 @@ int main(int argc, const char *argv[]) {
          .videoOutput = ngn::appkit::makeVideoOutput(),
          .languageModel = ngn::appkit::makeLanguageModelEngine(),
          .captureShield = ngn::appkit::captureShield(),
+         .windowCapture = ngn::appkit::makeWindowCapture(
+             [] { return gHost.appWindow; },
+             [](int64_t tag) -> NSView * { return gHost.backend->view(static_cast<Tag>(tag)); }),
          .splash = gSplash,
          .photos = ngn::appkit::makePhotoLibrary(caches),
          .cameraHardware = cameraHardware,

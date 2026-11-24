@@ -143,6 +143,7 @@ DesktopModules addDesktopModules(ModuleRegistry &registry, const DesktopModuleSo
   addSourced(s.videoOutput, "NgNativeVideo", [output = s.videoOutput, files = s.files] { return makeVideoModule(output, files); });
   addSourced(s.languageModel, "NgNativeLocalLlm", [engine = s.languageModel] { return makeLocalLlmModule(engine); });
   addSourced(s.captureShield, "NgNativeScreenCapture", [shield = s.captureShield] { return makeScreenCaptureModule(shield); });
+  addSourced(s.windowCapture, "NgNativeTesting", [capture = s.windowCapture] { return makeTestingModule(capture); });
   addSourced(s.splash, "NgNativeSplashScreen", [splash = s.splash] { return makeSplashScreenModule(splash); });
   addSourced(s.photos, "NgNativeMediaLibrary", [photos = s.photos, noPrompts = s.noPrompts, files = s.files] {
     return makeMediaLibraryModule(photos, noPrompts, files);

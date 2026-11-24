@@ -13,6 +13,7 @@ import type { FakeFabricNode } from '../test-utils.ts';
 import { harness } from './harness.ts';
 import { screen, type Frame } from './index.ts';
 import type { ScreenshotComparatorOptions, ScreenshotResult } from './screenshot-baselines.ts';
+import { testingModuleFrom, type TestingModule } from './testing-module.ts';
 
 export type { ScreenshotComparatorOptions } from './screenshot-baselines.ts';
 
@@ -35,27 +36,29 @@ export interface ToMatchScreenshotOptions extends ScreenshotCaptureOptions {
   comparatorOptions?: ScreenshotComparatorOptions;
 }
 
-export interface TestingModule {
-  /** A PNG, in base64, of the app's window, or of the region of it given in points. */
-  capture(region: Frame | null): Promise<string>;
-  /** A PNG, in base64, of the part of the window a view covers, found by its tag. */
-  captureView(reactTag: number): Promise<string>;
-  /** Native view animations on or off: UIKit's on iOS, the animator duration scale on Android. */
-  setAnimationsEnabled?(enabled: boolean): Promise<boolean>;
+export type { TestingModule } from './testing-module.ts';
+
+/** `NgNativeTesting`, from the Expo modules or, on a desktop host, its TurboModules. */
+export function nativeModule(): TestingModule {
+  const expoModules = (globalThis as { expo?: { modules?: Record<string, unknown> } }).expo
+    ?.modules;
+  let native: ReactNative | undefined;
+  try {
+    native = require('react-native') as ReactNative;
+  } catch {
+    // Node, where there is no app: the error says what is missing.
+  }
+  return testingModuleFrom({
+    expoModules,
+    turboModule: native && ((name) => native.TurboModuleRegistry.get(name)),
+    os: native?.Platform.OS,
+  });
 }
 
-export function nativeModule(): TestingModule {
-  const modules = (globalThis as { expo?: { modules?: Record<string, unknown> } }).expo?.modules;
-  const module = modules?.['NgNativeTesting'] as TestingModule | undefined;
-  if (!module?.capture) {
-    throw new Error(
-      'This needs the NgNativeTesting native module from @ng-native/testing, which this ' +
-        'build of the app does not have. Rebuild the development build after installing or ' +
-        'upgrading @ng-native/testing; Expo Go does not have it. iOS and Android have it today.',
-    );
-  }
-  return module;
-}
+type ReactNative = {
+  TurboModuleRegistry: { get(name: string): unknown };
+  Platform: { OS: string };
+};
 
 /**
  * One capture of a target. A node is found by native itself, which places it in the window

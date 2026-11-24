@@ -17,6 +17,7 @@ add_library(ngn_appkit OBJECT
     audio.mm
     language-model.mm
     screen-capture.mm
+    testing-capture.mm
     photo-library.mm
     tracking.mm
     image-manipulator.mm

@@ -338,10 +338,10 @@ it('draws the swatch', async () => {
   half a point by default (`{ tolerance }`).
 - `toHaveColorAt` reads the colour native drew at a point of the node (or of a region, or
   `screen`), in points from its top-left, within one step of 255 on each channel by default
-  (`{ tolerance }`). Await it: it captures the window, as a screenshot does, so it needs iOS or
-  Android 8 (API 26) or later, and does not work on macOS yet. A point of a node partly outside
-  the window is read where that point is drawn, and one outside the window fails. `colorsAt(target,
-points)` gives the colours themselves.
+  (`{ tolerance }`). Await it: it captures the window, as a screenshot does, so it needs iOS,
+  Android 8 (API 26) or later, or macOS, and does not work on Linux yet. A point of a node partly
+  outside the window is read where that point is drawn, and one outside the window fails.
+  `colorsAt(target, points)` gives the colours themselves.
 
 ## Turning animations off
 
@@ -416,8 +416,9 @@ What it captures:
 - a region of the window in points, `{ x, y, width, height }`, in the coordinates `measure` gives;
 - `screen`: the whole window.
 
-The capture is the app's window as iOS or Android drew it, text included. It is taken again until
-two captures in a row agree, so what is moving between captures has stopped; one that does not
+The capture is the app's window as iOS, Android or the macOS host drew it, text included. The macOS
+host draws its window in process, so it asks for no screen recording permission. It is taken again
+until two captures in a row agree, so what is moving between captures has stopped; one that does not
 stop within `timeout` (5 seconds) fails the test. An animation that is paused, or waiting on its
 delay, looks still: wait for one to end before the screenshot when it matters.
 

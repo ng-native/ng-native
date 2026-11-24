@@ -180,6 +180,7 @@ add_library(ngn_core STATIC
     core/src/modules/photo-library.cpp
     core/src/modules/printing.cpp
     core/src/modules/screen-capture.cpp
+    core/src/modules/testing-capture.cpp
     core/src/modules/sharing.cpp
     core/src/modules/splash-screen.cpp
     core/src/modules/sqlite.cpp
@@ -235,6 +236,7 @@ if(NGN_TESTS)
         appkit/audio.mm appkit/tests/audio.test.mm
         appkit/language-model.mm appkit/tests/language-model.test.mm
         appkit/screen-capture.mm appkit/tests/screen-capture.test.mm
+        appkit/testing-capture.mm appkit/tests/testing-capture.test.mm
         appkit/photo-library.mm appkit/tests/photo-library.test.mm
         appkit/tracking.mm appkit/tests/tracking.test.mm
         appkit/image-manipulator.mm appkit/tests/image-manipulator.test.mm
