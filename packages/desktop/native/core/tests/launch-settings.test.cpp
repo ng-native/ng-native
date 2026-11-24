@@ -34,6 +34,7 @@ const Map kUpdatesEnv{
     {"NGN_UPDATES_CODE_SIGNING_CERTIFICATE", "-----BEGIN CERTIFICATE-----evil"},
     {"NGN_UPDATES_PLATFORM", "ios"},
     {"NGN_DESKTOP_CAPABILITIES", R"({"spawn":[{"program":"/bin/sh"}]})"},
+    {"NGN_DESKTOP_ICON", "/tmp/evil.png"},
 };
 
 std::variant<ngn::LaunchSettings, std::string> launch(ngn::LaunchSources sources) {
@@ -65,6 +66,10 @@ TEST_CASE("A dev run takes its bundle, module, title, app id and capabilities fr
   // The environment's capabilities when argv has none.
   auto env = std::get<ngn::LaunchSettings>(launch({.args = {"/tmp/b.js"}, .env = from(kUpdatesEnv), .plist = from({})}));
   CHECK(env.capabilitiesJson == kUpdatesEnv.at("NGN_DESKTOP_CAPABILITIES"));
+  // The app's icon, which a dev run's executable has none of: from the environment, which a host
+  // too old for it ignores, as it would refuse an argument it does not know.
+  CHECK(env.icon == "/tmp/evil.png");
+  CHECK(settings.icon.empty());
 
   CHECK(std::holds_alternative<std::string>(launch({.args = {}, .env = from({}), .plist = from({})})));
   CHECK(std::holds_alternative<std::string>(
@@ -89,6 +94,7 @@ TEST_CASE("A packaged app runs what its Info.plist says, whatever argv and the e
     CHECK(settings.title == "Notes");
     CHECK(settings.appId == "com.example.notes");
     CHECK(settings.capabilitiesJson.empty());
+    CHECK(settings.icon.empty());
     CHECK(settings.initialUrl.empty());
     CHECK_FALSE(settings.dbusService);
   }

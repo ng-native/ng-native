@@ -17,7 +17,14 @@ import { parseArgs } from 'node:util';
 import { hostCapabilities } from './app-config.mjs';
 import { prepareHost, system, UsageError } from './host.mjs';
 import { linuxRunAppId } from './package-linux.mjs';
-import { PACKAGE_USAGE, packageApp, parsePackage } from './package.mjs';
+import {
+  HERMES_FRAMEWORK,
+  MINIMUM_MACOS,
+  PACKAGE_USAGE,
+  packageApp,
+  parsePackage,
+} from './package.mjs';
+import { plist } from './plist.mjs';
 
 export {
   cacheDir,
@@ -200,17 +207,98 @@ export async function run(options, sys = system) {
       : (config.bundleIdentifier ?? expo.slug ?? config.name);
   // What Processes may run and read, as a packaged app's Info.plist or embedded metadata gives it.
   const capabilities = hostCapabilities(config.options);
-  return sys.host(executableIn(buildDir, os), [
-    bundleArgument(options, os, cwd),
-    '--module',
-    options.module,
-    '--title',
-    config.name,
-    '--app-id',
-    appId,
-    ...(capabilities ? ['--capabilities', JSON.stringify(capabilities)] : []),
-    ...(options.url ? ['--url', options.url] : []),
-  ]);
+  const { executable, icon } = devIdentity(sys, { cwd, expo, config, appId, os, buildDir });
+  return sys.host(
+    executable,
+    [
+      bundleArgument(options, os, cwd),
+      '--module',
+      options.module,
+      '--title',
+      config.name,
+      '--app-id',
+      appId,
+      ...(capabilities ? ['--capabilities', JSON.stringify(capabilities)] : []),
+      ...(options.url ? ['--url', options.url] : []),
+    ],
+    // In the environment, which a host from before it ignores, where it would refuse an argument.
+    icon ? { env: { NGN_DESKTOP_ICON: icon } } : undefined,
+  );
+}
+
+/**
+ * What shows a dev run as the app, as its bundle or desktop entry shows a packaged one: the
+ * executable it starts, and the icon, null when there is none.
+ *
+ * @param {typeof system} sys
+ * @param {{ cwd: string, expo: import('./app-config.mjs').ExpoConfig, config: import('./app-config.mjs').DesktopAppConfig, appId: string, os: DesktopOs, buildDir: string }} app
+ */
+function devIdentity(sys, { cwd, expo, config, appId, os, buildDir }) {
+  const executable = executableIn(buildDir, os);
+  const dev = path.join(cwd, '.expo', 'ng-native-desktop', 'dev');
+  return {
+    executable: os === 'macos' ? devApp(sys, dev, { config, appId, executable }) : executable,
+    icon: devIcon(sys, dev, os === 'linux' ? expo.icon : config.icon, { cwd, appId, os }),
+  };
+}
+
+/**
+ * What a dev run on macOS launches: the host's executable in a thin `<name>.app` in `dev`, which
+ * names the app in the menu bar, its About, Hide and Quit items, the Dock and the app switcher, as
+ * a packaged app's bundle does (a link named for the app names only the menu bar). Its Info.plist
+ * has no `NGNBundleFile`, so the host still takes the bundle and the rest from its arguments, and
+ * carries the usage strings a packaged app has, which macOS asks a bundled app for before a
+ * permission. The executable is copied afresh each run, under a new inode, so an earlier run still
+ * going keeps its own.
+ *
+ * @param {typeof system} sys
+ * @param {string} dev
+ * @param {{ config: import('./app-config.mjs').DesktopAppConfig, appId: string, executable: string }} app
+ */
+function devApp(sys, dev, { config, appId, executable }) {
+  const contents = path.join(dev, `${config.name}.app`, 'Contents');
+  const inside = path.join(contents, 'MacOS', config.name);
+  sys.remove(inside);
+  sys.copy(executable, inside);
+  // Found through the executable's @executable_path/../Frameworks.
+  const hermes = path.join(path.dirname(executable), HERMES_FRAMEWORK);
+  if (sys.exists(hermes)) sys.symlink(hermes, path.join(contents, 'Frameworks', HERMES_FRAMEWORK));
+  sys.writeFile(
+    path.join(contents, 'Info.plist'),
+    plist({
+      CFBundleDisplayName: config.name,
+      CFBundleExecutable: config.name,
+      CFBundleIdentifier: appId,
+      CFBundleInfoDictionaryVersion: '6.0',
+      CFBundleName: config.name,
+      CFBundlePackageType: 'APPL',
+      LSMinimumSystemVersion: MINIMUM_MACOS,
+      NSHighResolutionCapable: true,
+      NSPrincipalClass: 'NSApplication',
+      ...config.permissions.usageStrings,
+    }),
+  );
+  return inside;
+}
+
+/**
+ * The icon a dev run shows, which a packaged app takes from its bundle or desktop entry: the
+ * image itself on macOS, and on Linux a link to it in `dev` named for the app id, the icon name
+ * the GTK host looks it up by. An Icon Composer `.icon` folder, which only `actool` reads, gives
+ * none.
+ *
+ * @param {typeof system} sys
+ * @param {string} dev
+ * @param {string | null | undefined} icon as the app config gives it, relative to the app
+ * @param {{ cwd: string, appId: string, os: DesktopOs }} app
+ */
+function devIcon(sys, dev, icon, { cwd, appId, os }) {
+  if (!icon || icon.endsWith('.icon')) return null;
+  const image = path.resolve(cwd, icon);
+  if (os === 'macos') return image;
+  const link = path.join(dev, `${appId}${path.extname(image)}`);
+  sys.symlink(image, link);
+  return link;
 }
 
 /**

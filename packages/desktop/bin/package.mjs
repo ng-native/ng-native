@@ -38,7 +38,7 @@ export const PACKAGE_OSES = {
   macos: { formats: ['app', 'dmg', 'mas'], output: DEFAULT_OUTPUT },
   linux: { formats: [...LINUX_FORMATS], output: 'dist/linux' },
 };
-const HERMES_FRAMEWORK = 'hermesvm.framework';
+export const HERMES_FRAMEWORK = 'hermesvm.framework';
 
 /** @type {readonly string[]} */
 const ARCHES = ['x64', 'arm64', 'all'];

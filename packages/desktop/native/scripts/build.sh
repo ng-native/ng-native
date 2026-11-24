@@ -37,6 +37,9 @@
 #
 # NGN_JOBS caps parallel compiles (default 8).
 #
+# NGN_FIRST_BUILD_NOTE, how long a first build takes, is printed when the build directory has never
+# been configured (scripts/first-build-note.sh).
+#
 # NGN_COMPILER_LAUNCHER, e.g. ccache, runs every compile of the host and of Hermes through it.
 # Unset, the build is as it was.
 set -euo pipefail
@@ -132,6 +135,17 @@ if [ -n "${NGN_DESKTOP_LINK:-}" ] && [ "$backend" != "none" ]; then
 fi
 [ ${#link_args[@]} -eq 0 ] && link_args=(-DNGN_DESKTOP_LINK= -DNGN_LINK_CODEGEN=)
 
+# Off macOS archs is blank, and Hermes is built for this machine's architecture, under the same
+# name as on macOS.
+arch_key="${archs//;/-}"
+[ -n "$arch_key" ] || arch_key="$(uname -m)"
+variant="$backend"
+[ "$backend" = "none" ] && [ "$runtime" = 1 ] && variant=none-runtime
+BUILD="${build_dir:-$host_dir/$variant-$arch_key-$config}"
+# How long a first build takes, when this directory has none yet (NGN_FIRST_BUILD_NOTE), before
+# Hermes or the host compiles.
+"$here/first-build-note.sh" "$BUILD"
+
 launcher_args=()
 while IFS= read -r arg; do
   launcher_args+=("$arg")
@@ -156,10 +170,6 @@ if [ "$config" = RelWithDebInfo ]; then
   done
 fi
 
-# Off macOS archs is blank, and Hermes is built for this machine's architecture, under the same
-# name as on macOS.
-arch_key="${archs//;/-}"
-[ -n "$arch_key" ] || arch_key="$(uname -m)"
 hermes_args=()
 if [ "$backend" = "appkit" ]; then
   # React Native's own prebuilt Hermes, universal: with the debugger for a dev build, as React
@@ -186,9 +196,6 @@ elif [ "$runtime" = 1 ]; then
   hermes_args=(-DNGN_HERMES_BUILD="$hermes")
 fi
 
-variant="$backend"
-[ "$backend" = "none" ] && [ "$runtime" = 1 ] && variant=none-runtime
-BUILD="${build_dir:-$host_dir/$variant-$arch_key-$config}"
 # One build at a time in it (build-lock.sh), held until this script and the ninja it runs end.
 . "$here/build-lock.sh"
 lock_build "$BUILD"

@@ -130,6 +130,7 @@ std::variant<LaunchSettings, std::string> launchSettings(LaunchSources sources, 
   if (auto capabilities = sources.env ? sources.env("NGN_DESKTOP_CAPABILITIES") : std::nullopt) {
     settings.capabilitiesJson = *capabilities;
   }
+  settings.icon = sources.env ? sources.env("NGN_DESKTOP_ICON").value_or("") : "";
   const auto &args = sources.args;
   for (size_t i = 0; i < args.size(); i++) {
     const auto &arg = args[i];

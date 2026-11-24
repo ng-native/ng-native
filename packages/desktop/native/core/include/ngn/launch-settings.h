@@ -73,6 +73,9 @@ struct LaunchSettings {
   // NGNCapabilities: here when its lookup gives them as JSON (metadata.json); a macOS app reads its
   // Info.plist's dictionary itself.
   std::string capabilitiesJson;
+  // A dev run's NGN_DESKTOP_ICON: the app's icon image, which the host shows for the app (a bare
+  // executable has no bundle to take one from). Empty when none; a packaged app's is its bundle's.
+  std::string icon;
   // A dev run's --url: the link the app opens as it launches (Linking's initial URL), as a click on
   // a link to the app's scheme would. Empty when none; a packaged app is opened on a link by the OS.
   std::string initialUrl;

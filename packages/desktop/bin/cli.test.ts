@@ -173,7 +173,10 @@ describe('run --os linux', () => {
       {
         command: path.join(packageDir, 'native', 'scripts', 'build.sh'),
         args: ['/apps/demo/node_modules/react-native', '--backend', 'gtk', '--no-tests'],
-        env: { NGN_DESKTOP_LINK: '/apps/demo/.expo/ng-native-desktop/link.json' },
+        env: {
+          NGN_DESKTOP_LINK: '/apps/demo/.expo/ng-native-desktop/link.json',
+          NGN_FIRST_BUILD_NOTE: LINUX_FIRST_BUILD_NOTE,
+        },
       },
       {
         command: '/cache/rn-0.88.0/host/gtk-x86_64-RelWithDebInfo/gtk/ngn-linux',
@@ -254,6 +257,24 @@ describe('run --os linux', () => {
     assert.equal(macArgs[macArgs.indexOf('--app-id') + 1], 'my-demo');
   });
 
+  it('shows a dev run with the app’s icon, linked under its app id for the GTK host to look up, and runs the host as it is', async () => {
+    const { sys, linuxCalls, symlinks } = linuxBuild(() => ({
+      // The icon a Linux package installs, not the macOS one, which can be an Icon Composer folder.
+      expoConfig: () => ({
+        ...listsLinux(),
+        slug: 'my-demo',
+        ios: { icon: './assets/app.icon' },
+        icon: './assets/icon.png',
+      }),
+    }));
+    await run({ os: 'linux', module: 'main', universal: false }, sys);
+    const launch = linuxCalls[1]!;
+    assert.equal(launch.command, '/cache/rn-0.88.0/host/gtk-x86_64-RelWithDebInfo/gtk/ngn-linux');
+    const icon = '/apps/demo/.expo/ng-native-desktop/dev/dev.ngnative.mydemo.png';
+    assert.deepEqual(launch.env, { NGN_DESKTOP_ICON: icon });
+    assert.deepEqual(symlinks, { [icon]: '/apps/demo/assets/icon.png' });
+  });
+
   it('checks the Linux toolchain before it builds, naming the package for this distribution', async () => {
     const asked: string[] = [];
     const { sys, linuxCalls } = linuxBuild((calls) => ({
@@ -284,14 +305,15 @@ describe('run --os linux', () => {
     assert.ok(asked.includes('ld.lld --version'));
   });
 
-  it('says the first Linux build takes a while, before building for a version the cache lacks', async () => {
-    const { sys, warnings } = linuxBuild(() => ({
+  it('has the first Linux build say it takes a while', async () => {
+    const { sys, warnings, linuxCalls } = linuxBuild(() => ({
       env: { NGN_DESKTOP_CACHE: '/cache' },
       readFile: (file) =>
         file.endsWith('react-native/package.json') ? '{"version":"0.88.0"}' : '',
     }));
     await run({ os: 'linux', module: 'main', universal: false }, sys);
-    assert.deepEqual(warnings, [LINUX_FIRST_BUILD_NOTE]);
+    assert.deepEqual(warnings, []);
+    assert.equal(linuxCalls[0]!.env!['NGN_FIRST_BUILD_NOTE'], LINUX_FIRST_BUILD_NOTE);
   });
 
   it('prints the debug host’s executable with host, taking a prebuilt Linux host on a Mac', async () => {
@@ -382,6 +404,9 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
   const calls: { command: string; args: string[]; env?: Record<string, string> }[] = [];
   const written: Record<string, string> = {};
   const warnings: string[] = [];
+  const symlinks: Record<string, string> = {};
+  const copies: Record<string, string> = {};
+  const removed: string[] = [];
   const sys: typeof system = {
     platform: 'darwin',
     arch: 'arm64',
@@ -394,8 +419,8 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
     sha256: () => '',
     rename: () => {},
     exists: () => false,
-    remove: () => {},
-    copy: () => {},
+    remove: (file) => void removed.push(file),
+    copy: (from, to) => void (copies[to] = from),
     links: () => ({
       os: 'macos',
       libraries: [],
@@ -408,10 +433,10 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
     mkdir: () => {},
     readBytes: () => new Uint8Array(),
     files: () => [],
-    symlink: () => {},
+    symlink: (target, file) => void (symlinks[file] = target),
     warn: (line) => void warnings.push(line),
-    host(command, args) {
-      return Promise.resolve(this.run(command, args).status);
+    host(command, args, options) {
+      return Promise.resolve(this.run(command, args, options).status);
     },
     run(command, args, options) {
       const probe = TOOLCHAIN[[command, ...args].join(' ')];
@@ -433,7 +458,7 @@ function fakeSystem(overrides: Partial<typeof system> = {}) {
     }),
     ...overrides,
   };
-  return { sys, calls, written, warnings };
+  return { sys, calls, written, warnings, symlinks, copies, removed };
 }
 
 describe('run', () => {
@@ -446,10 +471,14 @@ describe('run', () => {
         command: path.join(packageDir, 'native', 'scripts', 'build.sh'),
         // The published package has no core test sources (published-files.test.ts).
         args: ['/apps/demo/node_modules/react-native', '--universal', '--no-tests'],
-        env: { NGN_DESKTOP_LINK: '/apps/demo/.expo/ng-native-desktop/link.json' },
+        env: {
+          NGN_DESKTOP_LINK: '/apps/demo/.expo/ng-native-desktop/link.json',
+          NGN_FIRST_BUILD_NOTE: FIRST_BUILD_NOTE,
+        },
       },
       {
-        command: '/cache/rn-0.88.0/host/appkit-arm64-RelWithDebInfo/appkit/ngn-macos',
+        // Inside a dev bundle named for the app, which AppKit names the app by (devApp).
+        command: '/apps/demo/.expo/ng-native-desktop/dev/Demo.app/Contents/MacOS/Demo',
         args: [
           '/apps/demo/dist/main.hbc',
           '--module',
@@ -461,6 +490,74 @@ describe('run', () => {
         ],
       },
     ]);
+  });
+
+  it('shows a dev run as the app, by its name and its icon, on the host it built or the prebuilt one', async () => {
+    const named = (name: string, icon?: string) =>
+      fakeSystem({
+        expoConfig: () => ({
+          name,
+          slug: 'demo',
+          platforms: ['macos'],
+          experiments: { outOfTreePlatforms: true },
+          ios: { bundleIdentifier: 'com.example.demo' },
+          ...(icon && { icon }),
+        }),
+      });
+    const app = named('My Notes', './assets/icon.png');
+    await run({ module: 'main', universal: false }, app.sys);
+    const launch = app.calls.at(-1)!;
+    const contents = '/apps/demo/.expo/ng-native-desktop/dev/My Notes.app/Contents';
+    const host = '/cache/rn-0.88.0/host/appkit-arm64-RelWithDebInfo/appkit/ngn-macos';
+    assert.equal(launch.command, `${contents}/MacOS/My Notes`);
+    // A fresh copy of the host, under a new inode, so an earlier run still going keeps its own,
+    // with Hermes where the executable's rpath finds it.
+    assert.deepEqual(app.removed, [`${contents}/MacOS/My Notes`]);
+    assert.deepEqual(app.copies, { [`${contents}/MacOS/My Notes`]: host });
+    assert.deepEqual(app.symlinks, {});
+    const plist = app.written[`${contents}/Info.plist`]!;
+    assert.match(plist, /<key>CFBundleName<\/key>\s*<string>My Notes<\/string>/);
+    assert.match(plist, /<key>CFBundleExecutable<\/key>\s*<string>My Notes<\/string>/);
+    assert.match(plist, /<key>CFBundleIdentifier<\/key>\s*<string>com\.example\.demo<\/string>/);
+    // Not a packaged app: the host takes the bundle from its arguments.
+    assert.doesNotMatch(plist, /NGNBundleFile/);
+    // The icon goes in the environment, which a host from before it ignores.
+    assert.deepEqual(launch.env, { NGN_DESKTOP_ICON: '/apps/demo/assets/icon.png' });
+    assert.ok(!launch.args.includes('--icon'));
+
+    // Hermes beside the host goes in the bundle's Frameworks, and the usage strings a packaged
+    // app has, which macOS asks a bundled app for, go in its Info.plist.
+    const withHermes = fakeSystem({
+      exists: (file) => file.endsWith('/appkit/hermesvm.framework'),
+      expoConfig: () => ({
+        name: 'Demo',
+        slug: 'demo',
+        platforms: ['macos'],
+        experiments: { outOfTreePlatforms: true },
+        ios: {
+          bundleIdentifier: 'com.example.demo',
+          infoPlist: { NSCameraUsageDescription: 'Scans receipts.' },
+        },
+      }),
+    });
+    await run({ module: 'main', universal: false }, withHermes.sys);
+    const demo = '/apps/demo/.expo/ng-native-desktop/dev/Demo.app/Contents';
+    assert.deepEqual(withHermes.symlinks, {
+      [`${demo}/Frameworks/hermesvm.framework`]:
+        '/cache/rn-0.88.0/host/appkit-arm64-RelWithDebInfo/appkit/hermesvm.framework',
+    });
+    assert.match(
+      withHermes.written[`${demo}/Info.plist`]!,
+      /<key>NSCameraUsageDescription<\/key>\s*<string>Scans receipts\.<\/string>/,
+    );
+
+    const plain = named('My Notes');
+    await run({ module: 'main', universal: false }, plain.sys);
+    assert.equal(plain.calls.at(-1)!.env, undefined);
+    // An Icon Composer folder, which only actool reads, gives no icon.
+    const composer = named('Notes', 'assets/app.icon');
+    await run({ module: 'main', universal: false }, composer.sys);
+    assert.equal(composer.calls.at(-1)!.env, undefined);
   });
 
   it('runs on the prebuilt debug host for its React Native version, compiling nothing', async () => {
@@ -497,7 +594,11 @@ describe('run', () => {
     await run({ bundle: 'dist/main.hbc', module: 'main', universal: false }, prebuilt.sys);
     assert.deepEqual(
       prebuilt.calls.map((call) => call.command),
-      [host],
+      ['/apps/demo/.expo/ng-native-desktop/dev/Demo.app/Contents/MacOS/Demo'],
+    );
+    assert.equal(
+      prebuilt.copies['/apps/demo/.expo/ng-native-desktop/dev/Demo.app/Contents/MacOS/Demo'],
+      host,
     );
 
     // A host library nested under a dependency, another version than the prebuilt's, builds too.
@@ -540,6 +641,8 @@ describe('run', () => {
         'silicon Mac (about 6 for a universal release build) the first time for this app, then only ' +
         'what changed.',
     ]);
+    // Which says how long a build takes, so the build adds no first build's note.
+    assert.equal(mismatched.calls[0]!.env!['NGN_FIRST_BUILD_NOTE'], undefined);
 
     // With native code of its own linked, the app builds its host.
     const linked = fakeSystem({
@@ -1060,25 +1163,23 @@ describe('run', () => {
     ]);
   });
 
-  it('says how long the first build takes, once, before building for a React Native version the cache lacks', async () => {
+  it('has the build say how long a first build takes, judged by the folder it builds in, not by the cache other apps share', async () => {
     const files: Record<string, string> = {
       '/apps/demo/node_modules/react-native/package.json': '{"version":"0.88.0"}',
     };
-    const first = fakeSystem({
-      env: { NGN_DESKTOP_CACHE: '/cache' },
-      readFile: (file) => files[file] ?? '',
-    });
-    await run({ bundle: 'a.js', module: 'main', universal: false }, first.sys);
-    assert.deepEqual(first.warnings, [FIRST_BUILD_NOTE]);
+    // Another app, or another install of the package, built its host in the same cache: this
+    // one's folder is its own (host-dir.sh), so only build.sh knows whether it is built yet.
+    for (const built of [false, true]) {
+      const { sys, calls, warnings } = fakeSystem({
+        env: { NGN_DESKTOP_CACHE: '/cache' },
+        readFile: (file) => files[file] ?? '',
+        exists: (file) => built && file.startsWith('/cache/rn-0.88.0/host'),
+      });
+      await run({ bundle: 'a.js', module: 'main', universal: false }, sys);
+      assert.deepEqual(warnings, []);
+      assert.equal(calls[0]!.env!['NGN_FIRST_BUILD_NOTE'], FIRST_BUILD_NOTE);
+    }
     assert.match(FIRST_BUILD_NOTE, /about 4 minutes/);
-
-    const later = fakeSystem({
-      env: { NGN_DESKTOP_CACHE: '/cache' },
-      readFile: (file) => files[file] ?? '',
-      exists: (file) => file === '/cache/rn-0.88.0/host',
-    });
-    await run({ bundle: 'a.js', module: 'main', universal: false }, later.sys);
-    assert.deepEqual(later.warnings, []);
   });
 
   it('stops when the build fails, without launching', async () => {
@@ -1154,7 +1255,7 @@ describe('main', () => {
     }
     const exiting = fakeSystem({
       run: (command, args) => ({
-        status: command.endsWith('ngn-macos') ? 3 : 0,
+        status: command.endsWith('/MacOS/Demo') ? 3 : 0,
         stdout: TOOLCHAIN[[command, ...args].join(' ')] ?? '/b\n',
       }),
     });
@@ -1172,14 +1273,14 @@ describe('system.host', () => {
         host,
         `const fs = require('node:fs');
 process.on('SIGTERM', () => { fs.appendFileSync(${JSON.stringify(log)}, 'TERM\\n'); process.exit(7); });
-fs.writeFileSync(${JSON.stringify(log)}, 'env ' + process.env.NGN_RUN_ID + '\\n');
+fs.writeFileSync(${JSON.stringify(log)}, 'env ' + process.env.NGN_RUN_ID + ' ' + process.env.NGN_DESKTOP_ICON + '\\n');
 setInterval(() => {}, 1000);`,
       );
       const cli = path.join(dir, 'cli.mjs');
       writeFileSync(
         cli,
         `import { system } from ${JSON.stringify(path.join(packageDir, 'bin', 'host.mjs'))};
-process.exitCode = await system.host(process.execPath, [${JSON.stringify(host)}]);`,
+process.exitCode = await system.host(process.execPath, [${JSON.stringify(host)}], { env: { NGN_DESKTOP_ICON: '/a/icon.png' } });`,
       );
       const child = spawn(process.execPath, [cli], {
         env: { ...process.env, NGN_RUN_ID: 'run-1' },
@@ -1193,7 +1294,8 @@ process.exitCode = await system.host(process.execPath, [${JSON.stringify(host)}]
       child.kill('SIGTERM');
       assert.equal(await exited, 7);
       assert.ok(Date.now() - sent < 3000);
-      assert.equal(readFileSync(log, 'utf8'), 'env run-1\nTERM\n');
+      // With what it adds on top.
+      assert.equal(readFileSync(log, 'utf8'), 'env run-1 /a/icon.png\nTERM\n');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

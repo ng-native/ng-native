@@ -86,6 +86,16 @@ given instead. A bundle's images and other assets are read beside it as React Na
 for an embedded bundle, so make it with `npx expo export:embed --platform macos --dev false
 --bundle-output <dir>/main.jsbundle --assets-dest <dir>`; `npx expo export` puts them elsewhere.
 
+A dev run shows as the app, as a packaged one does. `run` starts the host from a thin
+`<expo.name>.app` in `.expo/ng-native-desktop/dev`: a copy of the host, with an Info.plist that
+names the app, gives its bundle identifier and carries the usage strings a packaged app has, but
+leaves the bundle and the rest to the command's arguments. The menu bar, About, Hide and Quit, the
+Dock and the app switcher name the app, and the Dock and the app switcher show its icon
+(`ios.icon`, else `icon`); an Icon Composer `.icon` folder shows only once the app is packaged. As a
+bundled app, a dev run asks for a permission in the app's name, needing the usage string a packaged
+app needs, has notifications on, and keeps its preferences in its bundle identifier's defaults,
+which a packaged build of the app with that identifier shares.
+
 For a host built from source, adding or removing one of the [libraries it compiles
 in](/packages/desktop/views#libraries-compiled-in) builds it again: in a folder of its own for that
 set of libraries when the app links no native desktop code, reusing the Hermes downloaded before,
@@ -116,6 +126,10 @@ npm run linux    # ng-native-desktop run --os linux: gets the GTK host, then ope
 `http://localhost:8081/.expo/.virtual-metro-entry.bundle?platform=linux&dev=true` from the dev
 server, with Fast Refresh, and takes the same options as on a Mac but `--universal`: a Linux host
 is built for the machine's own architecture, x64 or arm64.
+
+The app's windows take its name, and its `icon` as their icon, which an X11 window manager shows.
+GNOME on Wayland names a window and picks its icon from the desktop entry with the app's id, which
+only an installed package has, so a dev run there shows the app id and a generic icon.
 
 As on a Mac, the first run uses a prebuilt debug host for the machine's architecture when
 `@ng-native/desktop` has one for the app's React Native version and the app links no native desktop

@@ -865,6 +865,13 @@ int main(int argc, const char *argv[]) {
     NSApplication *app = NSApplication.sharedApplication;
     // A test launch has no Dock icon, and never takes focus, until a test asks for the key window.
     app.activationPolicy = settings.test ? NSApplicationActivationPolicyAccessory : NSApplicationActivationPolicyRegular;
+    // A dev run's icon (NGN_DESKTOP_ICON) in the Dock and the app switcher: a bare executable has no
+    // bundle to take one from.
+    if (!settings.icon.empty()) {
+      if (NSImage *icon = [[NSImage alloc] initWithContentsOfFile:@(settings.icon.c_str())]) {
+        app.applicationIconImage = icon;
+      }
+    }
     endOnTerminateSignal();
     NGNAppDelegate *delegate = [NGNAppDelegate new];
     app.delegate = delegate;

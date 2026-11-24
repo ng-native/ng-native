@@ -125,11 +125,15 @@ export const system = {
    *
    * @param {string} command
    * @param {string[]} args
+   * @param {{ env?: Record<string, string> }} [options] `env`: set on top of this process's
    * @returns {Promise<number>}
    */
-  host(command, args) {
+  host(command, args, { env } = {}) {
     return new Promise((resolve, reject) => {
-      const child = spawn(command, args, { stdio: 'inherit' });
+      const child = spawn(command, args, {
+        stdio: 'inherit',
+        ...(env && { env: { ...process.env, ...env } }),
+      });
       const signals = /** @type {const} */ (['SIGTERM', 'SIGINT', 'SIGHUP']);
       const forward = (/** @type {NodeJS.Signals} */ signal) => child.kill(signal);
       for (const signal of signals) process.on(signal, forward);
@@ -610,23 +614,21 @@ function prebuiltHost(sys, reactNative, { flavour, deny, linked, hostLibraries, 
  */
 function buildHost(sys, reactNative, libraries, { universal, release, os, explained }, link) {
   checkToolchain(sys, os);
-  const version = versionIn(sys, reactNative);
-  if (
-    !explained &&
-    version &&
-    !sys.exists(path.join(cacheDir(version, { env: sys.env, platform: sys.platform }), 'host'))
-  ) {
-    sys.warn(os === 'linux' ? LINUX_FIRST_BUILD_NOTE : FIRST_BUILD_NOTE);
-  }
   const buildArgs = [reactNative, ...libraries.flatMap((dir) => ['--library', dir])];
   if (os === 'linux') buildArgs.push('--backend', 'gtk');
   if (universal && os === 'macos') buildArgs.push('--universal');
   // The core tests are the repo's own (`test:native`): the published package has no sources for
   // them, so an app's build leaves them out.
   buildArgs.push(release ? '--release' : '--no-tests');
+  // Whether this build is the first is the build's to say: it builds in a folder of its own for
+  // this install and these libraries (host-dir.sh), which only it names.
+  /** @type {Record<string, string>} */
+  const env = { NGN_DESKTOP_LINK: link };
+  if (!explained)
+    env['NGN_FIRST_BUILD_NOTE'] = os === 'linux' ? LINUX_FIRST_BUILD_NOTE : FIRST_BUILD_NOTE;
   const build = sys.run(path.join(packageDir, 'native', 'scripts', 'build.sh'), buildArgs, {
     capture: true,
-    env: { NGN_DESKTOP_LINK: link },
+    env,
   });
   const buildDir = build.stdout.trim().split('\n').pop();
   if (build.status !== 0 || !buildDir) {

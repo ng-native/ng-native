@@ -76,6 +76,7 @@
 
 #include <atomic>
 #include <cstdio>
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -606,6 +607,15 @@ int main(int argc, char *argv[]) {
 
   gtk_init();
   adw_init();
+  // The app's name where the desktop shows one without a desktop entry, and a dev run's icon
+  // (NGN_DESKTOP_ICON, named for the app id, which `run` links in a folder of its own) as its
+  // windows' icon, which an X11 window manager shows. A packaged app's are its desktop entry's.
+  g_set_application_name(settings.title.c_str());
+  if (!settings.icon.empty()) {
+    std::filesystem::path icon(settings.icon);
+    gtk_icon_theme_add_search_path(gtk_icon_theme_get_for_display(gdk_display_get_default()), icon.parent_path().c_str());
+    gtk_window_set_default_icon_name(icon.stem().c_str());
+  }
   // The desktop's accent, which libadwaita below 1.6 does not follow itself.
   gHost.accent = std::make_unique<ngn::gtk::AccentFollower>();
   // Back and forward swap arrows in a right-to-left locale, which GTK knows once it is initialised.
