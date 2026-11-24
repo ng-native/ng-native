@@ -91,10 +91,11 @@ A dev run shows as the app, as a packaged one does. `run` starts the host from a
 names the app, gives its bundle identifier and carries the usage strings a packaged app has, but
 leaves the bundle and the rest to the command's arguments. The menu bar, About, Hide and Quit, the
 Dock and the app switcher name the app, and the Dock and the app switcher show its icon
-(`ios.icon`, else `icon`); an Icon Composer `.icon` folder shows only once the app is packaged. As a
-bundled app, a dev run asks for a permission in the app's name, needing the usage string a packaged
-app needs, has notifications on, and keeps its preferences in its bundle identifier's defaults,
-which a packaged build of the app with that identifier shares.
+(`ios.icon`, else `icon`); an Icon Composer `.icon` folder shows only once the app is packaged. As
+a bundled app, a dev run asks for a permission in the app's name, needing the usage string a
+packaged app needs, can show notifications once the user grants authorization, and keeps its
+preferences in its bundle identifier's defaults, which a packaged build of the app with that
+identifier shares.
 
 For a host built from source, adding or removing one of the [libraries it compiles
 in](/packages/desktop/views#libraries-compiled-in) builds it again: in a folder of its own for that
@@ -129,7 +130,9 @@ is built for the machine's own architecture, x64 or arm64.
 
 The app's windows take its name, and its `icon` as their icon, which an X11 window manager shows.
 GNOME on Wayland names a window and picks its icon from the desktop entry with the app's id, which
-only an installed package has, so a dev run there shows the app id and a generic icon.
+only an installed package has, so a dev run there shows the app id and a generic icon, unless an
+installed package of the same app id supplies a desktop entry, whose name and icon the dev run
+then takes.
 
 As on a Mac, the first run uses a prebuilt debug host for the machine's architecture when
 `@ng-native/desktop` has one for the app's React Native version and the app links no native desktop

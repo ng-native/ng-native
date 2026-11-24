@@ -257,7 +257,7 @@ describe('run --os linux', () => {
     assert.equal(macArgs[macArgs.indexOf('--app-id') + 1], 'my-demo');
   });
 
-  it('shows a dev run with the app’s icon, linked under its app id for the GTK host to look up, and runs the host as it is', async () => {
+  it('shows a dev run with the app’s icon, linked under a name of its own for the GTK host to look up, and runs the host as it is', async () => {
     const { sys, linuxCalls, symlinks } = linuxBuild(() => ({
       // The icon a Linux package installs, not the macOS one, which can be an Icon Composer folder.
       expoConfig: () => ({
@@ -270,7 +270,7 @@ describe('run --os linux', () => {
     await run({ os: 'linux', module: 'main', universal: false }, sys);
     const launch = linuxCalls[1]!;
     assert.equal(launch.command, '/cache/rn-0.88.0/host/gtk-x86_64-RelWithDebInfo/gtk/ngn-linux');
-    const icon = '/apps/demo/.expo/ng-native-desktop/dev/dev.ngnative.mydemo.png';
+    const icon = '/apps/demo/.expo/ng-native-desktop/dev/dev.ngnative.mydemo-ngn-dev.png';
     assert.deepEqual(launch.env, { NGN_DESKTOP_ICON: icon });
     assert.deepEqual(symlinks, { [icon]: '/apps/demo/assets/icon.png' });
   });

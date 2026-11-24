@@ -608,7 +608,7 @@ int main(int argc, char *argv[]) {
   gtk_init();
   adw_init();
   // The app's name where the desktop shows one without a desktop entry, and a dev run's icon
-  // (NGN_DESKTOP_ICON, named for the app id, which `run` links in a folder of its own) as its
+  // (NGN_DESKTOP_ICON, named for the app id and `-ngn-dev`, which `run` links in a folder of its own) as its
   // windows' icon, which an X11 window manager shows. A packaged app's are its desktop entry's.
   g_set_application_name(settings.title.c_str());
   if (!settings.icon.empty()) {

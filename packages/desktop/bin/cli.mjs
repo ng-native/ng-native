@@ -283,8 +283,8 @@ function devApp(sys, dev, { config, appId, executable }) {
 
 /**
  * The icon a dev run shows, which a packaged app takes from its bundle or desktop entry: the
- * image itself on macOS, and on Linux a link to it in `dev` named for the app id, the icon name
- * the GTK host looks it up by. An Icon Composer `.icon` folder, which only `actool` reads, gives
+ * image itself on macOS, and on Linux a link to it in `dev` named for the app id and `-ngn-dev`, the icon
+ * name the GTK host looks it up by. An Icon Composer `.icon` folder, which only `actool` reads, gives
  * none.
  *
  * @param {typeof system} sys
@@ -296,7 +296,9 @@ function devIcon(sys, dev, icon, { cwd, appId, os }) {
   if (!icon || icon.endsWith('.icon')) return null;
   const image = path.resolve(cwd, icon);
   if (os === 'macos') return image;
-  const link = path.join(dev, `${appId}${path.extname(image)}`);
+  // A stem of its own: a themed icon an installed package of the app installs under the app id
+  // would win over this unthemed file, and the window would show the installed image.
+  const link = path.join(dev, `${appId}-ngn-dev${path.extname(image)}`);
   sys.symlink(image, link);
   return link;
 }
