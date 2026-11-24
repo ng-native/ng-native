@@ -4681,16 +4681,22 @@ function markUnitless(code) {
 function markNegatives(code) {
   return code.replace(
     /\/\*.*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|([{;}](?:\s|\/\*.*?\*\/)*)([a-z][a-z-]*)(\s*:)([^;{}]*)/gis,
-    (whole, before, name, colon, value) =>
-      NEVER_NEGATIVE_NAME.test(name?.toLowerCase())
-        ? `${before}${name}${colon}${tagNegatives(value)}`
-        : whole,
+    (whole, before, name, colon, value) => {
+      if (NEVER_NEGATIVE_NAME.test(name?.toLowerCase())) {
+        return `${before}${name}${colon}${tagNegatives(value)}`;
+      }
+      // The shorthand's position may be below zero, and its size, after the slash, may not.
+      if (name?.toLowerCase() === 'background') {
+        return `${before}${name}${colon}${tagBackgroundSizes(value)}`;
+      }
+      return whole;
+    },
   );
 }
 
 /** The properties of `NEVER_NEGATIVE`, as a sheet names them, and the shorthands of them. */
 const NEVER_NEGATIVE_NAME =
-  /^(?:(?:min-|max-)?(?:width|height|inline-size|block-size)|padding(?:-.+)?|font-size|line-height|border(?:-(?:top|right|bottom|left|inline|block)(?:-start|-end)?)?|border(?:-.+)?-(?:width|radius)|outline(?:-width)?|gap|row-gap|column-gap|grid-(?:row-|column-)?gap|flex|flex-basis|flex-grow|flex-shrink|aspect-ratio)$/;
+  /^(?:(?:min-|max-)?(?:width|height|inline-size|block-size)|padding(?:-.+)?|font-size|line-height|border(?:-(?:top|right|bottom|left|inline|block)(?:-start|-end)?)?|border(?:-.+)?-(?:width|radius)|outline(?:-width)?|gap|row-gap|column-gap|grid-(?:row-|column-)?gap|flex|flex-basis|flex-grow|flex-shrink|aspect-ratio|background-size)$/;
 
 const NEGATIVE = /^-(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:%|[a-z]+)?$/i;
 
@@ -4705,6 +4711,33 @@ function tagNegatives(value) {
     out += negative ? `${parseFloat(token)}__negative` : token;
   }
   return out;
+}
+
+/** A `background`'s negatives in each layer's size: what follows the layer's `/`. */
+function tagBackgroundSizes(value) {
+  return splitTopLevel(value, ',')
+    .map((layer) => {
+      const [placed, size] = splitTopLevel(layer, '/');
+      return size === undefined ? layer : `${placed}/${tagNegatives(size)}`;
+    })
+    .join(',');
+}
+
+/** `value` split at each `separator` outside parentheses. */
+function splitTopLevel(value, separator) {
+  const parts = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === '(') depth++;
+    else if (value[i] === ')') depth--;
+    else if (value[i] === separator && depth === 0) {
+      parts.push(value.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(value.slice(start));
+  return parts;
 }
 
 /** Whether a property's bare numbers other than 0 are an error: every length but line-height. */

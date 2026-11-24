@@ -119,7 +119,17 @@ function backgroundSize(value, context) {
   });
 }
 
-const axisSize = (value, context) => (value?.type === 'auto' ? 'auto' : length(value, context));
+/**
+ * One axis of a size. A negative written out has been refused (`markNegatives`); one a math
+ * function comes to is 0, as a browser clamps it.
+ */
+function axisSize(value, context) {
+  if (value?.type === 'auto') return 'auto';
+  const size = length(value, context);
+  if (typeof size === 'number' && size < 0) return 0;
+  if (typeof size === 'string' && /^-[\d.]+%$/.test(size)) return '0%';
+  return size;
+}
 
 /** `background-repeat`: one keyword per axis, which is how native stores it. */
 function backgroundRepeat(value, context) {
