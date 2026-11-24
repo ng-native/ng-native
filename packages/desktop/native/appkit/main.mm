@@ -1377,7 +1377,10 @@ int main(int argc, const char *argv[]) {
       } else {
         fprintf(stderr, "ngn-macos: could not load %s\n", bundle.c_str());
       }
-      return 1;
+      // Out at once, as the SIGTERM path is: the runtime's threads are still running, and a return
+      // from main would run the statics' destructors under them ("mutex lock failed").
+      fflush(stderr);
+      _exit(1);
     }
     gHost.runtime->startSurface(
         kAppSurface, module, metricsFor(frame.size, NSScreen.mainScreen.backingScaleFactor));

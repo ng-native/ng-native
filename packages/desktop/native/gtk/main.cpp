@@ -1097,7 +1097,10 @@ int main(int argc, char *argv[]) {
 
   if (!gHost.runtime->loadBundle()) {
     fprintf(stderr, "ngn-linux: could not load %s\n", bundle.c_str());
-    return 1;
+    // Out at once, as the SIGTERM path is: the runtime's threads are still running, and a return
+    // from main would run the statics' destructors under them ("mutex lock failed").
+    fflush(stderr);
+    _exit(1);
   }
   gHost.runtime->startSurface(kAppSurface, settings.module, metricsFor(width, height, ngn::gtk::windowScale(gHost.appWindow)));
 
