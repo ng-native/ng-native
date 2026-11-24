@@ -189,8 +189,8 @@ branch a stacked PR depends on) show only the fix, its tests and the version pla
 In this step `<base>` is `origin/main`, or for a stacked PR the remote branch it depends on
 (`origin/<parent>`).
 
-- Turn step 5's WIP commit and what followed into the PR's commits (`git commit --amend`, or
-  `git reset --soft $(git merge-base HEAD <base>)` and commit again), each with a sentence-case
+- Turn step 5's WIP commit and what followed into the PR's commits (`git commit --amend` when step 5
+  made one, as a fix that skipped mutations has not; otherwise commit, or `git reset --soft $(git merge-base HEAD <base>)` and commit again), each with a sentence-case
   summary: no `feat:`/`fix:` prefix, no co-author trailer. Reset to the commit the branch grew from,
   never to `<base>` itself: once it has moved, that commits the old checkout's files on top of the newer
   base and silently reverts everything merged in between (#1479 undid #1451 this way).

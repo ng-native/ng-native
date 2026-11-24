@@ -100,7 +100,8 @@ Run the merge queue for PRs once they are open:
   behavioural ones to an agent, on Sonnet unless the fix is hard.
 - **Minor wording nits after a fix round:** once CI is green and every thread is answered and resolved, a
   PR whose only commits since the last bot review change docs or version plans is merged by hand, without
-  waiting for another review round that would only raise more wording nits.
+  waiting for another review round that would only raise more wording nits. Everything else the queue
+  checks still holds: no release running, a clean merge, and no undoing of a recent main commit.
 - **CI failures:** send those back to the same agent. Re-run a failed job only once the failure is shown not
   to be the PR's. A re-run reuses its run's checkout, so it never picks up a fix main has gained since: when
   the same failure comes back, look for that fix on main and rebase instead.
