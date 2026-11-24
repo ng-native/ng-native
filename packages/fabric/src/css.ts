@@ -5205,9 +5205,21 @@ export class StyleResolver {
     }
   }
 
-  /** A safe-area inset read where nothing has supplied it, which development is told of. */
-  private noteInset(name: string | undefined, tokens: Readonly<Record<string, TokenValue>>): void {
-    if (name?.startsWith('--safe-area-inset-') && !(name in tokens)) this.onUnsuppliedInset!(name);
+  /**
+   * A safe-area inset read where nothing has supplied it, which development is told of: the
+   * declaration's own reference, or one inside it, as `calc()` of two tokens holds them.
+   */
+  private noteInsets(value: unknown, tokens: Readonly<Record<string, TokenValue>>): void {
+    if (value === null || typeof value !== 'object') return;
+    if (Array.isArray(value)) {
+      for (const part of value) this.noteInsets(part, tokens);
+      return;
+    }
+    const name = (value as { reference?: unknown }).reference;
+    if (typeof name === 'string' && name.startsWith('--safe-area-inset-') && !(name in tokens)) {
+      this.onUnsuppliedInset!(name);
+    }
+    for (const part of Object.values(value)) this.noteInsets(part, tokens);
   }
 
   /** One deferred declaration's value, from the tokens in scope and the node's own style. */
@@ -5217,12 +5229,12 @@ export class StyleResolver {
     parentInherited: Record<string, unknown>,
     tokens: Readonly<Record<string, TokenValue>>,
   ): unknown {
+    if (this.onUnsuppliedInset) this.noteInsets(declaration, tokens);
     if (declaration.within !== undefined) {
       return this.settledWithin(declaration.within, declaration, own, parentInherited, tokens);
     }
     if (declaration.compute) return this.computed(declaration, own, parentInherited);
     if (declaration.line) return this.settledLine(declaration, own, parentInherited, tokens);
-    if (this.onUnsuppliedInset) this.noteInset(declaration.reference, tokens);
     const value = referenced(declaration, tokens);
     if (declaration.whenSet !== undefined)
       return value === undefined ? undefined : declaration.whenSet;

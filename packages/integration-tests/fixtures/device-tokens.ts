@@ -55,3 +55,11 @@ export class DeviceTokenHost {}
   `,
 })
 export class ProvidedInsets {}
+
+/** One view with no styles of its own, for a global sheet to style. */
+@Component({
+  selector: 'x-plain-box',
+  imports: [View],
+  template: '<view nativeID="box"></view>',
+})
+export class PlainBox {}

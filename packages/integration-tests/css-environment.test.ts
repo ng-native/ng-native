@@ -183,13 +183,16 @@ describe('env(), the way the web writes the insets', () => {
 });
 
 describe('a safe-area inset with no provider to measure it', () => {
-  const warnings = async (fixture: string) => {
+  const warnings = async (fixture: string, css = '') => {
     const mod = await compileFixture('fixtures/device-tokens.ts');
     const warn = console.warn;
     const warned: string[] = [];
     console.warn = (...args: unknown[]) => void warned.push(String(args[0]));
     try {
-      await render(mod[fixture] as Type<unknown>, { dev: true });
+      await render(mod[fixture] as Type<unknown>, {
+        dev: true,
+        globalStyles: compileCss(css, 'global'),
+      });
       return warned.filter((message) => message.includes('<safe-area-provider>'));
     } finally {
       console.warn = warn;
@@ -197,11 +200,23 @@ describe('a safe-area inset with no provider to measure it', () => {
     }
   };
 
-  it('says in development, once, that a provider publishes the insets', async () => {
-    // Read with a fallback and without, in calc() and max(): only one warning.
-    const warned = await warnings('DeviceTokenHost');
-    assert.equal(warned.length, 1);
-    assert.match(warned[0]!, /var\(--safe-area-inset-(top|bottom)\)/);
+  for (const [form, value] of [
+    ['on its own', 'var(--safe-area-inset-top)'],
+    ['with a fallback', 'var(--safe-area-inset-top, 0px)'],
+    ['in calc()', 'calc(var(--safe-area-inset-top, 0px) + 12px)'],
+    ['in max()', 'max(var(--safe-area-inset-top, 0px), 16px)'],
+    ['in calc() with another token', 'calc(var(--safe-area-inset-top, 0px) + var(--gap, 10px))'],
+    ['as env()', 'env(safe-area-inset-top)'],
+  ]) {
+    it(`says in development, once, that a provider publishes it: read ${form}`, async () => {
+      const warned = await warnings('PlainBox', `#box { padding-top: ${value}; }`);
+      assert.equal(warned.length, 1);
+      assert.match(warned[0]!, /var\(--safe-area-inset-top\)/);
+    });
+  }
+
+  it('says it once for an app that reads several', async () => {
+    assert.equal((await warnings('DeviceTokenHost')).length, 1);
   });
 
   it('says nothing where a provider will report them', async () => {
