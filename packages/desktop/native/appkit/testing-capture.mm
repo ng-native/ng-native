@@ -1,5 +1,7 @@
 #include "testing-capture.h"
 
+#include "printing.h"
+
 #import <AppKit/AppKit.h>
 
 #include <string>
@@ -23,18 +25,19 @@ void drawn(NSWindow *window, NSRect rect, const WindowCapture::Done &done) {
   }
   // After pending layout and drawing, so the last commit is in the picture.
   [window displayIfNeeded];
-  NSBitmapImageRep *rep = [content bitmapImageRepForCachingDisplayInRect:rect];
-  if (rep == nil) {
-    done("", "The window could not be drawn");
-    return;
-  }
-  [content cacheDisplayInRect:rect toBitmapImageRep:rep];
-  NSData *png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
-  if (png == nil) {
-    done("", "The capture could not be encoded as a PNG");
-    return;
-  }
-  done(std::string(static_cast<const char *>(png.bytes), png.length), "");
+  // Web views' pages in their places, as printing draws them.
+  drawnContent(content, rect, [done](NSBitmapImageRep *rep) {
+    if (rep == nil) {
+      done("", "The window could not be drawn");
+      return;
+    }
+    NSData *png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+    if (png == nil) {
+      done("", "The capture could not be encoded as a PNG");
+      return;
+    }
+    done(std::string(static_cast<const char *>(png.bytes), png.length), "");
+  });
 }
 
 class Capture final : public WindowCapture {

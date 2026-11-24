@@ -4,6 +4,7 @@
 #include <doctest/doctest.h>
 
 #import <AppKit/AppKit.h>
+#import <WebKit/WebKit.h>
 
 #include <optional>
 #include <string>
@@ -132,4 +133,39 @@ TEST_CASE("The window captured is the default surface's while shown, else one th
   [app close];
   [main close];
   CHECK((ngn::appkit::capturedWindow(nil) == nil));
+}
+
+TEST_CASE("WindowCapture shows a web view's page, which WebKit draws out of process, where it is") {
+  [NSApplication sharedApplication];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(-10000, -10000, 100, 80)
+                                                 styleMask:NSWindowStyleMaskBorderless
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  window.releasedWhenClosed = NO;
+  NGNCaptureTestView *content = [[NGNCaptureTestView alloc] initWithFrame:NSMakeRect(0, 0, 100, 80)];
+  window.contentView = content;
+  // A blue page in the bottom right of the red window.
+  WKWebView *web = [[WKWebView alloc] initWithFrame:NSMakeRect(50, 40, 50, 40) configuration:[WKWebViewConfiguration new]];
+  [content addSubview:web];
+  [web loadHTMLString:@"<html><body style='margin:0;background:rgb(0,0,255)'></body></html>" baseURL:nil];
+  for (int i = 0; i < 1000 && (web.isLoading || web.estimatedProgress < 1); ++i) {
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.02, false);
+  }
+  REQUIRE(!web.isLoading);
+  auto capture = ngn::appkit::makeWindowCapture([&] { return window; }, [](int64_t) -> NSView * { return nil; });
+  Taken whole;
+  capture->capture(std::nullopt, [&whole](std::string png, std::string error) {
+    whole = {std::move(png), std::move(error), true};
+  });
+  for (int i = 0; i < 500 && !whole.done; ++i) {
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.02, false);
+  }
+  REQUIRE(whole.done);
+  NSBitmapImageRep *rep = decoded(whole.png);
+  REQUIRE((rep != nil));
+  NSColor *page = at(rep, NSMakeSize(100, 80), 75, 60);
+  CHECK(page.blueComponent > 0.9);
+  CHECK(page.redComponent < 0.2);
+  CHECK([at(rep, NSMakeSize(100, 80), 75, 20) redComponent] > 0.9);
+  [window close];
 }

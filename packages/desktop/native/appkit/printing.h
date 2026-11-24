@@ -32,6 +32,11 @@ NSPrintOperation *printOperation(PDFDocument *document, bool landscape);
 // nothing to draw.
 void windowDocument(NSView *content, std::function<void(PDFDocument *)> done);
 
+// `rect` of a content view, in its own coordinates, as it is drawn, at the window's scale, with
+// each web view's page in its place: WebKit's snapshot, since a web view draws out of process.
+// Main thread; answers on it, with nil for nothing to draw.
+void drawnContent(NSView *content, NSRect rect, std::function<void(NSBitmapImageRep *)> done);
+
 // Shows the print panel for what `window` shows, as a sheet on it, scaled down to the paper. Main
 // thread; answers once the panel closes, or why it could not show.
 void printWindow(NSWindow *window, bool landscape, std::function<void(const std::string &error)> done);
