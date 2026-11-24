@@ -107,7 +107,7 @@ native_dir="$(cd "$here/.." && pwd -P)"
 library_list=()
 [ -n "$library_dirs" ] && IFS=';' read -ra library_list <<< "$library_dirs"
 host_dir="$("$here/host-dir.sh" "$CACHE" "$native_dir" ${library_list[@]+"${library_list[@]}"})"
-"$here/prune-hosts.sh" "$CACHE"
+"$here/prune-hosts.sh" "$(dirname "$CACHE")"
 if [ -n "${NGN_DESKTOP_LINK:-}" ] && [ "$backend" != "none" ]; then
   link="$(cd "$(dirname "$NGN_DESKTOP_LINK")" && pwd -P)/$(basename "$NGN_DESKTOP_LINK")"
   # The libraries' package names and directories, one per line, when the app links anything.
