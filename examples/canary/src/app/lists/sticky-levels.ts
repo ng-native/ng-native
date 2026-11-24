@@ -15,6 +15,8 @@ interface Row {
   readonly kind: Kind;
   readonly id: string;
   readonly label: string;
+  /** What an event is about, long enough on some to wrap, so rows size themselves. */
+  readonly note?: string;
 }
 
 const MONTHS = [
@@ -33,13 +35,18 @@ const MONTHS = [
 ];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const EVENTS = ['Stand-up', 'Design review', 'Lunch', 'Pairing', 'Release notes', 'Retro'];
+const NOTES = [
+  'Walk through the open questions from last week, then agree who takes each one.',
+  'Bring the screenshots.',
+  'Go over the changes to the list since the last release, the sticky rows first, then columns.',
+];
 const LEVELS: Record<Kind, number | null> = { year: 0, month: 1, day: 2, event: null };
-const HEIGHTS: Record<Kind, number> = { year: 44, month: 36, day: 30, event: 48 };
 
 /**
  * Three years of an agenda: each day's events under the day, the days under their month and the
  * months under their year, with the year, the month and the day pinned one under the other while
- * the events scroll under them.
+ * the events scroll under them. Every row sizes itself, and an event with a note is as tall as
+ * its note wraps to.
  */
 @Component({
   selector: 'x-sticky-levels',
@@ -74,7 +81,7 @@ const HEIGHTS: Record<Kind, number> = { year: 44, month: 36, day: 30, event: 48 
         #list
         class="grow"
         [items]="rows"
-        [itemHeight]="heightOf"
+        [estimatedItemHeight]="48"
         [itemType]="kindOf"
         [keyExtractor]="keyOf"
         [virtualListStickyLevel]="levelOf"
@@ -83,8 +90,11 @@ const HEIGHTS: Record<Kind, number> = { year: 44, month: 36, day: 30, event: 48 
         @for (row of list.window(); track row.slot) {
           <view [virtualListRow]="row">
             <view [class]="'row ' + row.item.kind"
-              ><text [class]="'label ' + row.item.kind + '-label'">{{ row.item.label }}</text></view
-            >
+              ><text [class]="'label ' + row.item.kind + '-label'">{{ row.item.label }}</text>
+              @if (row.item.note) {
+                <text class="note">{{ row.item.note }}</text>
+              }
+            </view>
           </view>
         }
       </virtual-list>
@@ -122,11 +132,11 @@ const HEIGHTS: Record<Kind, number> = { year: 44, month: 36, day: 30, event: 48 
       padding: 8px 12px;
     }
     .row {
-      flex: 1;
-      justify-content: center;
-      padding: 0 12px;
+      padding: 8px 12px;
     }
     .year {
+      padding-top: 10px;
+      padding-bottom: 10px;
       background-color: var(--accent);
     }
     .month {
@@ -134,11 +144,20 @@ const HEIGHTS: Record<Kind, number> = { year: 44, month: 36, day: 30, event: 48 
       background-color: var(--card);
     }
     .day {
+      padding-top: 6px;
+      padding-bottom: 6px;
       padding-left: 28px;
       background-color: var(--card-inset);
     }
     .event {
+      padding-top: 12px;
+      padding-bottom: 12px;
       padding-left: 36px;
+    }
+    .note {
+      margin-top: 4px;
+      color: var(--text-muted);
+      font-size: 13px;
     }
     .label {
       color: var(--text-strong);
@@ -176,7 +195,6 @@ export class StickyLevelsPage {
   protected readonly rows: readonly Row[] = agenda(2024, 3);
   protected readonly keyOf = (row: Row) => row.id;
   protected readonly kindOf = (row: Row) => row.kind;
-  protected readonly heightOf = (row: Row) => HEIGHTS[row.kind];
   protected readonly levelOf = (row: Row) => LEVELS[row.kind];
 }
 
@@ -192,10 +210,12 @@ function agenda(from: number, years: number): Row[] {
         const weekday = WEEKDAYS[new Date(year, m, day).getDay()]!;
         rows.push({ kind: 'day', id: `${year}-${m}-${day}`, label: `${weekday} ${day} ${month}` });
         for (let event = 0; event < 2 + ((day + m) % 3); event++) {
+          const at = day + m + event;
           rows.push({
             kind: 'event',
             id: `${year}-${m}-${day}-${event}`,
-            label: EVENTS[(day + m + event) % EVENTS.length]!,
+            label: EVENTS[at % EVENTS.length]!,
+            note: at % 2 === 0 ? NOTES[at % NOTES.length] : undefined,
           });
         }
       }

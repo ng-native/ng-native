@@ -371,9 +371,9 @@ whatever `[virtualListMaxStickyLevels]` is, which limits the levels the function
 row of any level takes a line to itself. On a horizontal list the levels pin side by side from the
 leading edge.
 
-Levels are for a list with `itemHeight`, since a row pins under others by their heights. With rows
-that size themselves, level 0 pins as `stickyIndices` does, deeper rows scroll with the rest, and
-the list says so in development.
+Rows that size themselves pin at every level as rows with `itemHeight` do, each under the rows
+pinned over it at the heights they were measured at. A row not measured yet pins at its estimate
+until its layout arrives.
 
 <!-- api: VirtualListStickyLevel -->
 

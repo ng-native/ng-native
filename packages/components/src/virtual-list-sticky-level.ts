@@ -1,6 +1,5 @@
-import { Directive, Injector, computed, effect, forwardRef, inject, input } from '@angular/core';
+import { Directive, computed, forwardRef, input } from '@angular/core';
 import { numberOr } from './transforms.ts';
-import { VirtualList } from './virtual-list.ts';
 import { VIRTUAL_LIST_STICKY, type VirtualListSticky } from './virtual-list-sticky.ts';
 
 /**
@@ -21,10 +20,6 @@ import { VIRTUAL_LIST_STICKY, type VirtualListSticky } from './virtual-list-stic
  * A row pins under the nearest row before it of each level further out than its own, and stays
  * until the next row of its own level, or of one further out, pushes it off. The rows of
  * `stickyIndices` are at level 0, so the two can be given together.
- *
- * ponytail: rows that size themselves pin level 0 alone, with a warning in development, and
- * deeper rows scroll with the rest: where a row pins under others depends on their heights, which
- * are not known until each has been measured.
  */
 @Directive({
   selector: 'virtual-list[virtualListStickyLevel]',
@@ -46,9 +41,6 @@ export class VirtualListStickyLevel<T = unknown> implements VirtualListSticky {
     transform: numberOr(Infinity),
   });
 
-  // Looked up once the list exists: the list injects this directive while it is being made.
-  private readonly injector = inject(Injector);
-
   readonly levelOf = computed(() => {
     const level = this.level();
     if (!level) return null;
@@ -58,22 +50,4 @@ export class VirtualListStickyLevel<T = unknown> implements VirtualListSticky {
       return typeof at === 'number' && at >= 0 && at < levels ? Math.floor(at) : null;
     };
   });
-
-  constructor() {
-    if (typeof ngDevMode === 'undefined' || !ngDevMode) return;
-    const unsupported = effect(() => {
-      const levelOf = this.levelOf();
-      const list = this.injector.get(VirtualList, null, { self: true });
-      if (!levelOf || !list?.measuring()) return;
-      if (!list.items().some((item, index) => (levelOf(item, index) ?? 0) > 0)) return;
-      unsupported.destroy();
-      console.warn(
-        `[angular-native] virtualListStickyLevel pins level 0 alone on rows without itemHeight: ` +
-          `a row pins under others by their heights, which rows that size themselves do not ` +
-          `have until they are measured.`,
-      );
-    });
-  }
 }
-
-declare const ngDevMode: unknown;

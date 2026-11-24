@@ -517,50 +517,11 @@ describe('sticky rows at several levels, moved on the native side', () => {
   });
 });
 
-describe('sticky levels on rows that size themselves', () => {
-  it('pins level 0 alone, and says why in development', async () => {
-    const warnings = await warned(async () => {
-      const { row, scroll } = await boot(
-        (page) => page.levelOf.set((entry) => entry.level),
-        {},
-        'VirtualStickyLevelsMeasured',
-      );
-      await scroll(100);
-      assert.equal(row(0)?.props['zIndex'], 1, 'the year is pinned');
-      assert.deepEqual(row(0)?.props['transform'], [{ translateY: 100 }]);
-      assert.equal(row(1)?.props['zIndex'] ?? null, null, 'the month is in flow');
-      assert.equal(row(1)?.props['transform'] ?? null, null);
-    });
-    assert.equal(warnings.filter((line) => line.includes('virtualListStickyLevel')).length, 1);
-  });
-
-  it('says nothing where no row is deeper than level 0', async () => {
-    const warnings = await warned(async () => {
-      const { row, scroll } = await boot(undefined, {}, 'VirtualStickyLevelsMeasured');
-      await scroll(100);
-      assert.equal(row(0)?.props['zIndex'], 1, 'the year is pinned');
-    });
-    assert.deepEqual(
-      warnings.filter((line) => line.includes('virtualListStickyLevel')),
-      [],
-    );
-  });
-
-  it('says nothing on a list with itemHeight', async () => {
-    const warnings = await warned(async () => void (await boot()));
-    assert.deepEqual(
-      warnings.filter((line) => line.includes('virtualListStickyLevel')),
-      [],
-    );
-  });
-});
-
 async function boot(
   setUp?: (instance: Instance) => void,
   options: Parameters<typeof render>[1] = {},
-  name = 'VirtualStickyLevels',
 ) {
-  const rendered = await render(mod[name] as Type<unknown>, options);
+  const rendered = await render(mod['VirtualStickyLevels'] as Type<unknown>, options);
   const fabric: FakeFabric = rendered.fabric;
   const instance = rendered.instance as Instance;
   if (setUp) {
@@ -606,18 +567,6 @@ function across(node: FakeFabricNode): { x: number; width: number } {
 function resolve(value: unknown): number {
   if (typeof value === 'string' && value.endsWith('%')) return (parseFloat(value) * WIDTH) / 100;
   return typeof value === 'number' ? value : 0;
-}
-
-async function warned(run: () => Promise<void>): Promise<string[]> {
-  const warnings: string[] = [];
-  const warn = console.warn;
-  console.warn = (...args: unknown[]) => void warnings.push(args.join(' '));
-  try {
-    await run();
-  } finally {
-    console.warn = warn;
-  }
-  return warnings;
 }
 
 function flatten(nodes: FakeFabricNode[]): FakeFabricNode[] {

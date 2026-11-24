@@ -150,9 +150,8 @@ export class StickyRows {
 
   /**
    * Each sticky row's level, in list order: the rows of `stickyIndices` at level 0, and with a
-   * level function every row it gives one. Rows that size themselves take level 0 alone: where a
-   * deeper row pins depends on the heights of the rows over it. A sticky index given for rows not
-   * there yet pins nothing and pushes nothing off until its row arrives.
+   * level function every row it gives one. A sticky index given for rows not there yet pins
+   * nothing and pushes nothing off until its row arrives.
    */
   private readonly levels = computed<readonly (readonly [index: number, level: number])[]>(() => {
     const indices = this.list.indices();
@@ -164,10 +163,9 @@ export class StickyRows {
       return levels;
     }
     const outermost = new Set(indices);
-    const flow = this.list.measuring();
     items.forEach((item, index) => {
       const level = outermost.has(index) ? 0 : levelOf(item, index);
-      if (level !== null && !(flow && level > 0)) levels.push([index, level]);
+      if (level !== null) levels.push([index, level]);
     });
     return levels;
   });
@@ -248,14 +246,19 @@ export class StickyRows {
   });
 
   /**
-   * The pinned row `index` in flow, moved by a transform from `at`, where flow put it, to the leading
-   * edge, until the next sticky row reaches it there and pushes it off.
+   * A pinned row in flow, moved by a transform from `at`, where flow put it, to where it holds:
+   * under the rows it pins under, until the next row at its level or further out pushes it off.
    */
   flowStyle(index: number, at: number): Record<string, unknown> {
-    const shift = Math.max(0, Math.min(this.offset(), this.stopOf(index)) - at);
+    const holds = Math.min(this.offset(), this.stopOf(index)) + this.above(index);
+    const shift = Math.max(0, holds - at);
     const move = `${this.list.horizontal() ? 'translateX' : 'translateY'}(${shift}px)`;
     const flip = this.list.flipText();
-    return { ...this.list.flowSpacing(), zIndex: 1, transform: flip ? `${move} ${flip}` : move };
+    return {
+      ...this.list.flowSpacing(),
+      zIndex: this.zIndexOf(index),
+      transform: flip ? `${move} ${flip}` : move,
+    };
   }
 
   /**

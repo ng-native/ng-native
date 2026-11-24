@@ -64,33 +64,6 @@ export class VirtualStickyLevels {
   readonly maxLevels = signal<number | undefined>(undefined);
 }
 
-/** Rows that size themselves, which pin level 0 alone: the years, until a test gives more. */
-@Component({
-  selector: 'x-virtual-sticky-levels-measured',
-  imports: [VirtualList, VirtualListRow, VirtualListStickyLevel, Text, View],
-  template: `
-    <virtual-list
-      #list
-      [items]="entries()"
-      [estimatedItemHeight]="40"
-      [overscan]="1"
-      [virtualListStickyLevel]="levelOf()"
-      [style]="fill"
-    >
-      @for (row of list.window(); track row.key) {
-        <view [virtualListRow]="row" [nativeID]="'row' + row.index"
-          ><text>{{ row.item.label }}</text></view
-        >
-      }
-    </virtual-list>
-  `,
-})
-export class VirtualStickyLevelsMeasured {
-  readonly entries = signal<readonly Entry[]>(entries());
-  readonly fill = { flex: 1 };
-  readonly levelOf = signal<LevelOf>((entry) => (entry.level === 0 ? 0 : null));
-}
-
 /**
  * Three years of three months of three days of five entries: a day and its entries are 6 rows, a
  * month 19 and a year 58, so year `y` is row `58y`, its month `m` row `58y + 1 + 19m` and that
@@ -110,4 +83,43 @@ export function entries(): Entry[] {
     }
   }
   return out;
+}
+
+/** Rows that size themselves at every level: the year, the month and the day pinned. */
+@Component({
+  selector: 'x-virtual-sticky-levels-flow',
+  imports: [VirtualList, VirtualListRow, VirtualListStickyLevel, Text, View],
+  template: `
+    <virtual-list
+      #list
+      [items]="entries()"
+      [estimatedItemHeight]="40"
+      [overscan]="1"
+      [rowGap]="rowGap()"
+      [horizontal]="horizontal()"
+      [inverted]="inverted()"
+      [stickyHeader]="stickyHeader()"
+      [virtualListStickyLevel]="levelOf()"
+      [virtualListMaxStickyLevels]="maxLevels()"
+      [style]="fill"
+    >
+      <view listHeader nativeID="header"></view>
+      @for (row of list.window(); track row.key) {
+        <view [virtualListRow]="row" [nativeID]="'row' + row.index"
+          ><text>{{ row.item.label }}</text></view
+        >
+      }
+    </virtual-list>
+  `,
+})
+export class VirtualStickyLevelsFlow {
+  readonly list = viewChild.required(VirtualList);
+  readonly entries = signal<readonly Entry[]>(entries());
+  readonly fill = { flex: 1 };
+  readonly rowGap = signal(0);
+  readonly horizontal = signal(false);
+  readonly inverted = signal(false);
+  readonly stickyHeader = signal(false);
+  readonly levelOf = signal<LevelOf | null | undefined>((entry) => entry.level);
+  readonly maxLevels = signal<number | undefined>(undefined);
 }

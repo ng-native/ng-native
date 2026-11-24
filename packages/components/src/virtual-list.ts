@@ -1008,22 +1008,48 @@ export class VirtualList<T> extends ScrollViewProps {
   protected readonly spacer = computed(() => {
     const span = this.span();
     let lead = span ? this.topOf(span.first) : 0;
-    const [pinned] = this.sticky.pinned();
-    if (span && pinned !== undefined && pinned < span.first) {
-      lead = this.sticky.native ? this.topOf(pinned) : lead - this.heightOf(pinned) - this.rowGap();
+    const ahead = this.rendersAhead();
+    if (span && ahead.length > 0) {
+      if (this.sticky.native) lead = this.topOf(ahead[0]!);
+      else for (const index of ahead) lead -= this.heightOf(index) + this.rowGap();
     }
     return this.horizontal() ? { width: Math.max(0, lead) } : { height: Math.max(0, lead) };
   });
 
-  /** The rows from `first` up to `last`, and the pinned rows above them if there are any. */
+  /**
+   * The rows rendered ahead of the window: the pinned rows it has left behind, and where native
+   * moves rows in flow, the row before each pinned row after the outermost. Flow places a row
+   * after the row before it, so with that row rendered too, a pinned row is at its own place
+   * with no margin of its own, and its props stay as they are as the window moves past it.
+   */
+  private readonly rendersAhead = computed<readonly number[]>(
+    () => {
+      const span = this.span();
+      if (!span) return [];
+      const pinned = this.sticky.pinned();
+      const ahead = new Set(pinned.filter((index) => index < span.first));
+      if (this.sticky.native && this.measuring()) {
+        for (const index of pinned.slice(1)) {
+          if (index <= span.first && index - 1 < span.first) ahead.add(index - 1);
+        }
+      }
+      return [...ahead].sort((a, b) => a - b);
+    },
+    { equal: (a, b) => a.length === b.length && a.every((index, at) => index === b[at]) },
+  );
+
+  /** The rows from `first` up to `last`, and the rows ahead of them if there are any. */
   private rowsFor(items: readonly T[], first: number, last: number): VirtualRow<T>[] {
     const rows: VirtualRow<T>[] = [];
     const pinned = this.sticky.pinned();
-    const above = pinned.filter((index) => index < first);
-    this.releaseRecycled(first, last, above);
+    const ahead = this.rendersAhead();
+    this.releaseRecycled(first, last, ahead);
+    // Where flow puts each row ahead of the window, where JavaScript moves the pinned ones.
+    let at = this.topOf(first);
+    for (const index of ahead) at -= this.heightOf(index) + this.rowGap();
     // A pinned row is on screen even when its own place in the list is not, which is the whole
     // point of it, so it is rendered whether or not the window reaches that far.
-    for (const index of above) {
+    for (const index of ahead) {
       const key = this.keyAt(index);
       rows.push(
         this.hold({
@@ -1032,15 +1058,15 @@ export class VirtualList<T> extends ScrollViewProps {
           key,
           item: items[index]!,
           style: this.sticky.native
-            ? this.sticky.style(index)
+            ? pinned.includes(index)
+              ? this.sticky.style(index)
+              : this.flowStyle()
             : this.measuring()
-              ? this.sticky.flowStyle(
-                  index,
-                  this.topOf(first) - this.heightOf(index) - this.rowGap(),
-                )
+              ? this.sticky.flowStyle(index, at)
               : this.sticky.slotStyle(index),
         }),
       );
+      at += this.heightOf(index) + this.rowGap();
     }
     for (let index = first; index < last; index++) {
       const key = this.keyAt(index);
@@ -1054,26 +1080,30 @@ export class VirtualList<T> extends ScrollViewProps {
         }),
       );
     }
-    // Rows in flow pin one at a time, so the one above the window is the only one.
-    const [lead] = above;
-    if (lead !== undefined && this.sticky.native && this.measuring()) {
-      this.leadWindow(rows, lead, first);
+    if (ahead.length > 0 && this.sticky.native && this.measuring()) {
+      this.placeAhead(rows, ahead.length + 1, pinned);
     }
     return rows;
   }
 
   /**
-   * A pinned row native moves stays at its own place, so the rows between it and the window are
-   * made up before the window rather than after the row: new props on a view native is moving
-   * put its transform back for a frame.
+   * A pinned row native moves stays at its own place, so the rows that are not rendered between
+   * it and the next are made up by a margin on the next row that is not pinned, up to the
+   * window's first, a negative one where a negative gap overlaps them: new props on a view native
+   * is moving put its transform back for a frame.
    */
-  private leadWindow(rows: VirtualRow<T>[], pinned: number, first: number): void {
-    const lead = rows[1];
-    // The pinned row's own gap already follows it in flow.
-    const between = this.topOf(first) - this.topOf(pinned) - this.heightOf(pinned) - this.rowGap();
-    if (!lead || between <= 0) return;
+  private placeAhead(rows: VirtualRow<T>[], count: number, pinned: readonly number[]): void {
     const margin = this.horizontal() ? 'marginLeft' : 'marginTop';
-    rows[1] = this.hold({ ...lead, style: { ...lead.style, [margin]: between } });
+    let end = this.topOf(rows[0]!.index);
+    for (let at = 0; at < Math.min(count, rows.length); at++) {
+      const row = rows[at]!;
+      const start = this.topOf(row.index);
+      if (start !== end && !pinned.includes(row.index)) {
+        rows[at] = this.hold({ ...row, style: { ...row.style, [margin]: start - end } });
+      }
+      // A row's own gap already follows it in flow.
+      end = start + this.heightOf(row.index) + this.rowGap();
+    }
   }
 
   private styleFor(index: number, pinned: boolean): Record<string, unknown> {
