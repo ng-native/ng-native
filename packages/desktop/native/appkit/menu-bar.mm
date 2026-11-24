@@ -1,5 +1,7 @@
 #import "menu-bar.h"
 
+#import "svg-icon.h"
+
 using ngn::MenuCommand;
 using ngn::MenuItem;
 
@@ -88,6 +90,9 @@ NGNMenuTarget *target() {
 
 void addItems(NSMenu *menu, const std::vector<MenuItem> &items, const MenuChosen &chosen);
 
+// The side of an item's SVG icon: what a menu draws an SF Symbol at.
+constexpr CGFloat kMenuIconSize = 16;
+
 NSMenuItem *makeItem(const MenuItem &spec, const MenuChosen &chosen) {
   NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:string(spec.title) action:nil keyEquivalent:keyEquivalent(spec.key)];
   item.keyEquivalentModifierMask = flagsFor(spec.modifiers);
@@ -96,6 +101,8 @@ NSMenuItem *makeItem(const MenuItem &spec, const MenuChosen &chosen) {
   }
   if (!spec.sfSymbol.empty()) {
     item.image = [NSImage imageWithSystemSymbolName:string(spec.sfSymbol) accessibilityDescription:nil];
+  } else {
+    item.image = NGNSvgTemplateImage(spec.svgIcon, kMenuIconSize);
   }
   if (!spec.subtitle.empty() && [item respondsToSelector:@selector(setSubtitle:)]) {
     [item performSelector:@selector(setSubtitle:) withObject:string(spec.subtitle)];

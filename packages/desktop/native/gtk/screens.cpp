@@ -2,6 +2,7 @@
 
 #include "gtk-backend.h"
 #include "menus.h"
+#include "svg-icon.h"
 #include "view-widget.h"
 
 #include "ngn/screen-presentation.h"
@@ -439,10 +440,37 @@ void fillMenu(
   }
 }
 
+// The side of a bar button's SVG icon: Adwaita's for a symbolic icon.
+constexpr int kBarIconSize = 16;
+
+// A bar button with no menu: its SVG icon, named by its title or label, or else its title.
+GtkWidget *plainButton(const BarButton &button) {
+  GtkWidget *icon = makeSvgIcon(button.svgIcon, kBarIconSize);
+  if (!icon) {
+    return gtk_button_new_with_label(button.title.c_str());
+  }
+  GtkWidget *widget = gtk_button_new();
+  gtk_button_set_child(GTK_BUTTON(widget), icon);
+  const std::string &label = button.accessibilityLabel.empty() ? button.title : button.accessibilityLabel;
+  if (!label.empty()) {
+    gtk_widget_set_tooltip_text(widget, label.c_str());
+    gtk_accessible_update_property(GTK_ACCESSIBLE(widget), GTK_ACCESSIBLE_PROPERTY_LABEL, label.c_str(), -1);
+  }
+  return widget;
+}
+
 // A bar button with a menu: a GtkMenuButton opening it.
 GtkWidget *menuButton(GtkBackend &backend, Tag config, const BarButton &button) {
   GtkWidget *widget = gtk_menu_button_new();
-  gtk_menu_button_set_label(GTK_MENU_BUTTON(widget), (button.title.empty() ? button.accessibilityLabel : button.title).c_str());
+  const std::string &label = button.title.empty() ? button.accessibilityLabel : button.title;
+  // Its SVG icon in place of its label, as AppKit's toolbar shows it, and the label its name.
+  if (GtkWidget *icon = makeSvgIcon(button.svgIcon, kBarIconSize)) {
+    gtk_menu_button_set_child(GTK_MENU_BUTTON(widget), icon);
+    gtk_widget_set_tooltip_text(widget, label.c_str());
+    gtk_accessible_update_property(GTK_ACCESSIBLE(widget), GTK_ACCESSIBLE_PROPERTY_LABEL, label.c_str(), -1);
+  } else {
+    gtk_menu_button_set_label(GTK_MENU_BUTTON(widget), label.c_str());
+  }
   GMenu *menu = g_menu_new();
   GSimpleActionGroup *group = g_simple_action_group_new();
   int next = 0;
@@ -830,7 +858,7 @@ void Headers::layOutBar(SurfaceId surfaceId, Shown &shown) {
       gtk_widget_set_size_request(widget, static_cast<int>(*b.spacing), -1);
       return keep(widget);
     }
-    GtkWidget *widget = b.menu ? menuButton(backend_, shown.header->config, b) : gtk_button_new_with_label(b.title.c_str());
+    GtkWidget *widget = b.menu ? menuButton(backend_, shown.header->config, b) : plainButton(b);
     addClass(widget, b.tint ? colorClass("color", b.tint) : tint);
     if (b.menu) {
       gtk_widget_set_sensitive(widget, !b.disabled);

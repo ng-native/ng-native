@@ -2,12 +2,15 @@
 // drawn by the cairo canvas into the svg view's snapshot. Read from the pixels the window draws.
 #include "../cairo-canvas.h"
 #include "../image-view.h"
+#include "../svg-icon.h"
 #include "fake-network.h"
 #include "mounted-views.h"
 
 #include <doctest/doctest.h>
 
+#include <cstdlib>
 #include <optional>
+#include <string>
 
 using namespace facebook::react;
 using folly::dynamic;
@@ -546,4 +549,42 @@ TEST_CASE("the cairo canvas draws what follows a mask whose bitmap cannot be mad
   // Only the mask's own shape covers this one: it stays transparent.
   CHECK(pixels[1 * 10 + 1] == 0);
   cairo_surface_destroy(surface);
+}
+
+TEST_CASE("an SVG icon as a tray's pixmaps: each size in its colour, unpremultiplied, alpha first in network order") {
+  constexpr const char *topHalf = R"svg(<svg viewBox="0 0 16 16"><rect width="16" height="8"/></svg>)svg";
+  GVariant *pixmaps = ngn::gtk::svgIconPixmaps(topHalf, 0x80336699, {16, 32});
+  g_variant_ref_sink(pixmaps);
+  REQUIRE(g_variant_n_children(pixmaps) == 2);
+  for (gsize i = 0; i < 2; i++) {
+    gint32 width = 0, height = 0;
+    GVariant *bytes = nullptr;
+    g_variant_get_child(pixmaps, i, "(ii@ay)", &width, &height, &bytes);
+    CHECK(width == (i == 0 ? 16 : 32));
+    CHECK(height == width);
+    gsize size = 0;
+    const auto *data = static_cast<const guchar *>(g_variant_get_fixed_array(bytes, &size, 1));
+    REQUIRE(size == static_cast<gsize>(width * height * 4));
+    // A pixel in the top half, then one in the bottom half.
+    const guchar *top = data + (static_cast<size_t>(2 * width / 16) * width + width / 2) * 4;
+    CHECK(top[0] == 0x80);
+    CHECK(std::abs(top[1] - 0x33) <= 1);
+    CHECK(std::abs(top[2] - 0x66) <= 1);
+    CHECK(std::abs(top[3] - 0x99) <= 1);
+    const guchar *bottom = data + (static_cast<size_t>(13 * width / 16) * width + width / 2) * 4;
+    CHECK(bottom[0] == 0);
+    g_variant_unref(bytes);
+  }
+  g_variant_unref(pixmaps);
+
+  // Markup that is no svg has none.
+  GVariant *none = g_variant_ref_sink(ngn::gtk::svgIconPixmaps("lucideTimer", 0xffffffff));
+  CHECK(g_variant_n_children(none) == 0);
+  g_variant_unref(none);
+
+  // As a PNG, for a tray menu's item.
+  std::string png = ngn::gtk::svgIconPng(topHalf, 32, 0xffffffff);
+  REQUIRE(png.size() > 8);
+  CHECK(png.substr(1, 3) == "PNG");
+  CHECK(ngn::gtk::svgIconPng("lucideTimer", 32, 0xffffffff).empty());
 }

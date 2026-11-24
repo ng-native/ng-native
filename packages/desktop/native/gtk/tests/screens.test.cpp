@@ -599,6 +599,61 @@ TEST_CASE("a bar button's menu is a menu button, and the header's colours reach 
   CHECK_FALSE(gtk_widget_has_css_class(bar, green.c_str()));
 }
 
+TEST_CASE("a bar button with an SVG icon shows the icon in place of its title, named by its title, a menu's too") {
+  REQUIRE(ngn::testing::gtkReady());
+  Glue glue;
+  MountedViews views(true, 400, 300);
+  GtkWidget *bar = ngn::gtk::chromeOf(views.surface)->headerBar;
+  constexpr const char *topHalf = R"svg(<svg viewBox="0 0 16 16"><rect width="16" height="8"/></svg>)svg";
+  auto props = std::make_shared<HeaderProps>();
+  props->bar.title = "Notes";
+  ngn::BarButton add = barButton("add", "Add");
+  add.svgIcon = topHalf;
+  ngn::BarButton sort = barButton("sort", "Sort");
+  sort.svgIcon = topHalf;
+  ngn::HeaderMenuItem byName;
+  byName.title = "By name";
+  byName.menuId = "name";
+  ngn::HeaderMenuItem menu;
+  menu.items = {byName};
+  sort.menu = menu;
+  props->bar.right = {sort, add};
+  auto stack = shadow(2, "RNSScreenStack", nullptr, {{0, 0}, {400, 300}});
+  auto screen = shadow(3, "RNSScreen", nullptr, {{0, 0}, {400, 300}});
+  auto config = shadow(4, "RNSScreenStackHeaderConfig", props, {{0, 0}, {400, 44}});
+  mountAll(views, {{stack, MountedViews::kSurface}, {screen, 2}, {config, 3}});
+
+  // The SVG icons drawn in the bar.
+  auto isSvgIcon = [](GtkWidget *w) -> bool {
+    return GTK_IS_DRAWING_AREA(w) && g_object_get_data(G_OBJECT(w), "ngn-svg-icon") != nullptr;
+  };
+  auto drawn = findAll(bar, isSvgIcon);
+  REQUIRE(drawn.size() == 2);
+  // In whichever order the bar packs them, one icon is in the menu button and one in the plain one.
+  if (!gtk_widget_get_ancestor(drawn[0], GTK_TYPE_MENU_BUTTON)) {
+    std::swap(drawn[0], drawn[1]);
+  }
+  // The plain button: the icon its child, its title its accessible name and tooltip.
+  GtkWidget *plain = gtk_widget_get_ancestor(drawn[1], GTK_TYPE_BUTTON);
+  REQUIRE(plain);
+  CHECK_FALSE(gtk_widget_get_ancestor(drawn[1], GTK_TYPE_MENU_BUTTON));
+  CHECK(named(plain, "Add"));
+  CHECK(std::string(gtk_widget_get_tooltip_text(plain)) == "Add");
+  // The menu button: the icon in place of its label, named by its title.
+  GtkWidget *menuButton = gtk_widget_get_ancestor(drawn[0], GTK_TYPE_MENU_BUTTON);
+  REQUIRE(menuButton);
+  CHECK(gtk_menu_button_get_label(GTK_MENU_BUTTON(menuButton)) == nullptr);
+  CHECK(named(menuButton, "Sort"));
+
+  // Without the icon, the title again.
+  props = std::make_shared<HeaderProps>(*props);
+  props->bar.right[0].svgIcon.clear();
+  props->bar.right[1].svgIcon.clear();
+  views.update(config, props);
+  CHECK(findAll(bar, isSvgIcon).empty());
+  CHECK(findAll(bar, [](GtkWidget *w) { return isButton(w) && labelOf(w) == "Add"; }).size() == 1);
+}
+
 TEST_CASE("a window shows with no widget focused, unless one was focused before") {
   REQUIRE(ngn::testing::gtkReady());
   for (bool focusFirst : {false, true}) {

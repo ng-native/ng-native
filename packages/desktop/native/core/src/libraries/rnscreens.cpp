@@ -119,6 +119,8 @@ void installGlue_rnscreens() {
         .sfSymbol = p->iconType == RNSTabsScreenIOSIconType::SfSymbol ? p->iconResourceName : std::string{},
         // `<native-tab [icon]="{ svg }">` commits its markup on a desktop as a data uri.
         .svgIcon = svgMarkupOfUri(p->iconImageSource.uri).value_or(""),
+        .selectedSfSymbol = p->iconType == RNSTabsScreenIOSIconType::SfSymbol ? p->selectedIconResourceName : std::string{},
+        .selectedSvgIcon = svgMarkupOfUri(p->selectedIconImageSource.uri).value_or(""),
         .preventNativeSelection = p->preventNativeSelection,
     };
   };

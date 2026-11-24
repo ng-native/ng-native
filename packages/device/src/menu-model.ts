@@ -61,6 +61,11 @@ export interface MenuItemModel {
   /** A drawable resource's name, shown on Android. */
   readonly icon?: string;
   /**
+   * An icon's SVG markup, such as an `@ng-icons` icon, shown on macOS where there is no `sfSymbol`,
+   * and in a Linux tray icon's menu.
+   */
+  readonly svgIcon?: string;
+  /**
    * The standard menu a top-level `<menu-group menuRole>` adds its items to, for a group written
    * in a `<menu-bar>`: what becomes `MenuGroupModel.menuRole`.
    */

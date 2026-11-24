@@ -71,8 +71,8 @@ Without a renderer the tab has no icon, and in development it logs a warning nam
 
 On macOS and Linux, where the tabs are the window's sidebar, the host draws the markup itself as
 the row's icon, so it needs no renderer and shows from the first frame. It draws the shapes
-[`<native-button>`](/packages/components/native-button) lists, and the row shows `icon` whether or
-not the tab is selected, so `selectedIcon` goes unused there.
+[`<native-button>`](/packages/components/native-button) lists. The selected tab's row shows its
+`selectedIcon`, an SF Symbol on macOS or SVG markup on either, where it has one.
 
 Every tab is a route a user reaches in one tap, so a tab whose route is lazy pauses on its first
 visit while its code loads. `withPreloading(PreloadAllModules)` in `provideNativeRouter` loads

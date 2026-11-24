@@ -2,10 +2,15 @@
 
 #include "app-windows.h"
 
-#include "ngn/dbus-menu.h"
+#include "svg-icon.h"
 
+#include "ngn/dbus-menu.h"
+#include "ngn/svg-markup.h"
+
+#include <adwaita.h>
 #include <gtk/gtk.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <functional>
 #include <map>
@@ -114,6 +119,21 @@ GVariant *noPixmaps() {
   return g_variant_new_array(G_VARIANT_TYPE("(iiay)"), nullptr, 0);
 }
 
+// The colour an SVG icon is drawn in, for the panel the tray most likely sits on (tray-and-dock.h).
+uint32_t iconColor() {
+  const char *desktop = g_getenv("XDG_CURRENT_DESKTOP");
+  bool dark = adw_is_initialized() && adw_style_manager_get_dark(adw_style_manager_get_default());
+  return linuxTrayIconColor(desktop ? desktop : "", dark);
+}
+
+// The side of a menu item's SVG icon in pixels: twice a menu's 16, for a host that draws at 2x.
+constexpr int kMenuIconPixels = 32;
+
+// Whether `node` or any item under it has an SVG icon.
+bool hasSvgIcon(const DbusMenuNode &node) {
+  return !node.svgIcon.empty() || std::any_of(node.children.begin(), node.children.end(), hasSvgIcon);
+}
+
 // A menu node's properties as dbusmenu names them.
 GVariant *nodeProperties(const DbusMenuNode &node, bool root) {
   GVariantBuilder props;
@@ -131,6 +151,10 @@ GVariant *nodeProperties(const DbusMenuNode &node, bool root) {
     }
     if (!node.children.empty()) {
       g_variant_builder_add(&props, "{sv}", "children-display", g_variant_new_string("submenu"));
+    }
+    if (auto png = svgIconPng(node.svgIcon, kMenuIconPixels, iconColor()); !png.empty()) {
+      g_variant_builder_add(
+          &props, "{sv}", "icon-data", g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, png.data(), png.size(), 1));
     }
   }
   return g_variant_builder_end(&props);
@@ -170,8 +194,15 @@ struct Icon {
     }
   }
 
+  // None for an SVG icon, which goes as its pixmap: a host draws the name where it finds one.
   std::string iconName() const {
+    if (drawsSvg()) {
+      return "";
+    }
     return icon.image.empty() ? appId : icon.image;
+  }
+  bool drawsSvg() const {
+    return parseSvgMarkup(icon.svgIcon).has_value();
   }
   std::string title() const {
     return !icon.title.empty() ? icon.title : !icon.tooltip.empty() ? icon.tooltip : appId;
@@ -200,7 +231,7 @@ GVariant *itemProperty(GDBusConnection *, const gchar *, const gchar *, const gc
   if (n == "Status") return g_variant_new_string("Active");
   if (n == "WindowId") return g_variant_new_int32(0);
   if (n == "IconName") return g_variant_new_string(icon->iconName().c_str());
-  if (n == "IconPixmap") return noPixmaps();
+  if (n == "IconPixmap") return icon->drawsSvg() ? svgIconPixmaps(t.svgIcon, iconColor()) : noPixmaps();
   if (n == "OverlayIconName" || n == "AttentionIconName") return g_variant_new_string("");
   if (n == "ToolTip") {
     return g_variant_new("(s@a(iiay)ss)", "", noPixmaps(), (t.tooltip.empty() ? icon->title() : t.tooltip).c_str(), "");
@@ -353,6 +384,9 @@ class Tray final : public TrayBackend, public std::enable_shared_from_this<Tray>
     if (watch_) {
       g_bus_unwatch_name(watch_);
     }
+    if (styleChanged_) {
+      g_signal_handler_disconnect(adw_style_manager_get_default(), styleChanged_);
+    }
   }
 
   // The watcher, given every icon each time it appears.
@@ -367,6 +401,23 @@ class Tray final : public TrayBackend, public std::enable_shared_from_this<Tray>
           }
         },
         [](GDBusConnection *, const gchar *, gpointer data) { static_cast<Tray *>(data)->watcher_ = false; }, this, nullptr);
+    // An SVG icon is drawn in a colour that can follow the style, so a change draws it again.
+    if (adw_is_initialized()) {
+      styleChanged_ = g_signal_connect_swapped(
+          adw_style_manager_get_default(), "notify::dark", G_CALLBACK(+[](Tray *self) { self->redrawSvgIcons(); }), this);
+    }
+  }
+
+  // Tell the hosts to draw each SVG icon, and each menu holding one, again.
+  void redrawSvgIcons() {
+    for (auto &[id, icon] : icons_) {
+      if (icon->drawsSvg()) {
+        icon->emit("org.kde.StatusNotifierItem", kItemPath, "NewIcon", nullptr);
+      }
+      if (hasSvgIcon(icon->layout)) {
+        icon->emit("com.canonical.dbusmenu", kMenuPath, "LayoutUpdated", g_variant_new("(ui)", ++icon->revision, 0));
+      }
+    }
   }
 
   void setIcons(std::vector<TrayIcon> icons) override {
@@ -454,6 +505,7 @@ class Tray final : public TrayBackend, public std::enable_shared_from_this<Tray>
   std::string appId_;
   TrayEvents events_;
   guint watch_{0};
+  gulong styleChanged_{0};
   bool watcher_{false};
   std::map<std::string, std::shared_ptr<Icon>> icons_;
 };

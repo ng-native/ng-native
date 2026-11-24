@@ -9,12 +9,14 @@
 #include "ngn/host-state.h"
 #include "ngn/native-module.h"
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ngn {
@@ -23,6 +25,8 @@ struct TrayIcon {
   std::string id;
   std::string title;
   std::string sfSymbol;
+  // An icon's SVG markup (ngn/svg-markup.h), drawn where the icon has no `sfSymbol`.
+  std::string svgIcon;
   // An image asset of the app's own, by name.
   std::string image;
   std::string tooltip;
@@ -32,6 +36,13 @@ struct TrayIcon {
 };
 
 std::vector<TrayIcon> parseTrayIcons(const folly::dynamic &icons);
+
+// The colour, as ARGB, a Linux tray draws an SVG icon in. A StatusNotifierItem's pixmap is drawn as
+// given, with no tint for the panel, so it is drawn for the panel it will most likely sit on: light on
+// GNOME (`currentDesktop`, XDG_CURRENT_DESKTOP, names it), whose top bar is dark in either style, and
+// elsewhere (KDE Plasma's panel follows the colour scheme) light for a `dark` style and dark for a
+// light one.
+uint32_t linuxTrayIconColor(std::string_view currentDesktop, bool dark);
 
 class TrayBackend {
  public:

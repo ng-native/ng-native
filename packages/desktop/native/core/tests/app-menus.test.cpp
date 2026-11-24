@@ -65,7 +65,7 @@ dynamic appBar() {
                   "items",
                   dynamic::array(
                       dynamic::object("id", "1.2.0")("label", "PDF")("sfSymbol", "doc")("checked", true),
-                      dynamic::object("id", "1.2.1")("label", "Delete all")("destructive", true)(
+                      dynamic::object("id", "1.2.1")("label", "Delete all")("destructive", true)("svgIcon", "<svg/>")(
                           "subtitle", "Cannot be undone"))))),
       dynamic::object("label", "Edit")("menuRole", "edit")(
           "items",
@@ -143,6 +143,8 @@ TEST_CASE("the app's bar is drawn as it sent it, with the Developer menu kept be
   CHECK(exportMenu.items[0].checked);
   CHECK(exportMenu.items[1].destructive);
   CHECK(exportMenu.items[1].subtitle == "Cannot be undone");
+  CHECK(exportMenu.items[1].svgIcon == "<svg/>");
+  CHECK(exportMenu.items[0].svgIcon.empty());
 }
 
 TEST_CASE("a bar with no File menu gets one for Close Window, after the app menu; one with a close item keeps its own") {

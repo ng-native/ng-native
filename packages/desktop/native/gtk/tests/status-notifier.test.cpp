@@ -458,3 +458,46 @@ TEST_CASE("the badge count goes out as the launcher entry's count for the app's 
   g_dbus_connection_signal_unsubscribe(bus, watch);
   g_object_unref(bus);
 }
+
+TEST_CASE("an icon with an SVG icon goes as its pixmap with no icon name, and a menu item's as its icon-data") {
+  if (!haveSessionBus()) {
+    return;
+  }
+  constexpr const char *topHalf = R"svg(<svg viewBox="0 0 16 16"><rect width="16" height="8"/></svg>)svg";
+  Watcher watcher;
+  Heard heard;
+  auto tray = ngn::gtk::makeStatusNotifierTray("dev.ngnative.TrayTest", heard.sink());
+  tray->setIcons({{.id = "t0", .svgIcon = topHalf, .image = "emblem-synchronizing",
+                   .menu = std::vector<MenuItem>{{.title = "Pause", .command = ngn::MenuCommand::AppItem, .id = "0", .svgIcon = topHalf},
+                                                 {.title = "Stop", .command = ngn::MenuCommand::AppItem, .id = "1"}}}});
+  REQUIRE(spinUntil([&] { return watcher.registered.size() == 1; }));
+  const auto *timer = watcher.item("dev.ngnative.TrayTest-t0");
+  REQUIRE(timer);
+  CHECK(watcher.text(*timer, "IconName") == "");
+
+  GVariant *reply = watcher.call(*timer, "/StatusNotifierItem", "org.freedesktop.DBus.Properties", "Get",
+                                 g_variant_new("(ss)", "org.kde.StatusNotifierItem", "IconPixmap"));
+  REQUIRE(reply);
+  GVariant *pixmaps = nullptr;
+  g_variant_get(reply, "(v)", &pixmaps);
+  REQUIRE(g_variant_is_of_type(pixmaps, G_VARIANT_TYPE("a(iiay)")));
+  CHECK(g_variant_n_children(pixmaps) == 4);
+  g_variant_unref(pixmaps);
+  g_variant_unref(reply);
+
+  auto iconData = [&](gint32 id) {
+    GVariant *got = watcher.call(*timer, "/MenuBar", "com.canonical.dbusmenu", "GetProperty", g_variant_new("(is)", id, "icon-data"));
+    size_t size = 0;
+    if (got) {
+      GVariant *value = nullptr;
+      g_variant_get(got, "(v)", &value);
+      size = g_variant_get_size(value);
+      g_variant_unref(value);
+      g_variant_unref(got);
+    }
+    return size;
+  };
+  // A PNG for the item with an icon, and nothing for the one without.
+  CHECK(iconData(1) > 8);
+  CHECK(iconData(2) == 0);
+}

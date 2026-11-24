@@ -272,7 +272,7 @@ TEST_CASE("neighbouring sections in one parent are one source list") {
       item(6, dynamic::object("label", "Sent")("selected", true)("svgIcon", "<svg/>")),
       4)});
   CHECK(lines == Lines{
-                     "lists of 2: [4 Mailboxes (collapsible): 5 Inbox (3) <tray> *, 6 Sent <svg> * | 8: 9 Flagged] [12 Tags: 13 Work]",
+                     "lists of 2: [4 Mailboxes (collapsible): 5 Inbox (3) <tray> *, 6 Sent <svg/> * | 8: 9 Flagged] [12 Tags: 13 Work]",
                  });
   lines = f.mount({ShadowViewMutation::UpdateMutation(
       item(6, dynamic::object("label", "Sent")("selected", true)("svgIcon", "<svg/>")),

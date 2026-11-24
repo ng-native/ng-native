@@ -5,8 +5,10 @@
 // registered with the watcher by that path, so closing the connection takes the icon away. An icon
 // with a menu is ItemIsMenu, which a click opens; one without is pressed by Activate.
 //
-// The icon is `image` as an icon theme's name, else the app's own icon (its application id, as
-// the package installs it); an SF Symbol has no Linux equivalent and is not drawn. The title is
+// The icon is its SVG icon as IconPixmap, in the colour linuxTrayIconColor picks and drawn again
+// when the style changes, else `image` as an icon theme's name, else the app's own icon (its
+// application id, as the package installs it); an SF Symbol has no Linux equivalent and is not
+// drawn. A menu item's SVG icon goes as its dbusmenu icon-data, a PNG in the same colour. The title is
 // the item's Title, and the tooltip its ToolTip. A watcher that restarts (Plasma's shell, say) is
 // given every icon again.
 #pragma once

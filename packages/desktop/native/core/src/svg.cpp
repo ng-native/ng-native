@@ -1469,7 +1469,9 @@ class Renderer {
 
   void drawUse(const SvgElement &use, const Style &style) {
     const SvgNode *target = named(use.href);
-    if (target == nullptr || active_.contains(target)) {
+    // A bound on the uses one drawing expands: uses nested so each level draws the one below
+    // twice would otherwise double the work at every level.
+    if (target == nullptr || active_.contains(target) || ++usesDrawn_ > kMaxUses) {
       return;
     }
     double x = length(use, "x", Axis::X), y = length(use, "y", Axis::Y);
@@ -1715,6 +1717,9 @@ class Renderer {
   std::unordered_map<std::string, const SvgNode *> names_;
   // What is being drawn, so a `use` of it, or of what holds it, draws nothing.
   std::unordered_set<const SvgNode *> active_;
+  // The uses drawn so far, and how many one drawing draws: far more than any icon or chart has.
+  static constexpr int kMaxUses = 1 << 16;
+  int usesDrawn_{0};
 };
 
 } // namespace

@@ -137,7 +137,7 @@ if(NGN_TESTS)
     tests/views/split-under-pushed-screen.test.mm tests/views/view-effects.test.mm
     tests/views/native-button.test.mm tests/views/sidebar-rows.test.mm tests/views/split-toolbar-insets.test.mm
     tests/views/tags-after-reload.test.mm
-    tests/views/text-input-key-press.test.mm tests/views/window-subtitle.test.mm)
+    tests/views/text-input-key-press.test.mm tests/views/window-subtitle.test.mm tests/views/header-svg-icons.test.mm)
   target_include_directories(ngn_appkit_tests PRIVATE ../core/tests)
   target_link_libraries(ngn_appkit_tests PRIVATE ngn_appkit doctest ${NGN_APPKIT_FRAMEWORKS})
   if(NGN_HERMES_TEST_RPATH)

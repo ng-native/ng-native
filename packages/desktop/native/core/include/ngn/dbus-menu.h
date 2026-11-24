@@ -25,6 +25,8 @@ struct DbusMenuNode {
   std::string itemId;
   // The OS's command a click runs instead (a `menuRole` such as quit), or AppItem for the app's.
   MenuCommand command{MenuCommand::AppItem};
+  // The item's SVG icon (ngn/svg-markup.h), which the toolkit draws as its icon-data.
+  std::string svgIcon;
   std::vector<DbusMenuNode> children;
   bool operator==(const DbusMenuNode &) const = default;
 };

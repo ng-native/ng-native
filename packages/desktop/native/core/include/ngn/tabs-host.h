@@ -101,6 +101,10 @@ struct TabScreen {
   std::string sfSymbol;
   // The SVG markup, when the tab's icon is a `data:image/svg+xml` image (`<native-tab [icon]="{ svg }">`).
   std::string svgIcon;
+  // The icon its row shows while the tab is the one shown, when it has one (`selectedIcon`): of the
+  // same kind as the icon, as react-native-screens has it.
+  std::string selectedSfSymbol;
+  std::string selectedSvgIcon;
   bool preventNativeSelection{false};
 };
 

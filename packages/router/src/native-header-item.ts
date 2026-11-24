@@ -84,6 +84,8 @@ export interface HeaderMenuAction {
   readonly title: string;
   /** An SF Symbol name. */
   readonly systemImageName?: string;
+  /** An icon's SVG markup, such as an `@ng-icons` icon: macOS draws it where there is no symbol. */
+  readonly svgIcon?: string;
   /** Whether the action shows as chosen. */
   readonly state?: 'on' | 'off' | 'mixed';
   readonly disabled?: boolean;
@@ -97,12 +99,22 @@ export interface HeaderSubmenu {
   readonly title: string;
   /** An SF Symbol name. */
   readonly systemImageName?: string;
+  /** An icon's SVG markup, as on an action. */
+  readonly svgIcon?: string;
   readonly items: HeaderMenu['items'];
   readonly displayInline?: boolean;
   /** Keep one of the items' `state` on at a time. */
   readonly singleSelection?: boolean;
   readonly destructive?: boolean;
 }
+
+/**
+ * A bar button's picture, as `<native-button>` takes it (`ButtonIcon`): an SF Symbol, or an icon's
+ * SVG markup, such as an `@ng-icons` icon, which the macOS and Linux hosts draw as a symbol. A
+ * drawable draws nothing: Android's header has no bar buttons.
+ */
+export type HeaderItemIcon =
+  { readonly sfSymbol: string } | { readonly drawable: string } | { readonly svg: string };
 
 /** What a bar button opens. */
 export interface HeaderMenu {
@@ -124,6 +136,9 @@ declare const ngDevMode: unknown;
 
 /** Whether Android has been told it draws no bar buttons, which it says once. */
 let warnedAndroid = false;
+
+/** Whether iOS has been told it draws no SVG bar button icon, which it says once. */
+let warnedSvg = false;
 
 @Component({
   selector: 'native-header-item',
@@ -172,6 +187,9 @@ export class NativeHeaderItem implements AfterContentInit {
       if (this.isBarButton()) warnIfAndroid();
     });
     effect(() => {
+      if (this.isBarButton() && this.svgIcon() !== undefined) warnIfNoSvg();
+    });
+    effect(() => {
       const menu = this.menu();
       this.buildMenu(menu instanceof TemplateRef ? menu : null);
     });
@@ -202,6 +220,11 @@ export class NativeHeaderItem implements AfterContentInit {
   readonly title = input<string>();
   /** An SF Symbol name. */
   readonly systemImageName = input<string>();
+  /**
+   * The picture as one value: `{ sfSymbol }` on iOS and macOS, the same as `systemImageName`, which
+   * wins over it, or on macOS and Linux an icon's SVG markup, `{ svg }`, such as an `@ng-icons` icon.
+   */
+  readonly icon = input<HeaderItemIcon>();
   readonly tintColor = input<string>();
   /** `prominent` is the filled style iOS 26 gives a screen's main action. */
   readonly barButtonItemStyle = input<'plain' | 'prominent'>();
@@ -245,11 +268,24 @@ export class NativeHeaderItem implements AfterContentInit {
     return slot === undefined || slot === 'left' ? 'left' : slot === 'right' ? 'right' : null;
   });
 
+  /** The SF Symbol, from `systemImageName` or `icon`. */
+  private readonly symbol = computed(() => {
+    const icon = this.icon();
+    return this.systemImageName() ?? (icon && 'sfSymbol' in icon ? icon.sfSymbol : undefined);
+  });
+
+  /** The SVG markup of an `icon` of `{ svg }`. */
+  private readonly svgIcon = computed(() => {
+    const icon = this.icon();
+    return icon && 'svg' in icon ? icon.svg : undefined;
+  });
+
   protected readonly isBarButton = computed(
     () =>
       !this.hasContent() &&
       this.side() !== null &&
-      (this.systemImageName() !== undefined ||
+      (this.symbol() !== undefined ||
+        this.svgIcon() !== undefined ||
         this.title() !== undefined ||
         this.spacing() !== undefined),
   );
@@ -266,7 +302,8 @@ export class NativeHeaderItem implements AfterContentInit {
       buttonId: menu ? undefined : this.buttonId,
       menu: menu && nativeMenu(menu, this.menuIdPrefix),
       title: this.title(),
-      sfSymbolName: this.systemImageName(),
+      sfSymbolName: this.symbol(),
+      svgIcon: this.svgIcon(),
       variant: this.barButtonItemStyle(),
       tintColor: tint === undefined ? undefined : (this.engine.color?.(tint) ?? tint),
       disabled: this.disabled(),
@@ -421,10 +458,15 @@ function headerMenuOf(
   return { menu: { items: walk(entries, '') }, actions };
 }
 
-/** An item's symbol and colour, as a header menu entry takes them. */
-function headerLook(entry: MenuItemModel): { systemImageName?: string; destructive?: true } {
+/** An item's symbol, SVG icon and colour, as a header menu entry takes them. */
+function headerLook(entry: MenuItemModel): {
+  systemImageName?: string;
+  svgIcon?: string;
+  destructive?: true;
+} {
   return {
     ...(entry.sfSymbol !== undefined && { systemImageName: entry.sfSymbol }),
+    ...(entry.svgIcon !== undefined && { svgIcon: entry.svgIcon }),
     ...(entry.destructive && { destructive: true }),
   };
 }
@@ -458,6 +500,17 @@ function findAction(menu: HeaderMenu, id: string): HeaderMenuAction | undefined 
     if (found) return found;
   }
   return undefined;
+}
+
+/** Says once, in development, that iOS draws no SVG icon on a bar button. */
+function warnIfNoSvg(): void {
+  if (typeof ngDevMode !== 'undefined' && !ngDevMode) return;
+  if (nativePlatform() !== 'ios' || warnedSvg) return;
+  warnedSvg = true;
+  console.warn(
+    '[angular-native] A <native-header-item> draws an SVG icon on macOS and Linux only, so on ' +
+      'iOS its bar button shows none. Give it { sfSymbol } there.',
+  );
 }
 
 /** Says once, in development, that Android's header has no bar buttons to draw. */

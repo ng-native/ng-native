@@ -44,9 +44,8 @@ greys it out.
   The host draws it as it draws a symbol: a template image AppKit tints on macOS, and in the
   button's text colour on Linux. iOS, Android and the web show no SVG icon, and in development
   the button says so once. The host draws the shapes icon sets use, in one colour: paths,
-  rectangles, circles, ellipses, lines, polylines and polygons, and the groups around them. It
-  leaves out text, clips and masks, and draws nothing for a shape inside `<defs>` or `<symbol>` or
-  one drawn through `<use>`.
+  rectangles, circles, ellipses, lines, polylines and polygons, the groups around them, and a shape
+  in `<defs>` or a `<symbol>` where a `<use>` draws it. It leaves out text, clips and masks.
 
 `(press)` fires once for each click, tap or key that activates it. On Android it takes
 `android_ripple` and the rest of a `<pressable>`'s press inputs.

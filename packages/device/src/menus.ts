@@ -70,6 +70,7 @@ export type NativeMenuEntry =
       readonly subtitle?: string;
       readonly sfSymbol?: string;
       readonly icon?: string;
+      readonly svgIcon?: string;
       readonly inline?: boolean;
       readonly items?: readonly NativeMenuEntry[];
     };

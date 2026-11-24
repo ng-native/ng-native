@@ -2,6 +2,7 @@
 
 #import "search-toolbar-item.h"
 #import "surface-view.h"
+#import "svg-icon.h"
 
 #include "ngn/header-bar.h"
 
@@ -35,6 +36,21 @@ NSImage *symbol(const std::string &name, NSString *description) {
     return nil;
   }
   return [NSImage imageWithSystemSymbolName:nsString(name) accessibilityDescription:description];
+}
+
+// The side of a bar button's SVG icon, and of a menu item's: what each draws an SF Symbol at.
+constexpr CGFloat kToolbarIconSize = 18;
+constexpr CGFloat kMenuIconSize = 16;
+
+// A bar button's or a menu item's picture: its SF Symbol, or its SVG icon as a template image.
+NSImage *picture(const std::string &name, const std::string &svgIcon, CGFloat size, NSString *description) {
+  if (NSImage *image = symbol(name, description)) {
+    return image;
+  }
+  // A copy: the image is shared by every place that draws this markup at this size.
+  NSImage *image = [NGNSvgTemplateImage(svgIcon, size) copy];
+  image.accessibilityDescription = description;
+  return image;
 }
 
 } // namespace
@@ -477,7 +493,7 @@ NSImage *symbol(const std::string &name, NSString *description) {
   }
   NSString *title = nsString(button.title);
   NSString *label = button.accessibilityLabel.empty() ? title : nsString(button.accessibilityLabel);
-  NSImage *image = symbol(button.symbol, label);
+  NSImage *image = picture(button.symbol, button.svgIcon, kToolbarIconSize, label);
   NSColor *tint = button.tint ? nsColor(button.tint) : headerTint;
   if (button.menu) {
     NSMenuToolbarItem *item = [[NSMenuToolbarItem alloc] initWithItemIdentifier:identifier];
@@ -530,7 +546,7 @@ NSImage *symbol(const std::string &name, NSString *description) {
 
 - (NSMenuItem *)menuItemFor:(const ngn::HeaderMenuItem &)entry {
   NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:nsString(entry.title) action:nil keyEquivalent:@""];
-  item.image = symbol(entry.symbol, nil);
+  item.image = picture(entry.symbol, entry.svgIcon, kMenuIconSize, nil);
   item.state = entry.on ? NSControlStateValueOn : NSControlStateValueOff;
   if (!entry.items.empty() || entry.menuId.empty()) {
     item.submenu = [self menuFor:entry];

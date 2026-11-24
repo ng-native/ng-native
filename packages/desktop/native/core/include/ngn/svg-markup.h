@@ -1,13 +1,15 @@
 // An icon's SVG markup, such as an `@ng-icons` set's, read into the document drawSvg draws, for the
-// places a desktop toolkit takes an image rather than a view: a sidebar row, a button and a tab.
-// `<sidebar-item>` and `<native-button>` commit the markup as `svgIcon`; `<native-tab>` commits it
-// as a `data:image/svg+xml` icon source.
+// places a desktop toolkit takes an image rather than a view: a sidebar row, a button, a tab, a
+// header bar button, a menu item and a tray icon. Each element commits the markup as `svgIcon`;
+// `<native-tab>` commits it as a `data:image/svg+xml` icon source.
 //
 // The markup is read as far as an icon needs: `svg` with its viewBox and preserveAspectRatio, `g`,
 // `path`, `rect`, `circle`, `ellipse`, `line`, `polyline` and `polygon`, with their presentation
-// attributes, written as attributes or in `style` (which wins), and `transform`. A `var()` takes its
-// fallback, which is how an outline set carries its stroke width. Anything else (gradients, clips,
-// masks, text, `use`) is left out, since the icon is drawn in one colour.
+// attributes, written as attributes or in `style` (which wins), and `transform`; and `defs`,
+// `symbol` with its viewBox, and `use` with its `href` or `xlink:href`, so a shape in `defs` or a
+// `symbol` draws where a `use` draws it. A `var()` takes its fallback, which is how an outline set
+// carries its stroke width. Anything else (gradients, clips, masks, text) is left out, since the
+// icon is drawn in one colour.
 #pragma once
 
 #include "ngn/svg.h"

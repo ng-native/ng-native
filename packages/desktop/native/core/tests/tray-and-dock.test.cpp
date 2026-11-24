@@ -56,7 +56,7 @@ TEST_CASE("NgNativeTray draws each icon the app sends, with its menu or as a pre
       dynamic::array(dynamic::array(
           dynamic::object("id", "t0")("title", "25:00")("sfSymbol", "timer")("tooltip", "Focus timer")(
               "menu", dynamic::array(dynamic::object("id", "0")("label", "Pause"))),
-          dynamic::object("id", "t1")("image", "sync")("menu", nullptr))));
+          dynamic::object("id", "t1")("image", "sync")("svgIcon", "<svg/>")("menu", nullptr))));
   REQUIRE(backend->sets.size() == 1);
   const auto &icons = backend->sets[0];
   REQUIRE(icons.size() == 2);
@@ -68,6 +68,8 @@ TEST_CASE("NgNativeTray draws each icon the app sends, with its menu or as a pre
   CHECK((*icons[0].menu)[0].title == "Pause");
   CHECK((*icons[0].menu)[0].command == MenuCommand::AppItem);
   CHECK(icons[1].image == "sync");
+  CHECK(icons[1].svgIcon == "<svg/>");
+  CHECK(icons[0].svgIcon.empty());
   CHECK_FALSE(icons[1].menu);
 
   host->menuSelect("t0", "0");
@@ -145,4 +147,16 @@ TEST_CASE("dropping a tray or Dock listener waits for a call to it already runni
         return source.listen(listener, reloaded);
       },
       [&] { source.send(dynamic::object("type", "press")); }));
+}
+
+TEST_CASE("a Linux tray draws an SVG icon light on GNOME's dark bar, and elsewhere for the style") {
+  constexpr uint32_t light = 0xffffffff, dark = 0xcc000000;
+  CHECK(ngn::linuxTrayIconColor("GNOME", false) == light);
+  CHECK(ngn::linuxTrayIconColor("ubuntu:GNOME", false) == light);
+  CHECK(ngn::linuxTrayIconColor("GNOME", true) == light);
+  CHECK(ngn::linuxTrayIconColor("KDE", false) == dark);
+  CHECK(ngn::linuxTrayIconColor("KDE", true) == light);
+  CHECK(ngn::linuxTrayIconColor("", false) == dark);
+  // A name that only contains GNOME's is another desktop's.
+  CHECK(ngn::linuxTrayIconColor("GNOME-Flashback-x", false) == dark);
 }

@@ -593,6 +593,23 @@ std::string pathOfPoints(const std::string &points, bool close) {
   return d.empty() || !close ? d : d + "Z";
 }
 
+// The viewBox and preserveAspectRatio of an svg or a symbol.
+void viewBoxOf(SvgElement &e, std::map<std::string, std::string> &attrs) {
+  e.align = "xMidYMid";
+  if (auto box = numbers(attrs["viewBox"]); box.size() == 4 && box[2] > 0 && box[3] > 0) {
+    e.minX = box[0];
+    e.minY = box[1];
+    e.vbWidth = box[2];
+    e.vbHeight = box[3];
+  }
+  if (attrs.contains("preserveAspectRatio")) {
+    std::string text = trimmed(attrs["preserveAspectRatio"]);
+    auto space = text.find(' ');
+    e.align = text.substr(0, space);
+    e.meetOrSlice = space != std::string::npos && trimmed(std::string_view(text).substr(space)) == "slice" ? 1 : 0;
+  }
+}
+
 std::optional<SvgNode> nodeOf(const XmlElement &x) {
   static const std::map<std::string, SvgKind> kinds = {
       {"g", SvgKind::Group},
@@ -604,6 +621,9 @@ std::optional<SvgNode> nodeOf(const XmlElement &x) {
       {"line", SvgKind::Line},
       {"polyline", SvgKind::Path},
       {"polygon", SvgKind::Path},
+      {"defs", SvgKind::Defs},
+      {"symbol", SvgKind::Symbol},
+      {"use", SvgKind::Use},
   };
   auto kind = kinds.find(x.tag);
   if (kind == kinds.end()) {
@@ -613,6 +633,9 @@ std::optional<SvgNode> nodeOf(const XmlElement &x) {
   SvgNode node{.element = {.kind = kind->second}};
   auto &e = node.element;
   presentation(e, attrs);
+  if (auto id = attrs.find("id"); id != attrs.end()) {
+    e.name = id->second;
+  }
   if (auto t = attrs.find("transform"); t != attrs.end()) {
     e.matrix = transformOf(t->second);
   }
@@ -641,6 +664,16 @@ std::optional<SvgNode> nodeOf(const XmlElement &x) {
     case SvgKind::Line:
       lengths({"x1", "y1", "x2", "y2"});
       break;
+    case SvgKind::Use: {
+      // SVG 2's `href`, or SVG 1.1's `xlink:href`, naming an element of this document.
+      auto href = attrs.contains("href") ? attrs["href"] : attrs["xlink:href"];
+      e.href = !href.empty() && href[0] == '#' ? href.substr(1) : std::string{};
+      lengths({"x", "y", "width", "height"});
+      break;
+    }
+    case SvgKind::Symbol:
+      viewBoxOf(e, attrs);
+      [[fallthrough]];
     default:
       for (const auto &child : x.children) {
         if (auto drawn = nodeOf(child)) {
@@ -689,19 +722,7 @@ std::optional<SvgDocument> parseSvgMarkup(std::string_view markup) {
   }
   auto attrs = declared(*root);
   SvgElement svg{.kind = SvgKind::Svg};
-  svg.align = "xMidYMid";
-  if (auto box = numbers(attrs["viewBox"]); box.size() == 4 && box[2] > 0 && box[3] > 0) {
-    svg.minX = box[0];
-    svg.minY = box[1];
-    svg.vbWidth = box[2];
-    svg.vbHeight = box[3];
-  }
-  if (attrs.contains("preserveAspectRatio")) {
-    std::string text = trimmed(attrs["preserveAspectRatio"]);
-    auto space = text.find(' ');
-    svg.align = text.substr(0, space);
-    svg.meetOrSlice = space != std::string::npos && trimmed(std::string_view(text).substr(space)) == "slice" ? 1 : 0;
-  }
+  viewBoxOf(svg, attrs);
   if (auto color = attrs.find("color"); color != attrs.end()) {
     svg.color = colorOf(color->second);
   }

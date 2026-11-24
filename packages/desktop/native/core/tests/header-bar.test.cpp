@@ -9,11 +9,12 @@ TEST_CASE("bar buttons read as RNSBarButtonItem.mm reads them") {
       dynamic::object("buttonId", "save")("title", "Save")("tintColor", 0xff0000ff)("disabled", true),
       dynamic::object("spacing", 12),
       dynamic::object("buttonId", "share")("sfSymbolName", "square.and.arrow.up")("accessibilityLabel", "Share"),
+      dynamic::object("buttonId", "add")("svgIcon", "<svg/>"),
       // Not an entry at all.
       dynamic("noise"),
   };
   auto buttons = ngn::barButtons(items);
-  REQUIRE(buttons.size() == 3);
+  REQUIRE(buttons.size() == 4);
   CHECK(buttons[0].id == "save");
   CHECK(buttons[0].title == "Save");
   CHECK(buttons[0].disabled);
@@ -24,11 +25,13 @@ TEST_CASE("bar buttons read as RNSBarButtonItem.mm reads them") {
   CHECK(buttons[2].accessibilityLabel == "Share");
   CHECK_FALSE(buttons[2].tint);
   CHECK_FALSE(buttons[2].menu);
+  CHECK(buttons[2].svgIcon.empty());
+  CHECK(buttons[3].svgIcon == "<svg/>");
 }
 
 TEST_CASE("a bar button's menu keeps its actions and submenus, without hidden entries") {
-  dynamic remove = dynamic::object("title", "Delete")("menuId", "item-1/delete")("destructive", true);
-  dynamic more = dynamic::object("title", "More")("displayInline", true)("items", dynamic::array(remove));
+  dynamic remove = dynamic::object("title", "Delete")("menuId", "item-1/delete")("destructive", true)("svgIcon", "<svg/>");
+  dynamic more = dynamic::object("title", "More")("displayInline", true)("svgIcon", "<svg id=\"more\"/>")("items", dynamic::array(remove));
   dynamic name = dynamic::object("title", "Name")("menuId", "item-1/name")("state", "on");
   dynamic gone = dynamic::object("title", "Gone")("menuId", "item-1/gone")("hidden", true);
   dynamic menu = dynamic::object("title", "Sort")("items", dynamic::array(name, gone, more));
@@ -45,6 +48,9 @@ TEST_CASE("a bar button's menu keeps its actions and submenus, without hidden en
   REQUIRE(m.items[1].items.size() == 1);
   CHECK(m.items[1].items[0].destructive);
   CHECK(m.items[1].items[0].menuId == "item-1/delete");
+  CHECK(m.items[1].items[0].svgIcon == "<svg/>");
+  CHECK(m.items[1].svgIcon == "<svg id=\"more\"/>");
+  CHECK(m.items[0].svgIcon.empty());
 }
 
 TEST_CASE("a toolbar search field reports to JavaScript as react-native-screens' iOS search bar does") {

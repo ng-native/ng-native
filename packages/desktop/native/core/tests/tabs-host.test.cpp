@@ -190,9 +190,34 @@ TEST_CASE("a tab's SVG icon is its row's, and goes when the tab takes it away") 
   Fixture f;
   f.mount(tabsApp());
   f.mount({ShadowViewMutation::UpdateMutation(tab(4, "search", "Search"), tab(4, "search", "Search", false, "<svg/>"), 2)});
-  CHECK(f.calls() == Lines{"lists of 2: [2: 3 Library <books.vertical> *, 4 Search <svg>, 5 Locked]"});
+  CHECK(f.calls() == Lines{"lists of 2: [2: 3 Library <books.vertical> *, 4 Search <svg/>, 5 Locked]"});
   f.mount({ShadowViewMutation::UpdateMutation(tab(4, "search", "Search", false, "<svg/>"), tab(4, "search", "Search"), 2)});
   CHECK(f.calls() == Lines{"lists of 2: [2: 3 Library <books.vertical> *, 4 Search, 5 Locked]"});
+}
+
+TEST_CASE("a tab's row shows its selected icon while it is the tab shown, a symbol or an svg") {
+  Fixture f;
+  f.mount(tabsApp());
+  auto withSelected = [](Tag tag, std::string key, std::string title, ngn::TabScreen icons) {
+    auto props = std::make_shared<TabProps>();
+    icons.screenKey = std::move(key);
+    icons.title = std::move(title);
+    props->tab = std::move(icons);
+    return shadowView(tag, "RNSTabsScreenIOS", {}, props);
+  };
+  auto library = withSelected(3, "library", "Library", {.sfSymbol = "books.vertical", .selectedSfSymbol = "books.vertical.fill"});
+  auto search = withSelected(4, "search", "Search", {.svgIcon = "<svg id=\"off\"/>", .selectedSvgIcon = "<svg id=\"on\"/>"});
+  f.mount({ShadowViewMutation::UpdateMutation(tab(3, "library", "Library"), library, 2),
+           ShadowViewMutation::UpdateMutation(tab(4, "search", "Search"), search, 2)});
+  CHECK(f.calls() == Lines{R"(lists of 2: [2: 3 Library <books.vertical.fill> *, 4 Search <svg id="off"/>, 5 Locked])"});
+
+  f.choose(4);
+  f.backend->drain();
+  CHECK(f.calls() == Lines{"cover 3", "uncover 4", R"(lists of 2: [2: 3 Library <books.vertical>, 4 Search <svg id="on"/> *, 5 Locked])"});
+
+  // Taken away, the selected row shows its icon.
+  f.mount({ShadowViewMutation::UpdateMutation(search, withSelected(4, "search", "Search", {.svgIcon = "<svg id=\"off\"/>"}), 2)});
+  CHECK(f.calls() == Lines{R"(lists of 2: [2: 3 Library <books.vertical>, 4 Search <svg id="off"/> *, 5 Locked])"});
 }
 
 TEST_CASE("without a request, the first tab shown starts the count, so the first click is the user's") {

@@ -235,6 +235,13 @@ describe('an SVG tab icon', () => {
         assert.deepEqual(home().props['iconImageSource'], {
           uri: `data:image/svg+xml;utf8,${encodeURIComponent('<svg id="away"/>')}`,
         });
+        // The row of the tab shown draws its selected icon.
+        selectedIcon().set({ svg: '<svg id="on"/>' });
+        await idle();
+        assert.deepEqual(home().props['selectedIconImageSource'], {
+          uri: `data:image/svg+xml;utf8,${encodeURIComponent('<svg id="on"/>')}`,
+        });
+        selectedIcon().set(undefined);
         icon().set({ sfSymbol: 'house' });
         await idle();
         assert.equal(home().props['iconType'], 'sfSymbol');

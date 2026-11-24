@@ -18,6 +18,8 @@ struct HeaderMenuItem {
   std::string title;
   std::string menuId;
   std::string symbol;
+  // An icon's SVG markup (ngn/svg-markup.h), drawn when there is no `symbol`.
+  std::string svgIcon;
   bool on{false};
   bool disabled{false};
   bool destructive{false};
@@ -32,6 +34,9 @@ struct BarButton {
   std::string id;
   std::string title;
   std::string symbol;
+  // An icon's SVG markup (ngn/svg-markup.h): `<native-header-item [icon]="{ svg }">`, drawn when
+  // there is no `symbol`.
+  std::string svgIcon;
   std::string accessibilityLabel;
   facebook::react::SharedColor tint;
   bool disabled{false};

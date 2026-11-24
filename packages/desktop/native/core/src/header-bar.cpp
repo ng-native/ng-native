@@ -21,6 +21,7 @@ HeaderMenuItem menuItem(const folly::dynamic &item) {
       .title = text(item, "title"),
       .menuId = text(item, "menuId"),
       .symbol = text(item, "sfSymbolName"),
+      .svgIcon = text(item, "svgIcon"),
       .on = text(item, "state") == "on",
       .disabled = flag(item, "disabled"),
       .destructive = flag(item, "destructive"),
@@ -54,6 +55,7 @@ std::vector<BarButton> barButtons(const std::vector<folly::dynamic> &items) {
     button.id = text(item, "buttonId");
     button.title = text(item, "title");
     button.symbol = text(item, "sfSymbolName");
+    button.svgIcon = text(item, "svgIcon");
     button.accessibilityLabel = text(item, "accessibilityLabel");
     button.disabled = flag(item, "disabled");
     if (auto *tint = item.get_ptr("tintColor"); tint != nullptr && tint->isNumber()) {

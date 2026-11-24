@@ -79,6 +79,8 @@ struct MenuItem {
   bool destructive{false};
   std::string subtitle;
   std::string sfSymbol;
+  // An icon's SVG markup (ngn/svg-markup.h), drawn where the item has no `sfSymbol`.
+  std::string svgIcon;
   // Its items are drawn in place, between separators, rather than as a submenu.
   bool inlineItems{false};
 

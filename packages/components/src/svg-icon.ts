@@ -4,6 +4,7 @@
  * icon GTK draws in the text colour). They take it as the `svgIcon` prop.
  */
 import { nativePlatform } from '@ng-native/fabric';
+import type { ButtonIcon } from './native-button.ts';
 
 declare const ngDevMode: unknown;
 
@@ -46,4 +47,34 @@ export function svgIconMarkup(
     );
   }
   return markup;
+}
+
+/** A picture as a menu item or a tray icon sends it: each form under the key the host reads. */
+export interface IconFields {
+  readonly sfSymbol?: string;
+  /** A drawable resource's name, which Android draws. */
+  readonly icon?: string;
+  readonly svgIcon?: string;
+}
+
+/**
+ * The fields for an element's `sfSymbol` and `icon` inputs, where `icon` is a `ButtonIcon` or, as it
+ * was before it took one, a drawable's name. The `sfSymbol` input wins over an `icon` of
+ * `{ sfSymbol }`, as on `<native-button>`. Says what `svgIconMarkup` says.
+ */
+export function iconFields(
+  sfSymbol: string | undefined,
+  icon: string | ButtonIcon | undefined,
+  element: string,
+  offDesktop = false,
+): IconFields {
+  const given = typeof icon === 'string' ? { drawable: icon } : icon;
+  const symbol = sfSymbol || (given && 'sfSymbol' in given ? given.sfSymbol : undefined);
+  const drawable = given && 'drawable' in given ? given.drawable : undefined;
+  const svgIcon = svgIconMarkup(given, element, offDesktop);
+  return {
+    ...(symbol && { sfSymbol: symbol }),
+    ...(drawable && { icon: drawable }),
+    ...(svgIcon && { svgIcon }),
+  };
 }

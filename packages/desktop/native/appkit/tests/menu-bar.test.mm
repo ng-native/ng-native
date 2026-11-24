@@ -57,3 +57,57 @@ TEST_CASE("A key press is named as the web names it, F13 to F20 too, and a chara
   // The letter k.
   CHECK((ngn::appkit::keyName(40) == nil));
 }
+
+namespace {
+
+// The alpha of `image` drawn `size` points square at 1x, at the pixel (x, y) from its top left.
+CGFloat alphaAt(NSImage *image, CGFloat size, NSInteger x, NSInteger y) {
+  NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil
+                                                                  pixelsWide:(NSInteger)size
+                                                                  pixelsHigh:(NSInteger)size
+                                                               bitsPerSample:8
+                                                             samplesPerPixel:4
+                                                                    hasAlpha:YES
+                                                                    isPlanar:NO
+                                                              colorSpaceName:NSDeviceRGBColorSpace
+                                                                 bytesPerRow:0
+                                                                bitsPerPixel:0];
+  [NSGraphicsContext saveGraphicsState];
+  NSGraphicsContext.currentContext = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
+  [image drawInRect:NSMakeRect(0, 0, size, size)];
+  [NSGraphicsContext restoreGraphicsState];
+  return [rep colorAtX:x y:y].alphaComponent;
+}
+
+} // namespace
+
+TEST_CASE("A menu item draws its SVG icon as a template image, and its SF Symbol in its place when it has one") {
+  const std::string topHalf = R"svg(<svg viewBox="0 0 16 16"><rect width="16" height="8"/></svg>)svg";
+  ngn::MenuItem svg{.title = "Rename", .command = ngn::MenuCommand::AppItem, .id = "a1", .svgIcon = topHalf};
+  ngn::MenuItem symbol = svg;
+  symbol.sfSymbol = "star";
+  ngn::MenuItem plain{.title = "Delete", .command = ngn::MenuCommand::AppItem, .id = "a2"};
+  ngn::MenuItem notSvg = plain;
+  notSvg.svgIcon = "lucidePencil";
+  ngn::MenuItem submenu{.title = "More", .items = {plain}, .svgIcon = topHalf};
+  NSMenu *menu = ngn::appkit::buildMenu("", {svg, symbol, plain, notSvg, submenu}, [](const ngn::MenuItem &) {});
+  REQUIRE(menu.numberOfItems == 5);
+  NSImage *image = [menu itemAtIndex:0].image;
+  REQUIRE((image != nil));
+  // Tinted by AppKit for the highlight and the menu's appearance, as a symbol is.
+  CHECK([image isTemplate]);
+  CHECK(image.size.width == 16);
+  // Drawn the right way up: its top half filled.
+  CHECK(alphaAt(image, 16, 8, 2) == doctest::Approx(1));
+  CHECK(alphaAt(image, 16, 8, 13) == doctest::Approx(0));
+  // An SF Symbol wins.
+  NSImage *star = [menu itemAtIndex:1].image;
+  REQUIRE((star != nil));
+  CHECK(star.size.width != 16);
+  CHECK(([menu itemAtIndex:2].image == nil));
+  // Markup that is no svg is no icon.
+  CHECK(([menu itemAtIndex:3].image == nil));
+  // A submenu's item has its icon too.
+  CHECK(([menu itemAtIndex:4].image != nil));
+  CHECK(([menu itemAtIndex:4].submenu != nil));
+}

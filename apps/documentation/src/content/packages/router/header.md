@@ -116,6 +116,21 @@ the bar as the system's own buttons are, and a button with a symbol and no title
 background: `hidesSharedBackground` draws a button with none, and `[sharesBackground]="false"`
 gives it glass of its own. `(press)` is a tap on the button.
 
+`icon` gives the button's picture as one value, as on
+[`<native-button>`](/packages/components/native-button): `{ sfSymbol }`, the same as
+`systemImageName`, which wins over it, or on macOS and Linux an icon's SVG markup, `{ svg }`, such
+as an `@ng-icons` icon, which the host draws in place of the title, tinted as a symbol is. iOS draws
+no SVG icon, and in development the item says so once.
+
+```html
+<native-header-item
+  type="right"
+  [icon]="{ svg: lucidePlus }"
+  accessibilityLabel="Add"
+  (press)="add()"
+/>
+```
+
 Bar buttons and items with content can share a side, in the order they are written. An item with
 anything written in it, an `@if` included, stays a view. `hidden` leaves any item out of the bar.
 Android's header has no bar buttons: it draws nothing for one, and says so once in development.
@@ -168,8 +183,9 @@ export class Notes {
 }
 ```
 
-An action takes `systemImageName`, `state` (`on`, `off` or `mixed`), `disabled`, `destructive` and
-`hidden`. A submenu takes `systemImageName`, `destructive`, `singleSelection` and `displayInline`,
+An action takes `systemImageName`, `svgIcon` (an icon's SVG markup, which macOS draws), `state`
+(`on`, `off` or `mixed`), `disabled`, `destructive` and `hidden`. A submenu takes
+`systemImageName`, `svgIcon`, `destructive`, `singleSelection` and `displayInline`,
 which draws its items as a section of the menu rather than behind a row of their own. Any change to
 a side's bar buttons, a menu's included, builds that side's items again, so a change made while a
 menu is open can close it.

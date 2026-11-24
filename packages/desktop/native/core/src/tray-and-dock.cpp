@@ -17,6 +17,19 @@ struct Listening : NativeModule {
 
 } // namespace
 
+uint32_t linuxTrayIconColor(std::string_view currentDesktop, bool dark) {
+  // White, or Adwaita's and Breeze's dark text: black at 80%.
+  constexpr uint32_t light = 0xffffffff, darkText = 0xcc000000;
+  while (!currentDesktop.empty()) {
+    auto colon = currentDesktop.find(':');
+    if (currentDesktop.substr(0, colon) == "GNOME") {
+      return light;
+    }
+    currentDesktop = colon == std::string_view::npos ? std::string_view() : currentDesktop.substr(colon + 1);
+  }
+  return dark ? light : darkText;
+}
+
 std::vector<TrayIcon> parseTrayIcons(const folly::dynamic &icons) {
   std::vector<TrayIcon> out;
   if (!icons.isArray()) {
@@ -30,6 +43,7 @@ std::vector<TrayIcon> parseTrayIcons(const folly::dynamic &icons) {
         .id = text(icon, "id"),
         .title = text(icon, "title"),
         .sfSymbol = text(icon, "sfSymbol"),
+        .svgIcon = text(icon, "svgIcon"),
         .image = text(icon, "image"),
         .tooltip = text(icon, "tooltip"),
     };

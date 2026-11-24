@@ -68,6 +68,7 @@ MenuItem parseItem(const folly::dynamic &entry) {
       .destructive = flag(entry, "destructive"),
       .subtitle = text(entry, "subtitle"),
       .sfSymbol = text(entry, "sfSymbol"),
+      .svgIcon = text(entry, "svgIcon"),
       .inlineItems = flag(entry, "inline"),
   };
   auto role = text(entry, "menuRole");

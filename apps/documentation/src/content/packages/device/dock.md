@@ -42,8 +42,14 @@ click opens; with none, a click fires `(press)`.
 ```
 
 `sfSymbol` draws a symbol that follows the menu bar's light or dark appearance; `image` names an
-image asset of the app's own. On Linux `image` names an icon in the icon theme, the app's own icon
-stands in without one, and `sfSymbol` is not drawn. A menu-bar-only app pairs it with
+image asset of the app's own. `icon` takes the picture as one value, as
+[`<native-button>`](/packages/components/native-button) does: `{ sfSymbol }`, or an icon's SVG
+markup, `{ svg }`, such as an `@ng-icons` icon, which macOS draws as it draws a symbol. On Linux
+`image` names an icon in the icon theme, the app's own icon stands in without one, and `sfSymbol` is
+not drawn. An SVG icon is drawn as a picture of its own, and its menu items' SVG icons too: the
+panel draws a picture as it is given, so the icon is light on GNOME, whose top bar is dark in either
+style, and elsewhere, as on KDE Plasma, whose panel follows the colour scheme, light in the dark
+style and dark in the light one. A menu-bar-only app pairs it with
 `provideMainWindow({ autoOpen: false })`; see [Windows](/packages/device/app-windows).
 
 ## Reference

@@ -26,6 +26,7 @@ void addItems(const std::vector<MenuItem> &items, std::vector<DbusMenuNode> &int
           .checked = item.checked,
           .itemId = item.items.empty() ? item.id : std::string(),
           .command = item.items.empty() && item.command != MenuCommand::None ? item.command : MenuCommand::AppItem,
+          .svgIcon = item.svgIcon,
       };
       addItems(item.items, node.children, next);
       into.push_back(std::move(node));

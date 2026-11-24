@@ -4,8 +4,8 @@
  * iOS and Android, and on a Linux desktop with no StatusNotifierWatcher, where nothing is drawn.
  *
  * The host contract, on the `NgNativeTray` module: `setIcons(icons)` takes every icon each time one
- * changes, as `{ id, title, sfSymbol, image, tooltip, menu }`, `menu` as `serializeMenu` makes it
- * (null for an icon with a press instead). It sends `{ type: 'press', icon }` and
+ * changes, as `{ id, title, sfSymbol, svgIcon, image, tooltip, menu }`, `menu` as `serializeMenu`
+ * makes it (null for an icon with a press instead). It sends `{ type: 'press', icon }` and
  * `{ type: 'menuSelect', icon, id }` on `ngNativeTray`.
  */
 import {
@@ -27,6 +27,12 @@ export interface TrayIconModel {
   readonly title?: string;
   /** An SF Symbol, drawn as a template image that follows the menu bar's appearance. */
   readonly sfSymbol?: string;
+  /**
+   * An icon's SVG markup, such as an `@ng-icons` icon, where there is no `sfSymbol`: on macOS a
+   * template image that follows the menu bar's appearance, and on Linux a picture in a colour for
+   * the panel.
+   */
+  readonly svgIcon?: string;
   /** An image asset's name, for an icon of the app's own. */
   readonly image?: string;
   readonly tooltip?: string;
@@ -39,6 +45,7 @@ export interface NativeTrayIcon {
   readonly id: string;
   readonly title?: string;
   readonly sfSymbol?: string;
+  readonly svgIcon?: string;
   readonly image?: string;
   readonly tooltip?: string;
   readonly menu: readonly NativeMenuEntry[] | null;

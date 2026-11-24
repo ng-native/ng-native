@@ -30,6 +30,8 @@ import {
 } from '@ng-native/device';
 import type { EngineNode } from '@ng-native/fabric';
 import { ControlledModel } from './controlled-model.ts';
+import type { ButtonIcon } from './native-button.ts';
+import { iconFields } from './svg-icon.ts';
 
 export { menuModelInTreeOrder, treeOrder } from '@ng-native/device';
 
@@ -94,8 +96,11 @@ export class MenuItem implements OnChanges {
   readonly subtitle = input<string>();
   /** An SF Symbol, on Apple's OSes. */
   readonly sfSymbol = input<string>();
-  /** A drawable resource's name, on Android. */
-  readonly icon = input<string>();
+  /**
+   * The picture: a drawable resource's name, on Android, or a `ButtonIcon` as `<native-button>`
+   * takes, `{ sfSymbol }`, `{ drawable }`, or on macOS an icon's SVG markup, `{ svg }`.
+   */
+  readonly icon = input<string | ButtonIcon>();
   readonly select = output<void>();
 
   private readonly handled = listened(this.select);
@@ -115,8 +120,7 @@ export class MenuItem implements OnChanges {
           ...(checked !== undefined && { checked }),
           ...(this.destructive() && { destructive: true }),
           ...(this.subtitle() && { subtitle: this.subtitle() }),
-          ...(this.sfSymbol() && { sfSymbol: this.sfSymbol() }),
-          ...(this.icon() && { icon: this.icon() }),
+          ...iconFields(this.sfSymbol(), this.icon(), 'menu-item', true),
           ...(own && { select: this.choose }),
         };
       }),
@@ -168,7 +172,8 @@ export class MenuGroup {
   readonly menuRole = input<MenuGroupRole>();
   readonly inline = input(false, { transform: booleanAttribute });
   readonly sfSymbol = input<string>();
-  readonly icon = input<string>();
+  /** A drawable's name, or a `ButtonIcon`, as on `<menu-item>`. */
+  readonly icon = input<string | ButtonIcon>();
   readonly destructive = input(false, { transform: booleanAttribute });
 
   private readonly own = inject(MENU_MODEL, { self: true });
@@ -180,8 +185,7 @@ export class MenuGroup {
         items: this.own.entries(),
         ...(this.menuRole() && { group: this.menuRole() }),
         ...(this.inline() && { inline: true }),
-        ...(this.sfSymbol() && { sfSymbol: this.sfSymbol() }),
-        ...(this.icon() && { icon: this.icon() }),
+        ...iconFields(this.sfSymbol(), this.icon(), 'menu-group', true),
         ...(this.destructive() && { destructive: true }),
       })),
       'menu-group',

@@ -42,8 +42,20 @@ item's `shortcut` still works from a hardware keyboard; Android lists them in it
 Shortcuts helper, under their menu's label.
 
 A `<menu-item>` takes `label`, `menuRole`, `shortcut`, `[disabled]`, `[(checked)]`, `destructive`,
-`subtitle`, `sfSymbol` (Apple's OSes) and `icon` (a drawable on Android), and fires `(select)`. A
-`<menu-group>` inside a menu is a submenu, or with `inline` a section of the menu it is in.
+`subtitle`, `sfSymbol` (Apple's OSes) and `icon`, and fires `(select)`. `icon` is a drawable's name
+on Android, or the picture as one value, as on
+[`<native-button>`](/packages/components/native-button): `{ sfSymbol }`, `{ drawable }`, or an
+icon's SVG markup, `{ svg }`, such as an `@ng-icons` icon, which macOS draws as it draws a symbol:
+
+```html
+<menu-item label="Rename" [icon]="{ svg: lucidePencil }" (select)="rename()" />
+```
+
+The same goes for a `<menu-bar>`, a `[contextMenu]`, a `[menu]`, a header bar button's menu, a tray
+icon's menu and the Dock's. GTK draws no icon beside a menu item's label, so on Linux a menu shows
+neither a symbol nor an SVG icon, except in a tray icon's menu, which the panel draws. iOS and
+Android show no SVG icon, and in development the item says so once. A `<menu-group>` inside a menu
+is a submenu, or with `inline` a section of the menu it is in, and takes `icon` too.
 
 ## Shortcuts
 

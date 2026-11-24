@@ -36,6 +36,7 @@ export {
 } from './native-header-palette.ts';
 export {
   NativeHeaderItem,
+  type HeaderItemIcon,
   type HeaderItemType,
   type HeaderMenu,
   type HeaderMenuAction,

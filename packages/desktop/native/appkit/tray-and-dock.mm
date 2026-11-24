@@ -1,6 +1,7 @@
 #import "tray-and-dock.h"
 
 #import "menu-bar.h"
+#import "svg-icon.h"
 
 #import <objc/runtime.h>
 
@@ -35,19 +36,27 @@ NSString *string(const std::string &s) {
   return out != nil ? out : @"";
 }
 
-NSImage *iconImage(const TrayIcon &icon) {
+// The side of an SVG icon in the status bar.
+constexpr CGFloat kTrayIconSize = 18;
+
+} // namespace
+
+NSImage *trayIconImage(const TrayIcon &icon) {
   NSImage *image = nil;
   if (!icon.sfSymbol.empty()) {
     image = [NSImage imageWithSystemSymbolName:string(icon.sfSymbol) accessibilityDescription:string(icon.tooltip)];
     // A template follows the menu bar's appearance, light or dark.
     [image setTemplate:YES];
+  } else if (NSImage *drawn = NGNSvgTemplateImage(icon.svgIcon, kTrayIconSize)) {
+    // A template image, as a symbol is, at the height the status bar draws one. A copy: the image
+    // is shared by every place that draws this markup at this size.
+    image = [drawn copy];
+    image.accessibilityDescription = string(icon.tooltip);
   } else if (!icon.image.empty()) {
     image = [NSImage imageNamed:string(icon.image)];
   }
   return image;
 }
-
-} // namespace
 
 AppKitTray::AppKitTray(std::function<void(const std::string &)> pressed,
                        std::function<void(const std::string &, const std::string &)> chose)
@@ -64,7 +73,7 @@ void AppKitTray::setIcons(std::vector<TrayIcon> icons) {
         item = [NSStatusBar.systemStatusBar statusItemWithLength:NSVariableStatusItemLength];
         items_[key] = item;
       }
-      NSImage *image = iconImage(icon);
+      NSImage *image = trayIconImage(icon);
       item.button.image = image;
       item.button.imagePosition = image != nil && !icon.title.empty() ? NSImageLeading : NSImageOnly;
       item.button.title = string(icon.title);

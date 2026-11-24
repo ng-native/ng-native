@@ -12,6 +12,10 @@
 
 namespace ngn::appkit {
 
+// What a status item shows for `icon`: its SF Symbol, its SVG icon or its image asset, the first
+// two as template images that follow the menu bar's appearance. Nil for none.
+NSImage *trayIconImage(const TrayIcon &icon);
+
 class AppKitTray final : public TrayBackend {
  public:
   // What a click does: `pressed` for an icon with no menu, `chose` for an item of one's menu.
