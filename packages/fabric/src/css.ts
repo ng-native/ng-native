@@ -5209,17 +5209,43 @@ export class StyleResolver {
    * A safe-area inset read where nothing has supplied it, which development is told of: the
    * declaration's own reference, or one inside it, as `calc()` of two tokens holds them.
    */
+  private noteInset(name: string): void {
+    if (name.startsWith('--safe-area-inset-')) this.onUnsuppliedInset!(name);
+  }
+
+  /**
+   * The insets a reference reads: the names a `var()` tries in turn up to the first one set, and a
+   * gradient stop's position. Whether its fallback is read, which it is only with none of them set.
+   */
+  private noteNamed(
+    record: Record<string, unknown>,
+    tokens: Readonly<Record<string, TokenValue>>,
+  ): boolean {
+    const position = record['positionReference'];
+    if (typeof position === 'string' && !(position in tokens)) this.noteInset(position);
+    const tried = [
+      record['reference'],
+      ...((record['alternatives'] as unknown[] | undefined) ?? []),
+    ];
+    for (const name of tried) {
+      if (typeof name !== 'string') continue;
+      if (name in tokens) return false;
+      this.noteInset(name);
+    }
+    return true;
+  }
+
   private noteInsets(value: unknown, tokens: Readonly<Record<string, TokenValue>>): void {
     if (value === null || typeof value !== 'object') return;
     if (Array.isArray(value)) {
       for (const part of value) this.noteInsets(part, tokens);
       return;
     }
-    const name = (value as { reference?: unknown }).reference;
-    if (typeof name === 'string' && name.startsWith('--safe-area-inset-') && !(name in tokens)) {
-      this.onUnsuppliedInset!(name);
+    const record = value as Record<string, unknown>;
+    const used = this.noteNamed(record, tokens);
+    for (const [key, part] of Object.entries(record)) {
+      if (used || (key !== 'fallback' && key !== 'fallbackToken')) this.noteInsets(part, tokens);
     }
-    for (const part of Object.values(value)) this.noteInsets(part, tokens);
   }
 
   /** One deferred declaration's value, from the tokens in scope and the node's own style. */

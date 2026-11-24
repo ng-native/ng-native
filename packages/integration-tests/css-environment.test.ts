@@ -207,6 +207,7 @@ describe('a safe-area inset with no provider to measure it', () => {
     ['in max()', 'max(var(--safe-area-inset-top, 0px), 16px)'],
     ['in calc() with another token', 'calc(var(--safe-area-inset-top, 0px) + var(--gap, 10px))'],
     ['as env()', 'env(safe-area-inset-top)'],
+    ['as a fallback that is read', 'var(--unset, var(--safe-area-inset-top, 0px))'],
   ]) {
     it(`says in development, once, that a provider publishes it: read ${form}`, async () => {
       const warned = await warnings('PlainBox', `#box { padding-top: ${value}; }`);
@@ -214,6 +215,21 @@ describe('a safe-area inset with no provider to measure it', () => {
       assert.match(warned[0]!, /var\(--safe-area-inset-top\)/);
     });
   }
+
+  it('says it of a gradient stop placed at an inset', async () => {
+    const warned = await warnings(
+      'PlainBox',
+      '#box { background-image: linear-gradient(red var(--safe-area-inset-top, 10px), blue); }',
+    );
+    assert.equal(warned.length, 1);
+    assert.match(warned[0]!, /var\(--safe-area-inset-top\)/);
+  });
+
+  it('says nothing of an inset in a fallback that is never read', async () => {
+    const css =
+      ':root { --gap: 4px; } #box { padding-top: var(--gap, calc(var(--safe-area-inset-top, 0px) * 2)); }';
+    assert.deepEqual(await warnings('PlainBox', css), []);
+  });
 
   it('says it once for an app that reads several', async () => {
     assert.equal((await warnings('DeviceTokenHost')).length, 1);
