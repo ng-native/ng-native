@@ -5221,8 +5221,14 @@ export class StyleResolver {
     record: Record<string, unknown>,
     tokens: Readonly<Record<string, TokenValue>>,
   ): boolean {
+    // A gradient stop's position is read only where the stop is painted: with a colour of its own,
+    // or its colour token set to one. With neither it is left out, position and all.
     const position = record['positionReference'];
-    if (typeof position === 'string' && !(position in tokens)) this.noteInset(position);
+    const colour =
+      typeof record['reference'] === 'string' ? tokens[record['reference']] : undefined;
+    const painted =
+      record['colour'] !== undefined || (colour !== undefined && colour.keyword !== 'none');
+    if (typeof position === 'string' && painted && !(position in tokens)) this.noteInset(position);
     const tried = [
       record['reference'],
       ...((record['alternatives'] as unknown[] | undefined) ?? []),

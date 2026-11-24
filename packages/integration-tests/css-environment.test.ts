@@ -225,6 +225,15 @@ describe('a safe-area inset with no provider to measure it', () => {
     assert.match(warned[0]!, /var\(--safe-area-inset-top\)/);
   });
 
+  it('says it of a stop at an inset only where the stop is painted', async () => {
+    const stops = (via: string) =>
+      `${via} #box { background-image: linear-gradient(red, var(--via) var(--safe-area-inset-top, 10px), blue); }`;
+    assert.deepEqual(await warnings('PlainBox', stops('')), []);
+    const warned = await warnings('PlainBox', stops(':root { --via: green; }'));
+    assert.equal(warned.length, 1);
+    assert.match(warned[0]!, /var\(--safe-area-inset-top\)/);
+  });
+
   it('says nothing of an inset in a fallback that is never read', async () => {
     const css =
       ':root { --gap: 4px; } #box { padding-top: var(--gap, calc(var(--safe-area-inset-top, 0px) * 2)); }';
