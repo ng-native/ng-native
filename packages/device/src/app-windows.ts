@@ -27,6 +27,7 @@ import {
   type Type,
 } from '@angular/core';
 import { AppLifecycle } from './app-lifecycle.ts';
+import { injectOs, isDesktopOs } from './os.ts';
 import { reactNative } from './react-native.ts';
 import { WINDOW_NAVIGATOR } from './window-navigator.ts';
 import { RESTORABLE_WINDOWS, WINDOW_RESTORE_STORE, type RestoredWindow } from './window-restore.ts';
@@ -47,9 +48,8 @@ export interface WindowOptions {
   readonly titleBar?: TitleBar;
   readonly fullScreen?: boolean;
   /**
-   * Whether the window's frame is saved and restored on the next launch. On by default, keyed by
-   * the route outlet, the `restoreKey`, or `main`; a component window without a `restoreKey` has
-   * no key and is not saved.
+   * Whether the window's frame is saved and restored on the next launch. On by default for the
+   * main window, route windows and component windows with a `restoreKey`.
    */
   readonly autosave?: boolean;
 }
@@ -75,6 +75,11 @@ export interface RouteWindowOptions extends WindowOptions {
 
 /** The main window's options, as `provideMainWindow` takes them. */
 export interface MainWindowOptions extends WindowOptions {
+  /**
+   * The main window's saved frame key on macOS and Linux. Defaults to `main`. Use a key distinct
+   * from the app's other windows, and change it to start with a fresh frame on the next launch.
+   */
+  readonly restoreKey?: string;
   /**
    * Whether the main window opens at launch. True by default; false for an app that lives in the
    * menu bar or the tray, which opens it with `AppWindows.openMain()`.
@@ -273,7 +278,7 @@ interface Open {
   /** How it opens again after a reload, or null where it does not. */
   restore: RestoredWindow | null;
   readonly guards: Set<CloseGuard>;
-  readonly outlet: string | null;
+  readonly outlet: string | undefined;
   readonly closedNow: () => void;
   mount: WindowMount | null;
   closing: boolean;
@@ -292,6 +297,7 @@ export class AppWindows {
   private readonly navigator = inject(WINDOW_NAVIGATOR);
   private readonly lifecycle = inject(AppLifecycle);
   private readonly mainOptions = inject(MAIN_WINDOW_OPTIONS);
+  private readonly desktop = isDesktopOs(injectOs());
   private readonly store = inject(WINDOW_RESTORE_STORE);
   private readonly restorable = new Map(
     (inject(RESTORABLE_WINDOWS, { optional: true }) ?? []).flatMap((components) =>
@@ -432,10 +438,11 @@ export class AppWindows {
       const existing = this.byKey('main');
       if (existing) return this.front(existing);
       if (!this.main) return null;
-      const { autoOpen: _autoOpen, ...options } = this.mainOptions;
+      const { autoOpen: _autoOpen, restoreKey, ...options } = this.mainOptions;
       return this.openWindow(this.main.component, {
         ...options,
         key: 'main',
+        frameKey: this.desktop ? restoreKey : undefined,
         inputs: this.main.inputs,
         ...(this.main.bindings && { bindings: this.main.bindings }),
         main: true,
@@ -537,6 +544,7 @@ export class AppWindows {
     component: Type<unknown>,
     options: WindowOptions & {
       key: string | null;
+      frameKey?: string | undefined;
       inputs?: Readonly<Record<string, unknown>> | undefined;
       bindings?: Binding[];
       outlet?: string;
@@ -552,6 +560,7 @@ export class AppWindows {
     this.refuseWhileQuitting();
     const {
       key,
+      frameKey = key,
       inputs,
       bindings,
       outlet,
@@ -564,7 +573,7 @@ export class AppWindows {
     } = options;
     const surface = await native.open({
       ...frame,
-      key: autosave === false ? null : key,
+      key: autosave === false ? null : frameKey,
       title,
     });
     if (surface === null) return null;
@@ -575,7 +584,7 @@ export class AppWindows {
       native.close(surface);
       this.refuseWhileQuitting();
     }
-    const open = this.track(surface, key, outlet ?? null, title);
+    const open = this.track(surface, key, outlet, title);
     open.restore = restore?.() ?? null;
     this.remember();
     this.mountIn(open, mounter, component, { inputs, bindings, providers, main });
@@ -613,7 +622,12 @@ export class AppWindows {
   }
 
   /** Make the handle for a window that has opened on `surface`, and list it. */
-  private track(surface: number, key: string | null, outlet: string | null, title: string): Open {
+  private track(
+    surface: number,
+    key: string | null,
+    outlet: string | undefined,
+    title: string,
+  ): Open {
     const native = this.native!;
     const guards = new Set<CloseGuard>();
     const titleSignal = signal(title);

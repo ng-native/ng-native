@@ -41,6 +41,19 @@ The options every window takes are `title`, `width`, `height`, `minWidth`, `minH
 outlet or its `restoreKey`; `autosave: false` turns that off. On Linux only the size comes back,
 maximised or full screen when the window was, and never a place: the desktop places each window.
 
+On macOS and Linux, a resizable main window opens at its saved size when there is one. Use a new
+`restoreKey` when changing the defaults should give the window a fresh frame, for example
+`provideMainWindow({ width: 1280, height: 800, restoreKey: 'workspace-v2' })`. Choose a key
+distinct from the app's other window keys. The new frame is saved under that key and restored on
+later launches. `AppWindows.openMain()` still opens the main window, whose handle has the key
+`main`.
+
+On macOS, bundled dev runs and packaged apps keep window frames in the defaults domain named by
+their bundle identifier. Inspect it with `defaults read <bundle-id>`. A window frame uses the key
+`NgNativeWindowFrame <key>`, and split view geometry is saved by AppKit under
+`NSSplitView Subview Frames <autosaveName>`. Older dev runs that launched the bare host put frames
+in the `ngn-macos` domain under `<app-id>.NgNativeWindowFrame <key>`.
+
 On Linux the title bar is the window's libadwaita header bar. `'default'` keeps the content below
 it; `'transparent'` makes the bar flat and runs the content under it, clear of it by the safe area's
 top inset; `'hidden'` does the same and hides the window's title. The window controls stay in

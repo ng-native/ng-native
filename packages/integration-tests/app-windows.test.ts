@@ -196,6 +196,42 @@ describe('the main window', () => {
     assert.equal(app.componentRef.instance?.constructor, fixtures['MainWindowApp']);
   });
 
+  for (const os of ['macos', 'linux'] as const) {
+    it(`uses the configured frame key for the main window on ${os}`, async () => {
+      const host = fakeHost();
+      const { windows } = start('MainWindowApp', host, [
+        { provide: OS, useValue: os },
+        provideMainWindow({ restoreKey: 'workspace-v2', width: 1280, height: 800 }),
+      ]);
+      await settle();
+      assert.deepEqual(host.opened, [{ key: 'workspace-v2', width: 1280, height: 800, title: '' }]);
+      const main = windows.windows()[0];
+      assert.equal(main?.key, 'main');
+      assert.equal(await windows.openMain(), main);
+      assert.equal(host.opened.length, 1);
+    });
+  }
+
+  it('does not send a main window frame key when autosave is disabled', async () => {
+    const host = fakeHost();
+    const { windows } = start('MainWindowApp', host, [
+      { provide: OS, useValue: 'macos' },
+      provideMainWindow({ autoOpen: false, restoreKey: 'workspace-v2', autosave: false }),
+    ]);
+    assert.equal((await windows.openMain())?.key, 'main');
+    assert.deepEqual(host.opened, [{ key: null, title: '' }]);
+  });
+
+  it('keeps the main scene key on iPadOS', async () => {
+    const host = fakeHost();
+    start('MainWindowApp', host, [
+      { provide: OS, useValue: 'ios' },
+      provideMainWindow({ restoreKey: 'workspace-v2' }),
+    ]);
+    await settle();
+    assert.deepEqual(host.opened, [{ key: 'main', title: '' }]);
+  });
+
   it('opens again on a Dock reopen once it has closed, and the app keeps running', async () => {
     const host = fakeHost();
     const { fabric, windows } = start('MainWindowApp', host);
@@ -843,19 +879,24 @@ describe('after a reload or a relaunch', () => {
     );
   });
 
-  it('opens the main window again under autoOpen: false where it was open', async () => {
-    const { store } = memoryStore();
+  it('reopens a manually opened main window using the new restoreKey', async () => {
+    const { store, saved } = memoryStore();
     const first = launch('MainWindowApp', store, [provideMainWindow({ autoOpen: false })]);
     await settle();
     assert.deepEqual(first.host.opened, []);
     await first.windows.openMain();
+    assert.deepEqual(saved(), [{ kind: 'main' }]);
     reload(first.app);
-    const second = launch('MainWindowApp', store, [provideMainWindow({ autoOpen: false })]);
+    const second = launch('MainWindowApp', store, [
+      { provide: OS, useValue: 'macos' },
+      provideMainWindow({ autoOpen: false, restoreKey: 'workspace-v2' }),
+    ]);
     await settle();
     assert.deepEqual(
       second.host.opened.map((request) => request.key),
-      ['main'],
+      ['workspace-v2'],
     );
+    assert.equal(second.windows.windows()[0]?.key, 'main');
   });
 
   it('opens a route window again at the path it last opened', async () => {
