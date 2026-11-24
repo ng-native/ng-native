@@ -81,6 +81,21 @@ jobs:
             sleep 15
           done' > "$RUNNER_TEMP/simulator-logs/load.txt" 2>&1 &
 
+      # The simulator the tests pick, the first iPhone on the newest iOS, booted here so the tests
+      # start once the setup that follows its first boot has settled: launched into that, the app
+      # has missed Metro and timed out its first test. Not when the app needs building, which takes
+      # longer than the setup and runs beside the boot.
+      - name: Boot the simulator and wait for the runner's load to fall
+        if: steps.cached.outputs.cache-hit == 'true'
+        run: |
+          udid=$(xcrun simctl list devices available -j | jq -r '
+            .devices | to_entries | map(select(.key | test("SimRuntime\\.iOS")))
+            | sort_by(.key | capture("iOS-(?<major>\\d+)-(?<minor>\\d+)") | [(.major | tonumber), (.minor | tonumber)])
+            | last | .value | map(select(.name | startswith("iPhone"))) | first | .udid')
+          xcrun simctl boot "$udid" || true
+          xcrun simctl bootstatus "$udid" -b > /dev/null
+          examples/canary/scripts/wait-for-load.sh
+
       # Under the job's limit, so a run that hangs fails here and the logs below are still collected:
       # a job that reaches its own limit is cancelled, and runs no step after.
       - name: Run the device tests on a simulator

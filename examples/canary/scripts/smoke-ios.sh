@@ -48,8 +48,14 @@ step "creating a $type on $runtime"
 udid=$(xcrun simctl create canary-smoke "$type" "$runtime") || exit 1
 trap 'xcrun simctl shutdown "$udid" 2>/dev/null; xcrun simctl delete "$udid"' EXIT
 
+# A first boot is followed by minutes of setup inside the simulator that starve the runner, and a
+# tap made then has been dropped: so the flow waits for the load to fall, for at most three minutes.
+boot() {
+  xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b | boot_phases || return 1
+  "$(dirname "$0")/wait-for-load.sh"
+}
 step "booting it"
-xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b | boot_phases || exit 1
+boot || exit 1
 # A fresh simulator posts follow-up notifications of its own, "Ready for Apple Intelligence" among
 # them, at any point after it boots. The banner covers the top of the screen, so
 # a tap on a header button lands on the banner and opens Settings over the app. followupd posts
@@ -100,7 +106,7 @@ if [ "$status" -ne 0 ] && grep -qE "$lost" "$out/console.log" "$out/maestro.log"
   if xcrun simctl list devices "$udid" | grep -q '(Booted)'; then
     xcrun simctl shutdown "$udid" || exit 1
   fi
-  xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b | boot_phases || exit 1
+  boot || exit 1
   walk "$out/retry"
   status=$?
 fi

@@ -26,13 +26,23 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
     env:
       LINK: canary://navigation
       SHOWS: 'push.*'
-- tapOn:
-    text: 'push.*'
-    retryTapIfNoChange: true
-- runFlow:
-    file: ../subflows/wait-for.yaml
-    env:
-      SHOWS: 'Detail'
+# A starved CI simulator has dropped the tap on push, and retryTapIfNoChange saw the screen change
+# anyway, so the tap is tried again until Detail is there. A tap that landed late leaves no push to
+# tap, so a retry then only waits.
+- retry:
+    maxRetries: 2
+    commands:
+      - runFlow:
+          when:
+            visible: 'push.*'
+          commands:
+            - tapOn:
+                text: 'push.*'
+                retryTapIfNoChange: true
+      - runFlow:
+          file: ../subflows/wait-for.yaml
+          env:
+            SHOWS: 'Detail'
 # A starved CI simulator has dropped the tap on the sheet's Done, and retryTapIfNoChange saw the
 # screen change anyway as the sheet settled, so the tap is tried again until the sheet is gone. A
 # tap that landed late leaves no Done to tap, so a retry then only waits.
@@ -50,9 +60,23 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
           file: ../subflows/wait-for.yaml
           env:
             SHOWS: 'reset to home.*'
-- tapOn:
-    text: 'reset to home.*'
-    retryTapIfNoChange: true
+# The same for reset to home. The navigation page shows 'Angular Native' too, as its back button,
+# so the tap is retried until reset to home is gone.
+- retry:
+    maxRetries: 2
+    commands:
+      - runFlow:
+          when:
+            visible: 'reset to home.*'
+          commands:
+            - tapOn:
+                text: 'reset to home.*'
+                retryTapIfNoChange: true
+      - waitForAnimationToEnd:
+          timeout: 5000
+      - extendedWaitUntil:
+          notVisible: 'reset to home.*'
+          timeout: 18000
 - runFlow:
     file: ../subflows/wait-for.yaml
     env:

@@ -53,8 +53,8 @@ jobs:
     if: github.event.pull_request.draft != true
     runs-on: macos-latest
     # The build, cold, is most of it; with a cached app, the bundle, simulator and flow are a few
-    # minutes.
-    timeout-minutes: 40
+    # minutes, and up to three more while the simulator's first boot settles (smoke-ios.sh).
+    timeout-minutes: 45
     env:
       # Read by the generated Podfile: pods are built through ccache, so a run recompiles only the
       # C++ whose inputs changed since the cache was saved.
