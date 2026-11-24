@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ngn {
 
@@ -52,17 +54,72 @@ void SafeAreas::removeContainer(Tag root) {
   containers_.erase(root);
 }
 
+namespace {
+
+using facebook::react::Float;
+
+// Where one edge of a view goes when the content edge of a safe-area view it is in moves from
+// `mounted` to `pending`, for a top or left edge (`inward` 1, the content edge moving in as it
+// grows) or a bottom or right one (-1): a view at the content edge, or past it, moves with it, and
+// one inside it stays, unless the content edge moves in past it and pushes it along.
+Float follow(Float edge, Float mounted, Float pending, Float inward) {
+  if ((edge - mounted) * inward <= 0.01) {
+    return edge + pending - mounted;
+  }
+  return inward > 0 ? std::max(edge, pending) : std::min(edge, pending);
+}
+
+// Where a view mounted at `frame` will be once the safe-area view it is in has its content box
+// moved from `mounted` to `pending`, every rect in their container.
+Rect placedIn(const Rect &frame, const Rect &mounted, const Rect &pending) {
+  Float left = follow(frame.getMinX(), mounted.getMinX(), pending.getMinX(), 1);
+  Float top = follow(frame.getMinY(), mounted.getMinY(), pending.getMinY(), 1);
+  Float right = follow(frame.getMaxX(), mounted.getMaxX(), pending.getMaxX(), -1);
+  Float bottom = follow(frame.getMaxY(), mounted.getMaxY(), pending.getMaxY(), -1);
+  return {{left, top}, {std::max<Float>(0, right - left), std::max<Float>(0, bottom - top)}};
+}
+
+} // namespace
+
 bool SafeAreas::settle(const ViewTree &tree) {
+  // Outer views before the views inside them. The views' new insets reach the layout only in the
+  // commit after this, so a view inside another is measured from where the other's new insets
+  // will put it, not from where it is mounted: there, it would be told the insets the outer view
+  // is about to take, and the commit would apply them twice before the next one settles.
+  std::vector<std::pair<int, Tag>> order;
+  order.reserve(tracked_.size());
+  for (const auto &entry : tracked_) {
+    int depth = 0;
+    for (const auto *node = tree.find(entry.first); node != nullptr; node = tree.find(node->parent)) {
+      ++depth;
+    }
+    order.emplace_back(depth, entry.first);
+  }
+  std::sort(order.begin(), order.end());
+  // Each safe-area view's content box this pass, in its container: where it is mounted, and where
+  // its new insets and its ancestors' will put it.
+  struct Content {
+    Rect mounted;
+    Rect pending;
+  };
+  std::unordered_map<Tag, Content> contents;
+
   bool told = false;
-  for (auto &[tag, tracked] : tracked_) {
-    // The container the view is in: the nearest ancestor with metrics.
+  for (auto [depth, tag] : order) {
+    auto &tracked = tracked_.at(tag);
+    // The container the view is in: the nearest ancestor with metrics. And the nearest safe-area
+    // view it is in below that.
     const ContainerInsets *container = nullptr;
+    const Content *within = nullptr;
     Tag root = -1;
     for (Tag at = tag; at != -1;) {
       if (auto it = containers_.find(at); it != containers_.end()) {
         container = &it->second;
         root = at;
         break;
+      }
+      if (auto it = contents.find(at); within == nullptr && it != contents.end()) {
+        within = &it->second;
       }
       const auto *node = tree.find(at);
       at = node == nullptr ? -1 : node->parent;
@@ -72,18 +129,21 @@ bool SafeAreas::settle(const ViewTree &tree) {
     if (node == nullptr || !origin) {
       continue;
     }
-    Rect frame{*origin, node->view.layoutMetrics.frame.size};
+    Rect mountedFrame{*origin, node->view.layoutMetrics.frame.size};
+    Rect frame = within == nullptr ? mountedFrame : placedIn(mountedFrame, within->mounted, within->pending);
     // A view that moves itself by its insets is measured from where it would be without them, as
     // iOS measures it against its provider; from where the margin put it, it would be told it is
     // clear, drop the margin, and move back.
-    Rect unmoved = frame;
-    if (auto margin = tracked.kind == Kind::View ? appliedMargin(*node) : std::nullopt) {
-      unmoved.origin.x -= margin->left;
-      unmoved.origin.y -= margin->top;
-      unmoved.size.width += margin->left + margin->right;
-      unmoved.size.height += margin->top + margin->bottom;
-    }
+    auto mounted = tracked.kind == Kind::View ? applied(*node, std::nullopt) : SafeAreaApplied{};
+    Rect unmoved = outsetBy(frame, mounted.margin);
     auto insets = insetsWithin(*container, unmoved);
+    if (tracked.kind == Kind::View) {
+      auto pending = applied(*node, insets);
+      contents[tag] = {
+          .mounted = insetBy(mountedFrame, mounted.padding),
+          .pending = insetBy(insetBy(unmoved, pending.margin), pending.padding),
+      };
+    }
     bool changed = !tracked.known || insets != tracked.insets ||
         (tracked.kind == Kind::Provider &&
          (frame != tracked.frame || container->titlebarLeading != tracked.titlebarLeading ||
@@ -140,13 +200,13 @@ void SafeAreas::setStateInsets(const ViewTree::Node &view, EdgeInsets insets) {
 
 namespace ngn {
 
-std::optional<EdgeInsets> SafeAreas::appliedMargin(const ViewTree::Node &view) const {
-  for (const auto &read : libraryGlue().safeAreaMargins) {
-    if (auto margin = read(view.view)) {
-      return margin;
+SafeAreaApplied SafeAreas::applied(const ViewTree::Node &view, std::optional<EdgeInsets> insets) const {
+  for (const auto &read : libraryGlue().safeAreaApplied) {
+    if (auto applied = read(view.view, insets)) {
+      return *applied;
     }
   }
-  return std::nullopt;
+  return {};
 }
 
 } // namespace ngn

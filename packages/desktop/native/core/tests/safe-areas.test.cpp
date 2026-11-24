@@ -22,14 +22,35 @@ std::string text(EdgeInsets i) {
   return out.str();
 }
 
+// How a view applies the insets it is told, as a library's glue reads it from its props: as a
+// margin that moves the view, or as padding that moves its content, on the edges weighted 1.
+struct Applies {
+  bool padding{false};
+  EdgeInsets edges{.left = 1, .top = 1, .right = 1, .bottom = 1};
+};
+
 struct RecordingAreas final : ngn::SafeAreas {
   Lines *out;
-  // The margin each view's state applies, as a library's glue reads it from the mounted state.
-  std::map<Tag, EdgeInsets> *margins;
-  RecordingAreas(Lines *out, std::map<Tag, EdgeInsets> *margins) : out(out), margins(margins) {}
-  std::optional<EdgeInsets> appliedMargin(const ngn::ViewTree::Node &node) const override {
-    auto it = margins->find(node.view.tag);
-    return it == margins->end() ? std::nullopt : std::optional(it->second);
+  std::map<Tag, Applies> *applies;
+  // The insets each view's mounted state holds.
+  std::map<Tag, EdgeInsets> *mounted;
+  RecordingAreas(Lines *out, std::map<Tag, Applies> *applies, std::map<Tag, EdgeInsets> *mounted)
+      : out(out), applies(applies), mounted(mounted) {}
+  ngn::SafeAreaApplied applied(const ngn::ViewTree::Node &node, std::optional<EdgeInsets> insets) const override {
+    auto how = applies->find(node.view.tag);
+    if (how == applies->end()) {
+      return {};
+    }
+    auto state = mounted->find(node.view.tag);
+    EdgeInsets told = insets ? *insets : state == mounted->end() ? EdgeInsets{} : state->second;
+    const auto &w = how->second.edges;
+    EdgeInsets added{
+        .left = told.left * w.left,
+        .top = told.top * w.top,
+        .right = told.right * w.right,
+        .bottom = told.bottom * w.bottom,
+    };
+    return how->second.padding ? ngn::SafeAreaApplied{.padding = added} : ngn::SafeAreaApplied{.margin = added};
   }
   void emitInsetsChange(const ngn::ViewTree::Node &node, EdgeInsets insets, Rect frame, double leading, double trailing)
       override {
@@ -48,10 +69,11 @@ struct RecordingAreas final : ngn::SafeAreas {
 
 struct Fixture {
   Lines sent;
-  std::map<Tag, EdgeInsets> margins;
+  std::map<Tag, Applies> applies;
+  std::map<Tag, EdgeInsets> mounted;
   std::shared_ptr<FakeBackend> backend = std::make_shared<FakeBackend>();
   std::shared_ptr<ngn::MountingManager> mounting = std::make_shared<ngn::MountingManager>(
-      backend, backend, nullptr, std::make_unique<RecordingAreas>(&sent, &margins));
+      backend, backend, nullptr, std::make_unique<RecordingAreas>(&sent, &applies, &mounted));
 
   void mount(ShadowViewMutationList mutations) {
     sent.clear();
@@ -205,13 +227,14 @@ TEST_CASE("a view that applies its insets as a margin keeps them once the margin
   Fixture f;
   f.mounting->setContainerInsets(1, kWindow);
   auto view = shadowView(4, "RNSSafeAreaView", {{0, 0}, {800, 600}});
+  f.applies[4] = {};
   f.mount({ShadowViewMutation::CreateMutation(view), ShadowViewMutation::InsertMutation(1, view, 0)});
   CHECK(f.sent == Lines{"view 4 52,0,0,0"});
 
   // The state's commit lands: 52 points of margin, and the view below the toolbar.
   auto moved = view;
   moved.layoutMetrics.frame = {{0, 52}, {800, 548}};
-  f.margins[4] = {.left = 0, .top = 52, .right = 0, .bottom = 0};
+  f.mounted[4] = {.left = 0, .top = 52, .right = 0, .bottom = 0};
   f.mount({ShadowViewMutation::UpdateMutation(view, moved, 1)});
   CHECK(f.sent.empty());
 
@@ -226,13 +249,14 @@ TEST_CASE("the safe areas are settled once a mount tells no view anything new") 
   Fixture f;
   f.mounting->setContainerInsets(1, kWindow);
   auto view = shadowView(4, "RNSSafeAreaView", {{0, 0}, {800, 600}});
+  f.applies[4] = {};
   f.mount({ShadowViewMutation::CreateMutation(view), ShadowViewMutation::InsertMutation(1, view, 0)});
   CHECK_FALSE(f.mounting->safeAreasSettled());
 
   // The state's commit lands and moves the view: nothing new to say.
   auto moved = view;
   moved.layoutMetrics.frame = {{0, 52}, {800, 548}};
-  f.margins[4] = {.left = 0, .top = 52, .right = 0, .bottom = 0};
+  f.mounted[4] = {.left = 0, .top = 52, .right = 0, .bottom = 0};
   f.mount({ShadowViewMutation::UpdateMutation(view, moved, 1)});
   CHECK(f.mounting->safeAreasSettled());
 
@@ -241,4 +265,176 @@ TEST_CASE("the safe areas are settled once a mount tells no view anything new") 
   CHECK_FALSE(f.mounting->safeAreasSettled());
   f.mounting->setContainerInsets(1, {.size = {800, 600}, .insets = {.left = 0, .top = 60, .right = 0, .bottom = 0}});
   CHECK_FALSE(f.mounting->safeAreasSettled());
+}
+
+TEST_CASE("a view inside one that moves by its insets is measured from where that margin will put it") {
+  // The native stack's inset view (RNSSafeAreaView, top edge) with a page's own
+  // screen-safe-area-view inside it. Measured where it is mounted, before the outer view's margin
+  // lands, the inner one would be told the toolbar too, and the page would draw one commit at
+  // twice the toolbar's height before settling. The inner view's tag is the lower one, so the
+  // order the views are kept in decides nothing.
+  Fixture f;
+  f.mounting->setContainerInsets(1, kWindow);
+  auto outer = shadowView(4, "RNSSafeAreaView", {{0, 0}, {800, 600}});
+  auto inner = shadowView(3, "RNSSafeAreaView", {{0, 0}, {800, 600}});
+  f.applies[4] = {.edges = {.left = 0, .top = 1, .right = 0, .bottom = 0}};
+  f.applies[3] = {.edges = {.left = 0, .top = 1, .right = 0, .bottom = 0}};
+  f.mount({
+      ShadowViewMutation::CreateMutation(outer),
+      ShadowViewMutation::CreateMutation(inner),
+      ShadowViewMutation::InsertMutation(4, inner, 0),
+      ShadowViewMutation::InsertMutation(1, outer, 0),
+  });
+  std::sort(f.sent.begin(), f.sent.end());
+  CHECK(f.sent == Lines{"view 3 0,0,0,0", "view 4 52,0,0,0"});
+
+  // The outer view's margin lands: nothing new for either.
+  auto outerMoved = outer;
+  outerMoved.layoutMetrics.frame = {{0, 52}, {800, 548}};
+  auto innerMoved = inner;
+  innerMoved.layoutMetrics.frame = {{0, 0}, {800, 548}};
+  f.mounted[4] = {.left = 0, .top = 52, .right = 0, .bottom = 0};
+  f.mount({
+      ShadowViewMutation::UpdateMutation(outer, outerMoved, 0),
+      ShadowViewMutation::UpdateMutation(inner, innerMoved, 0),
+  });
+  CHECK(f.sent.empty());
+
+  // The toolbar grows: the outer view takes all of it, the inner one none.
+  f.sent.clear();
+  f.mounting->setContainerInsets(1, {.size = {800, 600}, .insets = {.left = 0, .top = 60, .right = 0, .bottom = 0}});
+  CHECK(f.sent == Lines{"view 4 60,0,0,0"});
+}
+
+TEST_CASE("a view inside one that pads its content by its insets is measured from where that padding will put it") {
+  // react-native-safe-area-context's view in padding mode does not move, but its content does.
+  Fixture f;
+  f.mounting->setContainerInsets(1, kWindow);
+  auto outer = shadowView(4, "RNCSafeAreaView", {{0, 0}, {800, 600}});
+  auto inner = shadowView(3, "RNSSafeAreaView", {{0, 0}, {800, 600}});
+  f.applies[4] = {.padding = true};
+  f.applies[3] = {};
+  f.mount({
+      ShadowViewMutation::CreateMutation(outer),
+      ShadowViewMutation::CreateMutation(inner),
+      ShadowViewMutation::InsertMutation(4, inner, 0),
+      ShadowViewMutation::InsertMutation(1, outer, 0),
+  });
+  std::sort(f.sent.begin(), f.sent.end());
+  CHECK(f.sent == Lines{"view 3 0,0,0,0", "view 4 52,0,0,0"});
+
+  // The padding lands and the inner view is below the toolbar: nothing new.
+  auto innerMoved = inner;
+  innerMoved.layoutMetrics.frame = {{0, 52}, {800, 548}};
+  f.mounted[4] = {.left = 0, .top = 52, .right = 0, .bottom = 0};
+  f.mount({ShadowViewMutation::UpdateMutation(inner, innerMoved, 0)});
+  CHECK(f.sent.empty());
+
+  // The toolbar goes: the outer view's content moves up with it, and the inner view stays clear.
+  f.sent.clear();
+  f.mounting->setContainerInsets(1, {.size = {800, 600}, .insets = {.left = 0, .top = 28, .right = 0, .bottom = 0}});
+  CHECK(f.sent == Lines{"view 4 28,0,0,0"});
+}
+
+TEST_CASE("an outer view's new insets move only the inner views at the edge they inset") {
+  // A window with a bottom inset too. The outer view insets its top alone; a bar pinned to its
+  // bottom keeps its place and its bottom inset, and a banner under its top edge is pushed clear.
+  Fixture f;
+  f.mounting->setContainerInsets(1, {.size = {800, 600}, .insets = {.left = 0, .top = 52, .right = 0, .bottom = 20}});
+  auto outer = shadowView(4, "RNSSafeAreaView", {{0, 0}, {800, 600}});
+  auto bar = shadowView(3, "RNSSafeAreaView", {{0, 550}, {800, 50}});
+  auto banner = shadowView(5, "RNSSafeAreaView", {{0, 30}, {800, 40}});
+  f.applies[4] = {.edges = {.left = 0, .top = 1, .right = 0, .bottom = 0}};
+  f.applies[3] = {};
+  f.applies[5] = {};
+  f.mount({
+      ShadowViewMutation::CreateMutation(outer),
+      ShadowViewMutation::CreateMutation(bar),
+      ShadowViewMutation::CreateMutation(banner),
+      ShadowViewMutation::InsertMutation(4, bar, 0),
+      ShadowViewMutation::InsertMutation(4, banner, 1),
+      ShadowViewMutation::InsertMutation(1, outer, 0),
+  });
+  std::sort(f.sent.begin(), f.sent.end());
+  CHECK(f.sent == Lines{"view 3 0,0,20,0", "view 4 52,0,20,0", "view 5 0,0,0,0"});
+}
+
+TEST_CASE("a provider inside a view that moves by its insets hears where it will be") {
+  Fixture f;
+  f.mounting->setContainerInsets(1, kWindow);
+  auto outer = shadowView(4, "RNSSafeAreaView", {{0, 0}, {800, 600}});
+  auto provider = shadowView(2, "RNCSafeAreaProvider", {{0, 0}, {800, 600}});
+  f.applies[4] = {.edges = {.left = 0, .top = 1, .right = 0, .bottom = 0}};
+  f.mount({
+      ShadowViewMutation::CreateMutation(outer),
+      ShadowViewMutation::CreateMutation(provider),
+      ShadowViewMutation::InsertMutation(4, provider, 0),
+      ShadowViewMutation::InsertMutation(1, outer, 0),
+  });
+  std::sort(f.sent.begin(), f.sent.end());
+  CHECK(f.sent == Lines{"provider 2 0,0,0,0 at 0,52 leading 78", "view 4 52,0,0,0"});
+
+  // A commit before the margin lands, and the one it lands in, say nothing new.
+  auto box = shadowView(5, "View", {{0, 0}, {10, 10}});
+  f.mount({ShadowViewMutation::CreateMutation(box), ShadowViewMutation::InsertMutation(2, box, 0)});
+  CHECK(f.sent.empty());
+  auto outerMoved = outer;
+  outerMoved.layoutMetrics.frame = {{0, 52}, {800, 548}};
+  auto providerMoved = provider;
+  providerMoved.layoutMetrics.frame = {{0, 0}, {800, 548}};
+  f.mounted[4] = {.left = 0, .top = 52, .right = 0, .bottom = 0};
+  f.mount({
+      ShadowViewMutation::UpdateMutation(outer, outerMoved, 0),
+      ShadowViewMutation::UpdateMutation(provider, providerMoved, 0),
+  });
+  CHECK(f.sent.empty());
+}
+
+TEST_CASE("a view pulled under the toolbar inside a padded view keeps its overlap as the padding changes") {
+  // A negative margin puts the inner view 12 points under the toolbar, inside a view whose padding
+  // has already landed. The toolbar grows: the padding moves the inner view down with it, so its
+  // overlap stays 12 and it is told nothing new.
+  Fixture f;
+  f.mounting->setContainerInsets(1, kWindow);
+  auto outer = shadowView(4, "RNCSafeAreaView", {{0, 0}, {800, 600}});
+  auto inner = shadowView(3, "RNSSafeAreaView", {{0, 40}, {800, 560}});
+  f.applies[4] = {.padding = true};
+  f.applies[3] = {};
+  f.mounted[4] = {.left = 0, .top = 52, .right = 0, .bottom = 0};
+  f.mount({
+      ShadowViewMutation::CreateMutation(outer),
+      ShadowViewMutation::CreateMutation(inner),
+      ShadowViewMutation::InsertMutation(4, inner, 0),
+      ShadowViewMutation::InsertMutation(1, outer, 0),
+  });
+  std::sort(f.sent.begin(), f.sent.end());
+  CHECK(f.sent == Lines{"view 3 12,0,0,0", "view 4 52,0,0,0"});
+
+  f.sent.clear();
+  f.mounting->setContainerInsets(1, {.size = {800, 600}, .insets = {.left = 0, .top = 60, .right = 0, .bottom = 0}});
+  CHECK(f.sent == Lines{"view 4 60,0,0,0"});
+}
+
+TEST_CASE("a view is placed by the nearest safe-area view it is in") {
+  // Three deep: the outer view's margin has landed, the middle one insets its left edge alone and
+  // is about to move by it, and the innermost one moves with the middle one, clear of the left.
+  Fixture f;
+  f.mounting->setContainerInsets(1, {.size = {800, 600}, .insets = {.left = 10, .top = 52, .right = 0, .bottom = 0}});
+  auto outer = shadowView(4, "RNSSafeAreaView", {{0, 52}, {800, 548}});
+  auto middle = shadowView(5, "RNSSafeAreaView", {{0, 0}, {800, 548}});
+  auto inner = shadowView(3, "RNSSafeAreaView", {{0, 0}, {800, 548}});
+  f.applies[4] = {.edges = {.left = 0, .top = 1, .right = 0, .bottom = 0}};
+  f.applies[5] = {.edges = {.left = 1, .top = 0, .right = 0, .bottom = 0}};
+  f.applies[3] = {.edges = {.left = 1, .top = 0, .right = 0, .bottom = 0}};
+  f.mounted[4] = {.left = 10, .top = 52, .right = 0, .bottom = 0};
+  f.mount({
+      ShadowViewMutation::CreateMutation(outer),
+      ShadowViewMutation::CreateMutation(middle),
+      ShadowViewMutation::CreateMutation(inner),
+      ShadowViewMutation::InsertMutation(5, inner, 0),
+      ShadowViewMutation::InsertMutation(4, middle, 0),
+      ShadowViewMutation::InsertMutation(1, outer, 0),
+  });
+  std::sort(f.sent.begin(), f.sent.end());
+  CHECK(f.sent == Lines{"view 3 0,0,0,0", "view 4 52,0,0,10", "view 5 0,0,0,10"});
 }

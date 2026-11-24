@@ -9,6 +9,7 @@
 // their shadow nodes turn into padding. Each is told only when its insets change.
 #pragma once
 
+#include "ngn/library-glue.h"
 #include "ngn/view-tree.h"
 
 #include <react/renderer/graphics/RectangleEdges.h>
@@ -72,9 +73,10 @@ class SafeAreas {
       double titlebarLeading,
       double titlebarTrailing);
   virtual void setStateInsets(const ViewTree::Node &view, EdgeInsets insets);
-  // The margin a view's mounted state adds for its insets, for a view that moves itself by them
-  // (library-glue.h); nothing for one that pads its content instead.
-  virtual std::optional<EdgeInsets> appliedMargin(const ViewTree::Node &view) const;
+  // What `insets` add to a view, or without them what its mounted state's add, as the library's
+  // glue reads it (library-glue.h): the margin that moves the view and the padding that moves its
+  // content. Nothing for a view whose library has no glue.
+  virtual SafeAreaApplied applied(const ViewTree::Node &view, std::optional<EdgeInsets> insets) const;
 
  private:
   enum class Kind { Provider, View };

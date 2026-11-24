@@ -145,21 +145,23 @@ void installGlue_rnscreens() {
     return true;
   });
   // RNSSafeAreaViewShadowNode adds each of its edges' insets to its margin.
-  glue.safeAreaMargins.emplace_back([](const ShadowView &view) -> std::optional<EdgeInsets> {
-    const auto *props = dynamic_cast<const RNSSafeAreaViewProps *>(view.props.get());
-    const auto *state = dynamic_cast<const ConcreteState<RNSSafeAreaViewState> *>(view.state.get());
-    if (props == nullptr || state == nullptr) {
-      return std::nullopt;
-    }
-    auto insets = state->getData().insets;
-    const auto &edges = props->edges;
-    return EdgeInsets{
-        .left = edges.left ? insets.left : 0,
-        .top = edges.top ? insets.top : 0,
-        .right = edges.right ? insets.right : 0,
-        .bottom = edges.bottom ? insets.bottom : 0,
-    };
-  });
+  glue.safeAreaApplied.emplace_back(
+      [](const ShadowView &view, std::optional<EdgeInsets> told) -> std::optional<SafeAreaApplied> {
+        const auto *props = dynamic_cast<const RNSSafeAreaViewProps *>(view.props.get());
+        const auto *state = dynamic_cast<const ConcreteState<RNSSafeAreaViewState> *>(view.state.get());
+        if (props == nullptr || (state == nullptr && !told)) {
+          return std::nullopt;
+        }
+        auto insets = told ? *told : state->getData().insets;
+        const auto &edges = props->edges;
+        return SafeAreaApplied{
+            .margin = {
+                .left = edges.left ? insets.left : 0,
+                .top = edges.top ? insets.top : 0,
+                .right = edges.right ? insets.right : 0,
+                .bottom = edges.bottom ? insets.bottom : 0,
+            }};
+      });
 }
 
 } // namespace ngn

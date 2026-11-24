@@ -23,16 +23,24 @@
 
 namespace ngn {
 
+// What a safe-area view's insets add to it: margin, which moves the view, and padding, which moves
+// its content.
+struct SafeAreaApplied {
+  facebook::react::EdgeInsets margin;
+  facebook::react::EdgeInsets padding;
+};
+
 struct LibraryGlue {
   std::function<std::optional<HeaderBar>(const facebook::react::Props &)> headerBar;
   std::function<std::optional<std::string>(const facebook::react::Props &)> headerItemType;
   std::function<std::optional<SearchBarConfig>(const facebook::react::Props &)> searchBarConfig;
   // Each sets a safe-area view's insets through its state, and answers false for another state.
   std::vector<std::function<bool(const facebook::react::State &, facebook::react::EdgeInsets)>> safeAreaStates;
-  // Each reads how far a safe-area view's mounted state moves it (the margin its insets add), and
-  // answers nothing for a view that pads its content instead, or another library's view.
-  std::vector<std::function<std::optional<facebook::react::EdgeInsets>(const facebook::react::ShadowView &)>>
-      safeAreaMargins;
+  // Each reads what a safe-area view's insets add to it (SafeAreaApplied): the given insets, or
+  // without them its mounted state's. It answers nothing for another library's view.
+  std::vector<std::function<std::optional<SafeAreaApplied>(
+      const facebook::react::ShadowView &, std::optional<facebook::react::EdgeInsets>)>>
+      safeAreaApplied;
   std::function<std::optional<TabScreen>(const facebook::react::Props &)> tabScreen;
   std::function<std::optional<TabsRequest>(const facebook::react::Props &)> tabsRequest;
   // The svg element a view's props are (svg.h), from react-native-svg's props.
