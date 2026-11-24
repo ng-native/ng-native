@@ -49,7 +49,7 @@ jobs:
       - name: Resolve the development build's fingerprint
         id: build
         run: |
-          directory=$(node examples/canary/scripts/device-test-build-directory.mjs ios)
+          directory=$(node packages/testing/scripts/device-test-build-directory.mjs examples/canary ios)
           echo "directory=$directory" >> "$GITHUB_OUTPUT"
           echo "fingerprint=${directory##*/}" >> "$GITHUB_OUTPUT"
 
@@ -140,7 +140,7 @@ jobs:
       - name: Resolve the development build's fingerprint
         id: build
         run: |
-          directory=$(node examples/canary/scripts/device-test-build-directory.mjs android)
+          directory=$(node packages/testing/scripts/device-test-build-directory.mjs examples/canary android)
           echo "directory=$directory" >> "$GITHUB_OUTPUT"
           echo "fingerprint=${directory##*/}" >> "$GITHUB_OUTPUT"
 
