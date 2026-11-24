@@ -98,7 +98,8 @@ export class MenuItem implements OnChanges {
   readonly sfSymbol = input<string>();
   /**
    * The picture: a drawable resource's name, on Android, or a `ButtonIcon` as `<native-button>`
-   * takes, `{ sfSymbol }`, `{ drawable }`, or on macOS an icon's SVG markup, `{ svg }`.
+   * takes, `{ sfSymbol }`, `{ drawable }`, or an icon's SVG markup, `{ svg }`, in a macOS menu and
+   * in a Linux tray icon's menu.
    */
   readonly icon = input<string | ButtonIcon>();
   readonly select = output<void>();

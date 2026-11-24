@@ -357,8 +357,9 @@ export class NativeTab implements OnInit {
   readonly icon = input<TabIcon>();
 
   /**
-   * Shown while this tab is the selected one: in an iOS or Android tab bar, and on macOS and Linux
-   * in the tab's sidebar row. Absent leaves the platform to tint `icon`.
+   * Shown while this tab is the selected one: in an iOS or Android tab bar, and in the tab's
+   * sidebar row when it is SVG (`{ svg }`), on macOS and Linux, or an SF Symbol, on macOS. Absent
+   * leaves the platform to tint `icon`.
    */
   readonly selectedIcon = input<TabIcon>();
 
