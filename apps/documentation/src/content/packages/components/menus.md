@@ -137,14 +137,14 @@ not draw it.
 </ng-template>
 ```
 
-`[menu]` on a `<pressable>` opens its menu under the element on a press: a tap or a click, a
-screen reader's press, or a key that presses the focused element (Space or Return on macOS and
-Linux, Space, Enter or the D-pad centre on Android). On macOS and Linux a window's default button
-takes Return first, so in a window with one only Space opens the menu. `(press)` does not fire
-then. The menu is written as a context menu's is, and a one-way `[checked]` stays as the app binds it, so a menu of
-choices like this one is a pop-up select. `open()` opens it from code, named in the template with
-`#sort="pressMenu"`, and says whether it asked the host to open it: it answers `true` even when the
-host then draws nothing, for an element not on screen.
+`[menu]` on a `<pressable>` opens its menu under the element on a press: a tap or a click, a screen
+reader's press, or a key that presses the focused element (Space or Return on macOS and Linux,
+Space, Enter or the D-pad centre on Android). On macOS and Linux a window's default button takes
+Return first, so in a window with one only Space opens the menu. `(press)` does not fire then. The
+menu is written as a context menu's is, and a one-way `[checked]` stays as the app binds it, so a
+menu of choices like this one is a pop-up select. `open()` opens it from code, named in the template
+with `#sort="pressMenu"`, and says whether it asked the host to open it: it answers `true` even when
+the host then draws nothing, for an element not on screen.
 
 macOS draws it as a menu under the element, Linux as a popover menu below it, Android as a
 PopupMenu below it, from its leading edge, and iOS as a menu from the element, which UIKit places.
