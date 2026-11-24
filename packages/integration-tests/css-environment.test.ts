@@ -181,3 +181,30 @@ describe('env(), the way the web writes the insets', () => {
     assert.throws(() => deferredOf('padding-top: env(keyboard-inset-top)'), /keyboard-inset-top/);
   });
 });
+
+describe('a safe-area inset with no provider to measure it', () => {
+  const warnings = async (fixture: string) => {
+    const mod = await compileFixture('fixtures/device-tokens.ts');
+    const warn = console.warn;
+    const warned: string[] = [];
+    console.warn = (...args: unknown[]) => void warned.push(String(args[0]));
+    try {
+      await render(mod[fixture] as Type<unknown>, { dev: true });
+      return warned.filter((message) => message.includes('<safe-area-provider>'));
+    } finally {
+      console.warn = warn;
+      cleanup();
+    }
+  };
+
+  it('says in development, once, that a provider publishes the insets', async () => {
+    // Read with a fallback and without, in calc() and max(): only one warning.
+    const warned = await warnings('DeviceTokenHost');
+    assert.equal(warned.length, 1);
+    assert.match(warned[0]!, /var\(--safe-area-inset-(top|bottom)\)/);
+  });
+
+  it('says nothing where a provider will report them', async () => {
+    assert.deepEqual(await warnings('ProvidedInsets'), []);
+  });
+});

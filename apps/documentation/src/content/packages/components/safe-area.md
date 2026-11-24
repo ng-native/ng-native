@@ -70,6 +70,10 @@ The same insets are also published as CSS custom properties - `--safe-area-inset
 `env(safe-area-inset-bottom)` and the other three sides compile to the same custom properties, so a
 stylesheet shared with the web can keep its `env()`.
 
+A `<safe-area-provider>` publishes them, the macOS and Linux title bar ones too, once it has been
+laid out. With none in the window they are never set, so each `var()` stays at its fallback, and
+in development the first one read warns once.
+
 On macOS, `--safe-area-inset-titlebar-leading` is how far the window's close, minimise and zoom
 buttons reach into the pane that last reported, from its leading edge, so a toolbar row can start
 clear of them: their width in a window with no sidebar and in the sidebar pane they sit over, and

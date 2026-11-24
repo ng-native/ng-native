@@ -1,4 +1,5 @@
 import { Component } from '@angular/core';
+import { SafeAreaProvider } from '../../components/src/safe-area-provider.ts';
 import { View } from '../../components/src/view.ts';
 
 @Component({
@@ -37,3 +38,20 @@ import { View } from '../../components/src/view.ts';
   `,
 })
 export class DeviceTokenHost {}
+
+/** A header clear of the window's controls, in a window that has a safe-area provider. */
+@Component({
+  selector: 'x-provided-insets',
+  imports: [SafeAreaProvider, View],
+  template: `
+    <safe-area-provider>
+      <view nativeID="header"></view>
+    </safe-area-provider>
+  `,
+  styles: `
+    #header {
+      padding-left: var(--safe-area-inset-titlebar-leading, 0px);
+    }
+  `,
+})
+export class ProvidedInsets {}

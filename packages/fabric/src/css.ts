@@ -4017,6 +4017,12 @@ export class StyleResolver {
   onUndefinedToken: ((name: string, props: readonly string[], on?: string) => void) | null = null;
 
   /**
+   * Told of a `var()` that reads a safe-area inset nothing has supplied, fallback or not. Set only
+   * in development, where the engine says what supplies them.
+   */
+  onUnsuppliedInset: ((name: string) => void) | null = null;
+
+  /**
    * Told of a `display: var()` whose token holds no display native has, `grid` or `table`, which
    * leaves display unset. Set only in development, where it is how the engine says so: the
    * compiler refuses the same value written out, but a token is only known here.
@@ -5199,6 +5205,11 @@ export class StyleResolver {
     }
   }
 
+  /** A safe-area inset read where nothing has supplied it, which development is told of. */
+  private noteInset(name: string | undefined, tokens: Readonly<Record<string, TokenValue>>): void {
+    if (name?.startsWith('--safe-area-inset-') && !(name in tokens)) this.onUnsuppliedInset!(name);
+  }
+
   /** One deferred declaration's value, from the tokens in scope and the node's own style. */
   private settled(
     declaration: DeferredDeclaration,
@@ -5211,6 +5222,7 @@ export class StyleResolver {
     }
     if (declaration.compute) return this.computed(declaration, own, parentInherited);
     if (declaration.line) return this.settledLine(declaration, own, parentInherited, tokens);
+    if (this.onUnsuppliedInset) this.noteInset(declaration.reference, tokens);
     const value = referenced(declaration, tokens);
     if (declaration.whenSet !== undefined)
       return value === undefined ? undefined : declaration.whenSet;

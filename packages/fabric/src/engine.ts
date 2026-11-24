@@ -7901,6 +7901,7 @@ export class Engine implements HostEngine {
       this.styles.onUndefinedToken = (name, props, on) =>
         this.reportUndefinedToken(name, props, on);
       this.styles.onUnreadDisplay = (name, value) => this.reportUnreadDisplay(name, value);
+      this.styles.onUnsuppliedInset = (name) => this.reportUnsuppliedInset(name);
       this.styles.onPlatformColour = (name, props, on) =>
         this.reportPlatformColour(name, props, on);
     }
@@ -8632,6 +8633,7 @@ export class Engine implements HostEngine {
   // --- mutation API -----------------------------------------------------
 
   createElement(name: string, sheet: StyleSheet | null = null): EngineNode {
+    if (name === 'safe-area-provider') this.safeAreaProvided = true;
     const node = new RetainedNode('element', name, this);
     node.templateSheet = sheet;
     this.styles.noteSheet(sheet, true);
@@ -17077,6 +17079,23 @@ export class Engine implements HostEngine {
   private readonly undefinedTokens = new Set<string>();
 
   /** Said once per name: a phone has no inspector to show the declaration struck out. */
+  /** Whether a `<safe-area-provider>` has been made, which reports the insets once laid out. */
+  private safeAreaProvided = false;
+  private warnedUnsuppliedInset = false;
+
+  /**
+   * A safe-area inset read with no provider to report it, which leaves it unset for good: said
+   * once, in development. With a provider it is only not reported yet, a frame after mount.
+   */
+  private reportUnsuppliedInset(name: string): void {
+    if (this.safeAreaProvided || this.warnedUnsuppliedInset) return;
+    this.warnedUnsuppliedInset = true;
+    console.warn(
+      `[angular-native] var(${name}) reads a safe-area inset, and only a <safe-area-provider> ` +
+        `reports them, so it stays unset or at its fallback. Wrap the window's content in one.`,
+    );
+  }
+
   private reportUndefinedToken(name: string, props: readonly string[], on?: string): void {
     if (this.undefinedTokens.has(name)) return;
     this.undefinedTokens.add(name);
