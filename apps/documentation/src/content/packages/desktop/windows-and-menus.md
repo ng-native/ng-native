@@ -37,7 +37,12 @@ except that Cmd-Z, X, C, V and A still reach a focused text input. A view's `[co
 as an NSMenu on a secondary click, and a `<pressable>`'s `[menu]` as an NSMenu under it on a press
 (`popUpMenu`); either's choice comes back to the view. View > Back and Forward
 (Cmd-[ and Cmd-]), mouse buttons 4 and 5, a three-finger swipe and, with "Swipe between pages",
-a two-finger sideways swipe that nothing scrolls send `navigate` with the window's surface. A back
+a two-finger sideways swipe that nothing scrolls send `navigate` with the window's surface.
+Apps that manage their own history can subscribe with `Menus.onNavigate()` from `@ng-native/device`.
+The listener receives the direction, the window surface when available, and the number of steps.
+The method returns a function to unsubscribe. When an app-owned macOS menu item takes Cmd-[ or
+Cmd-], that key chooses the app's item while the standard View menu commands and other navigation
+inputs still send `navigate`. A back
 swipe over a native stack with a screen below its front one is interactive (`back-swipe.h`): the
 front screen follows the fingers with the one below showing, goes back when released past a third
 of the width or flicked, and slides home when released early. It is not offered on a screen with

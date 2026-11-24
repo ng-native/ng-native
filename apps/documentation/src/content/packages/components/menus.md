@@ -35,6 +35,13 @@ its items all have roles that move them into the default menus). A `<menu-item>`
 replaces the standard item for that role, and without `(select)` does what the OS does for it.
 Settings... shows only when an item with `menuRole="settings"` has a `(select)`.
 
+On macOS, an enabled app-owned menu item can take Cmd-[ or Cmd-] from the standard View
+menu by declaring that shortcut. View > Back and Forward remain clickable, and each gets its
+default key back when the app's item is disabled, removed or assigned another shortcut.
+Apps that keep their own history can listen with `Menus.onNavigate` for the standard commands,
+including the mouse buttons and swipes described in the
+[desktop navigation guide](/packages/desktop/windows-and-menus#the-menu-bar-and-navigation).
+
 On macOS and iPadOS this is the menu bar. On Linux it is a menu bar under each window's header bar
 when `XDG_CURRENT_DESKTOP` lists KDE, as KDE Plasma's apps have it, and the header bar's main menu
 on every other desktop, as GNOME's apps have it. On iPhone and Android nothing is drawn, and each

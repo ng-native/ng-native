@@ -50,6 +50,7 @@ import { injectOs } from './os.ts';
 import { reactNative } from './react-native.ts';
 import {
   isEditingShortcut,
+  matchesShortcut,
   navigationShortcut,
   parseShortcut,
   type ParsedShortcut,
@@ -130,6 +131,32 @@ export function serializeMenu(
       };
     });
   return { entries: walk(entries, prefix), actions };
+}
+
+/** Whether an enabled app menu item, including one in a submenu, takes this chord. */
+function hasMacMenuAction(entries: readonly MenuEntry[], chord: ParsedShortcut): boolean {
+  return entries.some((entry) => {
+    if (isSeparator(entry) || entry.disabled) return false;
+    if (entry.items) return hasMacMenuAction(entry.items, chord);
+    return Boolean(
+      entry.select && entry.shortcut && matchesShortcut(entry.shortcut, chord, 'macos'),
+    );
+  });
+}
+
+/** Keep the built-in navigation commands clickable when an app item takes their keys. */
+function releaseMacNavigationKeys(
+  entries: NativeMenuEntry[],
+  groups: readonly MenuGroupModel[],
+): NativeMenuEntry[] {
+  return entries.map((entry) => {
+    if ('separator' in entry || entry.handled) return entry;
+    if (entry.menuRole !== 'back' && entry.menuRole !== 'forward') return entry;
+    const { shortcut, ...item } = entry;
+    return shortcut && groups.some((group) => hasMacMenuAction(group.items, shortcut))
+      ? item
+      : entry;
+  });
 }
 
 /** A shortcut as the host receives it. */
@@ -434,7 +461,10 @@ export class Menus {
       return {
         label: group.label,
         ...(group.menuRole && { menuRole: group.menuRole }),
-        items: menu.entries,
+        items:
+          this.os === 'macos' && group.menuRole === 'view'
+            ? releaseMacNavigationKeys(menu.entries, groups)
+            : menu.entries,
       };
     });
     return { sent, actions };
@@ -529,9 +559,10 @@ export class Menus {
   >();
 
   /**
-   * Hear the OS's back and forward commands. `@ng-native/router` listens, and moves through the
-   * history of the window each was in, `steps` entries (one, but for a pick from a chevron's
-   * history menu). Answers the function that stops listening.
+   * Hear the OS's back and forward commands. Apps with their own history can listen here.
+   * `@ng-native/router` listens and moves through the history of the window each was in,
+   * `steps` entries (one, but for a pick from a chevron's history menu). Returns a function to
+   * stop listening.
    */
   onNavigate(
     listener: (direction: 'back' | 'forward', surface?: number, steps?: number) => void,

@@ -154,6 +154,103 @@ test("presses a menu item's key equivalent where the menu bar is drawn, as AppKi
   assert.deepEqual(instance.heard(), ['new', 'notes']);
 });
 
+@Component({
+  selector: 'app-navigation-menu-keys',
+  imports: [MenuBar, MenuGroup, MenuItem],
+  template: `
+    <menu-bar>
+      <menu-group label="Go" menuRole="view">
+        @if (shown()) {
+          <menu-item
+            label="Custom Back"
+            [shortcut]="backShortcut()"
+            [disabled]="disabled()"
+            (select)="heard.set('back')"
+          />
+          <menu-group label="History">
+            <menu-item label="Custom Forward" shortcut="cmd+]" (select)="heard.set('forward')" />
+          </menu-group>
+        }
+        @if (replaceBack()) {
+          <menu-item
+            menuRole="back"
+            label="Role Back"
+            shortcut="mod+["
+            (select)="heard.set('role')"
+          />
+        }
+        @if (systemRole()) {
+          <menu-item menuRole="find" label="System Find" shortcut="mod+[" />
+        }
+        <menu-item label="Other Back" shortcut="mod+shift+[" (select)="heard.set('other')" />
+        <menu-item label="Sidebar Shortcut" shortcut="ctrl+mod+s" (select)="heard.set('sidebar')" />
+      </menu-group>
+    </menu-bar>
+  `,
+})
+class NavigationMenuKeys {
+  readonly shown = signal(true);
+  readonly disabled = signal(false);
+  readonly backShortcut = signal('mod+[');
+  readonly replaceBack = signal(false);
+  readonly systemRole = signal(false);
+  readonly heard = signal('');
+}
+
+test("an enabled menu item's shortcut takes Cmd-[ and Cmd-] from AppKit's defaults", async () => {
+  const menus = fakeMenus();
+  const { instance } = await render(NavigationMenuKeys, {
+    os: 'macos',
+    providers: [{ provide: Menus.SOURCE, useValue: menus }],
+  });
+  const backKey = () => menus.item({ menuRole: 'back' })?.shortcut?.key;
+  assert.equal(await userEvent.keyboard('mod+['), true);
+  assert.equal(instance.heard(), 'back');
+  assert.equal(await userEvent.keyboard('mod+]'), true);
+  assert.equal(instance.heard(), 'forward');
+  assert.ok(menus.item({ menuRole: 'back' }), 'the built-in Back command stays in the menu');
+  assert.equal(menus.item({ menuRole: 'toggleSidebar' })?.shortcut?.key, 's');
+
+  instance.disabled.set(true);
+  await settle();
+  assert.equal(backKey(), '[');
+  assert.equal(await userEvent.keyboard('mod+['), true);
+  assert.equal(instance.heard(), 'forward');
+
+  instance.disabled.set(false);
+  instance.backShortcut.set('ctrl+[');
+  await settle();
+  assert.equal(backKey(), '[');
+  assert.equal(await userEvent.keyboard('ctrl+['), true);
+  assert.equal(instance.heard(), 'back');
+
+  instance.shown.set(false);
+  await settle();
+  assert.equal(menus.item({ menuRole: 'forward' })?.shortcut?.key, ']');
+  assert.equal(await userEvent.keyboard('mod+shift+['), true);
+  assert.equal(instance.heard(), 'other');
+  assert.equal(backKey(), '[');
+
+  instance.systemRole.set(true);
+  await settle();
+  assert.equal(backKey(), '[');
+  instance.systemRole.set(false);
+  instance.replaceBack.set(true);
+  await settle();
+  assert.equal(await userEvent.keyboard('mod+['), true);
+  assert.equal(instance.heard(), 'role');
+});
+
+test('keeps the standard navigation key equivalents on iPadOS', async () => {
+  const menus = fakeMenus();
+  await render(NavigationMenuKeys, {
+    os: 'ios',
+    providers: [{ provide: Menus.SOURCE, useValue: menus }],
+  });
+  assert.equal(menus.item({ menuRole: 'back' })?.shortcut?.key, '[');
+  assert.equal(menus.item({ menuRole: 'forward' })?.shortcut?.key, ']');
+});
+
 test('walks focus with Tab, as focus from the keyboard, and leaves the editing keys to a field', async () => {
   const { instance } = await render(Keys, { os: 'macos' });
   await userEvent.tab();
