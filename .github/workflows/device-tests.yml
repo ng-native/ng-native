@@ -72,6 +72,17 @@ jobs:
       # React Native's ccache wrapper runs plain clang, silently, without CCACHE_BINARY.
       - run: echo "CCACHE_BINARY=$(command -v ccache)" >> "$GITHUB_ENV"
 
+      # The runner's load, free memory and busiest processes every 15s while the tests run, uploaded
+      # with the simulator's logs: a sample taken after a failure misses what starved the launch.
+      - name: Sample the runner's load
+        run: |
+          mkdir -p "$RUNNER_TEMP/simulator-logs"
+          nohup bash -c 'while :; do
+            echo "=== $(date -u +%T) load $(sysctl -n vm.loadavg) $(memory_pressure | tail -1)"
+            ps -A -r -o pid=,ppid=,%cpu=,rss=,comm= | head -10
+            sleep 15
+          done' > "$RUNNER_TEMP/simulator-logs/load.txt" 2>&1 &
+
       # Under the job's limit, so a run that hangs fails here and the logs below are still collected:
       # a job that reaches its own limit is cancelled, and runs no step after.
       - name: Run the device tests on a simulator
