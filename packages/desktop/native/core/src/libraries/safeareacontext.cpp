@@ -75,7 +75,19 @@ void installGlue_safeareacontext() {
             .right = moved(edges.right, insets.right, of(style, Edge::Right, Edge::Horizontal)),
             .bottom = moved(edges.bottom, insets.bottom, of(style, Edge::Bottom, Edge::Vertical)),
         };
-        return padding ? SafeAreaApplied{.padding = added} : SafeAreaApplied{.margin = added};
+        if (!padding) {
+          return SafeAreaApplied{.margin = added};
+        }
+        // A padding view's content edge sits at the style's own padding plus what the inset adds
+        // to it, and an edge in "off" mode at the own padding alone.
+        auto total = [&](float add, Edge edge, Edge axis) { return add + of(style, edge, axis).value().unwrapOrDefault(0); };
+        return SafeAreaApplied{
+            .padding = {
+                .left = total(added.left, Edge::Left, Edge::Horizontal),
+                .top = total(added.top, Edge::Top, Edge::Vertical),
+                .right = total(added.right, Edge::Right, Edge::Horizontal),
+                .bottom = total(added.bottom, Edge::Bottom, Edge::Vertical),
+            }};
       });
 }
 

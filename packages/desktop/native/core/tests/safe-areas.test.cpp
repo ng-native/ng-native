@@ -5,6 +5,7 @@
 #include <doctest/doctest.h>
 #include <react/renderer/mounting/MountingTransaction.h>
 
+#include <algorithm>
 #include <map>
 #include <sstream>
 
@@ -26,6 +27,9 @@ std::string text(EdgeInsets i) {
 // margin that moves the view, or as padding that moves its content, on the edges weighted 1.
 struct Applies {
   bool padding{false};
+  // The style's own padding, which a padding view's content edge includes (the "maximum" mode adds
+  // only what the inset exceeds it by).
+  EdgeInsets own{};
   EdgeInsets edges{.left = 1, .top = 1, .right = 1, .bottom = 1};
 };
 
@@ -50,7 +54,18 @@ struct RecordingAreas final : ngn::SafeAreas {
         .right = told.right * w.right,
         .bottom = told.bottom * w.bottom,
     };
-    return how->second.padding ? ngn::SafeAreaApplied{.padding = added} : ngn::SafeAreaApplied{.margin = added};
+    if (!how->second.padding) {
+      return ngn::SafeAreaApplied{.margin = added};
+    }
+    const auto &own = how->second.own;
+    // The content edge: the larger of the own padding and the inset, as "maximum" mode sets it.
+    return ngn::SafeAreaApplied{
+        .padding = {
+            .left = std::max(own.left, added.left),
+            .top = std::max(own.top, added.top),
+            .right = std::max(own.right, added.right),
+            .bottom = std::max(own.bottom, added.bottom),
+        }};
   }
   void emitInsetsChange(const ngn::ViewTree::Node &node, EdgeInsets insets, Rect frame, double leading, double trailing)
       override {
@@ -334,6 +349,26 @@ TEST_CASE("a view inside one that pads its content by its insets is measured fro
   f.sent.clear();
   f.mounting->setContainerInsets(1, {.size = {800, 600}, .insets = {.left = 0, .top = 28, .right = 0, .bottom = 0}});
   CHECK(f.sent == Lines{"view 4 28,0,0,0"});
+}
+
+TEST_CASE("a padded view's own padding counts toward where its content starts") {
+  // A padding of 40 under a 52 inset in "maximum" mode: the content starts at 40 now and at 52 once
+  // the inset lands. A view at the content edge is moved with it, so it has no inset of its own.
+  Fixture f;
+  f.mounting->setContainerInsets(1, kWindow);
+  auto outer = shadowView(4, "RNCSafeAreaView", {{0, 0}, {800, 600}});
+  auto inner = shadowView(3, "RNSSafeAreaView", {{0, 40}, {800, 560}});
+  f.applies[4] = {.padding = true, .own = {.left = 0, .top = 40, .right = 0, .bottom = 0}};
+  f.applies[3] = {};
+  f.mounted[4] = {};
+  f.mount({
+      ShadowViewMutation::CreateMutation(outer),
+      ShadowViewMutation::CreateMutation(inner),
+      ShadowViewMutation::InsertMutation(4, inner, 0),
+      ShadowViewMutation::InsertMutation(1, outer, 0),
+  });
+  std::sort(f.sent.begin(), f.sent.end());
+  CHECK(f.sent == Lines{"view 3 0,0,0,0", "view 4 52,0,0,0"});
 }
 
 TEST_CASE("an outer view's new insets move only the inner views at the edge they inset") {

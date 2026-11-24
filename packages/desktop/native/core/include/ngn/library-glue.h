@@ -24,7 +24,8 @@
 namespace ngn {
 
 // What a safe-area view's insets add to it: margin, which moves the view, and padding, which moves
-// its content.
+// its content. The margin is the part the insets add; the padding is the whole of it, the style's
+// own padding included, since that is where the content starts.
 struct SafeAreaApplied {
   facebook::react::EdgeInsets margin;
   facebook::react::EdgeInsets padding;
