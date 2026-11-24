@@ -363,6 +363,7 @@ TEST_CASE("a text input sends keyPress for a key typed, and none for an input me
       } else {
         int at = gtk_editable_get_position(GTK_EDITABLE(field->text));
         gtk_editable_insert_text(GTK_EDITABLE(field->text), text, -1, &at);
+        gtk_editable_set_position(GTK_EDITABLE(field->text), at);
       }
     };
     auto none = GdkModifierType(0);
@@ -405,6 +406,53 @@ TEST_CASE("a text input sends keyPress for a key typed, and none for an input me
       pressKey(field->text, GDK_KEY_z, none);
     }
     CHECK(field->typedKeys.size() == 8);
+    data->emitter = nullptr;
+  }
+}
+
+TEST_CASE("a key a read-only text input refuses leaves nothing waiting once it is editable again") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    auto props = [multiline](bool editable) {
+      return textInputProps(dynamic::object("multiline", multiline)("editable", editable));
+    };
+    auto input = MountedViews::shadow(2, "TextInput", props(true), {{10, 10}, {150, 80}});
+    views.add(input);
+    auto *data = ngn::gtk::viewData(views.view(2));
+    auto *field = data->field;
+    ngn::testing::SentEvents<TextInputEventEmitter> sent(*data);
+    auto commit = [field, multiline](const char *text) {
+      if (multiline) {
+        gtk_text_buffer_insert_interactive_at_cursor(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), text, -1, TRUE);
+      } else {
+        int at = gtk_editable_get_position(GTK_EDITABLE(field->text));
+        gtk_editable_insert_text(GTK_EDITABLE(field->text), text, -1, &at);
+        gtk_editable_set_position(GTK_EDITABLE(field->text), at);
+      }
+    };
+    auto none = GdkModifierType(0);
+
+    // A key typed while the field is read-only: GTK refuses its commit, so no text goes in.
+    views.update(input, props(false));
+    CHECK_FALSE((multiline ? gtk_text_view_get_editable(GTK_TEXT_VIEW(field->text)) : gtk_editable_get_editable(GTK_EDITABLE(field->text))));
+    pressKey(field->text, GDK_KEY_x, none);
+    CHECK(sent.count("topKeyPress") == 0);
+    views.update(input, props(true));
+    pressKey(field->text, GDK_KEY_a, none);
+    commit("a");
+    CHECK(sent.count("topKeyPress") == 1);
+
+    // A key typed while editable whose commit (an input method's, a key behind) arrives once the
+    // field is read-only, and is refused.
+    auto before = sent.count("topKeyPress");
+    pressKey(field->text, GDK_KEY_y, none);
+    views.update(input, props(false));
+    views.update(input, props(true));
+    pressKey(field->text, GDK_KEY_b, none);
+    commit("b");
+    CHECK(sent.count("topKeyPress") == before + 1);
     data->emitter = nullptr;
   }
 }

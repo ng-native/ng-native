@@ -208,6 +208,12 @@ bool pressesLatin(GtkWidget *widget, guint keyval, guint keycode, guint latin) {
   return found;
 }
 
+// Whether the field takes text: GTK refuses an input method's commit to one that does not.
+bool editable(const TextField &field) {
+  return multiline(field) ? gtk_text_view_get_editable(GTK_TEXT_VIEW(field.text))
+                          : gtk_editable_get_editable(GTK_EDITABLE(field.text));
+}
+
 // `onKeyPress`, before the key changes the text, with the key as keyPressName names it.
 gboolean keyPressed(GtkEventControllerKey *, guint keyval, guint keycode, GdkModifierType state, gpointer user) {
   auto *field = static_cast<TextField *>(user);
@@ -247,8 +253,12 @@ gboolean keyPressed(GtkEventControllerKey *, guint keyval, guint keycode, GdkMod
   if (key.empty()) {
     return FALSE;
   }
-  // A printable key is sent with the text it puts in (sendTypedKey).
+  // A printable key is sent with the text it puts in (sendTypedKey), and a field that takes no text
+  // puts in none.
   if (g_utf8_strlen(key.c_str(), -1) == 1) {
+    if (!editable(*field)) {
+      return FALSE;
+    }
     // A few behind at most: keys a field that takes no text never puts in go first.
     if (field->typedKeys.size() == kTypedKeysWaiting) {
       field->typedKeys.pop_front();
@@ -723,6 +733,10 @@ void applyTextFieldProps(ViewData &view) {
   TextField &field = *view.field;
   auto attributes = props->getEffectiveTextAttributes(1);
   bool editable = props->traits.editable && props->editable && !props->readOnly;
+  // The keys waiting for text a read-only field refuses.
+  if (!editable) {
+    field.typedKeys.clear();
+  }
   bool rightToLeft = view.layout.layoutDirection == LayoutDirection::RightToLeft;
   float xalign = 0;
   switch (attributes.alignment.value_or(TextAlignment::Natural)) {
