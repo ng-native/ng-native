@@ -51,9 +51,12 @@ greys it out.
   iOS and Android draw it once as an image, through the renderer the app provides, as an SVG
   [tab icon](/packages/router/tabs) is: `withSvgIcons(SvgImages)` in `provideNativeRouter`, or
   `SVG_ICON_RENDERER` from `@ng-native/device` in an app without the router. Without one the button
-  shows no icon, and in development it says so once. The button has no icon until it has been
-  drawn, a frame or two after it appears. On iOS the image is a symbol's height in the title's
-  font, and on Android it is 18 points square. The web shows no SVG icon.
+  shows no icon, and in development it says so once. `SvgImages` draws through react-native-svg, so
+  the app's native build needs that package: without it the button shows no icon and says nothing.
+  A renderer of the app's own has to return a base64 `data:` URI for iOS, where the button draws no
+  other kind of URI. The button has no icon until it has been drawn, a frame or two after it
+  appears. On iOS the image is a symbol's height in the title's font, and on Android it is 18
+  points square. The web shows no SVG icon.
 
 `(press)` fires once for each click, tap or key that activates it. On Android it takes
 `android_ripple` and the rest of a `<pressable>`'s press inputs.
