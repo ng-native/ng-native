@@ -587,4 +587,10 @@ TEST_CASE("an SVG icon as a tray's pixmaps: each size in its colour, unpremultip
   REQUIRE(png.size() > 8);
   CHECK(png.substr(1, 3) == "PNG");
   CHECK(ngn::gtk::svgIconPng("lucideTimer", 32, 0xffffffff).empty());
+
+  // A size past what cairo can make is left out, rather than read from a surface with no pixels.
+  GVariant *past = g_variant_ref_sink(ngn::gtk::svgIconPixmaps(topHalf, 0xffffffff, {16, 40000}));
+  CHECK(g_variant_n_children(past) == 1);
+  g_variant_unref(past);
+  CHECK(ngn::gtk::svgIconPng(topHalf, 40000, 0xffffffff).empty());
 }

@@ -25,15 +25,22 @@ void drawIcon(GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer
   drawSvg(svgPaintedIn(document, argbOf(color)), width, height, *canvas);
 }
 
-// `document` drawn `size` pixels square in `argb` on an ARGB32 surface, which the caller destroys.
+// `document` drawn `size` pixels square in `argb` on an ARGB32 surface, which the caller destroys;
+// null where cairo could not make the surface or draw on it, such as at a size past its limit.
 cairo_surface_t *drawnSurface(const SvgDocument &document, int size, uint32_t argb) {
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size, size);
   cairo_t *cr = cairo_create(surface);
-  auto canvas = makeCairoCanvas(cr, size, size, 1);
-  drawSvg(svgPaintedIn(document, argb), size, size, *canvas);
-  canvas.reset();
+  if (cairo_status(cr) == CAIRO_STATUS_SUCCESS) {
+    auto canvas = makeCairoCanvas(cr, size, size, 1);
+    drawSvg(svgPaintedIn(document, argb), size, size, *canvas);
+  }
+  cairo_status_t status = cairo_status(cr);
   cairo_destroy(cr);
   cairo_surface_flush(surface);
+  if (status != CAIRO_STATUS_SUCCESS || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+    cairo_surface_destroy(surface);
+    return nullptr;
+  }
   return surface;
 }
 
@@ -45,8 +52,11 @@ std::string svgIconPng(const std::string &markup, int size, uint32_t argb) {
     return {};
   }
   cairo_surface_t *surface = drawnSurface(*document, size, argb);
+  if (surface == nullptr) {
+    return {};
+  }
   std::string png;
-  cairo_surface_write_to_png_stream(
+  cairo_status_t status = cairo_surface_write_to_png_stream(
       surface,
       [](void *out, const unsigned char *data, unsigned int length) {
         static_cast<std::string *>(out)->append(reinterpret_cast<const char *>(data), length);
@@ -54,7 +64,8 @@ std::string svgIconPng(const std::string &markup, int size, uint32_t argb) {
       },
       &png);
   cairo_surface_destroy(surface);
-  return png;
+  // A PNG cut short by a failed write is none.
+  return status == CAIRO_STATUS_SUCCESS ? png : std::string{};
 }
 
 GVariant *svgIconPixmaps(const std::string &markup, uint32_t argb, std::initializer_list<int> sizes) {
@@ -63,6 +74,9 @@ GVariant *svgIconPixmaps(const std::string &markup, uint32_t argb, std::initiali
   if (auto document = parseSvgMarkup(markup)) {
     for (int size : sizes) {
       cairo_surface_t *surface = drawnSurface(*document, size, argb);
+      if (surface == nullptr) {
+        continue;
+      }
       const unsigned char *data = cairo_image_surface_get_data(surface);
       int stride = cairo_image_surface_get_stride(surface);
       std::string bytes;
