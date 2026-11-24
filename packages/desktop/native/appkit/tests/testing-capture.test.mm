@@ -24,6 +24,18 @@
 }
 @end
 
+// A web view whose snapshot always fails, as one can.
+@interface NGNFailingSnapshotWebView : WKWebView
+@end
+@implementation NGNFailingSnapshotWebView
+- (void)takeSnapshotWithConfiguration:(WKSnapshotConfiguration *)configuration
+                    completionHandler:(void (^)(NSImage *, NSError *))completionHandler {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    completionHandler(nil, [NSError errorWithDomain:@"test" code:1 userInfo:nil]);
+  });
+}
+@end
+
 namespace {
 
 struct Taken {
@@ -167,5 +179,27 @@ TEST_CASE("WindowCapture shows a web view's page, which WebKit draws out of proc
   CHECK(page.blueComponent > 0.9);
   CHECK(page.redComponent < 0.2);
   CHECK([at(rep, NSMakeSize(100, 80), 75, 20) redComponent] > 0.9);
+  [window close];
+}
+
+TEST_CASE("WindowCapture fails where a web view's page could not be drawn, rather than leave it blank") {
+  [NSApplication sharedApplication];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(-10000, -10000, 100, 80)
+                                                 styleMask:NSWindowStyleMaskBorderless
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  window.releasedWhenClosed = NO;
+  NGNCaptureTestView *content = [[NGNCaptureTestView alloc] initWithFrame:NSMakeRect(0, 0, 100, 80)];
+  window.contentView = content;
+  NGNFailingSnapshotWebView *web =
+      [[NGNFailingSnapshotWebView alloc] initWithFrame:NSMakeRect(50, 40, 50, 40) configuration:[WKWebViewConfiguration new]];
+  [content addSubview:web];
+  auto capture = ngn::appkit::makeWindowCapture([&] { return window; }, [](int64_t) -> NSView * { return nil; });
+  Taken taken;
+  capture->capture(std::nullopt, [&taken](std::string png, std::string error) {
+    taken = {std::move(png), std::move(error), true};
+  });
+  CHECK(wait(taken).error == "A web view's page could not be drawn");
+  CHECK(taken.png.empty());
   [window close];
 }

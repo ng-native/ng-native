@@ -341,9 +341,9 @@ NSBitmapImageRep *drawnRep(NSView *content, NSRect bounds, NSArray<WKWebView *> 
 
 } // namespace
 
-void drawnContent(NSView *content, NSRect rect, std::function<void(NSBitmapImageRep *)> done) {
+void drawnContent(NSView *content, NSRect rect, std::function<void(NSBitmapImageRep *, bool)> done) {
   if (content == nil || NSWidth(rect) < 1 || NSHeight(rect) < 1) {
-    done(nil);
+    done(nil, true);
     return;
   }
   // Web views, video and Metal draw out of process or on the GPU, so a drawing of the views has
@@ -351,7 +351,7 @@ void drawnContent(NSView *content, NSRect rect, std::function<void(NSBitmapImage
   NSMutableArray<WKWebView *> *webViews = [NSMutableArray array];
   collectWebViews(content, webViews);
   if (webViews.count == 0) {
-    done(drawnRep(content, rect, webViews, @[]));
+    done(drawnRep(content, rect, webViews, @[]), true);
     return;
   }
   // Each snapshot answers on the main thread; a web view that cannot take one stays blank. The
@@ -361,14 +361,17 @@ void drawnContent(NSView *content, NSRect rect, std::function<void(NSBitmapImage
     [snapshots addObject:NSNull.null];
   }
   auto left = std::make_shared<NSUInteger>(webViews.count);
-  auto finish = std::make_shared<std::function<void(NSBitmapImageRep *)>>(std::move(done));
+  auto finish = std::make_shared<std::function<void(NSBitmapImageRep *, bool)>>(std::move(done));
+  auto complete = std::make_shared<bool>(true);
   for (NSUInteger i = 0; i < webViews.count; i++) {
     [webViews[i] takeSnapshotWithConfiguration:nil completionHandler:^(NSImage *snapshot, NSError *) {
       if (snapshot != nil) {
         snapshots[i] = snapshot;
+      } else {
+        *complete = false;
       }
       if (--*left == 0) {
-        (*finish)(drawnRep(content, rect, webViews, snapshots));
+        (*finish)(drawnRep(content, rect, webViews, snapshots), *complete);
       }
     }];
   }
@@ -376,7 +379,8 @@ void drawnContent(NSView *content, NSRect rect, std::function<void(NSBitmapImage
 
 void windowDocument(NSView *content, std::function<void(PDFDocument *)> done) {
   NSRect bounds = content.bounds;
-  drawnContent(content, bounds, [bounds, done = std::move(done)](NSBitmapImageRep *drawn) {
+  // A web view that could not be snapshotted prints blank rather than not at all.
+  drawnContent(content, bounds, [bounds, done = std::move(done)](NSBitmapImageRep *drawn, bool) {
     done(drawn != nil ? pageOf(drawn, bounds.size) : nil);
   });
 }

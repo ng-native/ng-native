@@ -26,9 +26,14 @@ void drawn(NSWindow *window, NSRect rect, const WindowCapture::Done &done) {
   // After pending layout and drawing, so the last commit is in the picture.
   [window displayIfNeeded];
   // Web views' pages in their places, as printing draws them.
-  drawnContent(content, rect, [done](NSBitmapImageRep *rep) {
+  drawnContent(content, rect, [done](NSBitmapImageRep *rep, bool complete) {
     if (rep == nil) {
       done("", "The window could not be drawn");
+      return;
+    }
+    // A blank where a page is would pass for a picture of it, and become a reference.
+    if (!complete) {
+      done("", "A web view's page could not be drawn");
       return;
     }
     NSData *png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
