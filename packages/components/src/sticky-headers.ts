@@ -1,4 +1,10 @@
-import { type HostEngine, type HostNode, type ScrollDrive, pinnedRange } from '@ng-native/fabric';
+import {
+  type HostEngine,
+  type HostNode,
+  type ScrollDrive,
+  type WindowFrame,
+  pinnedRange,
+} from '@ng-native/fabric';
 
 interface Extent {
   readonly start: number;
@@ -75,6 +81,7 @@ export class StickyHeaders {
         node,
         this.engine.setEventListener(node, 'topLayout', (event) => this.measured(node, event)),
       );
+      if (content) this.measureNow(node, content);
     }
     this.headers = headers;
     this.apply();
@@ -107,6 +114,28 @@ export class StickyHeaders {
       size: (horizontal ? layout.width : layout.height) ?? 0,
     });
     this.apply();
+  }
+
+  /**
+   * Where a child is in the content now, for one that turns sticky after it was laid out: native
+   * sends a layout event only when a view's layout changes, so none comes for it. RN's ScrollView
+   * gets one by wrapping the child in a new view. Measured against the content view, both in the
+   * window, as native answers; a child not committed yet is measured by its layout event instead.
+   */
+  private measureNow(node: HostNode, content: HostNode): void {
+    let own: WindowFrame | undefined;
+    let box: WindowFrame | undefined;
+    const both = () => {
+      if (!own || !box || this.extents.has(node) || !this.listening.has(node)) return;
+      const horizontal = this.horizontal();
+      this.extents.set(node, {
+        start: horizontal ? own.x - box.x : own.y - box.y,
+        size: horizontal ? own.width : own.height,
+      });
+      this.apply();
+    };
+    this.engine.measure(node, (frame) => ((own = frame), both()));
+    this.engine.measure(content, (frame) => ((box = frame), both()));
   }
 
   private release(node: HostNode): void {

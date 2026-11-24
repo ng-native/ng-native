@@ -635,16 +635,22 @@ describe('scroll view sticky headers', () => {
   });
 
   it('draws a child that turns sticky at rest from where native is, and mid-scroll leaves it to native', async () => {
-    const { fabric, instance, toldSince, named, layOut, unmount } = await stickyScroll([0]);
+    const { fabric, instance, toldSince, named, drives, unmount } = await stickyScroll([0]);
     fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 120 } });
     clock.rest();
     await frame();
+    // Native sends no layout event for a view whose layout has not changed, so the child is
+    // measured where native has it: in the window, against the content view scrolled by 120.
+    const content = scrollView(fabric).children[0]!;
+    fabric.frames.set(content.viewName, { x: 0, y: -120, width: 400, height: 1000 });
+    ['first', 'body-1', 'more-1', 'more-2', 'more-3'].forEach((id, at) =>
+      fabric.frames.set(id, { x: 0, y: at * 100 - 120, width: 400, height: 30 }),
+    );
     let before = named('set').length;
     instance.sticky.set([0, 1]);
     await frame();
-    // Its drive is made once it is measured, which is at rest too.
-    layOut(false);
-    await frame();
+    const body = byID(fabric, 'body-1')[0]!.reactTag;
+    assert.deepEqual(drives().get(body)?.inputRange[0], 100, 'measured where it is in the content');
     const told = toldSince(before);
     assert.ok(told.length > 0, 'pinned now, not at the next scroll event');
     assert.ok(
@@ -655,8 +661,6 @@ describe('scroll view sticky headers', () => {
     await frame();
     before = named('set').length;
     instance.sticky.set([0, 1, 3]);
-    await frame();
-    layOut(false);
     await frame();
     assert.deepEqual(toldSince(before), [], 'mid-scroll the next event draws it');
     unmount();
