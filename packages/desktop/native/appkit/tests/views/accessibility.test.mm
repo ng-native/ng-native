@@ -7,7 +7,41 @@
 
 using namespace facebook::react;
 using ngn::testing::MountedViews;
+using ngn::testing::SentEvents;
 using ngn::testing::viewProps;
+
+TEST_CASE("Space, Return and keypad Enter press the focused view once each") {
+  SentEvents<ViewEventEmitter> sent;
+  MountedViews m;
+  auto button = MountedViews::shadow(
+      2, "View", viewProps(folly::dynamic::object("focusable", true)("onAccessibilityTap", true)));
+  button.eventEmitter = sent.emitter;
+  m.add(button);
+  NGNView *view = m.view(2);
+  REQUIRE([m.window makeFirstResponder:view]);
+  REQUIRE((m.window.firstResponder == view));
+
+  auto keyDown = [&](NSString *key, unsigned short keyCode, NSEventModifierFlags flags, BOOL repeat = NO) {
+    [view keyDown:[NSEvent keyEventWithType:NSEventTypeKeyDown
+                                  location:NSZeroPoint
+                             modifierFlags:flags
+                                 timestamp:0
+                              windowNumber:m.window.windowNumber
+                                   context:nil
+                                characters:key
+               charactersIgnoringModifiers:key
+                                 isARepeat:repeat
+                                   keyCode:keyCode]];
+  };
+  keyDown(@" ", 49, 0);
+  keyDown(@"\r", 36, 0);
+  REQUIRE(sent.count("topAccessibilityTap") == 2);
+  keyDown(@"\x03", 76, NSEventModifierFlagNumericPad);
+  CHECK(sent.count("topAccessibilityTap") == 3);
+  keyDown(@"\x03", 76, NSEventModifierFlagNumericPad | NSEventModifierFlagCommand);
+  keyDown(@"\x03", 76, NSEventModifierFlagNumericPad, YES);
+  CHECK(sent.count("topAccessibilityTap") == 3);
+}
 
 TEST_CASE("a button has its role, label, hint and enabled state") {
   MountedViews m;

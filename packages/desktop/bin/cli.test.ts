@@ -1180,6 +1180,7 @@ describe('run', () => {
       assert.equal(calls[0]!.env!['NGN_FIRST_BUILD_NOTE'], FIRST_BUILD_NOTE);
     }
     assert.match(FIRST_BUILD_NOTE, /about 4 minutes/);
+    assert.match(FIRST_BUILD_NOTE, /prebuilt Hermes/);
   });
 
   it('stops when the build fails, without launching', async () => {

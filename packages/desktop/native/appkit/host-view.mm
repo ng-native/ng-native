@@ -672,13 +672,13 @@ static BOOL focusFromKeyboard() {
   return [super isAccessibilitySelectorAllowed:selector];
 }
 
-// Space and Return press a focused view, as they press a focused AppKit control. A default button
-// takes Return first, as AppKit's own key equivalents do.
+// Space, Return and keypad Enter press a focused view, as they press a focused AppKit control.
+// A default button takes its key equivalent first.
 - (void)keyDown:(NSEvent *)event {
   NSEventModifierFlags modifiers = event.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl |
                                                           NSEventModifierFlagOption);
   NSString *key = event.charactersIgnoringModifiers;
-  BOOL activates = [key isEqualToString:@" "] || [key isEqualToString:@"\r"];
+  BOOL activates = [key isEqualToString:@" "] || [key isEqualToString:@"\r"] || [key isEqualToString:@"\x03"];
   if (modifiers == 0 && activates && !event.isARepeat && self.window.firstResponder == self &&
       [self performAxVerb:ngn::AxVerb::Press]) {
     return;

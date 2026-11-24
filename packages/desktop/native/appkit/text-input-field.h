@@ -52,9 +52,14 @@ BOOL NGNControlShouldChangeText(
     const ngn::TextInputOptions &options,
     BOOL *inserting);
 
+// An editor that lets AppKit display marked text and fits the input method's final insertion.
+@interface NGNInputEditor : NSTextView
+- (std::optional<std::size_t>)compositionMaxLength;
+@end
+
 // A field editor that draws its text smoothed as `fontSmoothing` says (ngn::applyFontSmoothing), on
 // TextKit 1, which draws the text in the view's own drawRect.
-@interface NGNSmoothedFieldEditor : NSTextView
+@interface NGNSmoothedFieldEditor : NGNInputEditor
 @property (nonatomic) ngn::FontSmoothing fontSmoothing;
 @end
 
@@ -86,8 +91,7 @@ NSText *NGNEditorOf(NSControl *control);
 // An NSSecureTextField in place of the NSTextField (or back), keeping the text, its look, and the
 // keyboard and selection while editing.
 @property (nonatomic) BOOL secure;
-// True while `secure` swaps the control, or `fontSmoothing` the field editor, as the editing session
-// that ends and starts again is not the user's.
+// True while `secure` swaps the control, so the app can leave out the focus events of the swap.
 @property (nonatomic, readonly) BOOL swapping;
 // Focuses the field the first time it is in a window.
 @property (nonatomic) BOOL autoFocus;
@@ -109,7 +113,7 @@ NSText *NGNEditorOf(NSControl *control);
 - (void)selectRange:(NSRange)range;
 @end
 
-@interface NGNTextView : NSTextView
+@interface NGNTextView : NGNInputEditor
 @property (nonatomic) BOOL autoFocus;
 // Called with each key typed into it (NGNTypedKey), before the change is made.
 @property (nonatomic, copy) void (^typed)(NSString *key);

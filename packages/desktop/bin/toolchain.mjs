@@ -33,11 +33,11 @@ export const LINUX_LIBRARY_MINIMUMS = /** @type {Readonly<Record<string, string>
 
 /**
  * How long the first build of the host for a React Native version takes on an Apple silicon Mac,
- * measured cold: React Native and Hermes compile from source.
+ * measured cold: React Native compiles from source and the build uses prebuilt Hermes.
  */
 export const FIRST_BUILD_NOTE =
   'Building the desktop host from source for the first time for this React Native version: React ' +
-  'Native and Hermes compile, which takes about 4 minutes on an Apple silicon Mac (about 6 for a ' +
+  'Native compiles and the build uses prebuilt Hermes. This takes about 4 minutes on an Apple silicon Mac (about 6 for a ' +
   'universal release build). Later runs reuse it.';
 
 /** The same note for the GTK host, which compiles ICU and libcurl as well. */

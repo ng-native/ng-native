@@ -8,6 +8,31 @@ using ngn::Capitalize;
 using ngn::FontSmoothing;
 using ngn::TextInputOptions;
 
+@implementation NGNInputEditor
+
+- (std::optional<std::size_t>)compositionMaxLength {
+  return std::nullopt;
+}
+
+- (void)insertText:(id)value replacementRange:(NSRange)range {
+  // AppKit asks whether it can change the text while it is still marked, both for updates to the
+  // composition and for this insertion. Fit only the insertion, before AppKit commits it.
+  if (self.hasMarkedText) {
+    if (auto maxLength = [self compositionMaxLength]) {
+      NSAttributedString *attributed = [value isKindOfClass:NSAttributedString.class] ? value : nil;
+      NSString *replacement = attributed ? attributed.string : value;
+      NSRange replaced = range.location == NSNotFound ? self.markedRange : range;
+      NSString *fitted = NGNFitReplacement(self.string, replaced, replacement, {.maxLength = maxLength});
+      if (fitted.length < replacement.length) {
+        value = attributed ? [attributed attributedSubstringFromRange:NSMakeRange(0, fitted.length)] : fitted;
+      }
+    }
+  }
+  [super insertText:value replacementRange:range];
+}
+
+@end
+
 @implementation NGNSmoothedFieldEditor
 
 - (void)drawRect:(NSRect)dirtyRect {
@@ -150,7 +175,7 @@ namespace {
 
 // textView:shouldChangeTextInRange:replacementString: for either control: lets the change through
 // when it needs nothing, inserts what fits in its place when it does, and refuses it when nothing
-// does. Composition goes through untouched; its committed text is checked like any other.
+// does. Marked text goes through untouched; NGNInputEditor fits the composition's final insertion.
 BOOL shouldChange(NSTextView *text, NSRange range, NSString *replacement, const TextInputOptions &options, BOOL *inserting) {
   if (replacement == nil || *inserting || text.hasMarkedText) {
     return YES;
@@ -233,7 +258,6 @@ NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
 @interface NGNTextField ()
 - (void)controlDidBecomeFirstResponder;
 - (void)controlDidEndEditing;
-- (void)controlTextDidChange;
 - (void)reportTyped:(NSString *)replacement editor:(NSTextView *)editor;
 @end
 
@@ -267,10 +291,6 @@ NSDictionary<NSTextCheckingOptionKey, id> *NGNTextCheckingOptions(
   -(void)textDidEndEditing : (NSNotification *)note {                                                      \
     [super textDidEndEditing:note];                                                                        \
     [self.box controlDidEndEditing];                                                                       \
-  }                                                                                                        \
-  -(void)textDidChange : (NSNotification *)note {                                                          \
-    [super textDidChange:note];                                                                            \
-    [self.box controlTextDidChange];                                                                       \
   }                                                                                                        \
   -(BOOL)textView : (NSTextView *)textView shouldChangeTextInRange : (NSRange)range replacementString      \
       : (NSString *)string {                                                                               \
@@ -365,15 +385,32 @@ NGN_FIELD_CONTROL_METHODS
 NGN_FIELD_CONTROL_METHODS
 @end
 
-// A plain field edits in a field editor of its own while its text is not smoothed as the system
-// smooths it. A secure one keeps AppKit's, which hides what is typed.
+@interface NGNPlainFieldEditor : NGNSmoothedFieldEditor
+@property (nonatomic, weak) NGNTextField *box;
+@end
+
+@implementation NGNPlainFieldEditor
+- (std::optional<std::size_t>)compositionMaxLength {
+  NGNTextField *box = self.box;
+  return box ? box.options.maxLength : std::nullopt;
+}
+@end
+
+// A plain field needs its own editor to fit composition commits. A secure field keeps AppKit's
+// secure editor, which hides what is typed and accepts no marked text.
 @implementation NGNPlainFieldCell {
-  NGNSmoothedFieldEditor *_editor;
+  NGNPlainFieldEditor *_editor;
 }
 NGN_FIELD_CELL_METHODS
 - (NSTextView *)fieldEditorForView:(NSView *)view {
-  NSTextView *own = NGNFieldEditorFor(self.box.fontSmoothing, &_editor);
-  return own != nil ? own : [super fieldEditorForView:view];
+  if (_editor == nil) {
+    _editor = [[NGNPlainFieldEditor alloc] initUsingTextLayoutManager:NO];
+    _editor.fieldEditor = YES;
+    _editor.box = self.box;
+  }
+  NGNTextField *box = self.box;
+  _editor.fontSmoothing = box.fontSmoothing;
+  return _editor;
 }
 @end
 
@@ -389,8 +426,6 @@ NGN_FIELD_CELL_METHODS
   NSColor *_placeholderColor;
   NSTextAlignment _alignment;
   NSWritingDirection _writingDirection;
-  // An editing session begun in the shared field editor, to begin again in the field's own.
-  BOOL _restartPending;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame {
@@ -448,33 +483,7 @@ NGN_FIELD_CELL_METHODS
   if ([editor isKindOfClass:NGNSmoothedFieldEditor.class]) {
     ((NGNSmoothedFieldEditor *)editor).fontSmoothing = fontSmoothing;
     editor.needsDisplay = YES;
-  } else {
-    _restartPending = YES;
-    [self restartInOwnEditor];
   }
-}
-
-// Editing begun under auto, in the shared field editor, which draws as the system smooths, moves
-// to the field's own once its text is smoothed otherwise; a secure field keeps AppKit's.
-- (void)restartInOwnEditor {
-  NSText *editor = NGNEditorOf(_control);
-  if (!_restartPending || editor == nil || _secure || _fontSmoothing == FontSmoothing::Auto ||
-      [editor isKindOfClass:NGNSmoothedFieldEditor.class]) {
-    _restartPending = NO;
-    return;
-  }
-  _restartPending = !NGNRestartEditing(_control, &_swapping);
-}
-
-- (void)controlTextDidChange {
-  if (!_restartPending) {
-    return;
-  }
-  // A turn later, out of the text system's change.
-  __weak NGNTextField *weakSelf = self;
-  dispatch_async(dispatch_get_main_queue(), ^{
-    [weakSelf restartInOwnEditor];
-  });
 }
 
 - (void)setSecure:(BOOL)secure {
@@ -638,6 +647,10 @@ NGN_INVALID_ATTRIBUTE_METHODS(self.invalid)
 - (void)applyOptions:(const TextInputOptions &)options {
   _options = options;
   NGNApplyTextOptions(self, _options);
+}
+
+- (std::optional<std::size_t>)compositionMaxLength {
+  return _options.maxLength;
 }
 
 - (void)setTextAlignment:(NSTextAlignment)alignment writingDirection:(NSWritingDirection)direction {

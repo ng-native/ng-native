@@ -33,18 +33,6 @@ NSTextView *editor(NGNTextField *field) {
   return [field.currentEditor isKindOfClass:NSTextView.class] ? (NSTextView *)field.currentEditor : nil;
 }
 
-// Runs the main queue up to a block queued now, so every block queued before it has run.
-void settle() {
-  __block bool drained = false;
-  dispatch_async(dispatch_get_main_queue(), ^{
-    drained = true;
-  });
-  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5];
-  while (!drained && deadline.timeIntervalSinceNow > 0) {
-    [NSRunLoop.currentRunLoop runMode:NSDefaultRunLoopMode beforeDate:deadline];
-  }
-}
-
 void type(NSTextView *text, NSString *typed) {
   [text insertText:typed replacementRange:NSMakeRange(NSNotFound, 0)];
 }
@@ -138,7 +126,7 @@ TEST_CASE("NGNTextCheckingOptions turns the user's capitalization off for autoCa
   CHECK(NGNTextCheckingOptions(in, {.capitalize = Capitalize::Sentences}).count == 0);
 }
 
-TEST_CASE("a field sets the shared field editor up with its own options each time it edits") {
+TEST_CASE("each field sets up its editor with its own options") {
   NSWindow *window = offscreenWindow();
   NGNTextField *plain = addField(window);
   [plain applyOptions:{.autoCorrect = false, .spellCheck = false, .smartQuotes = false, .smartInsertDelete = false}];
@@ -510,7 +498,7 @@ TEST_CASE("-webkit-font-smoothing draws a field's text thinner when antialiased,
   [window close];
 }
 
-TEST_CASE("a field edits in a field editor that smooths as it does, and in the shared one for auto") {
+TEST_CASE("a field editor smooths as its field does, including auto") {
   NSWindow *window = offscreenWindow();
   NGNTextField *field = addField(window, NSMakeRect(10, 10, 200, 30));
   field.control.textColor = NSColor.blackColor;
@@ -532,16 +520,14 @@ TEST_CASE("a field edits in a field editor that smooths as it does, and in the s
 
   field.fontSmoothing = FontSmoothing::Auto;
   REQUIRE([window makeFirstResponder:field.control]);
-  NSTextView *shared = editor(field);
-  REQUIRE((shared != nil));
-  CHECK_FALSE([shared isKindOfClass:NGNSmoothedFieldEditor.class]);
-  CHECK((shared == [window fieldEditor:YES forObject:nil]));
-  [shared setSelectedRange:NSMakeRange(0, 0)];
-  CHECK(antialiased.total < inkOf(shared).total);
+  CHECK((editor(field) == own));
+  CHECK(((NGNSmoothedFieldEditor *)own).fontSmoothing == FontSmoothing::Auto);
+  [own setSelectedRange:NSMakeRange(0, 0)];
+  CHECK(antialiased.total < inkOf(own).total);
   [window close];
 }
 
-TEST_CASE("a field editing under auto moves to its own field editor once smoothed, its text and selection kept") {
+TEST_CASE("a field keeps its editor, text and selection when smoothing changes") {
   NSWindow *window = offscreenWindow();
   NGNTextField *field = addField(window, NSMakeRect(10, 10, 200, 30));
   field.stringValue = @"Hamburgefonstiv";
@@ -550,15 +536,13 @@ TEST_CASE("a field editing under auto moves to its own field editor once smoothe
     ++focuses;
   };
   REQUIRE([window makeFirstResponder:field.control]);
-  NSTextView *shared = editor(field);
-  REQUIRE((shared != nil));
-  CHECK_FALSE([shared isKindOfClass:NGNSmoothedFieldEditor.class]);
-  [shared setSelectedRange:NSMakeRange(15, 0)];
-  type(shared, @"!");
-  [shared setSelectedRange:NSMakeRange(2, 3)];
-  field.fontSmoothing = FontSmoothing::None;
   NSTextView *own = editor(field);
   REQUIRE((own != nil));
+  [own setSelectedRange:NSMakeRange(15, 0)];
+  type(own, @"!");
+  [own setSelectedRange:NSMakeRange(2, 3)];
+  field.fontSmoothing = FontSmoothing::None;
+  REQUIRE((editor(field) == own));
   REQUIRE([own isKindOfClass:NGNSmoothedFieldEditor.class]);
   CHECK(((NGNSmoothedFieldEditor *)own).fontSmoothing == FontSmoothing::None);
   CHECK([own.string isEqualToString:@"Hamburgefonstiv!"]);
@@ -569,24 +553,21 @@ TEST_CASE("a field editing under auto moves to its own field editor once smoothe
   [window close];
 }
 
-TEST_CASE("a field composing under auto moves to its own field editor once the composition ends") {
+TEST_CASE("a field can change smoothing during composition without ending it") {
   NSWindow *window = offscreenWindow();
   NGNTextField *field = addField(window, NSMakeRect(10, 10, 200, 30));
   field.stringValue = @"ab";
   REQUIRE([window makeFirstResponder:field.control]);
-  NSTextView *shared = editor(field);
-  REQUIRE((shared != nil));
-  [shared setSelectedRange:NSMakeRange(2, 0)];
-  [shared setMarkedText:@"k" selectedRange:NSMakeRange(1, 0) replacementRange:NSMakeRange(NSNotFound, 0)];
-  field.fontSmoothing = FontSmoothing::Antialiased;
-  // Ending the session now would commit what is being composed.
-  CHECK((window.firstResponder == shared));
-  CHECK(shared.hasMarkedText);
-  [shared insertText:@"k" replacementRange:shared.markedRange];
-  settle();
   NSTextView *own = editor(field);
   REQUIRE((own != nil));
-  CHECK([own isKindOfClass:NGNSmoothedFieldEditor.class]);
+  [own setSelectedRange:NSMakeRange(2, 0)];
+  [own setMarkedText:@"k" selectedRange:NSMakeRange(1, 0) replacementRange:NSMakeRange(NSNotFound, 0)];
+  field.fontSmoothing = FontSmoothing::Antialiased;
+  CHECK((window.firstResponder == own));
+  CHECK(own.hasMarkedText);
+  [own insertText:@"k" replacementRange:own.markedRange];
+  CHECK((editor(field) == own));
+  CHECK(((NGNSmoothedFieldEditor *)own).fontSmoothing == FontSmoothing::Antialiased);
   CHECK([own.string isEqualToString:@"abk"]);
   CHECK(NSEqualRanges(own.selectedRange, NSMakeRange(3, 0)));
   [window makeFirstResponder:nil];
