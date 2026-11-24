@@ -99,3 +99,16 @@ export class DefaultSplitFixture {}
   `,
 })
 export class NoSidebarSplitFixture {}
+
+/** A split view whose sidebar is wrapped in a view, so the sidebar pane does not take it. */
+@Component({
+  selector: 'x-wrapped-sidebar-split',
+  imports: [Sidebar, SplitView, View],
+  template: `
+    <split-view testID="split">
+      <view><sidebar /></view>
+      <view testID="detail" />
+    </split-view>
+  `,
+})
+export class WrappedSidebarSplitFixture {}

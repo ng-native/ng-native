@@ -1,6 +1,7 @@
 import {
   Component,
   computed,
+  forwardRef,
   inject,
   input,
   model,
@@ -10,7 +11,7 @@ import {
 import { nativeSplitViews } from '@ng-native/device';
 import { registerViewName } from '@ng-native/fabric';
 import { optionalNumber } from './transforms.ts';
-import { SplitView, hostDraws } from './split-view.ts';
+import { SIDEBAR, SplitView, hostDraws } from './split-view.ts';
 import { ViewBase } from './view-base.ts';
 
 /**
@@ -48,6 +49,7 @@ export interface SidebarRow {
  */
 @Component({
   selector: 'sidebar',
+  providers: [{ provide: SIDEBAR, useExisting: forwardRef(() => Sidebar) }],
   template: '<ng-content />',
   host: {
     '[collapsed]': 'native ? collapsed() : undefined',
@@ -92,7 +94,6 @@ export class Sidebar extends ViewBase implements OnInit, OnDestroy {
 
   override ngOnInit(): void {
     super.ngOnInit();
-    if (this.split) this.split.hasSidebar = true;
     if (!this.native || this.stopCollapsed) return;
     this.stopCollapsed = this.engine.setEventListener(this.node, 'topSidebarCollapse', (event) => {
       const { target, nativeEvent } = event as {

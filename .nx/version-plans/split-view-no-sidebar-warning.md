@@ -2,4 +2,4 @@
 __default__: patch
 ---
 
-A `<split-view>` with no `<sidebar>` warns once in development that it shows only its content, which on macOS has no divider and no second pane. Before, it laid its children out as a column with no warning.
+A `<split-view>` with no `<sidebar>` as a child of its own warns in development that its sidebar pane is empty. Before, nothing said so, and on macOS its children were laid out as a column with no divider.
