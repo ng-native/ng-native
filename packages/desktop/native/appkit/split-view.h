@@ -5,7 +5,10 @@
 //   Sidebar and autosave. A plain one is an NSSplitView in the content, at its Yoga frame.
 // - Each pane is a container of its own (NGNSurfaceView) in its split item, and the size it is given
 //   goes back to layout as the pane's state, at most once per display frame. The sidebar pane sits
-//   below the title bar; the content pane runs under the toolbar, as a window's content does.
+//   below the title bar; the content pane runs under the toolbar, as a window's content does. An
+//   inset content pane (the core's insetContent) is instead a card with rounded corners in a
+//   backdrop of the sidebar's material, which runs under the toolbar while the card starts below
+//   it, and the toolbar draws no separator over the backdrop.
 // - Each run of neighbouring sections is a source-list NSOutlineView in the sections' place. A
 //   native row is drawn from the item's props; a custom row's views move into a container of their
 //   own as the row's cell, which takes a click on something that takes it (rowContentTakesClick)

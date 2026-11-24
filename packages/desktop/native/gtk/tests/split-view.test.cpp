@@ -900,3 +900,81 @@ TEST_CASE("a native row draws its item's SVG icon in the row's text colour, and 
   s.views.update(s.inbox, parsedProps<ngn::SidebarItemComponentDescriptor>(dynamic::object("label", "Inbox")("svgIcon", "lucideBlocks")));
   CHECK(rowIcon(rowsOf(s.splits().lists(3)[0])[1]) == nullptr);
 }
+
+TEST_CASE("an inset content pane is a rounded card below the header bar on the sidebar's backdrop, and plain again") {
+  REQUIRE(ngn::testing::gtkReady());
+  // The sidebar's and the window's colours told apart: red and blue, taken away on every way out.
+  struct Colours {
+    GtkCssProvider *provider = gtk_css_provider_new();
+    Colours() {
+      gtk_css_provider_load_from_data(
+          provider, "@define-color sidebar_bg_color rgb(255, 0, 0); @define-color window_bg_color rgb(0, 0, 255);", -1);
+      gtk_style_context_add_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
+    }
+    ~Colours() {
+      gtk_style_context_remove_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(provider));
+      g_object_unref(provider);
+    }
+  } colours;
+  Split s;
+  auto contentStyle = [&](const char *style) {
+    s.views.update(s.content, parsedProps<ngn::SplitContentComponentDescriptor>(dynamic::object("contentStyle", style)));
+    s.views.settle();
+  };
+  GtkWidget *page = GTK_WIDGET(adw_navigation_split_view_get_content(s.widget()));
+  GtkWidget *slot = gtk_widget_get_parent(s.views.view(4));
+  const auto *chrome = ngn::gtk::chromeOf(s.views.surface);
+  REQUIRE(chrome);
+  auto slotBounds = [&] {
+    graphene_rect_t bounds;
+    REQUIRE(gtk_widget_compute_bounds(slot, page, &bounds));
+    return bounds;
+  };
+  auto headerBottom = [&] {
+    graphene_rect_t bounds;
+    REQUIRE(gtk_widget_compute_bounds(chrome->headerBar, page, &bounds));
+    return bounds.origin.y + bounds.size.height;
+  };
+  s.views.settle();
+  float plainWidth = slotBounds().size.width;
+  CHECK(slotBounds().origin.x == 0);
+
+  contentStyle("inset");
+  CHECK(gtk_widget_has_css_class(page, "ngn-inset-content"));
+  auto inset = slotBounds();
+  CHECK(inset.origin.x == doctest::Approx(ngn::kInsetContentMargin));
+  CHECK(inset.size.width == doctest::Approx(plainWidth - 2 * ngn::kInsetContentMargin));
+  CHECK(inset.origin.y == doctest::Approx(headerBottom() + ngn::kInsetContentMargin));
+  // The pane is laid out at the card's size.
+  ngn::testing::runUntil([&] { return s.splits().paneSize(4) && s.splits().paneSize(4)->width == inset.size.width; });
+  CHECK(s.splits().paneSize(4)->width == doctest::Approx(inset.size.width));
+  // The margin round the card and the header bar over it are the sidebar's backdrop, and the card
+  // is in the window's colour.
+  graphene_point_t origin{0, 0}, at;
+  REQUIRE(gtk_widget_compute_point(page, s.views.window, &origin, &at));
+  int left = static_cast<int>(at.x);
+  CHECK(ngn::testing::reddish(ngn::testing::widgetPixel(s.views.window, left + 3, 200)));
+  CHECK(ngn::testing::reddish(ngn::testing::widgetPixel(s.views.window, left + 40, static_cast<int>(headerBottom()) - 3)));
+  // With no line under the header bar.
+  for (int y = static_cast<int>(headerBottom()) - 2; y <= static_cast<int>(headerBottom()) + 2; y++) {
+    CHECK(ngn::testing::reddish(ngn::testing::widgetPixel(s.views.window, left + 40, y)));
+  }
+  CHECK(ngn::testing::bluish(ngn::testing::widgetPixel(s.views.window, left + 40, 200)));
+  // Rounded: the card's corner shows the backdrop.
+  int cardLeft = left + static_cast<int>(inset.origin.x);
+  int cardTop = static_cast<int>(at.y + inset.origin.y);
+  CHECK(ngn::testing::reddish(ngn::testing::widgetPixel(s.views.window, cardLeft + 1, cardTop + 1)));
+
+  contentStyle("plain");
+  CHECK_FALSE(gtk_widget_has_css_class(page, "ngn-inset-content"));
+  CHECK(slotBounds().origin.x == 0);
+  CHECK(slotBounds().size.width == doctest::Approx(plainWidth));
+
+  // A content pane mounted inset in place of the plain one is drawn inset as it joins.
+  ShadowView inset2 = view(9, "NgNativeSplitContent",
+      parsedProps<ngn::SplitContentComponentDescriptor>(dynamic::object("contentStyle", "inset")), {{240, 0}, {560, 500}});
+  s.views.mount({ShadowViewMutation::RemoveMutation(2, s.content, 1), ShadowViewMutation::DeleteMutation(s.content),
+                 ShadowViewMutation::CreateMutation(inset2), ShadowViewMutation::InsertMutation(2, inset2, 1)});
+  CHECK(gtk_widget_has_css_class(page, "ngn-inset-content"));
+  CHECK(gtk_widget_has_css_class(slot, "ngn-inset-card"));
+}

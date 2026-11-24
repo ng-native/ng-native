@@ -123,6 +123,27 @@ void addSourceListStyle() {
   g_object_unref(provider);
 }
 
+// An inset content pane: its page on the sidebar's backdrop, the header bar over it drawing none of
+// its own, and the slot a card in the window's colour, kInsetContentMargin in from the page's edges
+// and below the header bar, clipped to rounded corners (a slot's overflow is hidden).
+void addInsetContentStyle() {
+  static bool added = false;
+  if (added || !gdk_display_get_default()) {
+    return;
+  }
+  added = true;
+  GtkCssProvider *provider = gtk_css_provider_new();
+  std::string css = ".ngn-inset-content { background-color: @sidebar_bg_color; }"
+                    ".ngn-inset-content headerbar, .ngn-inset-content .top-bar { background: none; box-shadow: none; border: none; }"
+                    ".ngn-inset-card { background-color: @window_bg_color; margin: " +
+      std::to_string(static_cast<int>(kInsetContentMargin)) + "px; border-radius: " +
+      std::to_string(static_cast<int>(kInsetContentRadius)) + "px; }";
+  gtk_css_provider_load_from_data(provider, css.c_str(), -1);
+  gtk_style_context_add_provider_for_display(
+      gdk_display_get_default(), GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref(provider);
+}
+
 struct RowTarget {
   SplitViews *splits;
   Tag parent;
@@ -460,6 +481,24 @@ void SplitViews::host(Split &s, Tag pane) {
   if (GtkWidget *widget = sidebar ? backend_.view(pane) : nullptr) {
     titleContent(widget, nullptr);
   }
+  if (!sidebar) {
+    applyContentStyle(s);
+  }
+}
+
+void SplitViews::applyContentStyle(Split &s) {
+  bool inset = insetContent(paneProps(backend_.data(s.content)));
+  if (inset) {
+    addInsetContentStyle();
+  }
+  GtkWidget *page = GTK_WIDGET(adw_navigation_split_view_get_content(ADW_NAVIGATION_SPLIT_VIEW(s.view)));
+  for (auto [widget, name] : {std::pair{page, "ngn-inset-content"}, std::pair{s.contentSlot, "ngn-inset-card"}}) {
+    if (inset) {
+      gtk_widget_add_css_class(widget, name);
+    } else {
+      gtk_widget_remove_css_class(widget, name);
+    }
+  }
 }
 
 void SplitViews::hostScreen(Split &s, Tag screen) {
@@ -613,6 +652,10 @@ void SplitViews::propsChanged(Tag tag) {
     return;
   }
   auto &s = splits_[*split];
+  if (tag == s.content) {
+    applyContentStyle(s);
+    return;
+  }
   if (tag != s.sidebar) {
     return;
   }
@@ -715,6 +758,10 @@ void SplitViews::deleted(Tag tag) {
         backend_.hooks.containerRoot(tag, false);
         *pane = -1;
         NGN_PANE_SLOT(slot)->pane = -1;
+        // No content pane, nothing drawn inset.
+        if (pane == &s.content) {
+          applyContentStyle(s);
+        }
       }
     }
   }

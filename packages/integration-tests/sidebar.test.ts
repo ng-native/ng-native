@@ -6,6 +6,8 @@
  * - `<split-view>` is `NgNativeSplitView`. Its children are the sidebar, then one
  *   `NgNativeSplitContent` holding everything else: the content pane. The first in a window is its
  *   NSSplitViewController; a nested or second one is a plain NSSplitView.
+ * - `NgNativeSplitContent` has the prop `contentStyle`, `'plain'` (the default) or `'inset'`, the
+ *   content pane drawn as a rounded card inset from the window, on the sidebar's backdrop.
  * - `<sidebar>` is `NgNativeSidebar`, with the props `collapsed`, `paneMinWidth`, `paneMaxWidth`
  *   (renamed, as Fabric's view props read `minWidth` as a style) and `autosaveName`. The host owns
  *   its width and sends `topSidebarCollapse` with `{ collapsed }` when the user collapses or opens
@@ -35,6 +37,7 @@ import { compileFixture } from './compile.ts';
 
 type Signalish<T> = { (): T; set(value: T): void };
 type Fixture = {
+  contentStyle: Signalish<'plain' | 'inset'>;
   collapsed: Signalish<boolean>;
   mailTitle: Signalish<string | undefined>;
   mailCollapsible: Signalish<boolean>;
@@ -47,10 +50,12 @@ type Fixture = {
   storage: () => { emphasized(): boolean };
 };
 let Fixture: Type<Fixture>;
+let DefaultSplit: Type<unknown>;
 
 before(async () => {
   const mod = await compileFixture('fixtures/sidebar.ts');
   Fixture = mod['SidebarFixture'] as Type<Fixture>;
+  DefaultSplit = mod['DefaultSplitFixture'] as Type<unknown>;
 });
 
 afterEach(cleanup);
@@ -90,6 +95,18 @@ describe('on macOS', () => {
     assert.equal(sidebar.props['autosaveName'], 'main');
     assert.equal(sidebar.props['minWidth'], undefined, 'not a style the host would lay out by');
     assert.equal(sidebar.props['width'], undefined, 'the host owns the width');
+  });
+
+  it("commits the split view's contentStyle on the content pane, plain by default", async () => {
+    const { instance, getByTestId, rerender } = await render(Fixture);
+    const content = () => getByTestId('split').children[1]!;
+    assert.equal(content().props['contentStyle'], 'inset');
+    instance.contentStyle.set('plain');
+    await rerender();
+    assert.equal(content().props['contentStyle'], 'plain');
+    cleanup();
+    const plain = await render(DefaultSplit);
+    assert.equal(plain.getByTestId('split').children[1]!.props['contentStyle'], 'plain');
   });
 
   it('commits sections and items as the source list, with no drawn rows', async () => {
@@ -195,6 +212,11 @@ describe('on Linux', () => {
   before(() => registerPlatformComponents('linux'));
   after(() => registerPlatformComponents('ios'));
 
+  it("commits the split view's contentStyle on the content pane", async () => {
+    const { getByTestId } = await render(Fixture);
+    assert.equal(getByTestId('split').children[1]!.props['contentStyle'], 'inset');
+  });
+
   it('commits sections and items as the source list the GTK host draws, with no drawn rows', async () => {
     const { getByTestId } = await render(Fixture);
     assert.equal(getByTestId('split').viewName, 'NgNativeSplitView');
@@ -228,6 +250,8 @@ describe('drawn, beside the content', () => {
         assert.equal(sidebar.props['minWidth'], 180);
         assert.equal(sidebar.props['maxWidth'], 400);
         assert.equal(sidebar.props['paneMinWidth'], undefined);
+        const content = split.children[1]!;
+        assert.equal(content.props['contentStyle'], undefined, 'a drawn split view ignores it');
         assert.ok(getByText('Mailboxes'));
         assert.ok(getByText('Inbox'));
         assert.ok(getByText('3'), 'the badge');
@@ -446,6 +470,7 @@ describe('on iPadOS', () => {
       split.children.map((child) => child.viewName),
       ['NgNativeSidebar', 'NgNativeSplitContent'],
     );
+    assert.equal(split.children[1]!.props['contentStyle'], undefined, 'an iPad ignores it');
     const sidebar = getByTestId('sidebar');
     assert.equal(sidebar.props['collapsed'], false);
     assert.equal(sidebar.props['paneMinWidth'], 180);

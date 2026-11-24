@@ -23,7 +23,12 @@ SplitPaneProps::SplitPaneProps(const PropsParserContext &context, const SplitPan
       collapsed(convertRawProp(context, rawProps, "collapsed", sourceProps.collapsed, false)),
       paneMinWidth(convertRawProp(context, rawProps, "paneMinWidth", sourceProps.paneMinWidth, Float{0})),
       paneMaxWidth(convertRawProp(context, rawProps, "paneMaxWidth", sourceProps.paneMaxWidth, Float{0})),
-      autosaveName(convertRawProp(context, rawProps, "autosaveName", sourceProps.autosaveName, std::string{})) {}
+      autosaveName(convertRawProp(context, rawProps, "autosaveName", sourceProps.autosaveName, std::string{})),
+      contentStyle(convertRawProp(context, rawProps, "contentStyle", sourceProps.contentStyle, std::string{})) {}
+
+bool insetContent(const SplitPaneProps *props) {
+  return props != nullptr && props->contentStyle == "inset";
+}
 
 SidebarWidths sidebarWidths(const SplitPaneProps *props) {
   constexpr Float minimum = 150;

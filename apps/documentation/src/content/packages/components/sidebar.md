@@ -44,6 +44,24 @@ and `SidebarItemPath` from `@ng-native/router` for items with a `path`.
 Sections and items become a native source list on macOS. Anything else in the sidebar, such as a
 search field or a footer, is drawn and styled by CSS on every OS.
 
+## The content pane
+
+- **`contentStyle`** - `plain` (the default) or `inset`. On macOS and Linux an `inset` content
+  pane is a card with rounded corners, inset 8 points from the edges of the space beside the
+  sidebar and from the bottom of the toolbar or header bar, on the sidebar's backdrop, which
+  runs under the toolbar or header bar. The pane is laid out at the card's size, so a page in it
+  starts below the toolbar with no top inset of its own. iOS, Android and the web host ignore it.
+
+```html
+<split-view contentStyle="inset">
+  <sidebar>...</sidebar>
+  <native-stack-outlet />
+</split-view>
+```
+
+The host places the content pane, so a margin, radius or background on what it holds (a
+`<native-stack-outlet>`, say) styles the content inside the card, not the pane.
+
 ## Sections and items
 
 `<sidebar-section>` takes an optional `title`, and `collapsible` to show and hide its items from
@@ -120,7 +138,10 @@ separator, View > Show Sidebar and an autosaved width; one inside another split 
 the tabs is a plain NSSplitView in the content. Each pane is sized by AppKit, and the size goes
 back into layout, at most once a display frame. The sidebar's collapsed state follows the app's
 `collapsed`, and the title bar button, the View menu and a restored autosave report theirs with
-`topSidebarCollapse`.
+`topSidebarCollapse`. The content pane's `contentStyle` prop is `inset` for a card: its container
+sits in a backdrop of the sidebar's material, which runs under the toolbar, and the content's split
+item draws no title bar separator. On Linux the content page takes the sidebar's colour, the header
+bar over it draws none of its own, and the pane's slot is the card.
 
 Neighbouring `<sidebar-section>`s (`NgNativeSidebarSection`) in one parent are one NSOutlineView
 source list, laid out where Yoga put them, and each `<sidebar-item>` (`NgNativeSidebarItem`) is a

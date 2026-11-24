@@ -57,7 +57,16 @@ class SplitPaneProps final : public facebook::react::ViewProps {
   facebook::react::Float paneMinWidth{0};
   facebook::react::Float paneMaxWidth{0};
   std::string autosaveName;
+  // The content pane's own: `plain` or `inset`.
+  std::string contentStyle;
 };
+
+// Whether the content pane with these props is drawn inset: a card with rounded corners, this far
+// from the edges of its pane's space and below the toolbar, on the sidebar's backdrop. `props` is
+// the content pane's, or null before it has any.
+bool insetContent(const SplitPaneProps *props);
+constexpr facebook::react::Float kInsetContentMargin = 8;
+constexpr facebook::react::Float kInsetContentRadius = 10;
 
 // The narrowest and widest a sidebar is dragged to, and the width it starts at when its toolkit's
 // autosave holds none: the app's bounds, or 150 and 400 where it sets none, with the widest never

@@ -5,7 +5,9 @@
 // window's own runs the full height of the window, as a libadwaita window lays one out: each pane is
 // under a header bar of its own in an AdwToolbarView, the window's header bar (its title, history
 // pair, sidebar button and header items) moves over the content pane, and it moves back as the split
-// view goes. A window whose content already runs under its header bar keeps it there. Each
+// view goes. A window whose content already runs under its header bar keeps it there. An inset
+// content pane (insetContent) is a rounded card on its page, which takes the sidebar's colour, the
+// header bar over it drawing no background of its own. Each
 // pane moves into a slot of its own in a page of the split view, a container of its own for input,
 // and its size goes back to its shadow node as state, coalesced to once a frame (FrameSizes). The
 // core owns collapse (FoldingSplit): the bin's one AdwBreakpoint, whose condition is the core's
@@ -56,7 +58,8 @@ class SplitViews {
   void removed(Tag parent, Tag child);
   // A view in a sidebar gained or lost lists of its own: the content takes the sidebar's title.
   void retitleSidebarsHolding(Tag parent);
-  // A sidebar's props changed: its widths and whether the app has it collapsed.
+  // A pane's props changed: a sidebar's widths and whether the app has it collapsed, and whether
+  // the content is drawn inset.
   void propsChanged(Tag tag);
   // A view went.
   void deleted(Tag tag);
@@ -156,6 +159,8 @@ class SplitViews {
   // A sidebar first hosted, by placing the split or inserting the sidebar: its widths, the app's
   // collapsed prop, then the saved preference over it.
   void applySidebar(Split &s);
+  // The content pane drawn inset or plain, as its props say: none is plain.
+  void applyContentStyle(Split &s);
   // Moves the window's header bar over the content pane, or back over the whole window.
   void moveHeaderBar(Split &s, bool overContent);
   void placeHeader(SurfaceId surfaceId);

@@ -11,7 +11,7 @@ import { View } from '../../components/src/view.ts';
   selector: 'x-sidebar',
   imports: [Pressable, Sidebar, SidebarItem, SidebarSection, SplitView, Text, View],
   template: `
-    <split-view testID="split">
+    <split-view testID="split" [contentStyle]="contentStyle()">
       <sidebar
         testID="sidebar"
         [(collapsed)]="collapsed"
@@ -61,6 +61,7 @@ import { View } from '../../components/src/view.ts';
   `,
 })
 export class SidebarFixture {
+  readonly contentStyle = signal<'plain' | 'inset'>('inset');
   readonly collapsed = signal(false);
   readonly mailTitle = signal<string | undefined>('Mailboxes');
   readonly mailCollapsible = signal(true);
@@ -72,3 +73,16 @@ export class SidebarFixture {
   readonly split = viewChild.required(SplitView);
   readonly storage = viewChild.required('storage', { read: SidebarItem });
 }
+
+/** A split view that leaves its inputs at their defaults. */
+@Component({
+  selector: 'x-default-split',
+  imports: [Sidebar, SplitView, View],
+  template: `
+    <split-view testID="split">
+      <sidebar />
+      <view testID="content" />
+    </split-view>
+  `,
+})
+export class DefaultSplitFixture {}

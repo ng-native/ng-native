@@ -136,7 +136,9 @@ author needs is on the documentation site, under [Desktop](https://ng-native.com
   Sidebar (F9) and the sidebar button go to the window's split view. The button sits at the end of
   the sidebar's own header bar while the sidebar shows beside the content, and in the window's
   header bar once it folds away. A sidebar with an `autosave` name keeps whether it is collapsed in
-  the app's preferences, and that state wins over the app's prop on the next launch. A cover starts
+  the app's preferences, and that state wins over the app's prop on the next launch. An inset
+  content pane (`contentStyle="inset"`) is a rounded card on its page, which takes the sidebar's
+  colour, the header bar over it drawing none of its own. A cover starts
   below both header bars of a full-height split view. A
   presented screen's header is the sheet's own header bar, with Cancel at the start and bound to
   Escape and the last right item the default on Return. An alert (`alerts.h`) is an

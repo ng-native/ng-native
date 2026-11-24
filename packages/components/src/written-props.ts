@@ -65,6 +65,7 @@ export const WRITTEN_PROPS: readonly string[] = [
   'contentInset',
   'contentInsetAdjustmentBehavior',
   'contentOffset',
+  'contentStyle',
   'contextMenu',
   'contextMenuHidden',
   'controlSize',

@@ -140,6 +140,15 @@ TEST_CASE("the sidebar's props are read under their pane names") {
   CHECK(sidebar.paneMaxWidth == 400);
   CHECK(sidebar.autosaveName == "main");
 
+  // The content pane's: inset only when it says so.
+  CHECK(ngn::insetContent(&static_cast<const ngn::SplitPaneProps &>(
+      *props<ngn::SplitContentComponentDescriptor>(dynamic::object("contentStyle", "inset")))));
+  CHECK_FALSE(ngn::insetContent(&static_cast<const ngn::SplitPaneProps &>(
+      *props<ngn::SplitContentComponentDescriptor>(dynamic::object("contentStyle", "plain")))));
+  CHECK_FALSE(ngn::insetContent(&static_cast<const ngn::SplitPaneProps &>(
+      *props<ngn::SplitContentComponentDescriptor>(dynamic::object()))));
+  CHECK_FALSE(ngn::insetContent(nullptr));
+
   auto rowProps = props<ngn::SidebarItemComponentDescriptor>(
       dynamic::object("label", "Inbox")("badge", "3")("sfSymbol", "tray")("drawable", "ic_inbox")("svgIcon", "<svg/>")("selected", true));
   const auto &row = static_cast<const ngn::SidebarItemProps &>(*rowProps);

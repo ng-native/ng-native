@@ -59,7 +59,8 @@ runtime.
   `<pressable>` one on a click, and `[shortcut]` a key.
   See [Menus](/packages/components/menus).
 - **A sidebar.** `<split-view>`, `<sidebar>`, `<sidebar-section>` and `<sidebar-item>` are the
-  window's source list, and a tab app's tabs become one. See
+  window's source list, and a tab app's tabs become one. `contentStyle="inset"` draws the content
+  beside it as a rounded card on the sidebar's backdrop. See
   [Sidebar](/packages/components/sidebar).
 - **The mouse and keyboard.** `:hover`, `:focus-visible`, `cursor`, `(mouseenter)`,
   `(dblclick)`, `(contextmenu)` and Tab order all work, and `<native-button>` is an AppKit button.

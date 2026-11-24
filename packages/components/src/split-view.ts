@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, inject, signal, type Signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, input, signal, type Signal } from '@angular/core';
 import { HardwareBack, Screen, nativeSplitViews } from '@ng-native/device';
 import { nativePlatform, registerViewName, registeredViewName } from '@ng-native/fabric';
 import { ViewBase } from './view-base.ts';
@@ -38,11 +38,21 @@ export const ANDROID_EXPANDED_WIDTH = 840;
 /** Which pane a split view shows: both side by side, or one of them as a stack's top. */
 export type SplitViewShowing = 'both' | 'sidebar' | 'content';
 
+/**
+ * How the desktop hosts draw a split view's content pane: `plain`, filling the space beside the
+ * sidebar, or `inset`, a card with rounded corners inset from its space's edges, on the sidebar's
+ * backdrop, which runs under the toolbar or header bar.
+ */
+export type SplitViewContentStyle = 'plain' | 'inset';
+
 /** The content pane: everything in a `<split-view>` but its `<sidebar>`. */
 @Component({
   selector: 'split-view-content',
   template: '<ng-content />',
-  host: { '[style.display]': "split.showing() === 'sidebar' ? 'none' : undefined" },
+  host: {
+    '[style.display]': "split.showing() === 'sidebar' ? 'none' : undefined",
+    '[contentStyle]': 'split.onDesktop ? split.contentStyle() : undefined',
+  },
   styles: ':host { flex: 1; }',
 })
 export class SplitViewContent extends ViewBase {
@@ -69,6 +79,10 @@ export class SplitViewContent extends ViewBase {
  * root is the sidebar. On Android the columns wait for Material's expanded width,
  * `ANDROID_EXPANDED_WIDTH`, as its list-detail layout does. There, choosing an item shows the content, and `showSidebar()` (or
  * Android's back button) returns to the sidebar.
+ *
+ * `contentStyle="inset"` draws the content pane on macOS and Linux as a card with rounded corners,
+ * inset from its space's edges on the sidebar's backdrop, which runs under the toolbar. The pane's
+ * size, and so its layout, is the card's. iOS and Android ignore it.
  */
 @Component({
   selector: 'split-view',
@@ -81,10 +95,18 @@ export class SplitViewContent extends ViewBase {
   host: { '[style.flexDirection]': "drawn && !stacked() ? 'row' : undefined" },
 })
 export class SplitView extends ViewBase {
+  /**
+   * macOS and Linux: the content pane `plain`, beside the sidebar, or `inset`, a rounded card on
+   * the sidebar's backdrop. iOS and Android ignore it.
+   */
+  readonly contentStyle = input<SplitViewContentStyle>('plain');
+
   /** Whether this split view is drawn from views here, rather than by the host. */
   readonly drawn = !hostDraws('split-view');
   /** Whether the host is iOS's, whose split view controller pushes and pops the content. */
   private readonly stacksNatively = !this.drawn && nativePlatform() === 'ios';
+  /** Whether the desktop host draws this split view: on macOS and Linux. */
+  readonly onDesktop = !this.drawn && !this.stacksNatively;
   private readonly screen = inject(Screen);
   /** Too narrow for the panes side by side: below Material's expanded width on Android. */
   private readonly compact = computed(() =>

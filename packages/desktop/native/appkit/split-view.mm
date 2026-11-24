@@ -108,12 +108,87 @@ void updatePaneState(NGNView *view, facebook::react::Size size) {
 - (void)setSidebarView:(NSView *)sidebar contentView:(NSView *)content;
 @end
 
+// An inset content pane's card: the pane's container fills it, clipped to its rounded corners, on
+// the window's background colour, which it takes again as the appearance changes.
+@interface NGNInsetCard : NSView
+@end
+
+@implementation NGNInsetCard
+- (instancetype)initWithFrame:(NSRect)frame {
+  if ((self = [super initWithFrame:frame])) {
+    self.wantsLayer = YES;
+    self.layer.cornerRadius = ngn::kInsetContentRadius;
+    self.layer.cornerCurve = kCACornerCurveContinuous;
+    self.layer.masksToBounds = YES;
+  }
+  return self;
+}
+- (BOOL)wantsUpdateLayer {
+  return YES;
+}
+- (void)updateLayer {
+  self.layer.backgroundColor = NSColor.windowBackgroundColor.CGColor;
+}
+@end
+
+// An inset content pane's backdrop, in the sidebar's material: it places its card
+// kInsetContentMargin in from its edges and below its safe area's top (the toolbar's bottom), as
+// its size changes, as it lays out, and as the card's pane lays out, which a change of the toolbar
+// asks for (NGNSurfaceView safeAreaChangedIn:) though the backdrop's frame stays.
+@interface NGNInsetBackdrop : NSVisualEffectView
+@property (nonatomic, readonly) NGNInsetCard *card;
+- (void)placeCard;
+@end
+
+@implementation NGNInsetBackdrop
+- (instancetype)initWithFrame:(NSRect)frame {
+  if ((self = [super initWithFrame:frame])) {
+    self.material = NSVisualEffectMaterialSidebar;
+    self.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+    self.state = NSVisualEffectStateFollowsWindowActiveState;
+    _card = [[NGNInsetCard alloc] initWithFrame:NSZeroRect];
+    [self addSubview:_card];
+    [self placeCard];
+  }
+  return self;
+}
+- (void)placeCard {
+  CGFloat margin = ngn::kInsetContentMargin;
+  NSRect bounds = self.bounds;
+  NSRect frame = NSMakeRect(
+      margin, margin, MAX(0, NSWidth(bounds) - 2 * margin),
+      MAX(0, NSHeight(bounds) - self.safeAreaInsets.top - 2 * margin));
+  if (!NSEqualRects(frame, _card.frame)) {
+    _card.frame = frame;
+  }
+}
+- (void)setFrameSize:(NSSize)size {
+  [super setFrameSize:size];
+  [self placeCard];
+}
+- (void)layout {
+  [super layout];
+  [self placeCard];
+}
+- (void)viewDidMoveToWindow {
+  [super viewDidMoveToWindow];
+  [self placeCard];
+}
+@end
+
 @implementation NGNPaneContainer
 - (void)setFrameSize:(NSSize)size {
   [super setFrameSize:size];
   if (size.width > 0 && size.height > 0) {
     reportSize(self.pane, size);
   }
+}
+// In a card, which moves first: the insets this reports as it lays out are then the card's.
+- (void)layout {
+  if ([self.superview.superview isKindOfClass:NGNInsetBackdrop.class]) {
+    [(NGNInsetBackdrop *)self.superview.superview placeCard];
+  }
+  [super layout];
 }
 @end
 
@@ -165,6 +240,10 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   // What the split view shows: the panes' containers, or a tabs host's list and content.
   NSView *_sidebarContainer;
   NSView *_contentContainer;
+  // What the split shows for the content once built: the content's container, or while it is
+  // inset the backdrop holding it in its card.
+  NSView *_contentShown;
+  NGNInsetBackdrop *_backdrop;
   BOOL _decided;
   BOOL _windows;
   // The window's: the controller, its sidebar item, and the surface view it took the place of.
@@ -245,10 +324,69 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   }
   // A pane mounted in place of one the split already shows takes its place there.
   if (old != nil && (_controller != nil || _plain != nil)) {
-    [self replaceContainer:old with:container sidebar:sidebar];
+    if (sidebar) {
+      [self replaceContainer:old with:container sidebar:YES];
+    } else {
+      [self placeContent];
+    }
   } else if (_decided) {
     [self build];
   }
+}
+
+// What the split shows for the content: its container, or while the content pane says inset, the
+// backdrop holding the container in its card, which is inset from the backdrop's edges and below
+// its safe area's top (the toolbar's bottom).
+- (NSView *)contentHost {
+  if (!ngn::insetContent([_content paneProps])) {
+    return _contentContainer;
+  }
+  if (_backdrop == nil) {
+    _backdrop = [[NGNInsetBackdrop alloc] initWithFrame:NSMakeRect(0, 0, 400, 400)];
+  }
+  NGNInsetCard *card = _backdrop.card;
+  if (_contentContainer.superview != card) {
+    // A pane mounted in place of another: the card holds the new one alone.
+    for (NSView *other in [card.subviews copy]) {
+      [other removeFromSuperview];
+    }
+    _contentContainer.frame = card.bounds;
+    _contentContainer.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [card addSubview:_contentContainer];
+  }
+  return _backdrop;
+}
+
+// Puts what the split shows for the content in place of what it showed, once built: the content
+// pane changed, or whether it is inset did.
+- (void)placeContent {
+  if (_controller == nil && _plain == nil) {
+    return;
+  }
+  NSView *old = _contentShown;
+  // Before contentHost moves the container into the card or out of it.
+  NSRect frame = old.frame;
+  NSView *host = [self contentHost];
+  if (host == old) {
+    return;
+  }
+  _contentShown = host;
+  if (_plain != nil) {
+    // The content stays the second pane, at the width it had.
+    if (old.superview == _plain) {
+      [old removeFromSuperview];
+    }
+    host.frame = frame;
+    [_plain addArrangedSubview:host];
+    return;
+  }
+  [self replaceContainer:old with:host sidebar:NO];
+}
+
+// While inset, the toolbar draws no separator over the backdrop.
+- (void)styleContentItem:(NSSplitViewItem *)item {
+  item.titlebarSeparatorStyle =
+      _backdrop != nil && _contentShown == _backdrop ? NSTitlebarSeparatorStyleNone : NSTitlebarSeparatorStyleAutomatic;
 }
 
 - (void)replaceContainer:(NSView *)old with:(NSView *)container sidebar:(BOOL)sidebar {
@@ -281,7 +419,9 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
     NSViewController *main = [NSViewController new];
     main.view = container;
     [_controller removeSplitViewItem:_controller.splitViewItems.lastObject];
-    [_controller addSplitViewItem:[NSSplitViewItem splitViewItemWithViewController:main]];
+    NSSplitViewItem *item = [NSSplitViewItem splitViewItemWithViewController:main];
+    [self styleContentItem:item];
+    [_controller addSplitViewItem:item];
   }
 }
 
@@ -370,8 +510,10 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   _sidebarItem.maximumThickness = [self maximumWidth];
 
   NSViewController *main = [NSViewController new];
-  main.view = _contentContainer;
+  _contentShown = [self contentHost];
+  main.view = _contentShown;
   NSSplitViewItem *contentItem = [NSSplitViewItem splitViewItemWithViewController:main];
+  [self styleContentItem:contentItem];
 
   _controller = [NSSplitViewController new];
   const auto *p = [_sidebar paneProps];
@@ -426,7 +568,8 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   }
   BOOL restoring = [self hasAutosavedFrames];
   [_plain addArrangedSubview:_sidebarContainer];
-  [_plain addArrangedSubview:_contentContainer];
+  _contentShown = [self contentHost];
+  [_plain addArrangedSubview:_contentShown];
   [self addSubview:_plain];
   [_plain adjustSubviews];
   if (!restoring) {
@@ -489,6 +632,10 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 
 // The sidebar's props: its bounds, its autosave and whether the app has it collapsed.
 - (void)paneChanged:(NGNSplitPaneView *)pane {
+  if (pane != nil && pane == _content) {
+    [self placeContent];
+    return;
+  }
   if (pane != _sidebar || !_decided) {
     return;
   }
