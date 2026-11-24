@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
-import { Engine, type StyleSheet } from '@ng-native/fabric';
+import { Engine, pinnedRange, type StyleSheet } from '@ng-native/fabric';
 import { compileCss } from '@ng-native/testing';
 import { createLaidOutFabric } from './laid-out-fabric.ts';
 import { recorder } from './native-animated.ts';
@@ -439,6 +439,68 @@ describe('a painted view a native @keyframes animation starts on', () => {
     const graphs = s.rec.connected().get(s.engine.tagOf(s.view)) ?? [];
     assert.equal(graphs.length, 1, 'one graph on the view');
     assert.equal(s.view.transitions?.get('transform')?.native, undefined, 'none left native');
+  });
+});
+
+describe('a painted view a scroll drive starts on', () => {
+  it('lets the painter go, so one graph moves the view', () => {
+    const s = scene(BAR);
+    const scroll = s.engine.createElement('scroll-view');
+    s.engine.appendChild(s.engine.root, scroll);
+    for (let x = 10; x <= 40; x += 10) s.tick(50, move(x));
+    s.engine.driveByScroll(s.view, scroll, 'y', pinnedRange(0));
+    s.engine.commit();
+    const graphs = s.rec.connected().get(s.engine.tagOf(s.view)) ?? [];
+    assert.equal(graphs.length, 1, 'one graph on the view');
+    assert.ok(s.rec.animates(graphs[0]), 'the drive');
+  });
+
+  it('lets it go before the drive is connected, as one graph a view is all native keeps', () => {
+    const s = scene(BAR);
+    const scroll = s.engine.createElement('scroll-view');
+    s.engine.appendChild(s.engine.root, scroll);
+    for (let x = 10; x <= 40; x += 10) s.tick(50, move(x));
+    const from = s.rec.calls.length;
+    s.engine.driveByScroll(s.view, scroll, 'y', pinnedRange(0));
+    s.engine.commit();
+    const tag = s.engine.tagOf(s.view);
+    const order = s.rec.calls
+      .slice(from)
+      .filter(([name, , view]) => (name === 'toView' || name === 'fromView') && view === tag)
+      .map(([name]) => name);
+    assert.deepEqual(order, ['fromView', 'toView']);
+  });
+
+  it('keeps painting what the drive does not set, as the drive is built again', () => {
+    const s = scene(BAR);
+    const scroll = s.engine.createElement('scroll-view');
+    s.engine.appendChild(s.engine.root, scroll);
+    const drive = s.engine.driveByScroll(s.view, scroll, 'y', pinnedRange(0))!;
+    s.engine.commit();
+    for (let step = 1; step <= 3; step++) s.tick(50, { opacity: step / 10 });
+    const before = s.commits();
+    drive.update(pinnedRange(0, 100));
+    s.tick(50, { opacity: 0.4 });
+    assert.equal(s.commits(), before, 'the opacity is still painted, with no commit');
+    assert.deepEqual(s.rec.drawn(s.engine.tagOf(s.view))['opacity'], 0.4);
+  });
+
+  it('keeps painting it where its transform, which the drive sets, changed as well', () => {
+    const s = scene(BAR);
+    const scroll = s.engine.createElement('scroll-view');
+    s.engine.appendChild(s.engine.root, scroll);
+    const drive = s.engine.driveByScroll(s.view, scroll, 'y', pinnedRange(0))!;
+    s.engine.commit();
+    for (let step = 1; step <= 3; step++) s.tick(50, { opacity: step / 10 });
+    s.tick(50, { opacity: 0.3, ...move(5) });
+    const tag = s.engine.tagOf(s.view);
+    const painter = () => (s.rec.connected().get(tag) ?? []).filter((g) => !s.rec.animates(g));
+    const before = painter();
+    assert.equal(before.length, 1, 'the painter paints the opacity');
+    drive.update(pinnedRange(0, 100));
+    s.tick(50, { opacity: 0.4, ...move(5) });
+    assert.deepEqual(painter(), before, 'the same graph paints it');
+    assert.deepEqual(s.rec.drawn(tag)['opacity'], 0.4);
   });
 });
 

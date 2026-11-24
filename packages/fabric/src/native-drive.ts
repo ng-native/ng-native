@@ -184,6 +184,7 @@ interface Built {
 export class NativeScrollDriver {
   private readonly native: NativeAnimated;
   private readonly touched: Touched | undefined;
+  private readonly taking: ((view: object, keys: readonly string[]) => void) | undefined;
   /** One value per source view and feed, by the feed's key. */
   private readonly offsets = new Map<object, Map<string, Offset>>();
   private readonly pending = new Set<() => boolean>();
@@ -192,9 +193,19 @@ export class NativeScrollDriver {
   /** The graph setting each view's values, where one does: see `set`. */
   private readonly setters = new WeakMap<object, Setter>();
 
-  constructor(native: NativeAnimated, touched?: Touched) {
+  /**
+   * `taking` is told of a view and the props a graph that plays or drives it sets, before the
+   * graph is connected, for whatever else paints those on the view to let go: two graphs setting
+   * one prop draw whichever updated last.
+   */
+  constructor(
+    native: NativeAnimated,
+    touched?: Touched,
+    taking?: (view: object, keys: readonly string[]) => void,
+  ) {
     this.native = native;
     this.touched = touched;
+    this.taking = taking;
   }
 
   /** The style keys a graph of this driver's playing or driving a view sets on it now. */
@@ -316,6 +327,7 @@ export class NativeScrollDriver {
       if (viewTag === null || sourceTag === null) return false;
       drive.viewTag = viewTag;
       const offset = this.offset(source, sourceTag, feed, key);
+      this.taking?.(view, ['transform']);
       drive.nodes = this.build(offset.value, viewTag, property, drive);
       this.hold(view, viewTag, drive.nodes.props, ['transform']);
       this.place(offset.value, drive);
@@ -328,6 +340,7 @@ export class NativeScrollDriver {
       this.tearDown(drive.nodes, drive.viewTag);
       this.letGo(view, drive.nodes.props);
       const offset = this.offsets.get(source)!.get(key)!;
+      this.taking?.(view, ['transform']);
       drive.nodes = this.build(offset.value, drive.viewTag, property, drive);
       this.hold(view, drive.viewTag, drive.nodes.props, ['transform']);
       this.place(offset.value, drive);
@@ -583,6 +596,7 @@ export class NativeScrollDriver {
     const props = this.native.generateNewNodeTag();
     API.createAnimatedNode(props, { type: 'props', props: { style: styleTag } });
     API.connectAnimatedNodes(styleTag, props);
+    this.taking?.(view, channelKeys(channels));
     API.connectAnimatedNodeToView(props, viewTag);
     this.hold(view, viewTag, props, channelKeys(channels));
     return { props, nodes: [props, styleTag, ...made.reverse()] };

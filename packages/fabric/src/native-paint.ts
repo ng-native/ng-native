@@ -37,6 +37,8 @@ interface Graph {
   tag: number;
   shape: string;
   props: number;
+  /** The style props the graph sets on the view. */
+  keys: ReadonlySet<string>;
   /** Every node made, the props node first, for dropping them. */
   nodes: number[];
   /** The value node for each number painted, by its path: `opacity`, `transform.0`, `color.r`. */
@@ -194,6 +196,11 @@ export class NativePainter {
     return this.graphs.has(view);
   }
 
+  /** Whether native paints a prop on a view: the view's graph sets it. */
+  paintsProp(view: object, key: string): boolean {
+    return this.graphs.get(view)?.keys.has(key) ?? false;
+  }
+
   /** Let a view go: native no longer paints anything on it. */
   release(view: object): void {
     const graph = this.graphs.get(view);
@@ -269,6 +276,7 @@ export class NativePainter {
       tag,
       shape,
       props,
+      keys: new Set(Object.keys(style)),
       nodes: [props, ...nodes.filter((node) => node !== props).reverse()],
       leaves,
       values: leavesOf(values),
