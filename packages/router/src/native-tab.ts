@@ -361,10 +361,9 @@ export class NativeTab implements OnInit {
    * sidebar row when it is SVG (`{ svg }`), on macOS and Linux, or an SF Symbol, on macOS. Absent
    * leaves the platform to tint `icon`.
    *
-   * On iOS the two must be the same kind of icon, because native has one icon type for both: an
-   * SF Symbol with an SVG or an image, or the reverse, throws, while an SVG pairs with a template
-   * image, since both are drawn as one. A `selectedIcon` also needs a base icon, from `icon` or the
-   * `sfSymbol` or `drawable` shorthand. Android checks only a drawable `selectedIcon`, for a base.
+   * Give it the same kind of icon as the base one, which comes from `icon` or the `sfSymbol` or
+   * `drawable` shorthand. Native has one icon type for both states, so some mixed pairs, and a
+   * `selectedIcon` with no base icon, throw instead of quietly keeping the unselected icon.
    */
   readonly selectedIcon = input<TabIcon>();
 
