@@ -97,6 +97,10 @@ is right, and say so in the PR.
 
 ## 5. Prove the test bites
 
+Mutations (below) and step 8's device check are for a fix that changes native drawing, layout, the CSS
+engine or another code path a device shows. A fix to docs, a version plan, a CLI message or a small
+JavaScript guard skips both; the revert check still applies to any behaviour change.
+
 **Revert.** With the fix in place, the new test passes. Revert just the fix and confirm the test fails again
 for the same reason. Then restore it. Report both results.
 
@@ -221,7 +225,8 @@ on, and says so in its body.
 **Review comments.** Validate each one; a reviewer can be wrong. When it is right, fix it test-first, push,
 reply with what changed, and resolve the thread. When it is wrong, reply with the evidence and resolve it.
 Resolving a thread needs GraphQL (`resolveReviewThread`); REST can reply but not resolve. A change to the fix
-repeats step 5's mutations on the changed lines and step 8 on the device.
+repeats step 5's mutations on the changed lines and step 8 on the device, under step 5's same scaling: a
+wording or docs change repeats neither.
 
 A request that recurs and is wrong: version plans do not take a heading. `docs/RELEASING.md` shows none,
 and the body becomes the changelog bullet.

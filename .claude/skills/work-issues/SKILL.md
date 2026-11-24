@@ -95,7 +95,12 @@ Run the merge queue for PRs once they are open:
   finished "Greptile Review" check run). So the queue merges when a bot has reviewed the current commit, or
   an older commit whose own changes the current one leaves identical (a pure rebase), with every review
   thread resolved and CI green. A PR whose newest commit no bot has reviewed yet waits.
-- **Review comments on a PR:** send them back to the agent that wrote it; it has the context.
+- **Review comments on a PR:** fix docs, version-plan and wording threads yourself in the PR's worktree,
+  with no agent: an agent round rebuilds its context from scratch and costs far more than the edit. Send
+  behavioural ones to an agent, on Sonnet unless the fix is hard.
+- **Minor wording nits after a fix round:** once CI is green and every thread is answered and resolved, a
+  PR whose only commits since the last bot review change docs or version plans is merged by hand, without
+  waiting for another review round that would only raise more wording nits.
 - **CI failures:** send those back to the same agent. Re-run a failed job only once the failure is shown not
   to be the PR's. A re-run reuses its run's checkout, so it never picks up a fix main has gained since: when
   the same failure comes back, look for that fix on main and rebase instead.
