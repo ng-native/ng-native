@@ -9,7 +9,7 @@ import path from 'node:path';
 import { progress, runCommand, sleep } from './command.ts';
 import type { AppLauncher, LaunchedApp } from './launcher.ts';
 import { warmBundle } from './metro-server.ts';
-import { androidSdk, nativeBuild } from './native-build.ts';
+import { ANDROID_HOST_ABI, androidSdk, nativeBuild } from './native-build.ts';
 
 export interface AndroidEmulatorOptions {
   /**
@@ -18,9 +18,6 @@ export interface AndroidEmulatorOptions {
    */
   device?: string;
 }
-
-/** The ABI an emulator runs on this machine, which the build is limited to. */
-const HOST_ABI = process.arch === 'arm64' ? 'arm64-v8a' : 'x86_64';
 
 /** How long a launched app has to show a process before it counts as having ended at once. */
 const FIRST_PROCESS_MS = 15_000;
@@ -34,7 +31,10 @@ export function androidEmulatorLauncher(options: AndroidEmulatorOptions = {}): A
       const warming = warmBundle(request.metroPort, 'android', request.signal);
       const [serial, build] = await Promise.all([
         runningEmulator(sdk, options.device, request.signal),
-        nativeBuild(request.projectRoot, 'android', { abi: HOST_ABI, signal: request.signal }),
+        nativeBuild(request.projectRoot, 'android', {
+          abi: ANDROID_HOST_ABI,
+          signal: request.signal,
+        }),
       ]);
       const run =
         (signal: AbortSignal | undefined) =>

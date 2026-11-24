@@ -63,15 +63,28 @@ function keep(projectRoot: string, files: readonly string[]): () => void {
 /** Left in an `ios` or `android` folder the pool generated. */
 const GENERATED = '.ng-native-generated';
 
+export const ANDROID_HOST_ABI = process.arch === 'arm64' ? 'arm64-v8a' : 'x86_64';
+
+/** Also used by CI to restore the exact build the launcher will look for. */
+export async function nativeBuildDirectory(
+  projectRoot: string,
+  os: 'ios' | 'android',
+  abi?: string,
+): Promise<string> {
+  const key = `${os}-${await fingerprint(projectRoot, os)}${abi ? `-${abi}` : ''}`;
+  return path.join(projectRoot, 'node_modules/.cache/ng-native-device-tests', key);
+}
+
 export async function nativeBuild(
   projectRoot: string,
   os: 'ios' | 'android',
   { abi, signal }: { abi?: string; signal?: AbortSignal } = {},
 ): Promise<NativeBuild> {
-  const key = `${os}-${await fingerprint(projectRoot, os)}${abi ? `-${abi}` : ''}`;
-  const dir = path.join(projectRoot, 'node_modules/.cache/ng-native-device-tests', key);
+  const started = Date.now();
+  const dir = await nativeBuildDirectory(projectRoot, os, abi);
   const log = path.join(dir, 'build.log');
   const built = existsSync(dir) ? readdirSync(dir).find((name) => /\.(app|apk)$/.test(name)) : null;
+  progress(os, `looked up the native fingerprint (build cache ${built ? 'hit' : 'miss'})`, started);
   if (built) return { path: path.join(dir, built), log };
 
   mkdirSync(dir, { recursive: true });

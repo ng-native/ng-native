@@ -119,17 +119,22 @@ export async function warmBundle(
   platform: 'ios' | 'android',
   signal?: AbortSignal,
 ): Promise<boolean> {
+  const started = Date.now();
   // The query the app's own request has, so Metro builds the same graph and keeps it.
   const query = `platform=${platform}&dev=true&lazy=true&minify=false&modulesOnly=false&runModule=true`;
+  let warmed = false;
   try {
     const response = await fetch(
       `http://127.0.0.1:${port}/.expo/.virtual-metro-entry.bundle?${query}`,
       { signal: AbortSignal.any([AbortSignal.timeout(WARM_MS), ...(signal ? [signal] : [])]) },
     );
     await response.arrayBuffer();
-    if (!response.ok) return false;
+    warmed = response.ok;
   } catch {
-    // Not warmed: the app's request bundles it instead.
+    // The app's own request can still build the bundle.
+  }
+  if (!warmed) {
+    progress(platform, 'Metro bundle warmup did not finish', started);
     return false;
   }
   // The app asks Metro's status first and gives up for good after three slow answers, which a
@@ -139,6 +144,7 @@ export async function warmBundle(
     // A refusal comes back at once: asked again after a pause, not in a busy loop.
     await sleep(250);
   }
+  progress(platform, 'Metro bundle warmup finished', started);
   return true;
 }
 

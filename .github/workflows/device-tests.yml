@@ -3,8 +3,8 @@ name: Device tests
 # The canary's in-app tests (examples/canary/src/device-tests/phone), run the way an app's would
 # be: `vitest --project ios` and `--project android`, which start Metro, build the development
 # build the first time, boot the simulator or emulator, and launch the app themselves. The builds
-# are kept in node_modules/.cache/ng-native-device-tests, by Expo's fingerprint of the native half,
-# and that directory is cached here, so a run that changes only JavaScript builds nothing.
+# are kept in node_modules/.cache/ng-native-device-tests. CI restores the app for the same Expo
+# fingerprint and runner architecture. Compiler caches are restored only if the app needs building.
 on:
   push:
     branches: [main]
@@ -46,31 +46,29 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
 
-      # Keyed by what the native half is built from (dependencies, app config, the packages' own
-      # native code); the pool checks the fingerprint as well, so a stale build is rebuilt, not run.
-      # Each save has a key of its own, as a cache key cannot be written twice: the newest one whose
-      # key starts with what the native half is built from comes back.
-      - uses: actions/cache/restore@v6
-        with:
-          path: examples/canary/node_modules/.cache/ng-native-device-tests
-          key: device-tests-ios-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}
-          restore-keys: |
-            device-tests-ios-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}-
-            device-tests-ios-
-
-      - name: Note the finished builds already there
+      - name: Resolve the development build's fingerprint
+        id: build
         run: |
-          mkdir -p examples/canary/node_modules/.cache/ng-native-device-tests
-          find examples/canary/node_modules/.cache/ng-native-device-tests -maxdepth 2 \( -name '*.app' -o -name '*.apk' \) | sort > "$RUNNER_TEMP/builds-before"
+          directory=$(node examples/canary/scripts/device-test-build-directory.mjs ios)
+          echo "directory=$directory" >> "$GITHUB_OUTPUT"
+          echo "fingerprint=${directory##*/}" >> "$GITHUB_OUTPUT"
 
-      - uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
+      - id: cached
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.build.outputs.directory }}/*.app
+          key: device-test-build-${{ runner.arch }}-${{ steps.build.outputs.fingerprint }}
+
+      - if: steps.cached.outputs.cache-hit != 'true'
+        uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
         with:
           key: device-tests-ios-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: device-tests-ios-
           max-size: 2G
 
       # React Native's ccache wrapper runs plain clang, silently, without CCACHE_BINARY.
-      - run: echo "CCACHE_BINARY=$(command -v ccache)" >> "$GITHUB_ENV"
+      - if: steps.cached.outputs.cache-hit != 'true'
+        run: echo "CCACHE_BINARY=$(command -v ccache)" >> "$GITHUB_ENV"
 
       # Under the job's limit, so a run that hangs fails here and the logs below are still collected:
       # a job that reaches its own limit is cancelled, and runs no step after.
@@ -79,22 +77,21 @@ jobs:
         timeout-minutes: 35
         run: npx vitest run --project ios
 
-      # A build this run finished, whether the tests then passed or not: a screenshot that does not
-      # match is no reason to build again, and a build that failed is nothing to keep.
-      - id: built
-        if: always()
+      # Keep a completed build even if the tests failed after installing it.
+      - if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.cached.outputs.cache-hit != 'true' }}
+        id: built
+        env:
+          BUILD_DIR: ${{ steps.build.outputs.directory }}
         run: |
-          # A finished build that was not there before, in a folder of its own or one restored.
-          find examples/canary/node_modules/.cache/ng-native-device-tests -maxdepth 2 \( -name '*.app' -o -name '*.apk' \) | sort > "$RUNNER_TEMP/builds-after"
-          if [ -n "$(comm -13 "$RUNNER_TEMP/builds-before" "$RUNNER_TEMP/builds-after")" ]; then
-            echo "new=true" >> "$GITHUB_OUTPUT"
+          if compgen -G "$BUILD_DIR/*.app" > /dev/null; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - if: always() && steps.built.outputs.new == 'true'
+      - if: ${{ !cancelled() && steps.built.outputs.ready == 'true' }}
         uses: actions/cache/save@v6
         with:
-          path: examples/canary/node_modules/.cache/ng-native-device-tests
-          key: device-tests-ios-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}-${{ github.run_id }}
+          path: ${{ steps.build.outputs.directory }}/*.app
+          key: device-test-build-${{ runner.arch }}-${{ steps.build.outputs.fingerprint }}
 
       - name: Upload the screenshots that did not match
         if: failure()
@@ -140,28 +137,26 @@ jobs:
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
             /usr/share/swift /usr/local/share/boost
 
+      - name: Resolve the development build's fingerprint
+        id: build
+        run: |
+          directory=$(node examples/canary/scripts/device-test-build-directory.mjs android)
+          echo "directory=$directory" >> "$GITHUB_OUTPUT"
+          echo "fingerprint=${directory##*/}" >> "$GITHUB_OUTPUT"
+
+      - id: cached
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.build.outputs.directory }}/*.apk
+          key: device-test-build-${{ runner.arch }}-${{ steps.build.outputs.fingerprint }}
+
       - uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: 17
 
-      # Gradle's dependencies and build cache, for a build that is needed.
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-
-      # Each save has a key of its own, as a cache key cannot be written twice: the newest one whose
-      # key starts with what the native half is built from comes back.
-      - uses: actions/cache/restore@v6
-        with:
-          path: examples/canary/node_modules/.cache/ng-native-device-tests
-          key: device-tests-android-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}
-          restore-keys: |
-            device-tests-android-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}-
-            device-tests-android-
-
-      - name: Note the finished builds already there
-        run: |
-          mkdir -p examples/canary/node_modules/.cache/ng-native-device-tests
-          find examples/canary/node_modules/.cache/ng-native-device-tests -maxdepth 2 \( -name '*.app' -o -name '*.apk' \) | sort > "$RUNNER_TEMP/builds-before"
+      - if: steps.cached.outputs.cache-hit != 'true'
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       # Hardware acceleration: without KVM the emulator is software-emulated and takes minutes to
       # boot.
@@ -184,22 +179,21 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
           script: cd examples/canary && npx vitest run --project android
 
-      # A build this run finished, whether the tests then passed or not: a screenshot that does not
-      # match is no reason to build again, and a build that failed is nothing to keep.
-      - id: built
-        if: always()
+      # Keep a completed build even if the tests failed after installing it.
+      - if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.cached.outputs.cache-hit != 'true' }}
+        id: built
+        env:
+          BUILD_DIR: ${{ steps.build.outputs.directory }}
         run: |
-          # A finished build that was not there before, in a folder of its own or one restored.
-          find examples/canary/node_modules/.cache/ng-native-device-tests -maxdepth 2 \( -name '*.app' -o -name '*.apk' \) | sort > "$RUNNER_TEMP/builds-after"
-          if [ -n "$(comm -13 "$RUNNER_TEMP/builds-before" "$RUNNER_TEMP/builds-after")" ]; then
-            echo "new=true" >> "$GITHUB_OUTPUT"
+          if compgen -G "$BUILD_DIR/*.apk" > /dev/null; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - if: always() && steps.built.outputs.new == 'true'
+      - if: ${{ !cancelled() && steps.built.outputs.ready == 'true' }}
         uses: actions/cache/save@v6
         with:
-          path: examples/canary/node_modules/.cache/ng-native-device-tests
-          key: device-tests-android-${{ hashFiles('pnpm-lock.yaml', 'examples/canary/app.json', 'packages/*/expo-module.config.json', 'packages/*/ios/**', 'packages/*/android/src/main/**') }}-${{ github.run_id }}
+          path: ${{ steps.build.outputs.directory }}/*.apk
+          key: device-test-build-${{ runner.arch }}-${{ steps.build.outputs.fingerprint }}
 
       - name: Upload the screenshots that did not match
         if: failure()

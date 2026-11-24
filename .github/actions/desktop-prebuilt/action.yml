@@ -33,6 +33,9 @@ outputs:
       The folder holding the host built from this run's inputs, for the caller to keep. Empty when
       the last release's archive was reused or nothing was kept.
     value: ${{ steps.kept.outputs.dir }}
+  artifact-exists:
+    description: Whether a matching host artifact was found from the Desktop host workflow on main.
+    value: ${{ steps.artifact.outputs.exists }}
 
 runs:
   using: composite
@@ -77,25 +80,25 @@ runs:
         key: desktop-prebuilt-host-${{ inputs.flavour }}-${{ steps.key.outputs.key }}
 
     # The Actions cache evicts by size, so the host the Desktop host workflow built on main is also
-    # kept as an artifact of that run. Only a push or a manual run on main of this repository's
-    # desktop.yml counts: the host goes into the release, and a pull request's run can upload an
-    # artifact of any name.
-    # Any failure here builds instead.
+    # kept as an artifact of that run. Only push, scheduled and manual runs of desktop.yml on main
+    # count, since the host goes into the release. The scheduled job checks even on a cache hit
+    # so it only uploads when it needs a new artifact.
     - id: artifact
       if: >-
-        steps.key.outputs.key != '' && steps.reuse.outputs.done != 'true' &&
-        steps.host.outputs.cache-hit != 'true' && inputs.github-token != ''
+        steps.key.outputs.key != '' && steps.reuse.outputs.done != 'true' && inputs.github-token != '' &&
+        (steps.host.outputs.cache-hit != 'true' || github.workflow == 'Desktop host')
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
         NAME: desktop-prebuilt-host-${{ inputs.flavour }}-${{ steps.key.outputs.key }}
         DEST: ${{ github.workspace }}/.desktop-cache
+        CACHE_HIT: ${{ steps.host.outputs.cache-hit }}
       run: |
         fetch() {
           local found id run origin tmp
-          found=$(gh api "repos/$REPO/actions/artifacts?name=$NAME&per_page=20" --jq '
-            [.artifacts[] | select(.expired | not)
+          found=$(gh api --paginate --slurp "repos/$REPO/actions/artifacts?name=$NAME&per_page=100" | jq -r '
+            [.[].artifacts[] | select(.expired | not)
               | select(.workflow_run.head_branch == "main")
               | select(.workflow_run.head_repository_id == .workflow_run.repository_id)]
             | first // empty | "\(.id) \(.workflow_run.id)"') || return 1
@@ -103,17 +106,23 @@ runs:
           read -r id run <<< "$found"
           origin=$(gh api "repos/$REPO/actions/runs/$run" --jq '"\(.event) \(.path) \(.head_branch)"') || return 1
           case "$origin" in
-            'push .github/workflows/desktop.yml main' | 'workflow_dispatch .github/workflows/desktop.yml main') ;;
+            'push .github/workflows/desktop.yml main' | 'schedule .github/workflows/desktop.yml main' | 'workflow_dispatch .github/workflows/desktop.yml main') ;;
             *) echo "Artifact $id comes from '$origin', not desktop.yml on main."; return 1 ;;
           esac
-          tmp=$(mktemp -d)
+          if [ "$CACHE_HIT" = true ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            return
+          fi
+          tmp=$(mktemp -d) || return 1
           gh api "repos/$REPO/actions/artifacts/$id/zip" > "$tmp/host.zip" &&
             unzip -q "$tmp/host.zip" -d "$tmp" &&
             mkdir -p "$DEST" &&
             tar -xzf "$tmp/host.tar.gz" -C "$DEST" || return 1
           echo "Restored the host from artifact $id of run $run."
+          echo "restored=true" >> "$GITHUB_OUTPUT"
+          echo "exists=true" >> "$GITHUB_OUTPUT"
         }
-        if fetch; then echo "restored=true" >> "$GITHUB_OUTPUT"; else echo "Not using a host from main."; fi
+        if ! fetch; then echo "Not using a host from main."; fi
 
     # Everything a build needs, only when there is no host to pack. A cached host that fails its
     # check below still builds, without these: slower, never stale.

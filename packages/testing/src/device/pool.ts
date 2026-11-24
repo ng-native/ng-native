@@ -251,6 +251,7 @@ class DeviceWorker implements PoolWorker {
       return app;
     };
     let app = await launchApp();
+    let readyAt = Date.now();
     // Where the app stopped: what it and Metro last printed.
     const lastOutputs = () =>
       lastOutput("Metro's", metro?.output()) + lastOutput("The app's", this.launched?.output?.());
@@ -302,8 +303,9 @@ class DeviceWorker implements PoolWorker {
       // Stopped before the next claim is made: its poll closes with it, so it is no app to take.
       await launched.stop();
       app = await launchApp();
+      readyAt = Date.now();
     }
-    progress(this.options.platform ?? 'app', 'connected', this.launchedAt);
+    progress(this.options.platform ?? 'app', 'connected after the launcher returned', readyAt);
     // From here a process that ends is a lost app at once, not after the silence is waited out.
     void app.exited.then((how) => {
       const session = this.session;

@@ -122,11 +122,13 @@ async function bootedSimulator(
   name: string | undefined,
   signal: AbortSignal | undefined,
 ): Promise<Simulator> {
+  const started = Date.now();
   const simulator = pick(await simulators(signal), name);
   if (simulator.state !== 'Booted') {
     await runCommand('xcrun', ['simctl', 'boot', simulator.udid], { allowFailure: true, signal });
   }
   await runCommand('xcrun', ['simctl', 'bootstatus', simulator.udid, '-b'], { signal });
+  progress('ios', `${simulator.name} finished booting`, started);
   return simulator;
 }
 

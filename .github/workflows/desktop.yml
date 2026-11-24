@@ -8,21 +8,23 @@ name: Desktop host
 # in-app tests run on it (`vitest --project linux`).
 # On macOS, the AppKit host
 # builds as an app would build it, the core tests run there too, and the built host is launched on an
-# example app's bundle to its first frame. A pull request runs it only when
-# the host or the workflow changed, or the lockfile moved the version of a package the host builds
-# from (see `changes`); a push to main and a manual run build it whatever changed. Compiles go
+# example app's bundle to its first frame. Pull requests and pushes to main run these checks when
+# the desktop inputs or native dependency pins changed (see `changes`). Manual runs build them
+# regardless of what changed. Compiles go
 # through ccache, kept per job and saved only from main, which every pull request restores: a set
 # saved per pull request run filled the repository's 10 GB of Actions cache and evicted main's.
 #
-# On main, `prebuilt-host` also makes both universal prebuilt hosts the release publishes, and
-# `prebuilt-host-linux` the Linux ones for x86_64 and arm64, when anything they are built from
-# changed, so the release finds their caches warm. A manual run makes the Linux ones on any branch.
+# On main, `prebuilt-host` warms both universal macOS prebuilt hosts on a schedule.
+# `prebuilt-host-linux` makes the Linux ones for x86_64 and arm64 on pushes that change their inputs.
+# A manual run also warms the macOS hosts on main and builds the Linux ones on any branch.
 on:
   push:
     branches: [main]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * *'
 
 permissions:
   contents: read
@@ -31,7 +33,7 @@ permissions:
 # newest run on main is the one a release waits for. A run started by hand, or called by the Release
 # workflow, has a group of its own and is never cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  group: ${{ github.workflow }}-${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 env:
@@ -51,8 +53,7 @@ env:
   CCACHE_SLOPPINESS: include_file_mtime,include_file_ctime,time_macros
 
 jobs:
-  # Which parts of the tree a pull request, or a push to main, touched. The checks below build on
-  # every push and manual run anyway; on a push, `prebuilt-host` reads it.
+  # Check desktop inputs for pull requests and pushes. A manual run builds every desktop job.
   changes:
     if: >-
       github.event.pull_request.draft != true &&
@@ -69,6 +70,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
+        # The REST API caps the file list at 3,000. The jobs build without a filter result.
+        if: github.event_name != 'pull_request' || github.event.pull_request.changed_files < 3000
         with:
           filters: |
             desktop:
@@ -78,11 +81,13 @@ jobs:
               - 'packages/testing/src/device/linux-launcher.ts'
               - '.github/workflows/desktop.yml'
               - 'scripts/desktop-host-pins.mjs'
-              - '.github/actions/desktop-prebuilt/**'
+              - '.github/actions/desktop-prebuilt*/**'
+              - '.github/actions/setup/**'
+              - 'pnpm-workspace.yaml'
 
       # A lockfile edit reaches the host only through the version of a package it builds from.
       - id: pins
-        if: steps.filter.outputs.desktop != 'true'
+        if: steps.filter.outputs.desktop == 'false'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
@@ -92,9 +97,11 @@ jobs:
   core-linux:
     needs: changes
     if: >-
-      always() && github.event.pull_request.draft != true &&
-      (github.event_name != 'pull_request' || needs.changes.outputs.desktop == 'true' ||
-      needs.changes.outputs.pins == 'true')
+      !cancelled() && github.event.pull_request.draft != true &&
+      (github.event_name == 'workflow_dispatch' ||
+      ((github.event_name == 'push' || github.event_name == 'pull_request') &&
+      (needs.changes.result != 'success' || needs.changes.outputs.desktop != 'false' ||
+      needs.changes.outputs.pins != 'false')))
     runs-on: ubuntu-latest
     # React Native's renderer and the core, cold, are a few minutes on four cores.
     timeout-minutes: 30
@@ -138,9 +145,11 @@ jobs:
     name: host-linux (${{ matrix.arch }})
     needs: changes
     if: >-
-      always() && github.event.pull_request.draft != true &&
-      (github.event_name != 'pull_request' || needs.changes.outputs.desktop == 'true' ||
-      needs.changes.outputs.pins == 'true')
+      !cancelled() && github.event.pull_request.draft != true &&
+      (github.event_name == 'workflow_dispatch' ||
+      ((github.event_name == 'push' || github.event_name == 'pull_request') &&
+      (needs.changes.result != 'success' || needs.changes.outputs.desktop != 'false' ||
+      needs.changes.outputs.pins != 'false')))
     strategy:
       fail-fast: false
       matrix:
@@ -353,9 +362,11 @@ jobs:
   host-macos:
     needs: changes
     if: >-
-      always() && github.event.pull_request.draft != true &&
-      (github.event_name != 'pull_request' || needs.changes.outputs.desktop == 'true' ||
-      needs.changes.outputs.pins == 'true')
+      !cancelled() && github.event.pull_request.draft != true &&
+      (github.event_name == 'workflow_dispatch' ||
+      ((github.event_name == 'push' || github.event_name == 'pull_request') &&
+      (needs.changes.result != 'success' || needs.changes.outputs.desktop != 'false' ||
+      needs.changes.outputs.pins != 'false')))
     runs-on: macos-latest
     # Budget: a cold dev build within 10 minutes on this runner (spec, performance budget).
     timeout-minutes: 40
@@ -434,9 +445,10 @@ jobs:
     name: prebuilt-host-linux (${{ matrix.arch }}, ${{ matrix.flavour }})
     needs: changes
     if: >-
-      always() && (github.event_name == 'workflow_dispatch' ||
-      (github.ref == 'refs/heads/main' &&
-      (needs.changes.outputs.desktop == 'true' || needs.changes.outputs.pins == 'true')))
+      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      (needs.changes.result != 'success' || needs.changes.outputs.desktop != 'false' ||
+      needs.changes.outputs.pins != 'false')))
     strategy:
       fail-fast: false
       matrix:
@@ -468,17 +480,17 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
 
-  # Both universal prebuilt hosts, as the release makes them (the same action and caches), on a push
-  # to main that changed anything they are built from, or by hand. A release on main then finds the
-  # host already built, or at least ccache, Hermes and the sources warm. Nothing is uploaded.
+  # Warm both universal macOS hosts overnight or on demand. Release can restore the finished
+  # host by its inputs key and still builds it itself when the inputs have changed.
   prebuilt-host:
     name: prebuilt-host (${{ matrix.flavour }})
-    needs: changes
     if: >-
-      always() && github.ref == 'refs/heads/main' &&
-      (github.event_name == 'workflow_dispatch' || needs.changes.outputs.desktop == 'true' ||
-      needs.changes.outputs.pins == 'true')
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     runs-on: macos-latest
+    permissions:
+      contents: read
+      actions: read
     strategy:
       matrix:
         flavour: [debug, release]
@@ -498,12 +510,13 @@ jobs:
           version: 0.0.0-main
           base-url: https://github.com/${{ github.repository }}/releases/download/main
           out: ${{ runner.temp }}/prebuilt
+          github-token: ${{ github.token }}
 
       # The host also goes up as an artifact named by its inputs key, which the release fetches when
       # the Actions cache has evicted it (see the action). A tarball, since an artifact's zip follows
       # Sparkle.framework's symbolic links and drops the executable bits.
       - id: pack
-        if: steps.prebuilt.outputs.host-dir != ''
+        if: steps.prebuilt.outputs.host-dir != '' && steps.prebuilt.outputs.artifact-exists != 'true'
         env:
           DIR: ${{ steps.prebuilt.outputs.host-dir }}
         run: |
