@@ -80,6 +80,24 @@ class Capture final : public WindowCapture {
 
 } // namespace
 
+NSWindow *capturedWindow(NSWindow *appWindow) {
+  if (appWindow.isVisible) {
+    return appWindow;
+  }
+  if (NSApp.keyWindow != nil) {
+    return NSApp.keyWindow;
+  }
+  if (NSApp.mainWindow != nil) {
+    return NSApp.mainWindow;
+  }
+  for (NSWindow *window in NSApp.orderedWindows) {
+    if (window.isVisible && ![window isKindOfClass:NSPanel.class]) {
+      return window;
+    }
+  }
+  return appWindow;
+}
+
 std::shared_ptr<WindowCapture> makeWindowCapture(
     std::function<NSWindow *()> window, std::function<NSView *(int64_t tag)> viewForTag) {
   return std::make_shared<Capture>(std::move(window), std::move(viewForTag));

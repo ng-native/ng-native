@@ -1220,7 +1220,7 @@ int main(int argc, const char *argv[]) {
          .languageModel = ngn::appkit::makeLanguageModelEngine(),
          .captureShield = ngn::appkit::captureShield(),
          .windowCapture = ngn::appkit::makeWindowCapture(
-             [] { return gHost.appWindow; },
+             [] { return ngn::appkit::capturedWindow(gHost.appWindow); },
              [](int64_t tag) -> NSView * { return gHost.backend->view(static_cast<Tag>(tag)); }),
          .splash = gSplash,
          .photos = ngn::appkit::makePhotoLibrary(caches),

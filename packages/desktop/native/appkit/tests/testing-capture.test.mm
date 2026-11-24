@@ -110,3 +110,26 @@ TEST_CASE("WindowCapture draws the app's window, a region of it, and a view, in 
   CHECK(wait(none).error == "The app has no window to capture");
   [window close];
 }
+
+TEST_CASE("The window captured is the default surface's while shown, else one the app shows") {
+  [NSApplication sharedApplication];
+  auto make = [] {
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(-10000, -10000, 50, 50)
+                                                   styleMask:NSWindowStyleMaskBorderless
+                                                     backing:NSBackingStoreBuffered
+                                                       defer:NO];
+    window.releasedWhenClosed = NO;
+    return window;
+  };
+  NSWindow *app = make();
+  NSWindow *main = make();
+  [main orderFront:nil];
+  // No default-surface window, or one not shown: a window the app shows, as provideMainWindow's.
+  CHECK((ngn::appkit::capturedWindow(nil) == main));
+  CHECK((ngn::appkit::capturedWindow(app) == main));
+  [app orderFront:nil];
+  CHECK((ngn::appkit::capturedWindow(app) == app));
+  [app close];
+  [main close];
+  CHECK((ngn::appkit::capturedWindow(nil) == nil));
+}
