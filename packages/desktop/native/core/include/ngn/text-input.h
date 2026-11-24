@@ -39,6 +39,8 @@ class DesktopTextInputProps final : public facebook::react::BaseTextInputProps {
   std::vector<std::string> accessibilityDescribedBy;
   // `aria-required`, `aria-invalid` and the rest, as a view's desktop props have them.
   AriaFields aria;
+  // `-webkit-font-smoothing`, as a Paragraph's desktop props have it.
+  FontSmoothing fontSmoothing{FontSmoothing::Auto};
 };
 
 extern const char DesktopTextInputComponentName[];

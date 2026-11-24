@@ -52,6 +52,19 @@ BOOL NGNControlShouldChangeText(
     const ngn::TextInputOptions &options,
     BOOL *inserting);
 
+// A field editor that draws its text smoothed as `fontSmoothing` says (ngn::applyFontSmoothing), on
+// TextKit 1, which draws the text in the view's own drawRect.
+@interface NGNSmoothedFieldEditor : NSTextView
+@property (nonatomic) ngn::FontSmoothing fontSmoothing;
+@end
+
+// The field editor a cell whose text is smoothed as `smoothing` says edits in: `*editor`, made the
+// first time, or nil for `auto`, which edits in the window's shared one.
+NSTextView *NGNFieldEditorFor(ngn::FontSmoothing smoothing, NGNSmoothedFieldEditor *__strong *editor);
+
+// A cell's interior drawn as `draw` draws it, with its text smoothed as `smoothing` says.
+void NGNDrawSmoothed(ngn::FontSmoothing smoothing, void (^draw)(void));
+
 // A single-line field: an NSTextField, or an NSSecureTextField for secure entry, in a box that swaps
 // one for the other.
 @interface NGNTextField : NSView
@@ -74,6 +87,8 @@ BOOL NGNControlShouldChangeText(
 @property (nonatomic, copy) void (^typed)(NSString *key);
 // Whether its value is refused (aria-invalid), as VoiceOver reads it from the control.
 @property (nonatomic) BOOL invalid;
+// `-webkit-font-smoothing`, for the text drawn and the text being edited.
+@property (nonatomic) ngn::FontSmoothing fontSmoothing;
 - (void)applyOptions:(const ngn::TextInputOptions &)options;
 - (const ngn::TextInputOptions &)options;
 // Drawn in the field's font; nil colour is the system's placeholder colour.
@@ -92,6 +107,8 @@ BOOL NGNControlShouldChangeText(
 @property (nonatomic) BOOL invalid;
 @property (nonatomic, copy) void (^focused)(void);
 @property (nonatomic, copy, readonly) NSAttributedString *placeholder;
+// `-webkit-font-smoothing`, for the text and the placeholder.
+@property (nonatomic) ngn::FontSmoothing fontSmoothing;
 - (void)applyOptions:(const ngn::TextInputOptions &)options;
 - (void)setPlaceholder:(NSString *)placeholder color:(NSColor *)color;
 // The alignment and base writing direction of the text, typed or set later too, and of the

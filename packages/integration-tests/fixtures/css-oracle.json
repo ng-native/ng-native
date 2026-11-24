@@ -4885,6 +4885,229 @@
     }
   },
   {
+    "name": "inline background-size: 10px 20px; background-position: 3px 4px over #probe { background-image: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)); background-repeat: no-repeat }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "10px 20px",
+      "background-position": "3px 4px",
+      "background-repeat": "no-repeat"
+    }
+  },
+  {
+    "name": "inline background-repeat: repeat-x, no-repeat; background-size: auto 20%, 4px; background-position: left 1px top 2px, 3px 4px over #probe { background-image: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "auto 20%, 4px auto",
+      "background-position": "1px 2px, 3px 4px",
+      "background-repeat": "repeat-x, no-repeat"
+    }
+  },
+  {
+    "name": "inline background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) center / 10px 20px no-repeat rgb(4, 5, 6) over #probe { background-color: rgb(0, 255, 0); background-position: 3px 4px }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(4, 5, 6)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "10px 20px",
+      "background-position": "50% 50%",
+      "background-repeat": "no-repeat"
+    }
+  },
+  {
+    "name": "inline background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) 5% 6px / 1rem space round rgb(1, 2, 3) over #probe { background-size: 10px 20px }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(1, 2, 3)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "16px auto",
+      "background-position": "5% 6px",
+      "background-repeat": "space round"
+    }
+  },
+  {
+    "name": "inline background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) rgb(1, 2, 3) over #probe { background-size: 10px 20px; background-repeat: no-repeat }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(1, 2, 3)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "auto",
+      "background-position": "0% 0%",
+      "background-repeat": "repeat"
+    }
+  },
+  {
+    "name": "inline background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) center 10% / cover, linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) left 4px top 5px rgb(4, 5, 6) over #probe { background-size: 10px 20px }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(4, 5, 6)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "cover, auto",
+      "background-position": "50% 10%, 4px 5px",
+      "background-repeat": "repeat, repeat"
+    }
+  },
+  {
+    "name": "inline background-size, then a size no browser takes, keeps the first",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "4px 5px",
+      "background-position": "0% 0%",
+      "background-repeat": "repeat"
+    }
+  },
+  {
+    "name": "background: var() of a colour places a stronger rule image as nothing set",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(1, 2, 3)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "auto",
+      "background-position": "0% 0%",
+      "background-repeat": "repeat"
+    }
+  },
+  {
+    "name": "background: var() of a gradient places it as nothing set",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "auto",
+      "background-position": "0% 0%",
+      "background-repeat": "repeat"
+    }
+  },
+  {
+    "name": "inline background: var(--x) over #probe { --x: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)); background-size: 10px 20px; background-position: 3px 4px }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "auto",
+      "background-position": "0% 0%",
+      "background-repeat": "repeat"
+    }
+  },
+  {
+    "name": "inline background: var(--x); background-image: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) over #probe { --x: rgb(1, 2, 3); background-size: 10px 20px; background-repeat: no-repeat }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(1, 2, 3)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "auto",
+      "background-position": "0% 0%",
+      "background-repeat": "repeat"
+    }
+  },
+  {
+    "name": "background: var() of a layer with no image places a stronger rule image where it says",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "10px 20px",
+      "background-position": "50% 50%",
+      "background-repeat": "no-repeat"
+    }
+  },
+  {
+    "name": "inline background: var(--x); background-image: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)) over #probe { --x: left 3px top 4px / 10px no-repeat }",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "background-image": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+      "background-size": "10px auto",
+      "background-position": "3px 4px",
+      "background-repeat": "no-repeat"
+    }
+  },
+  {
+    "name": "-webkit-font-smoothing: a token",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "-webkit-font-smoothing": "antialiased"
+    }
+  },
+  {
+    "name": "-webkit-font-smoothing: a token of no keyword takes the inherited value",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "-webkit-font-smoothing": "none"
+    }
+  },
+  {
+    "name": "-webkit-font-smoothing: an unset token with a fallback",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "-webkit-font-smoothing": "auto"
+    }
+  },
+  {
+    "name": "-webkit-font-smoothing: inherit over a weaker rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "-webkit-font-smoothing": "none"
+    }
+  },
+  {
+    "name": "-webkit-font-smoothing: initial",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "-webkit-font-smoothing": "auto"
+    }
+  },
+  {
+    "name": "-webkit-font-smoothing: unset over a weaker rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "-webkit-font-smoothing": "none"
+    }
+  },
+  {
+    "name": "-webkit-font-smoothing: inherit set on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "-webkit-font-smoothing": "none"
+    }
+  },
+  {
+    "name": "-webkit-font-smoothing: initial set on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "-webkit-font-smoothing": "auto"
+    }
+  },
+  {
+    "name": "-webkit-font-smoothing: a value of no keyword set on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "-webkit-font-smoothing": "none"
+    }
+  },
+  {
+    "name": "-webkit-font-smoothing: a value of no keyword set after one",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "-webkit-font-smoothing": "antialiased"
+    }
+  },
+  {
     "name": "background: linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255)), var(--x) with --x of 10% 20%",
     "expected": {
       "color": "rgb(0, 0, 0)",

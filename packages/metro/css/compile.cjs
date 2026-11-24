@@ -732,11 +732,12 @@ function deferVar(value, context) {
 
 /**
  * What only the `background` shorthand's token has: it may hold the images as well as the colour,
- * where `background-color`'s never does. The image is named among its props so that it is ranked
- * in the cascade by itself, against a `background-image` another rule declares.
+ * where `background-color`'s never does. The image and its placing are named among its props so
+ * that each is ranked in the cascade by itself, against a `background-image` or a
+ * `background-size` another rule declares: the shorthand puts back the placing it does not say.
  */
 const backgroundLayers = () => ({
-  props: ['backgroundColor', 'experimental_backgroundImage'],
+  props: ['backgroundColor', 'experimental_backgroundImage', ...Object.keys(INITIAL_PLACING)],
   layers: true,
 });
 
@@ -866,7 +867,24 @@ function backgroundForm(parts) {
   // written there. Only one written leaves no room for a second, and makes a
   // `background-image: var()` of the token invalid.
   const written = color !== 'rgba(0, 0, 0, 0)' || !backgroundWritten(`${writtenText(parts)} red`);
-  return { background: { images, ...(written ? { color } : {}) } };
+  return {
+    background: { images, ...(written ? { color } : {}), ...imagelessPlacing(images, out) },
+  };
+}
+
+/**
+ * Where a layer with no image says an image goes, `center / cover`, as one layer's placing: what a
+ * stronger rule's `background-image` is drawn at, as in a browser. Nothing where it says nothing.
+ */
+function imagelessPlacing(images, out) {
+  if (images.length) return {};
+  const layer = Object.fromEntries(
+    Object.keys(INITIAL_PLACING).map((prop) => [prop, out[prop]?.[0]]),
+  );
+  const placed = Object.entries(INITIAL_PLACING).some(
+    ([prop, initial]) => layer[prop] !== undefined && JSON.stringify(layer[prop]) !== initial,
+  );
+  return placed ? { placing: [layer] } : {};
 }
 
 /** The motion a token can be read into whole, and the key and token form each reads it as. */
@@ -2349,8 +2367,22 @@ function addCustom(declaration, out, tokens, deferred, context) {
     return;
   }
 
+  if (deferredWord(name, parts, deferred, context)) return;
+
   refuseSlottedTouchAction(name, parts, context);
   addCustomWord(name, parts, out, context);
+}
+
+/**
+ * A word from a token, `-webkit-font-smoothing: var(--x)`, which the device reads where it is
+ * used, or the parent's value, `inherit`, which it has there. False for any other value.
+ */
+function deferredWord(name, parts, deferred, context) {
+  if (kindOf(name) === 'keyword' && parts?.some((part) => part.type === 'var')) {
+    deferred.push(deferVar({ propertyId: { property: name }, value: parts }, context));
+    return true;
+  }
+  return inherited(name, onlyWord(meaningful(parts))?.toLowerCase(), deferred);
 }
 
 /**
@@ -2483,10 +2515,19 @@ function inherited(property, word, deferred) {
     deferred.push({ props: ['color'], within: CURRENT_COLOUR });
     return true;
   }
-  if (word !== 'inherit' || !INHERITS[property]) return false;
+  const inherits = word === 'inherit' || (word === 'unset' && INHERITED_IN_CSS.has(property));
+  if (!inherits || !INHERITS[property]) return false;
   deferred.push({ props: INHERITS[property], inherit: true });
   return true;
 }
+
+/**
+ * Of `INHERITS`, the properties CSS inherits, whose `unset` is `inherit`.
+ *
+ * ponytail: `-webkit-font-smoothing` alone, as yet. The font properties are inherited too, and
+ * their `unset` is refused as a CSS-wide keyword.
+ */
+const INHERITED_IN_CSS = new Set(['-webkit-font-smoothing']);
 
 /**
  * The properties `inherit` is taken for, and the props it is the parent's values of: the ones
@@ -2506,6 +2547,7 @@ const INHERITS = {
       ...['letter-spacing', 'text-align', 'text-transform', 'background-color', 'opacity'],
     ].map((property) => [property, [camel(property)]]),
   ),
+  '-webkit-font-smoothing': ['fontSmoothing'],
 };
 
 /** `box-shadow: none` or `text-shadow: none` written to `out`, and whether `property` was one. */

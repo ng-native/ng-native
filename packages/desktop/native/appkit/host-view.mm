@@ -977,6 +977,7 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
   NSTextField *field = _box.control;
   auto attrs = p->getEffectiveTextAttributes(1);
   field.font = inputFont(*p);
+  _box.fontSmoothing = p->fontSmoothing;
   field.textColor = attrs.foregroundColor ? nsColor(attrs.foregroundColor) : NSColor.textColor;
   [_box setPlaceholder:nsString(p->placeholder) color:p->placeholderTextColor ? nsColor(p->placeholderTextColor) : nil];
   alignInput(_box, *p, self.layoutMetrics.layoutDirection);
@@ -1182,6 +1183,7 @@ std::optional<NSRange> newSelection(const Props::Shared &old, const DesktopTextI
   }
   auto attrs = p->getEffectiveTextAttributes(1);
   _text.font = inputFont(*p);
+  _text.fontSmoothing = p->fontSmoothing;
   _text.textColor = attrs.foregroundColor ? nsColor(attrs.foregroundColor) : NSColor.textColor;
   [_text setPlaceholder:nsString(p->placeholder) color:p->placeholderTextColor ? nsColor(p->placeholderTextColor) : nil];
   alignInput(_text, *p, self.layoutMetrics.layoutDirection);

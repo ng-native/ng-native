@@ -247,11 +247,14 @@ frame.
 
 A `style` attribute or a `[style]` binding has no compiler to read it, so it takes fewer forms of
 some shorthands than a stylesheet. `border`, its sides and logical sides, `outline`, `box-shadow`,
-`background`, `background-image`, `font` and `text-decoration` are read into the same props a
-stylesheet gives them. A line takes a token beside written parts, `border: 1px solid var(--c)`,
-and a `background` takes one as all of it or as its last layer. In these, `background` is a color
-or linear gradients, with no position, size, repeat or `url()`, and no token in a gradient, and
-`background-image` is linear gradients or `none`, or a token as all of it. `box-shadow` takes a
+`background`, `background-image`, `background-size`, `background-position`, `background-repeat`,
+`font` and `text-decoration` are read into the same props a stylesheet gives them. A line takes a
+token beside written parts, `border: 1px solid var(--c)`, and a `background` takes one as all of it
+or as its last layer. In these, `background` is a color or linear gradients, each with a position,
+size and repeat or none, `linear-gradient(red, blue) center / cover no-repeat green`, with no
+`url()` and no token in a gradient, and `background-image` is linear gradients or `none`, or a
+token as all of it. A background's position and size are in `px`, `rem` or percentages, with no
+token. `box-shadow` takes a
 token only as all of it, lengths in `px` or `rem` only, and a color written out, not a
 `color-mix()`. `font` has no `small-caps`, stretch, keyword size or system font.
 A value outside that is dropped, with a warning in development, and what was set before it stays,
@@ -321,10 +324,14 @@ first family of a stack is the one kept, so `ui-monospace, Menlo, monospace` is 
 `-webkit-font-smoothing` is inherited, as in CSS, so an app can set it once at its root. On macOS,
 `antialiased` (Tailwind's `antialiased`) turns off the system's font smoothing for text, which
 draws it thinner, as Chrome and Safari on a Mac draw it; `none` turns off antialiasing too, and
-`auto` and `subpixel-antialiased` keep the smoothing. It applies to a `<text>`'s text, not a text
-field's. iOS and Android draw no smoothing to turn off, and Chrome reads it only on a Mac, so it
-changes nothing on iOS, Android or Linux. `-moz-osx-font-smoothing`, which Firefox reads, is left
-out without a warning.
+`auto` and `subpixel-antialiased` keep the smoothing. It takes a token, `inherit`, `initial` and
+`unset`, and a token or a value set on an element that is none of its keywords leaves the inherited
+value, as in Chrome. It applies to the text of a `<text>`, a `<text-input>` and a `<search-field>`,
+while it is edited too, but for a secure entry's dots. A paragraph is smoothed as a whole, by its
+own value: a `<text>` nested in it with another value is drawn as the paragraph is. iOS and
+Android draw no smoothing to turn off, and Chrome reads it only on a Mac, so it changes nothing on
+iOS, Android or Linux.
+`-moz-osx-font-smoothing`, which Firefox reads, is left out without a warning.
 
 `display` takes `flex`, `none`, `contents`, the block containers `block`, `flow-root` and
 `inline-block`, `inline-flex`, and `grid` and `inline-grid`. An element that is `display: none` has
@@ -655,7 +662,8 @@ gradients, under its colour if it has one. Each part comes at most once, so `non
 ones, at the initial position, size and repeat. A `currentColor` in the token's last layer,
 `center currentColor`, is the text color where the token is used.
 A bare `background: var(--surface)` takes away an image a weaker rule declared, whatever its token
-holds, as in a browser.
+holds, and puts a weaker rule's `background-size`, `background-position` and `background-repeat`
+back at their initial values, as in a browser.
 `flex: var(--grow)` is `flex: <number>`: it grows by the token, shrinks by 1, and starts from a
 basis of 0, once the token is set. With no token it is `flex`'s initial value, `0 1 auto`, whatever
 a weaker rule set, as on the web, where a `var()` that cannot be substituted gives the property its

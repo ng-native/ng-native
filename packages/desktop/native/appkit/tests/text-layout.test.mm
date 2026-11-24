@@ -111,6 +111,9 @@ TEST_CASE("ui-monospace and monospace are the system's monospaced face, as Safar
   CHECK(system.second);
   CHECK(drawnIn("ui-monospace") == system);
   CHECK_FALSE(drawnIn("system-ui").second);
+  // Menlo is a family of its own, drawn as Chrome draws it, not the system's monospaced face.
+  CHECK(drawnIn("Menlo") == std::make_pair(std::string("Menlo"), true));
+  CHECK(system.first != "Menlo");
 }
 
 TEST_CASE("A fixed line height scales by the font size multiplier, capped as the font size is") {

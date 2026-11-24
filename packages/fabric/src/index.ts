@@ -137,6 +137,8 @@ export {
 export {
   BACKGROUND_PLACING,
   backgroundLayers,
+  placedBackground,
+  placingList,
   splitLayers,
   type BackgroundLayers,
 } from './background-layers.ts';

@@ -82,6 +82,19 @@ TEST_CASE("TextInput's desktop props parse React Native's traits, selection and 
   CHECK_FALSE(cleared->smartQuotes.has_value());
 }
 
+TEST_CASE("TextInput's desktop props parse -webkit-font-smoothing, as a Paragraph's do") {
+  Parser p;
+  auto antialiased = p.clone(nullptr, folly::dynamic::object("fontSmoothing", "antialiased"));
+  CHECK(antialiased->fontSmoothing == ngn::FontSmoothing::Antialiased);
+  CHECK(p.clone(nullptr, folly::dynamic::object("fontSmoothing", "none"))->fontSmoothing == ngn::FontSmoothing::None);
+  CHECK(
+      p.clone(nullptr, folly::dynamic::object("fontSmoothing", "subpixel-antialiased"))->fontSmoothing ==
+      ngn::FontSmoothing::Auto);
+  // An update keeps what it does not mention, and null is the default.
+  CHECK(p.clone(antialiased, folly::dynamic::object("editable", false))->fontSmoothing == ngn::FontSmoothing::Antialiased);
+  CHECK(p.clone(antialiased, folly::dynamic::object("fontSmoothing", nullptr))->fontSmoothing == ngn::FontSmoothing::Auto);
+}
+
 TEST_CASE("unset switches leave the system setting, and spellCheck and smartQuotes follow autoCorrect") {
   Parser p;
   auto none = p.options(folly::dynamic::object());

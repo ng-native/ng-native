@@ -5465,6 +5465,8 @@ function describeView(
   else delete LOOSE_TEXT[name];
   if (options?.fontNames) FONT_NAMES[name] = options.fontNames;
   else delete FONT_NAMES[name];
+  if (options?.fontSmoothing) SMOOTHED_VIEWS.add(name);
+  else if (!DRAWS_SMOOTHING.has(name)) SMOOTHED_VIEWS.delete(name);
 }
 
 /** What else a registered view needs the engine to know about it. */
@@ -5501,6 +5503,11 @@ export interface ViewNameOptions {
    * every commit of the view, and again for each view when the faces change.
    */
   readonly fontNames?: (props: Record<string, unknown>, postScriptName: PostScriptNames) => void;
+  /**
+   * Whether the view draws its text with the `-webkit-font-smoothing` it is styled with, as the
+   * macOS host's search field does. The property is committed to such a view on macOS alone.
+   */
+  readonly fontSmoothing?: boolean;
 }
 
 /** The PostScript name of the face a name is registered under, where the build read it. */
@@ -5508,6 +5515,13 @@ export type PostScriptNames = (name: string) => string | undefined;
 
 /** How each view that names fonts in its own props rewrites them. See `ViewNameOptions`. */
 const FONT_NAMES: Record<string, NonNullable<ViewNameOptions['fontNames']>> = {};
+
+/**
+ * The views the macOS host draws `-webkit-font-smoothing` on: a paragraph, a text input, and any
+ * a registration says draws it (`ViewNameOptions.fontSmoothing`).
+ */
+const DRAWS_SMOOTHING: ReadonlySet<string> = new Set([PARAGRAPH, 'TextInput']);
+const SMOOTHED_VIEWS = new Set(DRAWS_SMOOTHING);
 
 /** Rewrites the fonts a view's own props name, for a view that says how. See `ViewNameOptions`. */
 function renameFonts(
@@ -5722,12 +5736,15 @@ function monospaceGeneric(style: Record<string, unknown>): void {
 }
 
 /**
- * `-webkit-font-smoothing`, which only the macOS host draws, on a paragraph: Chrome reads it only
- * on a Mac, and iOS and Android never smooth text. Left off every other view, which would only
- * carry it.
+ * `-webkit-font-smoothing`, which only the macOS host draws, on the views that draw text: Chrome
+ * reads it only on a Mac, and iOS and Android never smooth text. Left off every other view, which
+ * would only carry it.
  */
 function fontSmoothing(viewName: string, style: Record<string, unknown>): void {
-  if (style['fontSmoothing'] !== undefined && (platformOS !== 'macos' || viewName !== PARAGRAPH)) {
+  if (
+    style['fontSmoothing'] !== undefined &&
+    (platformOS !== 'macos' || !SMOOTHED_VIEWS.has(viewName))
+  ) {
     delete style['fontSmoothing'];
   }
 }
@@ -6601,6 +6618,10 @@ function boundFrom(prop: string, text: string, on: string): DeferredDeclaration 
     return { props: [prop], on, within: CURRENT_COLOUR_MARKER };
   }
   if (BOUND_TOKEN.test(text)) return boundDeclaration(prop, tokenFromValue(text), on);
+  // The parent's, as a rule's `inherit` is: `unset` too, for a property CSS inherits.
+  if (prop === 'fontSmoothing' && /^\s*(?:inherit|unset)\s*$/i.test(text)) {
+    return { props: [prop], on, inherit: true };
+  }
   if (prop !== 'transform') return boundRelativeLength(prop, text, on);
   const within = measuredTransform(text);
   return within ? { props: [prop], ...(on === undefined ? {} : { on }), within } : null;
@@ -9786,7 +9807,10 @@ export class Engine implements HostEngine {
   private refusedBound(node: EngineNode, prop: string, text: string): boolean {
     const why = boundRefusal(prop, text);
     if (why === undefined) return false;
-    const name = prop.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+    const name =
+      prop === 'fontSmoothing'
+        ? '-webkit-font-smoothing'
+        : prop.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
     this.reportDroppedDeclaration(name, text, node.tag, why);
     return true;
   }

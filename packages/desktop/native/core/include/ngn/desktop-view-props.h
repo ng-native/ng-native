@@ -28,6 +28,13 @@ DesktopProps parseDesktopProps(
     const DesktopProps &source,
     const facebook::react::RawProps &rawProps);
 
+// A `fontSmoothing` keyword: anything but `antialiased` and `none` is `auto`. A paragraph's, a text
+// input's and a native control's.
+void fromRawValue(
+    const facebook::react::PropsParserContext &context,
+    const facebook::react::RawValue &value,
+    FontSmoothing &result);
+
 // The ARIA states and counts an update sets, on top of `source`'s: a view's and a text input's.
 AriaFields parseAriaFields(
     const facebook::react::PropsParserContext &context,

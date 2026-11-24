@@ -46,6 +46,11 @@ TextLayout layoutText(
     const facebook::react::ParagraphAttributes &paragraphAttributes,
     CGFloat maxWidth);
 
+// Sets what `smoothing` says on a context about to draw text: `auto` leaves the context's own, which
+// a window's has on, the system's font smoothing; `antialiased` turns smoothing off, and `none`
+// antialiasing too. The caller saves and restores the context's state around it.
+void applyFontSmoothing(CGContextRef context, FontSmoothing smoothing);
+
 // Draws a layout into a flipped (top-left origin) context at `origin`, smoothed as `smoothing` says.
 void drawText(
     const TextLayout &layout,

@@ -146,6 +146,26 @@ describe('a shorthand of mixed parts in a style commits what a stylesheet commit
     ['background: linear-gradient(to right, red 10%, blue 90%)'],
     ['background: linear-gradient(90deg, red, blue), linear-gradient(red, blue)'],
     ['background: linear-gradient(red, blue), green'],
+    ['background: linear-gradient(red, blue) green'],
+    ['background: red linear-gradient(to right, red, blue)'],
+    ['background: linear-gradient(red, blue) center / cover no-repeat'],
+    ['background: linear-gradient(red, blue) 10px 20px / 30px repeat-x green'],
+    [
+      'background: linear-gradient(red, blue) left 10% / auto 20% space round, linear-gradient(red, blue)',
+    ],
+    ['background: none, linear-gradient(red, blue) right 4px bottom / contain'],
+    ['background: linear-gradient(red, blue) top / 1rem repeat-y fixed padding-box'],
+    ['background: linear-gradient(red, blue), center red'],
+    ['background: linear-gradient(red, blue) center center'],
+    ['background-size: 10px 20px'],
+    ['background-size: cover, 4px'],
+    ['background-size: auto 20%'],
+    ['background-position: center'],
+    ['background-position: right 10px top'],
+    ['background-position: bottom right, 3px 4px'],
+    ['background-position: top'],
+    ['background-repeat: no-repeat'],
+    ['background-repeat: repeat-x, space round'],
     ['font: 12px Arial', 'text'],
     ['font: bold 12px Arial', 'text'],
     ['font: italic 700 12px/20px Georgia, serif', 'text'],
@@ -177,6 +197,12 @@ describe('over what a rule set', () => {
     ['background: red', 'background-size: 10px; background-position: 4px 4px'],
     ['background: linear-gradient(red, blue)', 'background-color: green'],
     ['background: none', 'background: red'],
+    [
+      'background: linear-gradient(red, blue) green',
+      'background-size: 10px; background-repeat: no-repeat',
+    ],
+    ['background-size: 10px', `background: linear-gradient(red, blue) center / cover no-repeat`],
+    ['background-position: 4px 5px', 'background-image: linear-gradient(red, blue)'],
     ['text-decoration: underline', 'text-decoration: underline dotted blue', 'text'],
     ['font: bold 12px/20px Arial', 'font-size: 30px; line-height: 40px', 'text'],
   ];
@@ -424,7 +450,20 @@ describe('a value a shorthand does not take', () => {
     ['background: notacolour'],
     ['background: red blue'],
     ['background: url(a.png)'],
-    ['background: linear-gradient(red, blue) no-repeat'],
+    ['background: red, linear-gradient(red, blue)'],
+    ['background: linear-gradient(red, blue) no-repeat center no-repeat'],
+    ['background: linear-gradient(red, blue) linear-gradient(red, blue)'],
+    ['background: linear-gradient(red, blue) / cover'],
+    ['background: linear-gradient(red, blue) 2em 0'],
+    ['background: radial-gradient(red, blue) center'],
+    ['background-size: -1px'],
+    ['background-size: 1px 2px 3px'],
+    ['background-size: cover 1px'],
+    ['background-size: var(--s)'],
+    ['background-position: left right'],
+    ['background-position: 2em'],
+    ['background-repeat: repeat-x repeat'],
+    ['background-repeat: sideways'],
     ['background: linear-gradient(var(--a), blue)'],
     ['background: linear-gradient(red, blue), var(--a), red'],
     ['background: var(--x) none'],
@@ -476,6 +515,20 @@ describe('a value a shorthand does not take', () => {
     assert.notDeepEqual(before, {});
     renderer.setStyle(node, 'border', '3px solid notacolour');
     assert.deepEqual(without(drawn(props())), before);
+  });
+
+  it('changes and takes away a background placing set on the element, back to the rule', () => {
+    const { renderer, node, props } = scene(
+      '.a { background-image: linear-gradient(red, blue); background-size: 3px }',
+    );
+    renderer.setStyle(node, 'background-size', '10px 20px');
+    assert.deepEqual(props()['experimental_backgroundSize'], [{ x: 10, y: 20 }]);
+    renderer.setStyle(node, 'background-size', 'cover');
+    assert.deepEqual(props()['experimental_backgroundSize'], ['cover']);
+    renderer.removeStyle(node, 'background-size');
+    assert.deepEqual(props()['experimental_backgroundSize'], [{ x: 3, y: 'auto' }]);
+    renderer.setAttribute(node, 'class', '');
+    assert.equal(props()['experimental_backgroundSize'], null);
   });
 
   it('keeps the value set before a refused one', () => {

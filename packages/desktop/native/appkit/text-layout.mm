@@ -53,7 +53,7 @@ CTFontRef makeFont(const TextAttributes &a) {
   const std::string &family = a.fontFamily;
   if (family.empty() || family == "System" || family == "system-ui" || family == "sans-serif") {
     font = [NSFont systemFontOfSize:size weight:weight];
-  } else if (family == "monospace" || family == "ui-monospace" || family == "Menlo") {
+  } else if (family == "monospace" || family == "ui-monospace") {
     font = [NSFont monospacedSystemFontOfSize:size weight:weight];
   } else {
     // A name a font was loaded under stands for that font's family, as expo-font's alias does on
@@ -543,15 +543,18 @@ static CGFloat lineOffset(const TextLayout &layout, const TextLine &l, CGFloat b
   return x;
 }
 
-void drawText(const TextLayout &layout, CGContextRef context, CGPoint origin, CGFloat boxWidth, FontSmoothing smoothing) {
-  CGContextSaveGState(context);
-  // `auto` leaves the context's own, which a window's has on: the system's font smoothing.
+void applyFontSmoothing(CGContextRef context, FontSmoothing smoothing) {
   if (smoothing != FontSmoothing::Auto) {
     CGContextSetShouldSmoothFonts(context, false);
   }
   if (smoothing == FontSmoothing::None) {
     CGContextSetShouldAntialias(context, false);
   }
+}
+
+void drawText(const TextLayout &layout, CGContextRef context, CGPoint origin, CGFloat boxWidth, FontSmoothing smoothing) {
+  CGContextSaveGState(context);
+  applyFontSmoothing(context, smoothing);
   // The view is flipped; glyphs are drawn with an inverted text matrix rather than by flipping
   // the whole context, so line origins stay top-down.
   CGContextSetTextMatrix(context, CGAffineTransformMakeScale(1, -1));

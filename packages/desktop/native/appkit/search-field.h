@@ -28,6 +28,8 @@ NSSize NGNSearchFieldSize(const ngn::NativeControlProps &props);
 @property (nonatomic, copy) void (^cancelled)(void);
 @property (nonatomic, copy) void (^began)(void);
 @property (nonatomic, copy) void (^ended)(void);
+// `-webkit-font-smoothing`, as the props last applied say it, for the text drawn and being edited.
+@property (nonatomic, readonly) ngn::FontSmoothing fontSmoothing;
 - (void)apply:(const ngn::NativeControlProps &)props;
 - (void)focus;
 - (void)blur;

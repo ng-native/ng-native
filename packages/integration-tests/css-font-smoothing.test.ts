@@ -8,7 +8,12 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { afterEach, describe, it } from 'node:test';
-import { Engine, registerPlatformComponents, type EngineNode } from '@ng-native/fabric';
+import {
+  Engine,
+  registerPlatformComponents,
+  registerViewName,
+  type EngineNode,
+} from '@ng-native/fabric';
 import { NativeRendererFactory } from '@ng-native/platform';
 import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 
@@ -84,6 +89,15 @@ describe('-webkit-font-smoothing in a stylesheet', () => {
     assert.match(warnings[0]!, /-webkit-font-smoothing/);
   });
 
+  it('takes a token, inherit, initial and unset without a warning', () => {
+    const { declarations, warnings } = compiled(
+      '.a { -webkit-font-smoothing: var(--x) } .b { -webkit-font-smoothing: inherit }' +
+        ' .c { -webkit-font-smoothing: Unset } .d { -webkit-font-smoothing: initial }',
+    );
+    assert.deepEqual(warnings, []);
+    assert.deepEqual(declarations, [{}, {}, {}, { fontSmoothing: 'auto' }]);
+  });
+
   it("leaves Firefox's -moz-osx-font-smoothing out without a warning, as Chrome does", () => {
     // Tailwind's antialiased and every reset write it beside the webkit property.
     const { declarations, warnings } = compiled(
@@ -122,6 +136,50 @@ describe('-webkit-font-smoothing on the macOS host', () => {
     assert.equal(s.smoothing().byId['label'], null);
     s.renderer.setStyle(label, '-webkit-font-smoothing', 'None');
     assert.equal(s.smoothing().byId['label'], 'none');
+  });
+
+  it("is a text input's, inherited as a paragraph's is", () => {
+    const s = scene('macos');
+    const app = s.add('root', 'app', 'view');
+    s.add('field', '', 'text-input', app);
+    s.add('own', 'none', 'text-input', app);
+    const { byId } = s.smoothing();
+    assert.equal(byId['field'], 'antialiased');
+    assert.equal(byId['own'], 'none');
+  });
+
+  it('is the view of a registration that says it draws it, and of no other', () => {
+    const drawn = registerViewName('smooth-field', 'SmoothField', undefined, {
+      fontSmoothing: true,
+    });
+    const carried = registerViewName('plain-field', 'PlainField');
+    try {
+      const s = scene('macos');
+      const app = s.add('root', 'app', 'view');
+      s.add('drawn', '', 'smooth-field', app);
+      s.add('carried', '', 'plain-field', app);
+      const { byId } = s.smoothing();
+      assert.equal(byId['drawn'], 'antialiased');
+      assert.equal(byId['carried'], undefined);
+    } finally {
+      drawn();
+      carried();
+    }
+  });
+
+  it('is no longer the view of a registration that says nothing of it, once it is replaced', () => {
+    const first = registerViewName('smooth-field', 'SmoothField', undefined, {
+      fontSmoothing: true,
+    });
+    const second = registerViewName('smooth-field', 'SmoothField');
+    try {
+      const s = scene('macos');
+      s.add('field', '', 'smooth-field', s.add('root', 'app', 'view'));
+      assert.equal(s.smoothing().byId['field'], undefined);
+    } finally {
+      second();
+      first();
+    }
   });
 
   it('goes back to the default when the class that set it is removed', () => {

@@ -104,6 +104,7 @@ export const EXTRA_KEYS = {
   transform: 'transform',
   'z-index': 'zIndex',
   'box-shadow': 'boxShadow',
+  '-webkit-font-smoothing': 'fontSmoothing',
 } as const;
 
 export type ExtraProperty = keyof typeof EXTRA_KEYS;
@@ -491,7 +492,145 @@ const TILE_PLACING_CASES: OracleCase[] = [
   },
 ];
 
+/**
+ * A background's placing set on the element itself: the longhands, and the shorthand with a
+ * position, a size, a repeat or a colour in its last layer, each over what a weaker rule placed.
+ */
+const OWN_PLACING_CASES: OracleCase[] = [
+  inlineValue(
+    { 'background-size': '10px 20px', 'background-position': '3px 4px' },
+    `#probe { background-image: ${GRADIENT}; background-repeat: no-repeat }`,
+    PLACING,
+  ),
+  inlineValue(
+    {
+      'background-repeat': 'repeat-x, no-repeat',
+      'background-size': 'auto 20%, 4px',
+      'background-position': 'left 1px top 2px, 3px 4px',
+    },
+    `#probe { background-image: ${GRADIENT}, ${GRADIENT} }`,
+    PLACING,
+  ),
+  inlineValue(
+    { background: `${GRADIENT} center / 10px 20px no-repeat rgb(4, 5, 6)` },
+    '#probe { background-color: rgb(0, 255, 0); background-position: 3px 4px }',
+    PLACING,
+  ),
+  inlineValue(
+    { background: `${GRADIENT} 5% 6px / 1rem space round rgb(1, 2, 3)` },
+    '#probe { background-size: 10px 20px }',
+    PLACING,
+  ),
+  inlineValue(
+    { background: `${GRADIENT} rgb(1, 2, 3)` },
+    '#probe { background-size: 10px 20px; background-repeat: no-repeat }',
+    PLACING,
+  ),
+  inlineValue(
+    { background: `${GRADIENT} center 10% / cover, ${GRADIENT} left 4px top 5px rgb(4, 5, 6)` },
+    '#probe { background-size: 10px 20px }',
+    PLACING,
+  ),
+  {
+    ...inlineValue({ 'background-size': '4px 5px' }, `#probe { background-image: ${GRADIENT} }`, [
+      ...PLACING,
+    ]),
+    name: 'inline background-size, then a size no browser takes, keeps the first',
+    then: { 'background-size': '-1px' },
+  },
+];
+
+/**
+ * `background: var()` is the whole shorthand, so it puts a weaker rule's size, position and
+ * repeat back at their initial values, for an image a stronger rule declares as for its own.
+ */
+const TOKEN_SHORTHAND_PLACING_CASES: OracleCase[] = [
+  {
+    name: 'background: var() of a colour places a stronger rule image as nothing set',
+    css:
+      '#probe { background-size: 10px 20px; background-position: 3px 4px; background-repeat: no-repeat } ' +
+      `#probe.b { --x: rgb(1, 2, 3); background: var(--x) } #probe.b.c { background-image: ${GRADIENT} }`,
+    tree: probe({ name: 'view', classes: ['b', 'c'] }),
+    extra: PLACING,
+  },
+  {
+    name: 'background: var() of a gradient places it as nothing set',
+    css:
+      '#probe { background-size: 10px 20px; background-repeat: no-repeat } ' +
+      `#probe.b { --x: ${GRADIENT}; background: var(--x) }`,
+    tree: probe({ name: 'view', classes: ['b'] }),
+    extra: PLACING,
+  },
+  inlineValue(
+    { background: 'var(--x)' },
+    `#probe { --x: ${GRADIENT}; background-size: 10px 20px; background-position: 3px 4px }`,
+    PLACING,
+  ),
+  inlineValue(
+    { background: 'var(--x)', 'background-image': GRADIENT },
+    '#probe { --x: rgb(1, 2, 3); background-size: 10px 20px; background-repeat: no-repeat }',
+    PLACING,
+  ),
+  {
+    name: 'background: var() of a layer with no image places a stronger rule image where it says',
+    css:
+      '#probe { background-size: 4px 5px } ' +
+      '#probe.b { --x: center / 10px 20px no-repeat; background: var(--x) } ' +
+      `#probe.b.c { background-image: ${GRADIENT} }`,
+    tree: probe({ name: 'view', classes: ['b', 'c'] }),
+    extra: PLACING,
+  },
+  inlineValue(
+    { background: 'var(--x)', 'background-image': GRADIENT },
+    '#probe { --x: left 3px top 4px / 10px no-repeat }',
+    PLACING,
+  ),
+];
+
 const TOKEN_GRADIENT = 'linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))';
+
+/** The probe's text in a parent of class `p`, which the cases smooth `none`. */
+const smoothed = (name: string, css: string, extra: Partial<OracleCase> = {}): OracleCase => ({
+  name: `-webkit-font-smoothing: ${name}`,
+  css: `.p { -webkit-font-smoothing: none } ${css}`,
+  tree: { name: 'view', classes: ['p'], children: [probe()] },
+  extra: ['-webkit-font-smoothing'],
+  ...extra,
+});
+
+/**
+ * `-webkit-font-smoothing` from a token and as a CSS-wide keyword, in a stylesheet and set on the
+ * element, as Chrome on a Mac computes it.
+ */
+const FONT_SMOOTHING_CASES: OracleCase[] = [
+  smoothed('a token', '.p { --x: antialiased } #probe { -webkit-font-smoothing: var(--x) }'),
+  smoothed(
+    'a token of no keyword takes the inherited value',
+    'text { -webkit-font-smoothing: antialiased } .p { --x: grayscale } ' +
+      '#probe { -webkit-font-smoothing: var(--x) }',
+  ),
+  smoothed('an unset token with a fallback', '#probe { -webkit-font-smoothing: var(--y, auto) }'),
+  smoothed(
+    'inherit over a weaker rule',
+    'text { -webkit-font-smoothing: antialiased } #probe { -webkit-font-smoothing: inherit }',
+  ),
+  smoothed('initial', '#probe { -webkit-font-smoothing: initial }'),
+  smoothed(
+    'unset over a weaker rule',
+    'text { -webkit-font-smoothing: antialiased } #probe { -webkit-font-smoothing: unset }',
+  ),
+  smoothed('inherit set on the element', '#probe { -webkit-font-smoothing: antialiased }', {
+    inline: { '-webkit-font-smoothing': 'inherit' },
+  }),
+  smoothed('initial set on the element', '', { inline: { '-webkit-font-smoothing': 'initial' } }),
+  smoothed('a value of no keyword set on the element', '', {
+    inline: { '-webkit-font-smoothing': 'grayscale' },
+  }),
+  smoothed('a value of no keyword set after one', '', {
+    inline: { '-webkit-font-smoothing': 'antialiased' },
+    then: { '-webkit-font-smoothing': 'grayscale' },
+  }),
+];
 
 /** `backgroundOver`, with `--x` written in the stylesheet beside the background. */
 const backgroundOverInSheet = (written: string, token: string, warns = false): OracleCase => ({
@@ -2144,6 +2283,9 @@ export const CASES: OracleCase[] = [
   ...INLINE_VALUE_SHORTHAND_CASES,
   ...BACKGROUND_TOKEN_CASES,
   ...TILE_PLACING_CASES,
+  ...OWN_PLACING_CASES,
+  ...TOKEN_SHORTHAND_PLACING_CASES,
+  ...FONT_SMOOTHING_CASES,
   ...BACKGROUND_TOKEN_MORE_CASES,
   ...BACKGROUND_LAYER_TOKEN_CASES,
   ...SHADOW_COLOUR_CASES,

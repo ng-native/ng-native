@@ -6018,6 +6018,24 @@ const clamped = (prop: string, value: unknown): unknown => {
   return isPercentage(value) && value.startsWith('-') ? '0%' : value;
 };
 
+/** The keywords `-webkit-font-smoothing` takes. */
+const FONT_SMOOTHING: ReadonlySet<string> = new Set([
+  'auto',
+  'none',
+  'antialiased',
+  'subpixel-antialiased',
+]);
+
+/**
+ * A token's word where `prop` takes it, in any case, and nothing where it does not: invalid where
+ * it is used, which unsets the property, so an inherited one is the parent's.
+ */
+function taken(prop: string, value: unknown): unknown {
+  if (prop !== 'fontSmoothing' || value === undefined) return value;
+  const word = typeof value === 'string' ? value.toLowerCase() : undefined;
+  return word !== undefined && FONT_SMOOTHING.has(word) ? word : undefined;
+}
+
 /** What a deferred declaration settled to, written to one of its props. */
 function writeSettled(
   own: Record<string, unknown>,
@@ -6027,7 +6045,7 @@ function writeSettled(
   layers: BackgroundLayers | undefined,
 ): void {
   const one = settled instanceof EachSide ? settled.at(declaration.props, prop) : settled;
-  const value = clamped(prop, one) ?? declaration.unset;
+  const value = taken(prop, clamped(prop, one)) ?? declaration.unset;
   if (declaration.layers) writeLayer(own, prop, value, layers, declaration.over);
   else write(own, prop, value, declaration.line !== undefined);
 }
@@ -6051,22 +6069,28 @@ function writeLayer(
 ): void {
   if (prop === 'backgroundColor') return write(own, prop, layers?.color ?? value, false);
   const images = layers?.images ?? (value === undefined ? undefined : []);
-  const list = images && layerList(prop, images, over);
+  const list = images && layerList(prop, images, over, layers?.placing);
   if (list) own[prop] = list;
   else delete own[prop];
 }
 
 /**
  * One prop's list for a token's images: what is written over them, then what each takes. With no
- * image of the token's, what is written, as the shorthand written out commits it, and with nothing
- * written either, nothing: the prop is unset, as a weaker rule's image is cleared.
+ * image of the token's, what is written, as the shorthand written out commits it, or where the
+ * token's layer places an image another rule declares, and with neither, nothing: the prop is
+ * unset, as a weaker rule's image is cleared.
  */
 function layerList(
   prop: string,
   images: readonly object[],
   over: DeferredDeclaration['over'],
+  placing: BackgroundLayers['placing'],
 ): readonly unknown[] | undefined {
-  if (!images.length) return over?.[prop];
+  if (!images.length) {
+    return (
+      over?.[prop] ?? (prop === BACKGROUND_IMAGE ? undefined : placing?.map((each) => each[prop]))
+    );
+  }
   const held = prop === BACKGROUND_IMAGE ? images : images.map(() => BACKGROUND_PLACING[prop]);
   const written = over?.[BACKGROUND_IMAGE]?.length ? over[prop] : undefined;
   return [...(written ?? []), ...held];
@@ -6223,10 +6247,15 @@ const isNegativeWritten = (prop: string, text: string): boolean =>
  */
 export function boundRefusal(prop: string, text: string): string | undefined {
   if (isNegativeWritten(prop, text)) return 'it is negative';
+  if (prop === 'fontSmoothing' && !SMOOTHING_SET.test(text)) return 'it is none of its keywords';
   if (isRefusedMath(prop, text)) return 'its math comes to no type it takes';
   if (isRefusedRatio(prop, text)) return 'it is no ratio';
   return undefined;
 }
+
+/** What `-webkit-font-smoothing` is set to on an element: a keyword, a CSS-wide one, or a token. */
+const SMOOTHING_SET =
+  /^\s*(?:auto|none|antialiased|subpixel-antialiased|inherit|initial|unset)\s*$|var\(/i;
 
 /** A number CSS takes as a side of a ratio, the whole text: `16`, `1.5`, `1e2`. */
 const RATIO_SIDE = new RegExp(String.raw`^\s*\+?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?\s*$`, 'i');

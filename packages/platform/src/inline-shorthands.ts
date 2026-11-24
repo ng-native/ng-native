@@ -2,6 +2,8 @@ import {
   BACKGROUND_PLACING,
   backgroundLayers,
   boundDeclaration,
+  placedBackground,
+  placingList,
   firstFamily,
   parseColor,
   platformColourOf,
@@ -21,8 +23,8 @@ import {
  * ponytail: `border` and its sides, `outline`, `box-shadow`, `background`, `background-image`,
  * `font` and `text-decoration`. A token is read where a stylesheet reads one that native can tell the part of:
  * in a line of written parts, as the colour under a `background`, or as all of it. A `background`
- * has no position, size, repeat, `url()` or token in a gradient, and its gradients are those
- * `backgroundLayers` reads. A `box-shadow` has no relative length, no colour worked out on the node, and a token only as all
+ * has no `url()` or token in a gradient, and its gradients are those `backgroundLayers` reads, each
+ * placed in `px`, `rem` or percentages. A `box-shadow` has no relative length, no colour worked out on the node, and a token only as all
  * of it. A `font` has no
  * `small-caps`, stretch, keyword size or system font. Anything else is dropped with a warning.
  */
@@ -285,16 +287,25 @@ const BACKGROUND_RESTS = Object.entries(BACKGROUND_PLACING);
 
 const TRANSPARENT = 'rgba(0, 0, 0, 0)';
 
-const background = (colour: string, images: readonly object[]) => [
+/** Each layer's placing where `placing` gives it, and where nothing does, the initial one. */
+const background = (
+  colour: string,
+  images: readonly object[],
+  placing: readonly Readonly<Record<string, unknown>>[] = [],
+) => [
   ['backgroundColor', colour] as const,
   [IMAGE, images] as const,
   ...BACKGROUND_RESTS.map(
-    ([prop, rest]) => [prop, new Array(Math.max(images.length, 1)).fill(rest)] as const,
+    ([prop, rest]) =>
+      [
+        prop,
+        Array.from({ length: Math.max(images.length, 1) }, (_, at) => placing[at]?.[prop] ?? rest),
+      ] as const,
   ),
 ];
 
 const NO_BACKGROUND =
-  'a background is a colour, or linear gradients over one, with no position, size or repeat';
+  'a background is a colour, or linear gradients over one, each placed in px, rem or percentages';
 
 /** A `var()` as all of a layer, the background's colour, or nothing for any other. */
 function backgroundToken(layer: string, on: string): DeferredDeclaration | undefined {
@@ -307,7 +318,9 @@ function backgroundToken(layer: string, on: string): DeferredDeclaration | undef
 function wholeToken(layer: string, on: string): Reading {
   const token = backgroundToken(layer, on);
   if (!token) return NO_BACKGROUND;
-  return { set: [], deferred: { ...token, props: ['backgroundColor', IMAGE], layers: true } };
+  // The placing too, which the shorthand puts back at its initial value, as it does the image.
+  const props = ['backgroundColor', IMAGE, ...BACKGROUND_RESTS.map(([prop]) => prop)];
+  return { set: [], deferred: { ...token, props, layers: true } };
 }
 
 /** The layers a token's fallback is, through any `var()` in it, whose names are listed already. */
@@ -341,9 +354,22 @@ function readBackground(text: string, on: string): Reading {
   }
   if (/^none$/i.test(text)) return { set: background(TRANSPARENT, []) };
   if (isColour(text) && cssValues(text).length === 1) return { set: background(text, []) };
-  const read = backgroundLayers(text);
-  return read ? { set: background(read.color ?? TRANSPARENT, read.images) } : NO_BACKGROUND;
+  const read = placedBackground(text);
+  return read
+    ? { set: background(read.color ?? TRANSPARENT, read.images, read.placing) }
+    : NO_BACKGROUND;
 }
+
+/**
+ * `background-position`, `background-size` or `background-repeat`, a value for each layer, as
+ * the list of one a layer native takes under its own name. A token is no part any of them reads.
+ */
+const readPlacing =
+  (prop: string, takes: string) =>
+  (text: string): Reading => {
+    const list = placingList(prop, text);
+    return list ? { set: [[prop, list]] } : takes;
+  };
 
 /**
  * `background-image`, which native names `experimental_backgroundImage`: gradients or `none`, or a
@@ -457,6 +483,27 @@ export const MIXED_SHORTHANDS: ReadonlyMap<string, (text: string, on: string) =>
   ['boxShadow', readShadows],
   ['background', readBackground],
   ['backgroundImage', readBackgroundImage],
+  [
+    'backgroundPosition',
+    readPlacing(
+      'experimental_backgroundPosition',
+      'a background-position is sides, center, px, rem or percentages, a layer each',
+    ),
+  ],
+  [
+    'backgroundSize',
+    readPlacing(
+      'experimental_backgroundSize',
+      'a background-size is cover, contain, auto, px, rem or percentages, a layer each',
+    ),
+  ],
+  [
+    'backgroundRepeat',
+    readPlacing(
+      'experimental_backgroundRepeat',
+      'a background-repeat is its keywords, a layer each',
+    ),
+  ],
   ['font', readFont],
   ['textDecoration', readDecoration],
 ]);

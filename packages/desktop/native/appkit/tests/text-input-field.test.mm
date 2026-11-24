@@ -1,12 +1,15 @@
 // NGNTextField and NGNTextView (text-input-field.mm) on offscreen windows, never shown.
 #include "../text-input-field.h"
+#include "ink.h"
 
 #include <doctest/doctest.h>
 
 #include <chrono>
 
 using ngn::Capitalize;
+using ngn::FontSmoothing;
 using ngn::TextInputOptions;
+using ngn::test::inkOf;
 
 namespace {
 
@@ -469,5 +472,82 @@ TEST_CASE("a field and a multiline text view tell their owner each key typed, on
   type(text, @"x");
   CHECK([text.string isEqualToString:@"X"]);
   CHECK([keys isEqualToArray:@[ @"x" ]]);
+  [window close];
+}
+
+TEST_CASE("-webkit-font-smoothing draws a field's text thinner when antialiased, and with no partial pixels when none") {
+  NSWindow *window = offscreenWindow();
+  NGNTextField *field = addField(window, NSMakeRect(10, 10, 200, 30));
+  field.control.bezeled = NO;
+  field.control.bordered = NO;
+  field.control.drawsBackground = NO;
+  field.control.textColor = NSColor.blackColor;
+  field.font = [NSFont systemFontOfSize:13];
+  field.stringValue = @"Hamburgefonstiv";
+  auto smoothed = inkOf(field);
+  CHECK(smoothed.partial > 0);
+  field.fontSmoothing = FontSmoothing::Antialiased;
+  auto antialiased = inkOf(field);
+  CHECK(antialiased.partial > 0);
+  CHECK(antialiased.total < smoothed.total);
+  field.fontSmoothing = FontSmoothing::None;
+  CHECK(inkOf(field).partial == 0);
+  // Back to the system's smoothing.
+  field.fontSmoothing = FontSmoothing::Auto;
+  CHECK(inkOf(field).total == smoothed.total);
+  [window close];
+}
+
+TEST_CASE("a field edits in a field editor that smooths as it does, and in the shared one for auto") {
+  NSWindow *window = offscreenWindow();
+  NGNTextField *field = addField(window, NSMakeRect(10, 10, 200, 30));
+  field.control.textColor = NSColor.blackColor;
+  field.font = [NSFont systemFontOfSize:13];
+  field.stringValue = @"Hamburgefonstiv";
+  field.fontSmoothing = FontSmoothing::Antialiased;
+  REQUIRE([window makeFirstResponder:field.control]);
+  NSTextView *own = editor(field);
+  REQUIRE((own != nil));
+  REQUIRE([own isKindOfClass:NGNSmoothedFieldEditor.class]);
+  CHECK(((NGNSmoothedFieldEditor *)own).fontSmoothing == FontSmoothing::Antialiased);
+  CHECK([own.string isEqualToString:@"Hamburgefonstiv"]);
+  [own setSelectedRange:NSMakeRange(0, 0)];
+  auto antialiased = inkOf(own);
+  // A change while editing reaches the editor at once.
+  field.fontSmoothing = FontSmoothing::None;
+  CHECK(((NGNSmoothedFieldEditor *)own).fontSmoothing == FontSmoothing::None);
+  [window makeFirstResponder:nil];
+
+  field.fontSmoothing = FontSmoothing::Auto;
+  REQUIRE([window makeFirstResponder:field.control]);
+  NSTextView *shared = editor(field);
+  REQUIRE((shared != nil));
+  CHECK_FALSE([shared isKindOfClass:NGNSmoothedFieldEditor.class]);
+  CHECK((shared == [window fieldEditor:YES forObject:nil]));
+  [shared setSelectedRange:NSMakeRange(0, 0)];
+  CHECK(antialiased.total < inkOf(shared).total);
+  [window close];
+}
+
+TEST_CASE("-webkit-font-smoothing draws a multiline text view's text thinner when antialiased") {
+  NSWindow *window = offscreenWindow();
+  NGNTextView *text = [[NGNTextView alloc] initWithFrame:NSMakeRect(0, 0, 200, 40)];
+  text.font = [NSFont systemFontOfSize:13];
+  text.textColor = NSColor.blackColor;
+  text.drawsBackground = NO;
+  text.string = @"Hamburgefonstiv";
+  [window.contentView addSubview:text];
+  auto smoothed = inkOf(text);
+  CHECK(smoothed.partial > 0);
+  text.fontSmoothing = FontSmoothing::Antialiased;
+  CHECK(inkOf(text).total < smoothed.total);
+  text.fontSmoothing = FontSmoothing::None;
+  CHECK(inkOf(text).partial == 0);
+  // The placeholder too.
+  text.string = @"";
+  [text setPlaceholder:@"Hamburgefonstiv" color:NSColor.blackColor];
+  CHECK(inkOf(text).partial == 0);
+  text.fontSmoothing = FontSmoothing::Auto;
+  CHECK(inkOf(text).partial > 0);
   [window close];
 }

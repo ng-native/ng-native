@@ -1,5 +1,7 @@
 // NGNSearchField (search-field.mm) on offscreen windows, never shown.
 #include "../search-field.h"
+#include "../text-input-field.h"
+#include "ink.h"
 
 #include <doctest/doctest.h>
 
@@ -298,4 +300,43 @@ TEST_CASE("the field's font is the CSS's face, weight and slant over the control
   p.fontWeight.reset();
   p.italic = false;
   CHECK_FALSE([NGNSearchFieldFont(p).familyName isEqualToString:@"No Such Face"]);
+}
+
+TEST_CASE("monospace and ui-monospace draw a search field in the system's monospaced face") {
+  NativeControlProps props;
+  props.fontFamily = "monospace";
+  NSFont *mono = NGNSearchFieldFont(props);
+  CHECK((mono.fontDescriptor.symbolicTraits & NSFontDescriptorTraitMonoSpace) != 0);
+  props.fontFamily = "ui-monospace";
+  CHECK([NGNSearchFieldFont(props).familyName isEqualToString:mono.familyName]);
+  props.fontWeight = 700;
+  CHECK((NGNSearchFieldFont(props).fontDescriptor.symbolicTraits & NSFontDescriptorTraitBold) != 0);
+  props.fontWeight.reset();
+  props.fontFamily = "Menlo";
+  CHECK([NGNSearchFieldFont(props).familyName isEqualToString:@"Menlo"]);
+}
+
+TEST_CASE("-webkit-font-smoothing draws a search field's text thinner when antialiased, and edits it so") {
+  NSWindow *window = offscreenWindow();
+  auto events = std::make_shared<Events>();
+  NGNSearchField *search = makeField(window, events);
+  NativeControlProps props;
+  props.text = "Hamburgefonstiv";
+  [search apply:props];
+  auto smoothed = ngn::test::inkOf(search.field);
+  props.desktop.fontSmoothing = ngn::FontSmoothing::Antialiased;
+  [search apply:props];
+  CHECK(search.fontSmoothing == ngn::FontSmoothing::Antialiased);
+  CHECK(ngn::test::inkOf(search.field).total < smoothed.total);
+  REQUIRE([window makeFirstResponder:search.field]);
+  CHECK([search.field.currentEditor isKindOfClass:NGNSmoothedFieldEditor.class]);
+  [window makeFirstResponder:nil];
+  props.desktop.fontSmoothing = ngn::FontSmoothing::Auto;
+  [search apply:props];
+  CHECK(ngn::test::inkOf(search.field).total == smoothed.total);
+  REQUIRE([window makeFirstResponder:search.field]);
+  CHECK_FALSE([search.field.currentEditor isKindOfClass:NGNSmoothedFieldEditor.class]);
+  [window makeFirstResponder:nil];
+  settle();
+  [window close];
 }

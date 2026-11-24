@@ -87,6 +87,7 @@ const COLOR = new Set([
  * is a name it has no reader for, so the colour was sent and never drawn.
  */
 const RN_NAME = {
+  '-webkit-font-smoothing': 'fontSmoothing',
   'border-inline-start-color': 'borderStartColor',
   'border-inline-end-color': 'borderEndColor',
   'border-inline-start-width': 'borderStartWidth',
@@ -1613,7 +1614,9 @@ const TRANSLATORS = new Map([
     '-webkit-font-smoothing',
     (property, value, out, context) => {
       // Kept for the macOS host, which draws it, as Chrome and Safari read it only on a Mac.
-      const word = String(value).toLowerCase();
+      // `initial` is `auto`; `inherit` and `unset` are the parent's, which the compiler defers.
+      const written = String(value).toLowerCase();
+      const word = written === 'initial' ? 'auto' : written;
       if (!FONT_SMOOTHING.has(word)) {
         throw new CssUnsupported(`${context}: ${property}: '${value}' is not one of its keywords`);
       }
@@ -2506,6 +2509,8 @@ const KINDS = {
   'font-weight': 'weight',
   // A keyword the engine reads as a display native has, or unsets display for.
   display: 'display',
+  // A keyword the engine checks where the token is used: one it does not take is unset.
+  '-webkit-font-smoothing': 'keyword',
   // The colour is the only part of the shorthand native has, and a token is one value, so
   // `background: var(--surface)` is `background-color: var(--surface)`. A token that is no colour
   // unsets it, as Chrome unsets every longhand of a shorthand whose token cannot be substituted;

@@ -309,8 +309,15 @@ describe("a library's component CSS, opted in", () => {
       sheet.rules[0]!.deferred,
       [
         {
-          // The shorthand's token may hold the images as well as the colour.
-          props: ['backgroundColor', 'experimental_backgroundImage'],
+          // The shorthand's token may hold the images as well as the colour, and the shorthand
+          // puts the placing it does not say back at its initial value.
+          props: [
+            'backgroundColor',
+            'experimental_backgroundImage',
+            'experimental_backgroundPosition',
+            'experimental_backgroundSize',
+            'experimental_backgroundRepeat',
+          ],
           kind: 'color',
           reference: '--surface',
           layers: true,

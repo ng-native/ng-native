@@ -60,7 +60,10 @@ NSFont *NGNSearchFieldFont(const NativeControlProps &p) {
   CGFloat base = [NSFont systemFontSizeForControlSize:controlSize(p.controlSize)];
   CGFloat size = p.fontSize ? static_cast<CGFloat>(*p.fontSize) : base;
   NSFont *font = p.fontWeight ? [NSFont systemFontOfSize:size weight:fontWeight(*p.fontWeight)] : [NSFont systemFontOfSize:size];
-  if (!p.fontFamily.empty()) {
+  if (p.fontFamily == "monospace" || p.fontFamily == "ui-monospace") {
+    // The system's monospaced face, as a paragraph draws both (text-layout.mm).
+    font = [NSFont monospacedSystemFontOfSize:size weight:p.fontWeight ? fontWeight(*p.fontWeight) : NSFontWeightRegular];
+  } else if (!p.fontFamily.empty()) {
     NSString *family = string(p.fontFamily);
     NSFont *named = [NSFont fontWithName:family size:size];
     NSString *familyName = named ? named.familyName : ([NSFontManager.sharedFontManager availableMembersOfFontFamily:family] ? family : nil);
@@ -115,8 +118,40 @@ NSSize NGNSearchFieldSize(const NativeControlProps &p) {
 @property (nonatomic, weak) NGNSearchField *box;
 @end
 
+// The field's cell, which draws its text smoothed as the box says, and edits it in a field editor
+// that draws it so while it is not smoothed as the system smooths it.
+@interface NGNSearchFieldCell : NSSearchFieldCell
+@end
+
+@implementation NGNSearchFieldCell {
+  NGNSmoothedFieldEditor *_editor;
+}
+
+- (ngn::FontSmoothing)fontSmoothing {
+  id control = self.controlView;
+  return [control isKindOfClass:NGNSearchControl.class] ? ((NGNSearchControl *)control).box.fontSmoothing
+                                                         : ngn::FontSmoothing::Auto;
+}
+
+- (void)drawInteriorWithFrame:(NSRect)frame inView:(NSView *)view {
+  NGNDrawSmoothed(self.fontSmoothing, ^{
+    [super drawInteriorWithFrame:frame inView:view];
+  });
+}
+
+- (NSTextView *)fieldEditorForView:(NSView *)view {
+  NSTextView *own = NGNFieldEditorFor(self.fontSmoothing, &_editor);
+  return own != nil ? own : [super fieldEditorForView:view];
+}
+
+@end
+
 @implementation NGNSearchControl {
   BOOL _inserting;
+}
+
++ (Class)cellClass {
+  return NGNSearchFieldCell.class;
 }
 
 - (BOOL)becomeFirstResponder {
@@ -178,6 +213,14 @@ NSSize NGNSearchFieldSize(const NativeControlProps &p) {
 - (void)apply:(const NativeControlProps &)p {
   _field.controlSize = controlSize(p.controlSize);
   _field.font = NGNSearchFieldFont(p);
+  if (p.desktop.fontSmoothing != _fontSmoothing) {
+    _fontSmoothing = p.desktop.fontSmoothing;
+    _field.needsDisplay = YES;
+    if ([_field.currentEditor isKindOfClass:NGNSmoothedFieldEditor.class]) {
+      ((NGNSmoothedFieldEditor *)_field.currentEditor).fontSmoothing = _fontSmoothing;
+      _field.currentEditor.needsDisplay = YES;
+    }
+  }
   NSString *placeholder = string(p.placeholder);
   if (![_field.placeholderString isEqualToString:placeholder]) {
     _field.placeholderString = placeholder;

@@ -15,6 +15,11 @@ export interface BackgroundLayers {
   readonly images: readonly object[];
   /** The colour under the images: the last layer, where it is one. */
   readonly color?: string;
+  /**
+   * Where each image goes, by the prop native has each part under; for a layer with no image,
+   * where it says an image another rule declares goes: `center / cover`.
+   */
+  readonly placing?: readonly LayerPlacing[];
 }
 
 /** Where a layer goes when nothing says: each prop of `background` other than the image. */
@@ -230,5 +235,232 @@ export function imagelessLayer(text: string): BackgroundLayers | undefined {
     if (part === 'color') color = terms[at];
     at = next;
   }
-  return terms.length ? { images: [], ...(color === undefined ? {} : { color }) } : undefined;
+  if (!terms.length) return undefined;
+  return {
+    images: [],
+    ...(color === undefined ? {} : { color }),
+    ...imagelessPlacing(terms, seen),
+  };
+}
+
+/**
+ * Where a layer with no image places an image another rule declares, where it says: read as
+ * `placedLayer` reads a layer written out. Nothing where it says nothing, or is not read there.
+ */
+function imagelessPlacing(
+  terms: readonly string[],
+  seen: ReadonlyMap<string, number>,
+): Pick<BackgroundLayers, 'placing'> {
+  if (!seen.has('position') && !seen.has('repeat')) return {};
+  const placing = placedLayer(terms, true)?.placing;
+  return placing ? { placing: [placing] } : {};
+}
+
+/** One layer's position, size and repeat, by the prop native has each under. */
+export type LayerPlacing = Readonly<Record<string, unknown>>;
+
+/** The layers of a `background` written out, each image with its placing. */
+export interface PlacedLayers extends BackgroundLayers {
+  readonly placing: readonly LayerPlacing[];
+}
+
+const POSITION = 'experimental_backgroundPosition';
+const SIZE = 'experimental_backgroundSize';
+const REPEAT = 'experimental_backgroundRepeat';
+
+/**
+ * A length or a percentage as a stylesheet commits one: points as a number, a `rem` at 16, a
+ * percentage as its text. Nothing for a unit read only once the box is known, `em` or `vw`.
+ */
+function placedLength(term: string): number | string | undefined {
+  const found = /^([+-]?(?:\d+\.?\d*|\.\d+))(px|rem|%)?$/i.exec(term);
+  if (!found) return undefined;
+  const value = Number(found[1]) + 0;
+  const unit = found[2]?.toLowerCase();
+  if (unit === '%') return `${value}%`;
+  if (unit === undefined) return value === 0 ? 0 : undefined;
+  return unit === 'rem' ? value * 16 : value;
+}
+
+type Edge = readonly [word: string | undefined, offset: string | undefined];
+
+/** One axis of a position: a side, `center`, or a length from the start side. */
+function positionEdge(
+  [word, offset]: Edge,
+  start: string,
+  end: string,
+): Record<string, unknown> | undefined {
+  const side = word?.toLowerCase();
+  if (side === 'center') return { [start]: '50%' };
+  const at = offset === undefined ? 0 : placedLength(offset);
+  if (at === undefined) return undefined;
+  return { [side === end ? end : start]: at };
+}
+
+/** The two axes of a position of one or two terms, across then down. */
+function pairEdges(terms: readonly string[]): readonly [Edge, Edge] {
+  const edge = (term: string): Edge => (isWord(term) ? [term, undefined] : [undefined, term]);
+  const centre: Edge = ['center', undefined];
+  const [first, second] = terms as readonly [string, string | undefined];
+  if (second === undefined) {
+    return isWord(first) && axis(first) === 'y' ? [centre, edge(first)] : [edge(first), centre];
+  }
+  const swapped = isWord(first) && isWord(second) && (axis(first) === 'y' || axis(second) === 'x');
+  return swapped ? [edge(second), edge(first)] : [edge(first), edge(second)];
+}
+
+/** The two axes of a position of three or four terms: two sides, each with a length or not. */
+function groupedEdges(terms: readonly string[]): readonly [Edge, Edge] {
+  const groups: Edge[] = [];
+  for (let at = 0; at < terms.length; at++) {
+    const word = terms[at]!;
+    const offset = isWord(terms[at + 1] ?? 'left') ? undefined : terms[++at];
+    groups.push([word, offset]);
+  }
+  const across = groups.find(([word]) => axis(word!) === 'x');
+  const down = groups.find(([word]) => axis(word!) === 'y');
+  const centre = groups.find(([word]) => axis(word!) === 'center')!;
+  return [across ?? centre, down ?? centre];
+}
+
+/** A `<bg-position>` as native's pair of edges, or nothing for one it does not read. */
+function positionOf(terms: readonly string[]): LayerPlacing | undefined {
+  if (!terms.length || !isPosition(terms)) return undefined;
+  const [across, down] = terms.length <= 2 ? pairEdges(terms) : groupedEdges(terms);
+  const x = positionEdge(across, 'left', 'right');
+  const y = positionEdge(down, 'top', 'bottom');
+  return x && y ? { ...x, ...y } : undefined;
+}
+
+/** A `<bg-size>`: `cover`, `contain`, or one or two sizes of zero or more, either `auto`. */
+function sizeOf(terms: readonly string[]): unknown {
+  if (terms.length === 1 && SIZE_WORD.test(terms[0]!)) return terms[0]!.toLowerCase();
+  if (!terms.length || terms.length > 2) return undefined;
+  const sizes = terms.map((term) => (/^auto$/i.test(term) ? 'auto' : placedLength(term)));
+  const read = sizes.every(
+    (size) => size === 'auto' || (size !== undefined && !String(size).startsWith('-')),
+  );
+  return read ? { x: sizes[0], y: sizes[1] ?? 'auto' } : undefined;
+}
+
+/** A `<repeat-style>`: `repeat-x`, `repeat-y`, or one word for both axes or one for each. */
+function repeatOf(terms: readonly string[]): LayerPlacing | undefined {
+  const words = terms.map((term) => term.toLowerCase());
+  if (words.length === 1 && REPEAT_ONE.test(words[0]!)) {
+    return words[0] === 'repeat-x'
+      ? { x: 'repeat', y: 'no-repeat' }
+      : { x: 'no-repeat', y: 'repeat' };
+  }
+  if (!words.length || words.length > 2 || !words.every((word) => REPEAT_EACH.test(word))) {
+    return undefined;
+  }
+  return { x: words[0], y: words[1] ?? words[0] };
+}
+
+const PLACING_READERS: Readonly<Record<string, (terms: readonly string[]) => unknown>> = {
+  [POSITION]: positionOf,
+  [SIZE]: sizeOf,
+  [REPEAT]: repeatOf,
+};
+
+/**
+ * `background-position`, `background-size` or `background-repeat` set on an element, by the prop
+ * native has it under, as the list of one a layer a stylesheet compiles it to. Nothing for a
+ * value any layer of which is not read.
+ */
+export function placingList(prop: string, text: string): readonly unknown[] | undefined {
+  const read = PLACING_READERS[prop]!;
+  const list = splitLayers(text.trim()).map((layer) => read(layerTerms(layer)));
+  return list.some((each) => each === undefined) ? undefined : list;
+}
+
+interface PlacedLayer {
+  readonly image?: object;
+  readonly placing: LayerPlacing;
+  readonly color?: string;
+}
+
+/** The part of a layer the term at `at` starts, an image among them, and where it ends. */
+function placedPart(terms: readonly string[], at: number): readonly [string, number] | undefined {
+  const term = terms[at]!;
+  const image = /^[a-z-]+\(/i.test(term) && !isLayerColour(term);
+  return image ? ['image', at + 1] : layerPart(terms, at);
+}
+
+/** A layer as it is read, part by part. */
+interface LayerRead {
+  readonly placing: Record<string, unknown>;
+  image?: object;
+  color?: string;
+}
+
+/**
+ * The part of a layer from `at` to `next` read into `layer`: its image, its colour, which only the
+ * last layer has, or where it places the image. False for a part that is not read.
+ */
+function readPart(
+  layer: LayerRead,
+  part: string,
+  terms: readonly string[],
+  at: number,
+  next: number,
+  last: boolean,
+): boolean {
+  const term = terms[at]!;
+  if (part === 'image') {
+    if (/^none$/i.test(term)) return true;
+    layer.image = linear(term);
+    return layer.image !== undefined;
+  }
+  if (part === 'color') {
+    layer.color = term;
+    return last;
+  }
+  if (part === 'repeat') layer.placing[REPEAT] = repeatOf(terms.slice(at, next));
+  if (part === 'position') {
+    const slash = terms.indexOf('/', at);
+    const end = slash < 0 || slash >= next ? next : slash;
+    layer.placing[POSITION] = positionOf(terms.slice(at, end));
+    if (end < next) layer.placing[SIZE] = sizeOf(terms.slice(end + 1, next));
+  }
+  return !Object.values(layer.placing).includes(undefined);
+}
+
+/**
+ * One layer of a `background` written out, or nothing where a part of it is not read or comes
+ * more often than once, a box twice.
+ */
+function placedLayer(terms: readonly string[], last: boolean): PlacedLayer | undefined {
+  const layer: LayerRead = { placing: { ...BACKGROUND_PLACING } };
+  const seen = new Map<string, number>();
+  for (let at = 0; at < terms.length;) {
+    const found = placedPart(terms, at);
+    if (!found) return undefined;
+    const [part, next] = found;
+    const times = (seen.get(part) ?? 0) + 1;
+    seen.set(part, times);
+    if (times > (part === 'box' ? 2 : 1) || !readPart(layer, part, terms, at, next, last)) {
+      return undefined;
+    }
+    at = next;
+  }
+  return terms.length ? layer : undefined;
+}
+
+/**
+ * A `background` written out on an element: gradients, each with a position, a size and a repeat
+ * or none, and the last layer's colour, as a stylesheet compiles the same text. A layer with no
+ * image draws nothing, so its placing goes with it. An attachment and a box are read and left, as
+ * a stylesheet leaves them. Nothing for text any part of which is not read.
+ */
+export function placedBackground(text: string): PlacedLayers | undefined {
+  const layers = splitLayers(text.trim());
+  const read = layers.map((layer, at) => placedLayer(layerTerms(layer), at === layers.length - 1));
+  if (read.some((layer) => layer === undefined)) return undefined;
+  const drawn = (read as PlacedLayer[]).filter((layer) => layer.image !== undefined);
+  return {
+    images: drawn.map((layer) => layer.image!),
+    placing: drawn.map((layer) => layer.placing),
+    color: read.at(-1)!.color,
+  };
 }

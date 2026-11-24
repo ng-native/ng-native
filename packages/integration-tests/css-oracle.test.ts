@@ -15,6 +15,7 @@ import { describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import {
   Engine,
+  registerPlatformComponents,
   StyleResolver,
   type EngineNode,
   type StyleSheet,
@@ -124,6 +125,7 @@ const NATIVE_INITIAL: Partial<Record<ExtraProperty, unknown>> = {
   'flex-basis': 'auto',
   opacity: 1,
   'pointer-events': 'auto',
+  '-webkit-font-smoothing': 'auto',
 };
 
 const UNITLESS: ReadonlySet<ExtraProperty> = new Set([
@@ -233,8 +235,12 @@ const placed = (value: unknown): string => (typeof value === 'number' ? `${value
 
 /** Each layer of a background's size, position or repeat as the browser writes it, by property. */
 const PLACINGS: Readonly<Record<string, (layer: Record<string, unknown>) => string>> = {
-  'background-size': ({ x, y }) =>
-    x === 'auto' && y === 'auto' ? 'auto' : `${placed(x)} ${placed(y)}`,
+  // `cover` and `contain` are a word of their own.
+  'background-size': (layer) => {
+    if (typeof layer === 'string') return layer;
+    const { x, y } = layer;
+    return x === 'auto' && y === 'auto' ? 'auto' : `${placed(x)} ${placed(y)}`;
+  },
   'background-position': ({ left, top }) => `${placed(left)} ${placed(top)}`,
   'background-repeat': ({ x, y }) =>
     x === y ? `${x}` : y === 'no-repeat' && x === 'repeat' ? 'repeat-x' : `${x} ${y}`,
@@ -349,6 +355,17 @@ const flatten = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
  */
 function committed(test: OracleCase, sheet: StyleSheet): Record<string, unknown> {
   assert.equal(test.global ?? test.none ?? test.bound, undefined, 'an inline case has one sheet');
+  // Only the macOS host is sent a smoothing, as only Chrome on a Mac draws one.
+  if (!test.extra?.includes('-webkit-font-smoothing')) return committedOn(test, sheet);
+  registerPlatformComponents('macos');
+  try {
+    return committedOn(test, sheet);
+  } finally {
+    registerPlatformComponents('ios');
+  }
+}
+
+function committedOn(test: OracleCase, sheet: StyleSheet): Record<string, unknown> {
   const fabric = createFakeFabric();
   const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
   const renderer = new NativeRendererFactory(engine).createRenderer(null, null);

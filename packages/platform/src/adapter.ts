@@ -180,13 +180,17 @@ const BRACKETS = /[()"'\\]/g;
 /**
  * A `font-family` is a stack, quoted or not, where native takes one family by name: the first,
  * unquoted, as a stylesheet rule commits it. Left as written, `'Inter-Bold'` names no font. A
- * `-webkit-font-smoothing` keyword is read in any case, as a rule reads it.
+ * `-webkit-font-smoothing` keyword is read in any case, as a rule reads it, and its `initial` is
+ * `auto`.
  */
 const declaredValue = (key: string, value: unknown): unknown =>
   key === 'fontFamily' && typeof value === 'string'
     ? (firstFamily(value) ?? value)
     : key === 'fontSmoothing' && typeof value === 'string'
-      ? value.toLowerCase()
+      ? value
+          .trim()
+          .toLowerCase()
+          .replace(/^initial$/, 'auto')
       : (platformColour(key, value) ?? styleValue(key, value));
 
 const COLOUR_KEY = /color$/i;

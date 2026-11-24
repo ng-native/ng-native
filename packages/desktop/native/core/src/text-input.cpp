@@ -24,7 +24,9 @@ DesktopTextInputProps::DesktopTextInputProps(
       smartQuotes(convertRawProp(context, rawProps, "smartQuotes", sourceProps.smartQuotes, std::optional<bool>())),
       accessibilityDescribedBy(convertRawProp(
           context, rawProps, "accessibilityDescribedBy", sourceProps.accessibilityDescribedBy, {})),
-      aria(parseAriaFields(context, sourceProps.aria, rawProps)) {}
+      aria(parseAriaFields(context, sourceProps.aria, rawProps)),
+      fontSmoothing(
+          convertRawProp(context, rawProps, "fontSmoothing", sourceProps.fontSmoothing, FontSmoothing::Auto)) {}
 
 namespace {
 

@@ -166,6 +166,8 @@ export class SearchField {
   constructor() {
     registerViewName('search-field', expoViewName(MODULE), undefined, {
       fontNames: nativePlatform() === 'ios' ? fieldFontName : undefined,
+      // The macOS host draws the field's text with it, as it draws a paragraph's.
+      fontSmoothing: true,
     });
     if (this.missing) warnMissing();
     const host =
