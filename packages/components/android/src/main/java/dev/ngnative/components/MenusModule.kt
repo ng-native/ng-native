@@ -2,6 +2,8 @@ package dev.ngnative.components
 
 import android.os.Handler
 import android.os.Looper
+import com.facebook.react.bridge.ReactContext
+import com.facebook.react.uimanager.UIManagerHelper
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -18,6 +20,10 @@ import expo.modules.kotlin.modules.ModuleDefinition
  * as a PopupMenu at the press point, and so does the view's long-press accessibility action.
  * `setTakesLongPress` names views inside one that take a long press themselves, where a long press
  * opens no menu.
+ *
+ * `popUpMenu` draws a `<pressable>`'s `[menu]` below the view with that tag now, on a press, in
+ * whichever window the view is in: the activity's, or a `<modal>`'s dialog. Either menu sends the
+ * item chosen to its view as `topContextMenuSelect`.
  */
 class MenusModule : Module() {
   private val main = Handler(Looper.getMainLooper())
@@ -59,6 +65,10 @@ class MenusModule : Module() {
       }
     }
 
+    Function("popUpMenu") { tag: Int, entries: List<Map<String, Any?>> ->
+      main.post { popUpMenu(tag, entries) }
+    }
+
     // On the main thread, in order with the old module's `OnDestroy` and every call after.
     OnCreate {
       main.post { MenuHost.attach(sender) }
@@ -77,6 +87,18 @@ class MenusModule : Module() {
       }
     }
   }
+
+  /**
+   * Show `entries` below the view with `tag`. React Native's UIManager finds it by its tag in any
+   * window, a `<modal>`'s dialog among them, where a search of the activity's window would not.
+   */
+  private fun popUpMenu(tag: Int, entries: List<Map<String, Any?>>) {
+    val activity = appContext.currentActivity ?: return
+    val context = appContext.reactContext as? ReactContext ?: return
+    val view = ContextMenuPopup.viewFor(tag) { UIManagerHelper.getUIManagerForReactTag(context, it)?.resolveView(it) } ?: return
+    ContextMenuPopup.showUnder(activity, view, entries)
+  }
+
 
   private fun watchActivity() {
     val activity = appContext.currentActivity ?: return

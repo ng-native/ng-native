@@ -5,7 +5,10 @@ import android.view.MenuItem
 import android.view.SubMenu
 import android.view.View
 import java.lang.reflect.Proxy
+import com.facebook.react.uimanager.IllegalViewOperationException
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class ContextMenuPopupTest {
@@ -52,5 +55,14 @@ class ContextMenuPopupTest {
     )
     ContextMenuPopup.closingOnDetach(root) { closed.add("popup") }.onViewDetachedFromWindow(aView())
     assertEquals(listOf("more", "share", "move", "popup"), closed)
+  }
+
+  @Test
+  fun findsAPressMenusViewByItsTagAndNoneForATagWithNoView() {
+    val view = aView()
+    assertSame(view, ContextMenuPopup.viewFor(7) { if (it == 7) view else null })
+    assertNull(ContextMenuPopup.viewFor(8) { null })
+    // React Native's resolveView throws for a tag it has no view for: the menu opens on nothing.
+    assertNull(ContextMenuPopup.viewFor(9) { throw IllegalViewOperationException("Unable to find view for tag $it") })
   }
 }

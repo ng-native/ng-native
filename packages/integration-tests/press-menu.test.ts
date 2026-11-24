@@ -2,10 +2,10 @@
  * `<pressable [menu]>`: a menu a press opens under the element, instead of firing `(press)`.
  *
  * The host contract (`NativeMenus.popUpMenu` in `@ng-native/device`, the `NgNativeMenus` module's
- * `popUpMenu(view, entries)`): the view's tag and the menu as `serializeMenu` makes it. The host
- * draws it under the view and sends the item chosen as the view's `topContextMenuSelect` with
- * `{ id }`, as a context menu's. A host without the method (iOS, Android, Expo Go and the web for
- * now) leaves the press to `(press)`, with one warning in development.
+ * `popUpMenu(view, entries)`): the view's tag and the menu as `serializeMenu` makes it. The host draws it under the view and sends the item
+ * chosen as the view's `topContextMenuSelect` with `{ id }`, as a context menu's. A host without the
+ * method (iOS, Expo Go and the web for now) leaves the press to `(press)`, with one warning in
+ * development.
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
@@ -24,14 +24,16 @@ import { cleanup, fireEvent, render, screen, settle } from '@ng-native/testing';
 
 afterEach(cleanup);
 
-function fakeHost(popsUp: boolean) {
+function fakeHost(popsUp: boolean, byNativeId = false) {
   const popUps: { view: number; entries: NativeMenuEntry[] }[] = [];
   const native: NativeMenus = {
-    menuBar: true,
+    menuBar: !byNativeId,
     appName: 'Notes',
     setMenuBar: () => {},
     setShortcuts: () => {},
     subscribe: () => () => {},
+    // Android's module, which takes menus by `nativeID`.
+    ...(byNativeId && { setContextMenu: () => {} }),
     ...(popsUp && {
       popUpMenu: (view: number, entries: readonly NativeMenuEntry[]) =>
         void popUps.push({ view, entries: [...entries] }),
@@ -56,8 +58,8 @@ const template = `
   </ng-template>
 `;
 
-async function open(popsUp: boolean, os: 'macos' | 'linux' = 'macos') {
-  const host = fakeHost(popsUp);
+async function open(popsUp: boolean, os: 'macos' | 'linux' | 'android' | 'ios' = 'macos') {
+  const host = fakeHost(popsUp, os === 'android' || os === 'ios');
   const said: string[] = [];
   const sort = signal('name');
   const byName = signal(true);
@@ -148,6 +150,34 @@ for (const os of ['macos', 'linux'] as const) {
   });
 }
 
+describe('a press menu on android', () => {
+  it('opens the menu under the view by its tag, instead of firing (press)', async () => {
+    const { host, said, press, node } = await open(true, 'android');
+    await press();
+    assert.deepEqual(said, []);
+    assert.equal(host.popUps.length, 1);
+    assert.equal(host.popUps[0]!.view, node.reactTag);
+    assert.deepEqual(byPlace(host.popUps[0]!.entries), [
+      { id: 'action', label: 'Name', checked: true },
+      { id: 'action', label: 'Date', checked: false },
+    ]);
+  });
+
+  it("runs the item chosen, which comes back as the view's topContextMenuSelect", async () => {
+    const { host, sort, press, node } = await open(true, 'android');
+    await press();
+    await fireEvent(node, 'contextMenuSelect', { id: idOf(host.popUps[0]!.entries, 'Date') });
+    assert.equal(sort(), 'date');
+  });
+
+  it('opens from code', async () => {
+    const { host, said, node } = await open(true, 'android');
+    await fireEvent.press(screen.getByTestId('opener'));
+    assert.deepEqual(said, ['opened true']);
+    assert.equal(host.popUps[0]!.view, node.reactTag);
+  });
+});
+
 describe('a press menu with no host to draw it', () => {
   it('fires (press), and warns once', async () => {
     const warnings: unknown[] = [];
@@ -160,6 +190,36 @@ describe('a press menu with no host to draw it', () => {
       assert.deepEqual(said, ['press', 'press']);
       assert.equal(warnings.length, 1);
       assert.match(String(warnings[0]), /\[menu\]/);
+    } finally {
+      console.warn = warn;
+    }
+  });
+});
+
+// After the warning test: the warning is given once in a run.
+describe('a press menu on ios', () => {
+  it('fires (press) where the module has no popUpMenu', async () => {
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      const host = fakeHost(false, true);
+      const said: string[] = [];
+      await render(
+        `<pressable testID="sort" [menu]="menu" (press)="said.push('press')"></pressable>
+        <ng-template #menu><menu-item label="Name" /></ng-template>`,
+        {
+          imports: [MenuItem, PressMenu, Pressable],
+          providers: [
+            { provide: Menus.SOURCE, useValue: host.native },
+            { provide: OS, useValue: 'ios' },
+          ],
+          componentProperties: { said },
+        },
+      );
+      await settle();
+      const node = screen.getByTestId('sort');
+      await fireEvent.press(node);
+      assert.deepEqual(said, ['press']);
     } finally {
       console.warn = warn;
     }
@@ -249,12 +309,18 @@ describe("the menus' platform source", () => {
     host['nativeFabricUIManager'] = {};
     try {
       menusSource()!.popUpMenu?.(7, []);
-      assert.deepEqual(calls, [[7, []]]);
+      assert.deepEqual([...calls], [[7, []]]);
       modules['NgNativeMenus'] = {};
       assert.equal(menusSource()!.popUpMenu, undefined);
+      // Android's Expo module.
+      delete modules['NgNativeMenus'];
+      host['expo'] = { modules: { NgNativeMenus: withIt } };
+      menusSource()!.popUpMenu?.(8, []);
+      assert.deepEqual(calls.at(-1), [8, []]);
     } finally {
       delete host['require'];
       delete host['nativeFabricUIManager'];
+      delete host['expo'];
     }
   });
 });
