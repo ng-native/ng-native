@@ -53,9 +53,9 @@ export class StickyHeaders {
     { drive: ScrollDrive; axis: 'x' | 'y'; range: string }
   >();
   private settleTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Where native last said the scroll view was, and along which axis. */
+  /** Where native last said the scroll view was, and along which axis: none until it has. */
   private offset = 0;
-  private offsetAxis: 'x' | 'y' = 'y';
+  private offsetAxis: 'x' | 'y' | null = null;
   /** Whether scrolling has paused: no scroll event is coming to draw a drive native is given. */
   private resting = true;
 
@@ -165,6 +165,7 @@ export class StickyHeaders {
     const key = JSON.stringify(range);
     const axis = this.axis();
     const held = this.drives.get(node);
+    // Not a position native never gave: 0 would move every view on this scroll view's offset.
     const from = this.resting && this.offsetAxis === axis ? this.offset : undefined;
     if (held?.axis === axis) {
       if (held.range === key) return held.drive.update(range);

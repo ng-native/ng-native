@@ -666,6 +666,27 @@ describe('scroll view sticky headers', () => {
     unmount();
   });
 
+  it('tells native nothing of a position it never heard, for a scroll view that scrolled with none sticky', async () => {
+    const { fabric, instance, toldSince, named, drives, unmount } = await stickyScroll([]);
+    // Nothing is sticky, so nothing listens: where the scroll view went is not known here.
+    fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 120 } });
+    clock.rest();
+    await frame();
+    const content = scrollView(fabric).children[0]!;
+    fabric.frames.set(content.viewName, { x: 0, y: -120, width: 400, height: 1000 });
+    fabric.frames.set('body-1', { x: 0, y: -20, width: 400, height: 30 });
+    const before = named('set').length;
+    instance.sticky.set([1]);
+    await frame();
+    assert.ok(drives().get(byID(fabric, 'body-1')[0]!.reactTag), 'driven');
+    assert.deepEqual(
+      toldSince(before),
+      [],
+      'not 0, which would move the scroll value for everything on it',
+    );
+    unmount();
+  });
+
   it('asks for every scroll event while anything is sticky, as RN does', async () => {
     const { fabric, unmount } = await boot('StickyScroll');
     assert.equal(scrollView(fabric).props['scrollEventThrottle'], 1);
