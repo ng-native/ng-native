@@ -19,7 +19,24 @@ appId: dev.angularnative.canary
           timeout: 60000
 # A tap on a list still moving from the search would only stop it.
 - waitForAnimationToEnd
-- tapOn:
-    text: '${SCREEN}(, .*)?'
-    retryTapIfNoChange: true
+# A starved simulator has dropped a tap, and retryTapIfNoChange saw the screen change anyway, so
+# the row is tapped again until the screen it opens is there: until the row has gone. Gone is the
+# row's whole label, title and blurb, as every home row has one, so the screen's own title in its
+# header does not count as the row. A tap that landed late leaves no row to tap, so a retry then
+# only waits.
+- retry:
+    maxRetries: 2
+    commands:
+      - runFlow:
+          when:
+            visible: '${SCREEN}, .*'
+          commands:
+            - tapOn:
+                text: '${SCREEN}, .*'
+                retryTapIfNoChange: true
+      - waitForAnimationToEnd:
+          timeout: 5000
+      - extendedWaitUntil:
+          notVisible: '${SCREEN}, .*'
+          timeout: 18000
 - runFlow: ../../subflows/no-error-screen.yaml

@@ -101,8 +101,14 @@ export class StickyRows {
    */
   private readonly settled = signal(0);
   private settleTimer: ReturnType<typeof setTimeout> | undefined;
-  /** What native is moving, by row view, with the transform kept beside the translate. */
-  private readonly drives = new Map<HostNode, { drive: ScrollDrive; statics: string }>();
+  /**
+   * What native is moving, by row view: the axis with the transform kept beside the translate,
+   * and the range it moves the row by.
+   */
+  private readonly drives = new Map<
+    HostNode,
+    { drive: ScrollDrive; statics: string; range: string }
+  >();
   /**
    * What native moves the header by, once it has been pinned. Kept, moving it nowhere, when it no
    * longer is: native goes on drawing a translate it set after its drive is gone.
@@ -399,9 +405,15 @@ export class StickyRows {
       const next = this.driveOf(row);
       if (!view || !next) return;
       live.add(view);
-      const statics = JSON.stringify(next.statics);
+      // The axis too: a list turned horizontal moves its sticky rows along x.
+      const statics = axis + JSON.stringify(next.statics);
+      const range = JSON.stringify(next.range);
       const held = this.drives.get(view);
-      if (held?.statics === statics) return held.drive.update(next.range, from);
+      if (held?.statics === statics) {
+        const at = held.range === range ? from : this.drawnFrom(axis, from);
+        held.range = range;
+        return held.drive.update(next.range, at);
+      }
       held?.drive.stop();
       const drive = this.engine.driveByScroll(
         view,
@@ -409,9 +421,9 @@ export class StickyRows {
         axis,
         next.range,
         next.statics,
-        held ? this.remadeFrom(axis, from) : from,
+        this.drawnFrom(axis, from),
       );
-      if (drive) this.drives.set(view, { drive, statics });
+      if (drive) this.drives.set(view, { drive, statics, range });
     });
     for (const [view, held] of this.drives) {
       if (live.has(view)) continue;
@@ -448,7 +460,7 @@ export class StickyRows {
       axis,
       range,
       statics,
-      held ? (at ?? this.remadeFrom(axis, from)) : at,
+      held ? (at ?? this.drawnFrom(axis, from)) : at,
     );
     this.headerDrive = drive && { drive, statics: key, pinned, range: moved };
   }
@@ -473,12 +485,12 @@ export class StickyRows {
   }
 
   /**
-   * Where native is told the scroll view is for a drive made again along `axis`, as for a flip. The
-   * one it replaces may have been the last to read the offset, so the new one starts from nothing,
-   * and at rest no scroll event comes to draw it: it is told where native last said it was, unless
-   * that was along the other axis. After a jump, `from`.
+   * Where native is told the scroll view is for a drive made, or moved by a new range, along
+   * `axis`. Native draws a graph when the offset changes, and at rest no scroll event comes to draw
+   * it: it is told where native last said it was, unless that was along the other axis. Mid-scroll
+   * the next event draws it. After a jump, `from`.
    */
-  private remadeFrom(axis: 'x' | 'y', from: number | undefined): number | undefined {
+  private drawnFrom(axis: 'x' | 'y', from: number | undefined): number | undefined {
     return from ?? (this.resting && this.nativeAxis === axis ? this.nativeAt : undefined);
   }
 

@@ -19,6 +19,7 @@ import {
 } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 import { recorder } from './native-animated.ts';
+import { holdStickySettle } from './sticky-settle-clock.ts';
 
 const VIEWPORT = 800;
 const ESTIMATE = 100;
@@ -521,6 +522,37 @@ describe('virtual list sticky rows moved on the native side', () => {
     // on only to another.
     assert.deepEqual([...drives().keys()], [row(20)!.reactTag]);
     unmount();
+  });
+
+  it('draws a sticky row a measured row above moves at rest from where native is', async () => {
+    const clock = holdStickySettle();
+    const { native, drives, named } = recorder();
+    const { instance, scroll, measure, measureAll, row, unmount } = await boot('Measured', {
+      nativeAnimated: native,
+    });
+    try {
+      instance.sticky!.set([3]);
+      await settle();
+      await measureAll(() => ESTIMATE);
+      await scroll(ESTIMATE);
+      clock.rest();
+      await settle();
+      const before = named('set').length;
+      // Row 1, on screen, grows, so row 3 starts a row further down, while nothing scrolls.
+      await measure(1, 2 * ESTIMATE);
+      await settle();
+      assert.equal(drives().get(row(3)!.reactTag)?.inputRange[0], 4 * ESTIMATE);
+      assert.deepEqual(
+        named('set')
+          .slice(before)
+          .map(([, , value]) => value),
+        [ESTIMATE],
+        'at rest no scroll event comes to draw it',
+      );
+    } finally {
+      clock.restore();
+      unmount();
+    }
   });
 });
 

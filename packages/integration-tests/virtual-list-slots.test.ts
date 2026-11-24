@@ -356,6 +356,84 @@ describe('virtual list sticky header', () => {
       unmount();
     });
 
+    /** A list whose rows `sticky` are sticky and whose header is not, moved on the native side. */
+    async function stickyRows(sticky: readonly number[]) {
+      const { native, named } = recorder();
+      const list = await boot<Separated>('Separated', 400, { nativeAnimated: native });
+      list.instance.sticky.set(sticky);
+      list.instance.items.set(Array.from({ length: 200 }, (_, i) => 'r' + i));
+      await fireEvent(header(list.fabric), 'layout', { layout: { height: 50 } });
+      await frame();
+      const toldSince = (before: number) =>
+        named('set')
+          .slice(before)
+          .map(([, , value]) => value);
+      return { ...list, named, toldSince };
+    }
+
+    it('moves a sticky row along x once the list turns horizontal, from no offset along y', async () => {
+      const { fabric, instance, named, toldSince, unmount } = await stickyRows([2]);
+      const tag = byID(fabric, 'row2')[0]!.reactTag;
+      fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 100 } });
+      clock.rest();
+      await frame();
+      const before = named('set').length;
+      instance.horizontal.set(true);
+      await frame();
+      assert.equal(byID(fabric, 'row2')[0]!.reactTag, tag, 'the same row view, still rendered');
+      assert.deepEqual(toldSince(before), [], 'where native was along y says nothing of x');
+      const props = named('toView')
+        .filter(([, , view]) => view === tag)
+        .at(-1)![1];
+      const parent = (child: unknown) => named('connect').find(([, , to]) => to === child)![1];
+      const config = named('create').find(([, node]) => node === parent(parent(props)))![2] as {
+        transforms: { property: string }[];
+      };
+      assert.equal(config.transforms[0]!.property, 'translateX');
+      unmount();
+    });
+
+    it('draws a sticky row s new range at rest from where native is, and mid-scroll leaves it to native', async () => {
+      const { fabric, instance, toldSince, named, unmount } = await stickyRows([4]);
+      fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 300 } });
+      clock.rest();
+      await frame();
+      // Row 100 is far outside the window, so only row 4's drive changes: row 100 now pushes it off.
+      let before = named('set').length;
+      instance.sticky.set([4, 100]);
+      await frame();
+      assert.deepEqual(toldSince(before), [300], 'at rest no scroll event comes to draw it');
+      const told = named('set').length;
+      instance.items.set(Array.from({ length: 300 }, (_, i) => 'r' + i));
+      await frame();
+      assert.equal(named('set').length, told, 'not told again while the range holds');
+      fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 320 } });
+      await frame();
+      before = named('set').length;
+      instance.sticky.set([4]);
+      await frame();
+      assert.deepEqual(toldSince(before), [], 'mid-scroll the next event draws it');
+      unmount();
+    });
+
+    it('draws a row that turns sticky at rest from where native is, and mid-scroll leaves it to native', async () => {
+      const { fabric, instance, toldSince, named, unmount } = await stickyRows([]);
+      fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 300 } });
+      clock.rest();
+      await frame();
+      let before = named('set').length;
+      instance.sticky.set([4]);
+      await frame();
+      assert.deepEqual(toldSince(before), [300], 'pinned now, not at the next scroll event');
+      fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 320 } });
+      await frame();
+      before = named('set').length;
+      instance.sticky.set([4, 6]);
+      await frame();
+      assert.deepEqual(toldSince(before), [], 'mid-scroll the next event draws it');
+      unmount();
+    });
+
     it('lets native go of it when the list goes', async () => {
       const { fabric, drives, unmount } = await pinned([]);
       const tag = header(fabric).reactTag;
@@ -399,8 +477,8 @@ describe('virtual list sticky header', () => {
         named('set')
           .slice(before)
           .map(([, , value]) => value),
-        [100],
-        'at rest no scroll event comes to draw the new limit',
+        [100, 100],
+        'at rest no scroll event comes to draw the new limit, nor row 6, which turned sticky',
       );
       const told = named('set').length;
       instance.items.set(Array.from({ length: 300 }, (_, i) => 'r' + i));
