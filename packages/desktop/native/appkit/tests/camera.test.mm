@@ -442,9 +442,11 @@ TEST_CASE("A recording set up ahead starts on that setup, and a setup taken down
   // Taking the setup down while a recording runs leaves the recording to finish whole.
   auto second = std::make_shared<std::optional<std::string>>();
   request.maxDuration = 1;
+  // The first recording's file is gone, so its coming back says this one has begun.
+  [NSFileManager.defaultManager removeItemAtPath:path error:nil];
   capture->startRecording(request, answerOnMain(second));
   REQUIRE(spinUntil([&] { return session.outputs.count == 1; }));
-  CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.3, false);
+  REQUIRE(spinUntil([&] { return file.exists(); }));
   capture->unprepareRecording();
   for (int i = 0; i < 3 && !second->has_value(); i++) {
     spinUntil([&] { return second->has_value(); });
@@ -453,7 +455,9 @@ TEST_CASE("A recording set up ahead starts on that setup, and a setup taken down
   CHECK(second->value() == "");
   auto whole = ngn::appkit::movieClip(path.UTF8String);
   REQUIRE(whole);
-  CHECK(whole->duration > 900);
+  // Taken down as it began, a cut recording is a few frames long. The limit is a second, but a
+  // starved runner gives the screen input few frames, so a whole one is held to over half of it.
+  CHECK(whole->duration > 500);
   capture->stop();
   REQUIRE(spinUntil([&] { return !session.running; }));
   [session removeInput:screen];
