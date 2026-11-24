@@ -238,13 +238,15 @@ async function sendRecords(records) {
 /**
  * The finished jobs that ran in this attempt. A re-run also lists the jobs it carried over from the
  * attempt before, created again but started back then; those were sent with that attempt and would
- * stretch this one back to its start.
+ * stretch this one back to its start. A job its `if` skipped never ran, and GitHub has it finish
+ * before it starts.
  */
 function ranInAttempt(jobs, attempt) {
   return jobs.filter(
     (job) =>
       job.started_at &&
       job.completed_at &&
+      job.conclusion !== 'skipped' &&
       !(attempt > 1 && Date.parse(job.started_at) < Date.parse(job.created_at)),
   );
 }
