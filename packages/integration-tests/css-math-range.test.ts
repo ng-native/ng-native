@@ -194,6 +194,28 @@ describe('a background-size below zero', () => {
     ]);
   });
 
+  it('is refused beside a comment, and a comment in the shorthand leaves the sheet whole', () => {
+    const beside = compiled('.a { background-size: 2px; background-size: -1px/**/ }');
+    assert.match(beside.warnings[0]!, /nothing below zero/);
+    assert.deepEqual(beside.sheet.rules[0].declarations.experimental_backgroundSize, [
+      { x: 2, y: 'auto' },
+    ]);
+    const noted = compiled(
+      '.a { background: red /* a / note */; width: 10px } .b { height: 20px }',
+    );
+    assert.deepEqual(noted.warnings, []);
+    assert.equal(noted.sheet.rules.length, 2);
+    assert.equal(noted.sheet.rules[0].declarations.width, 10);
+  });
+
+  it('leaves a layer with two slashes for the parser to refuse', () => {
+    const { sheet, warnings } = compiled(
+      '.a { background: red; background: linear-gradient(blue, blue) 0 0 / 4px / 5px }',
+    );
+    assert.equal(warnings.length, 1);
+    assert.ok(!JSON.stringify(sheet).includes('blue'));
+  });
+
   it('is 0 from a math function, as a browser clamps it', () => {
     const { sheet, warnings } = compiled('.a { background-size: calc(1px - 5px) calc(10% - 20%) }');
     assert.deepEqual(warnings, []);

@@ -4704,7 +4704,7 @@ const NEGATIVE = /^-(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:%|[a-z]+)?$/i;
 function tagNegatives(value) {
   let depth = 0;
   let out = '';
-  for (const token of value.split(/(\s+|,|\(|\))/)) {
+  for (const token of value.split(/(\/\*[\s\S]*?\*\/|\s+|,|\(|\))/)) {
     if (token === '(') depth++;
     else if (token === ')') depth--;
     const negative = depth === 0 && NEGATIVE.test(token) && parseFloat(token) !== 0;
@@ -4717,18 +4717,24 @@ function tagNegatives(value) {
 function tagBackgroundSizes(value) {
   return splitTopLevel(value, ',')
     .map((layer) => {
-      const [placed, size] = splitTopLevel(layer, '/');
-      return size === undefined ? layer : `${placed}/${tagNegatives(size)}`;
+      // More than one slash is no layer at all: left as written, for the parser to refuse.
+      const [placed, size, ...more] = splitTopLevel(layer, '/');
+      return size === undefined || more.length > 0 ? layer : `${placed}/${tagNegatives(size)}`;
     })
     .join(',');
 }
 
-/** `value` split at each `separator` outside parentheses. */
+/** `value` split at each `separator` outside parentheses, comments and quotes. */
 function splitTopLevel(value, separator) {
   const parts = [];
   let depth = 0;
   let start = 0;
   for (let i = 0; i < value.length; i++) {
+    const skip = value.slice(i).match(/^(?:\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/);
+    if (skip) {
+      i += skip[0].length - 1;
+      continue;
+    }
     if (value[i] === '(') depth++;
     else if (value[i] === ')') depth--;
     else if (value[i] === separator && depth === 0) {
