@@ -48,7 +48,7 @@ export class Separated {
   selector: 'x-sticky-scroll',
   imports: [ScrollView, Text, View],
   template: `
-    <scroll-view [stickyHeaderIndices]="sticky()">
+    <scroll-view [stickyHeaderIndices]="sticky()" [horizontal]="horizontal()">
       <view nativeID="first"><text>first</text></view>
       <view nativeID="body-1"><text>body</text></view>
       @for (n of more; track n) {
@@ -61,5 +61,6 @@ export class Separated {
 })
 export class StickyScroll {
   readonly sticky = signal<readonly number[]>([0, 2]);
+  readonly horizontal = signal(false);
   readonly more = [1, 2, 3];
 }

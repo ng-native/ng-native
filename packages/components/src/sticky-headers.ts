@@ -41,9 +41,17 @@ export class StickyHeaders {
   private readonly listening = new Map<HostNode, () => void>();
   /** The translation last written per header, so an unchanged one is not written again. */
   private readonly written = new Map<HostNode, number>();
-  private readonly drives = new Map<HostNode, ScrollDrive>();
+  /** Each header's native drive, with the axis and range it moves along. */
+  private readonly drives = new Map<
+    HostNode,
+    { drive: ScrollDrive; axis: 'x' | 'y'; range: string }
+  >();
   private settleTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Where native last said the scroll view was, and along which axis. */
   private offset = 0;
+  private offsetAxis: 'x' | 'y' = 'y';
+  /** Whether scrolling has paused: no scroll event is coming to draw a drive native is given. */
+  private resting = true;
 
   constructor(engine: HostEngine, scroll: HostNode, horizontal: () => boolean) {
     this.engine = engine;
@@ -74,9 +82,14 @@ export class StickyHeaders {
 
   scrolled(offset: number): void {
     this.offset = offset;
+    this.offsetAxis = this.axis();
     if (!this.engine.drivesScroll) return this.apply();
+    this.resting = false;
     clearTimeout(this.settleTimer);
-    this.settleTimer = setTimeout(() => this.apply(), STICKY_SETTLE_MS);
+    this.settleTimer = setTimeout(() => {
+      this.resting = true;
+      this.apply();
+    }, STICKY_SETTLE_MS);
   }
 
   destroy(): void {
@@ -101,32 +114,52 @@ export class StickyHeaders {
     this.listening.delete(node);
     this.extents.delete(node);
     this.written.delete(node);
-    this.drives.get(node)?.stop();
+    this.drives.get(node)?.drive.stop();
     this.drives.delete(node);
     this.engine.setProp(node, 'zIndex', undefined);
     this.engine.setProp(node, 'transform', undefined);
   }
 
+  private axis(): 'x' | 'y' {
+    return this.horizontal() ? 'x' : 'y';
+  }
+
+  /**
+   * Hand a header to native to move along the scroll view's axis, made again when the axis changes.
+   * A drive made, or given a new range, at rest has no scroll event coming to draw it, so native is
+   * told where it last said the scroll view was, unless that was along the other axis. Mid-scroll
+   * the next event draws it.
+   */
   private drive(node: HostNode, start: number, stop: number): void {
     if (!this.engine.drivesScroll) return;
     const range = pinnedRange(start, stop);
-    const drive = this.drives.get(node);
-    if (drive) return drive.update(range);
-    const axis = this.horizontal() ? 'x' : 'y';
-    const next = this.engine.driveByScroll(node, this.scroll, axis, range);
-    if (next) this.drives.set(node, next);
+    const key = JSON.stringify(range);
+    const axis = this.axis();
+    const held = this.drives.get(node);
+    const from = this.resting && this.offsetAxis === axis ? this.offset : undefined;
+    if (held?.axis === axis) {
+      if (held.range === key) return held.drive.update(range);
+      held.range = key;
+      return held.drive.update(range, from);
+    }
+    held?.drive.stop();
+    this.drives.delete(node);
+    const drive = this.engine.driveByScroll(node, this.scroll, axis, range, [], from);
+    if (drive) this.drives.set(node, { drive, axis, range: key });
   }
 
   /** `ScrollViewStickyHeader`'s interpolation, as plain arithmetic. */
   private apply(): void {
     const key = this.horizontal() ? 'translateX' : 'translateY';
+    // What native said along the other axis says nothing of this one.
+    const offset = this.offsetAxis === this.axis() ? this.offset : 0;
     this.headers.forEach((node, at) => {
       const own = this.extents.get(node);
       if (!own) return;
       const next = this.extents.get(this.headers[at + 1]!);
       const stop = next ? next.start - own.size : Infinity;
       this.drive(node, own.start, stop);
-      const shift = Math.min(Math.max(0, this.offset - own.start), Math.max(0, stop - own.start));
+      const shift = Math.min(Math.max(0, offset - own.start), Math.max(0, stop - own.start));
       if (this.written.get(node) === shift) return;
       this.written.set(node, shift);
       this.engine.setProp(node, 'transform', shift > 0 ? [{ [key]: shift }] : undefined);
