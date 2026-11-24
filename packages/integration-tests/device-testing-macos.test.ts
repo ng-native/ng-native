@@ -258,6 +258,23 @@ describe('the macOS launcher', () => {
 });
 
 describe('finding the crash report', () => {
+  it("also finds a report named for the app a dev run made, as the host runs under the app's name", async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'reports-'));
+    try {
+      const reports = join(dir, 'reports');
+      mkdirSync(join(dir, '.expo/ng-native-desktop/dev/My Demo.app'), { recursive: true });
+      mkdirSync(reports);
+      writeFileSync(join(reports, 'My Demo-2026-11-24.ips'), 'x');
+      const launcher = macosLauncher({ cwd: dir, reports, reportWait: 0 });
+      assert.equal(
+        await launcher.crashReport?.(0),
+        'Crash report: ' + join(reports, 'My Demo-2026-11-24.ips'),
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("takes the newest report for the host's executable written since the launch", () => {
     const dir = mkdtempSync(join(tmpdir(), 'reports-'));
     try {

@@ -128,7 +128,8 @@ npm run linux    # ng-native-desktop run --os linux: gets the GTK host, then ope
 server, with Fast Refresh, and takes the same options as on a Mac but `--universal`: a Linux host
 is built for the machine's own architecture, x64 or arm64.
 
-The app's windows take its name, and its `icon` as their icon, which an X11 window manager shows.
+The app's windows take its name. Where the app sets `icon` (`ios.icon` alone gives none), the
+host offers it to GTK as the windows' default icon.
 GNOME on Wayland names a window and picks its icon from the desktop entry with the app's id, which
 only an installed package has, so a dev run there shows the app id and a generic icon, unless an
 installed package of the same app id supplies a desktop entry, whose name and icon the dev run
