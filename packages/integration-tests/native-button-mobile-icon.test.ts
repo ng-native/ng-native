@@ -133,6 +133,8 @@ describe('on iOS', () => {
     const said = warned.filter((message) => message.includes('<native-button>'));
     assert.equal(said.length, 1, warned.join('\n'));
     assert.match(said[0]!, /withSvgIcons\(SvgImages\)/);
+    assert.match(said[0]!, /withSvgIcons from @ng-native\/router/);
+    assert.match(said[0]!, /SvgImages from @ng-native\/icons/);
   });
 });
 

@@ -236,7 +236,7 @@ function warnNoRenderer(): void {
   warnedNoRenderer.add(os);
   console.warn(
     `[angular-native] <native-button> has an SVG icon and nothing to draw it on ${os}, so it ` +
-      `shows none. Add withSvgIcons(SvgImages) from @ng-native/icons to provideNativeRouter, or ` +
-      `provide SVG_ICON_RENDERER.`,
+      `shows none. Add withSvgIcons(SvgImages) to provideNativeRouter (withSvgIcons from ` +
+      `@ng-native/router, SvgImages from @ng-native/icons), or provide SVG_ICON_RENDERER.`,
   );
 }

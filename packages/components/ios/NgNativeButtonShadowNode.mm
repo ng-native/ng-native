@@ -33,8 +33,10 @@ Size NgNativeButtonShadowNode::measureContent(
     const LayoutConstraints &layoutConstraints) const
 {
   const auto &props = getConcreteProps();
-  CGSize size = NgNativeButtonNaturalSize(
-      string(props.title), string(props.controlSize), string(props.sfSymbol), !props.iconImage.empty());
+  NSString *controlSize = string(props.controlSize);
+  // Room is kept for an image only when the button can decode it, as NgNativeButtonComponentView does.
+  BOOL hasImage = !props.iconImage.empty() && NgNativeButtonImage(string(props.iconImage), controlSize) != nil;
+  CGSize size = NgNativeButtonNaturalSize(string(props.title), controlSize, string(props.sfSymbol), hasImage);
   // A narrower box truncates the title rather than wrapping it.
   return layoutConstraints.clamp({.width = (Float)size.width, .height = (Float)size.height});
 }
