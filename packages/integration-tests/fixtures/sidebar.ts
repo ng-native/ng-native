@@ -86,3 +86,16 @@ export class SidebarFixture {
   `,
 })
 export class DefaultSplitFixture {}
+
+/** A split view with no sidebar, only content. */
+@Component({
+  selector: 'x-no-sidebar-split',
+  imports: [SplitView, View],
+  template: `
+    <split-view testID="split">
+      <view testID="list" />
+      <view testID="detail" />
+    </split-view>
+  `,
+})
+export class NoSidebarSplitFixture {}

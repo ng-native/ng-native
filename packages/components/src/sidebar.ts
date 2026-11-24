@@ -92,6 +92,7 @@ export class Sidebar extends ViewBase implements OnInit, OnDestroy {
 
   override ngOnInit(): void {
     super.ngOnInit();
+    if (this.split) this.split.hasSidebar = true;
     if (!this.native || this.stopCollapsed) return;
     this.stopCollapsed = this.engine.setEventListener(this.node, 'topSidebarCollapse', (event) => {
       const { target, nativeEvent } = event as {

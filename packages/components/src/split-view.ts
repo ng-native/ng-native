@@ -1,4 +1,13 @@
-import { Component, DestroyRef, computed, inject, input, signal, type Signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  afterNextRender,
+  computed,
+  inject,
+  input,
+  signal,
+  type Signal,
+} from '@angular/core';
 import { HardwareBack, Screen, nativeSplitViews } from '@ng-native/device';
 import { nativePlatform, registerViewName, registeredViewName } from '@ng-native/fabric';
 import { ViewBase } from './view-base.ts';
@@ -23,6 +32,11 @@ registerViewName('split-view-content', {
   android: 'View',
   macos: 'NgNativeSplitContent',
 });
+
+declare const ngDevMode: unknown;
+
+/** Whether a split view with no sidebar has been warned about, in development. */
+let warnedNoSidebar = false;
 
 /** Whether the host draws `element`, rather than a view drawn here. */
 export function hostDraws(element: string): boolean {
@@ -115,6 +129,8 @@ export class SplitView extends ViewBase {
       : this.screen.compact(),
   );
   private readonly top = signal<'sidebar' | 'content'>('sidebar');
+  /** Set by its `<sidebar>`, which every split view needs: without one it is only its content. */
+  hasSidebar = false;
 
   /** Whether the panes are a stack, one at a time: at a compact width, where it is drawn. */
   readonly stacked: Signal<boolean> = computed(() => this.drawn && this.compact());
@@ -128,6 +144,15 @@ export class SplitView extends ViewBase {
     super();
     const stop = inject(HardwareBack).handle(() => this.showSidebar());
     inject(DestroyRef).onDestroy(stop);
+    afterNextRender(() => {
+      if (this.hasSidebar || warnedNoSidebar) return;
+      if (typeof ngDevMode !== 'undefined' && !ngDevMode) return;
+      warnedNoSidebar = true;
+      console.warn(
+        '[angular-native] A <split-view> has no <sidebar>, so it shows its content alone, laid ' +
+          'out as one view: on macOS no divider, and no second pane. Put a <sidebar> first in it.',
+      );
+    });
   }
 
   /** Show the content over the sidebar, where the panes are a stack. A choice in the sidebar does. */

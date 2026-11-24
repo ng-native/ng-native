@@ -51,11 +51,13 @@ type Fixture = {
 };
 let Fixture: Type<Fixture>;
 let DefaultSplit: Type<unknown>;
+let NoSidebarSplit: Type<unknown>;
 
 before(async () => {
   const mod = await compileFixture('fixtures/sidebar.ts');
   Fixture = mod['SidebarFixture'] as Type<Fixture>;
   DefaultSplit = mod['DefaultSplitFixture'] as Type<unknown>;
+  NoSidebarSplit = mod['NoSidebarSplitFixture'] as Type<unknown>;
 });
 
 afterEach(cleanup);
@@ -205,6 +207,24 @@ describe('on macOS', () => {
     fabric.emit(getByTestId('search'), 'topSidebarCollapse', { collapsed: true });
     await settle();
     assert.equal(instance.collapsed(), false);
+  });
+});
+
+describe('with no sidebar', () => {
+  it('warns once in development that it shows its content alone', async () => {
+    const warn = console.warn;
+    const warned: unknown[] = [];
+    console.warn = (...args: unknown[]) => void warned.push(args[0]);
+    try {
+      await render(DefaultSplit);
+      assert.deepEqual(warned, []);
+      await render(NoSidebarSplit);
+      await render(NoSidebarSplit);
+      assert.equal(warned.length, 1);
+      assert.match(String(warned[0]), /<split-view> has no <sidebar>/);
+    } finally {
+      console.warn = warn;
+    }
   });
 });
 
