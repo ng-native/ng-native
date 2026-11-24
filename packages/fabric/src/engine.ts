@@ -15418,6 +15418,13 @@ export class Engine implements HostEngine {
     if (!keys.length) return payload;
     const state = this.paintFrom(node);
     for (const key of keys) state.keys.add(key);
+    // The setter's graph went with `paintFrom`, and a commit cannot change what a graph of native's
+    // has set: the painter paints those now, where the run's other changes are committed.
+    const owned = Object.keys(payload!).filter((key) => this.owns(node, key));
+    if (owned.length) {
+      for (const key of owned) state.keys.add(key);
+      this.paintNow(node, state, props, this.heldOn(node));
+    }
     if (props['collapsable'] !== undefined) return payload;
     props['collapsable'] = false;
     return { ...payload, collapsable: false };

@@ -504,6 +504,20 @@ describe('a painted view a scroll drive starts on', () => {
   });
 });
 
+describe('a view a scroll drive has let go, moved twice in a run', () => {
+  it('paints the change that hands it to the painter, which a commit cannot change', () => {
+    const s = scene(BAR);
+    const scroll = s.engine.createElement('scroll-view');
+    s.engine.appendChild(s.engine.root, scroll);
+    const drive = s.engine.driveByScroll(s.view, scroll, 'y', pinnedRange(0))!;
+    s.engine.commit();
+    drive.stop();
+    s.tick(1000, { ...move(-100000), opacity: 0 });
+    s.tick(16, {});
+    assert.deepEqual(s.painted(), { opacity: 1, transform: [] });
+  });
+});
+
 describe('a painted view an animation of something else starts on', () => {
   it('brings the shadow node up to what native painted as the painter lets go', () => {
     const css =
