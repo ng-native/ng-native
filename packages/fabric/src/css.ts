@@ -2583,13 +2583,17 @@ class TilePlacing {
     return this.under.has(prop) ? this.under.get(prop) : into[prop];
   }
 
-  /** Once the cascade has run: an important image wins over a plain tile's, and takes none of it. */
+  /**
+   * Once the cascade has run: an important image wins over a plain tile's, and takes none of it,
+   * and an important size, position or repeat wins over the tile's, so nothing is put back for it.
+   */
   underImportant(
     important: Readonly<Record<string, unknown>>,
     deferred: readonly DeferredDeclaration[] | null,
     into: Record<string, unknown>,
   ): void {
     if (BACKGROUND_IMAGE in important || deferred?.some(isImportantImage)) this.drop(into);
+    for (const prop of PLACING) if (prop in important) this.under.delete(prop);
   }
 
   /** The tile's placing gone from `into`, and what it covered back. */

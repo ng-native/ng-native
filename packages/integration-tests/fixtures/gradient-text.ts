@@ -36,3 +36,22 @@ export class GradientTextHost {
   readonly word = signal('Week');
   readonly tint = signal<string | null>('rgb(0, 128, 0)');
 }
+
+@Component({
+  selector: 'x-gradient-text-tiled',
+  imports: [GradientText],
+  template: `
+    <gradient-text nativeID="tiled" class="stripes" [style.background-image]="image()">
+      Wk
+    </gradient-text>
+    <view nativeID="plain" class="stripes" [style.background-image]="image()"></view>
+  `,
+  styles: `
+    .stripes {
+      background-image: repeating-linear-gradient(90deg, red 0 2px, blue 2px 4px);
+    }
+  `,
+})
+export class GradientTextTiled {
+  readonly image = signal<string | null>(null);
+}

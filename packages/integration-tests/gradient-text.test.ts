@@ -87,6 +87,29 @@ describe('gradient text', () => {
     assert.equal(parts('inline').fill.props['backgroundColor'] ?? undefined, undefined);
   });
 
+  it("places an image of the element's own on the fill as on a view, not by a tile's placing", async () => {
+    const app = await render<{ image: { set(value: string | null): void } }>(
+      mod['GradientTextTiled'] as Type<{ image: { set(value: string | null): void } }>,
+    );
+    const placing = (node: FakeFabricNode) =>
+      ['Size', 'Position', 'Repeat'].map(
+        (part) => node.props[`experimental_background${part}`] ?? null,
+      );
+    const fill = () => parts('tiled').fill;
+    const view = () => screen.getByTestId('plain');
+    assert.deepEqual(placing(fill()), placing(view()), 'the tile placed on both');
+    assert.notDeepEqual(placing(view()), [null, null, null]);
+    app.instance.image.set('linear-gradient(red, blue)');
+    await app.detectChanges();
+    assert.deepEqual(
+      placing(view()),
+      [null, null, null],
+      "the element's image is placed as nothing set",
+    );
+    assert.deepEqual(placing(fill()), placing(view()));
+    assert.deepEqual(stops(fill()), stops(view()), 'and painted with it');
+  });
+
   it('leaves a text with the same class as it was: the rule is for gradient text alone', async () => {
     await mount();
     const plain = screen.getByTestId('plain');

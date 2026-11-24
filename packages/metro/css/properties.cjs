@@ -19,7 +19,7 @@ const {
   number,
   round,
 } = require('./values.cjs');
-const { backgroundImage, tilePlacing } = require('./gradients.cjs');
+const { backgroundImage, placedBefore, tilePlacing } = require('./gradients.cjs');
 const { filter, backgroundSize, backgroundRepeat, backgroundPosition } = require('./filters.cjs');
 const { LOGICAL } = require('./shorthands.cjs');
 const grid = require('./grid.cjs');
@@ -1813,8 +1813,12 @@ const TRANSLATORS = new Map([
         Array.isArray(value) && value.every((layer) => layer?.type === 'none')
           ? []
           : backgroundImage(value, property);
-      // A repeating gradient is drawn as tiles, which places its layer as well as painting it.
-      Object.assign(out, tilePlacing(Array.isArray(value) ? value : [value], property));
+      // A repeating gradient is drawn as tiles, which places its layer as well as painting it,
+      // over what the rule placed before it, which is checked and kept as the shorthand's is.
+      Object.assign(
+        out,
+        tilePlacing(Array.isArray(value) ? value : [value], property, placedBefore(out)),
+      );
     },
   ],
   [

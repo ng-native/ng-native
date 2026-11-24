@@ -145,10 +145,12 @@ side (`to bottom`, `90deg`) the stops may instead all be percentages, and the ti
 percentage of the box: `repeating-linear-gradient(red 0 10%, blue 10% 20%)`. A percentage stop at
 any other angle, stops mixing lengths and percentages, an `em` or viewport stop, a first stop not
 at 0, a corner (`to top right`) or a `background-size` or a `background-position` in lengths
-(`1px 0`, `right 2px`) written beside it in the `background` shorthand is dropped with a build
-warning that names the tile to write instead, since each needs the laid-out box. A period under
-1px is dropped with a warning too: Chrome paints whichever stripe each device pixel lands on,
-which changes with the screen's density, rather than their average color. A `var()` in it, a
+(`1px 0`, `right 2px`) written beside it in the `background` shorthand, or before it in the same
+rule, is dropped with a build warning that names the tile to write instead, since each needs the
+laid-out box. A period in `px` or `rem` under 1px is dropped with a warning too: Chrome paints
+whichever stripe each device pixel lands on, which changes with the screen's density, rather than
+their average color. A period in percentages is a share of the box, whose size is known only at
+layout, so one that comes to under 1px on a small box is not refused. A `var()` in it, a
 token holding it, `repeating-radial-gradient` and `repeating-conic-gradient` are dropped with a
 warning as well. The tile sets the layer's background size, position and repeat, so a
 `background-size`, `background-position` or `background-repeat` declared for the same element, in

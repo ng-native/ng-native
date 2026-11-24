@@ -234,6 +234,19 @@ function tilePlacing(images, context, placing = {}) {
 const TILE_PLACED = new WeakMap();
 
 /**
+ * What a rule's declarations so far, `out`, place a background by, as `tilePlacing` takes it: what
+ * the author wrote, and under a tile's own, what that tile's declaration placed without it.
+ */
+function placedBefore(out) {
+  const written = (value) => (TILE_PLACED.has(value) ? TILE_PLACED.get(value) : value) ?? undefined;
+  return {
+    size: written(out.experimental_backgroundSize),
+    position: written(out.experimental_backgroundPosition),
+    repeat: written(out.experimental_backgroundRepeat),
+  };
+}
+
+/**
  * Of a rule's declarations, the background placing props a repeating gradient's tile wrote and no
  * declaration after it replaced, each to what the rule places without the tile: the shorthand's
  * own list, or null for nothing. The engine puts that back where an ordinary image wins over the
@@ -614,4 +627,4 @@ function positionToken(term, context) {
 const ident = (term) =>
   term?.type === 'token' && term.value?.type === 'ident' ? term.value.value : null;
 
-module.exports = { backgroundImage, deferGradient, tilePlacing, tiledBy, GRADIENTS };
+module.exports = { backgroundImage, deferGradient, placedBefore, tilePlacing, tiledBy, GRADIENTS };

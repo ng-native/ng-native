@@ -484,6 +484,40 @@ describe('a repeating linear gradient', () => {
     }
   });
 
+  it('refuses a size or a length position written before it in its rule, as in the shorthand', () => {
+    // A browser draws the stripes in tiles of the author's size, or shifted by the length, which
+    // the tile cannot say, so the image is refused rather than the author's placing dropped.
+    for (const before of ['background-size: 10px 20px', 'background-position: 1px 0']) {
+      assert.throws(
+        () =>
+          styleOf(
+            `${before}; background-image: repeating-linear-gradient(red 0 2px, blue 2px 4px)`,
+          ),
+        /repeating-linear-gradient.*background-(size|position)/s,
+        before,
+      );
+    }
+    // A keyword position, or a repeat, changes nothing a browser draws, so the tile's stand.
+    assert.deepEqual(
+      styleOf(
+        'background-position: right; background-repeat: no-repeat; ' +
+          'background-image: repeating-linear-gradient(red 0 2px, blue 2px 4px)',
+      ),
+      styleOf('background-image: repeating-linear-gradient(red 0 2px, blue 2px 4px)'),
+    );
+    // As do a tile's own, from a tile before it in the rule.
+    assert.deepEqual(
+      styleOf(
+        'background: repeating-linear-gradient(red 0 3px, blue 3px 6px); ' +
+          'background-image: repeating-linear-gradient(red 0 2px, blue 2px 4px)',
+      ),
+      {
+        ...styleOf('background: none'),
+        ...styleOf('background-image: repeating-linear-gradient(red 0 2px, blue 2px 4px)'),
+      },
+    );
+  });
+
   it('writes no placement for an ordinary image, so a later rule cannot clear what an author set', () => {
     // An ordinary image that wins over a tile takes the tile's placing away in the cascade, which
     // knows which rule wrote what. Resetting placement for every ordinary image instead would

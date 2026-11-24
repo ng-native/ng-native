@@ -452,6 +452,29 @@ const TILE_PLACING_CASES: OracleCase[] = [
     `#probe { background-size: 10px 20px } #probe { background-image: ${STRIPES} }`,
     PLACING,
   ),
+  inlineValue(
+    { 'background-image': GRADIENT },
+    `#probe { background-image: ${STRIPES} } #probe { background-size: 10px 20px !important; ` +
+      'background-position: 3px 4px !important; background-repeat: no-repeat !important }',
+    PLACING,
+  ),
+  {
+    name: 'background-image: a repeat written before a tile in its rule stands for the image that beats it',
+    css:
+      `.b { background-repeat: no-repeat; background-position: 50% 100%; background-image: ${STRIPES} } ` +
+      `.b.c { background-image: ${GRADIENT} }`,
+    tree: probe({ name: 'view', classes: ['b', 'c'] }),
+    extra: PLACING,
+  },
+  {
+    name: 'background-image: a tile after a size in its rule is refused, and the size stands',
+    css:
+      `.b { background-size: 10px 20px; background-image: ${STRIPES} } ` +
+      `.b.c { background-image: ${GRADIENT} }`,
+    tree: probe({ name: 'view', classes: ['b', 'c'] }),
+    extra: PLACING,
+    warns: true,
+  },
 ];
 
 const TOKEN_GRADIENT = 'linear-gradient(to right, rgb(0, 0, 0), rgb(1, 1, 1))';
