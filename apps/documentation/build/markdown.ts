@@ -220,13 +220,19 @@ const DOC_MARKERS: TokenizerAndRendererExtension = {
   },
 };
 
-async function render(source: string, headings: DocHeading[]): Promise<string> {
+/**
+ * Parses synchronously on purpose. `marked-gfm-heading-id` keeps one heading list and one slugger
+ * for the whole process, reset at the start of each parse. Vite transforms pages concurrently, so
+ * an async parse that yielded between that reset and `getHeadingList()` would collect every other
+ * page's headings into this page's contents column, and number its ids after theirs.
+ */
+function render(source: string, headings: DocHeading[]): string {
   // A Marked of its own for each page: `marked.use` would add to one shared instance every render.
   const instance = new Marked(
     gfmHeadingId(),
     { extensions: [DOC_MARKERS] },
     {
-      async: true,
+      async: false,
       gfm: true,
       renderer: {
         // Shiki owns the whole `<pre>`, so the fenced-code renderer is replaced rather than wrapped:
@@ -238,7 +244,7 @@ async function render(source: string, headings: DocHeading[]): Promise<string> {
       },
     },
   );
-  const html = (await instance.parse(source)) as string;
+  const html = instance.parse(source) as string;
   for (const heading of getHeadingList()) {
     if (heading.level >= 2 && heading.level <= 3) {
       headings.push({ id: heading.id, level: heading.level, text: stripTags(heading.text) });
@@ -314,7 +320,7 @@ export function markdown(): Plugin {
       for (const block of segments(body)) {
         blocks.push(
           block.kind === 'html'
-            ? { kind: 'html', html: pageLinks(await render(block.html, headings), url) }
+            ? { kind: 'html', html: pageLinks(render(block.html, headings), url) }
             : block,
         );
       }

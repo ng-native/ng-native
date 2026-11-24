@@ -167,3 +167,26 @@ describe('a marker in a fenced example', () => {
     expect(html).toContain('platforms: Nothing');
   });
 });
+
+describe("a page's contents column", () => {
+  /** The headings the `markdown()` plugin collects for a page. */
+  async function headings(page: string, name: string): Promise<string[]> {
+    const transform = markdown().transform as Transform;
+    const { code } = await transform(page, `/repo/apps/documentation/src/content/guide/${name}.md`);
+    const list = JSON.parse(/^export const headings = (.*);$/m.exec(code)![1]!) as { id: string }[];
+    return list.map((heading) => heading.id);
+  }
+
+  // Vite transforms pages concurrently, and the heading-id extension keeps one list and one slugger
+  // for the whole process: a parse that yields mid-way picks up the other pages' headings.
+  test("holds only that page's headings while other pages render alongside it", async () => {
+    const pages = await Promise.all(
+      ['one', 'two', 'three'].map((name) =>
+        headings(`# Title\n\n## ${name} first\n\nText.\n\n## ${name} second\n\nText.\n`, name),
+      ),
+    );
+    expect(pages).toEqual(
+      ['one', 'two', 'three'].map((name) => [`${name}-first`, `${name}-second`]),
+    );
+  });
+});
