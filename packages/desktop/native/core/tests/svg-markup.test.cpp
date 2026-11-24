@@ -216,6 +216,31 @@ TEST_CASE("uses that each draw the one before twice stop drawing at a bound, rat
   CHECK(drawn.size() <= (1 << 16));
 }
 
+namespace {
+
+// Sibling groups, each using the one before: shallow markup whose uses nest `levels` deep.
+std::string useChain(int levels, const std::string &after) {
+  std::string markup = R"svg(<svg viewBox="0 0 24 24"><defs><path id="u0" d="M0 0H1"/>)svg";
+  for (int i = 1; i <= levels; i++) {
+    markup += "<g id=\"u" + std::to_string(i) + "\"><use href=\"#u" + std::to_string(i - 1) + "\"/></g>";
+  }
+  return markup + "</defs>" + after + "</svg>";
+}
+
+} // namespace
+
+TEST_CASE("uses nested deeper than any icon stop at a bound, rather than at the end of the stack") {
+  // Each target is distinct, so no use leads back to itself, and the chain stays under the bound
+  // on uses drawn: only a bound on depth ends it.
+  CHECK(drawnOf(useChain(40000, R"svg(<use href="#u40000"/>)svg")).empty());
+  // A chain as deep as a sprite sheet's draws, and uses side by side do not add to the depth.
+  std::string siblings;
+  for (int i = 0; i < 300; i++) {
+    siblings += R"svg(<use href="#u20"/>)svg";
+  }
+  CHECK(drawnOf(useChain(20, siblings)).size() == 300);
+}
+
 TEST_CASE("a use that leads back to itself draws nothing, and ends") {
   CHECK(drawnOf(R"svg(<svg viewBox="0 0 24 24"><g id="a"><use href="#b"/></g><g id="b"><use href="#a"/></g></svg>)svg").empty());
 }

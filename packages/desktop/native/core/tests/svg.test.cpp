@@ -379,6 +379,28 @@ TEST_CASE("a use that refers to itself or its ancestor draws nothing rather than
         std::vector<std::string>{"fill M0,0L1,0L1,1L0,1Z #ff000000"});
 }
 
+TEST_CASE("uses in a clip path nested deeper than any drawing stop at a bound, rather than at the end of the stack") {
+  // Uses side by side, each naming the one before: none leads back to itself.
+  auto clipOf = [](int levels) {
+    std::vector<SvgNode> chain{node(rect(0, 0, 1, 1))};
+    chain.back().element.name = "u0";
+    for (int i = 1; i <= levels; i++) {
+      SvgElement use{.kind = SvgKind::Use, .name = "u" + std::to_string(i)};
+      use.href = "u" + std::to_string(i - 1);
+      chain.push_back(node(use));
+    }
+    SvgElement clip{.kind = SvgKind::ClipPath, .name = "c"};
+    SvgElement last{.kind = SvgKind::Use};
+    last.href = "u" + std::to_string(levels);
+    auto clipped = rect(0, 0, 10, 10);
+    clipped.clipPath = "c";
+    SvgElement defs{.kind = SvgKind::Defs};
+    return drawn(node(svg(), {node(defs, std::move(chain)), node(clip, {node(last)}), node(clipped)})).front();
+  };
+  CHECK(clipOf(20) == "clip M0,0L1,0L1,1L0,1Z");
+  CHECK(clipOf(40000).find('M') == std::string::npos);
+}
+
 TEST_CASE("clip and mask references that lead back to themselves draw nothing rather than recursing") {
   // Two uses in a clip path that refer to each other.
   SvgElement clip{.kind = SvgKind::ClipPath, .name = "c"};
