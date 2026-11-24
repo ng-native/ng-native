@@ -104,7 +104,8 @@ runs:
             | first // empty | "\(.id) \(.workflow_run.id)"') || return 1
           [ -n "$found" ] || { echo "No artifact $NAME from main."; return 1; }
           read -r id run <<< "$found"
-          origin=$(gh api "repos/$REPO/actions/runs/$run" --jq '"\(.event) \(.path) \(.head_branch)"') || return 1
+          origin=$(gh api "repos/$REPO/actions/runs/$run" --jq '
+            "\(.event) \(.path | sub("@(refs/heads/)?main$"; "")) \(.head_branch)"') || return 1
           case "$origin" in
             'push .github/workflows/desktop.yml main' | 'schedule .github/workflows/desktop.yml main' | 'workflow_dispatch .github/workflows/desktop.yml main') ;;
             *) echo "Artifact $id comes from '$origin', not desktop.yml on main."; return 1 ;;
