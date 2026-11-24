@@ -57,6 +57,33 @@ void sendsKeyPresses(bool multiline) {
   CHECK(sent.count("topKeyPress") == 5);
 }
 
+// An input method's composition sends no keyPress, as React Native iOS sends none: AppKit asks
+// whether the text may change with the text already marked, from the first keystroke to the commit
+// (NGNTypedKey's `composing`). A key typed after it sends one again.
+void sendsNoKeyPressWhileComposing(bool multiline) {
+  MountedViews m;
+  SentEvents<TextInputEventEmitter> sent;
+  auto view = MountedViews::shadow(
+      2, "TextInput", textInputProps(folly::dynamic::object("multiline", multiline)("editable", true)));
+  view.eventEmitter = sent.emitter;
+  m.add(view);
+  NSTextView *editor = editorIn(m.view(2));
+  REQUIRE((editor != nil));
+  [m.window makeFirstResponder:editor];
+
+  NSRange none = NSMakeRange(NSNotFound, 0);
+  [editor setMarkedText:@"k" selectedRange:NSMakeRange(1, 0) replacementRange:none];
+  REQUIRE(editor.hasMarkedText);
+  CHECK(sent.count("topKeyPress") == 0);
+  [editor setMarkedText:@"か" selectedRange:NSMakeRange(1, 0) replacementRange:none];
+  [editor insertText:@"か" replacementRange:none];
+  CHECK_FALSE(editor.hasMarkedText);
+  CHECK([editor.string isEqualToString:@"か"]);
+  CHECK(sent.count("topKeyPress") == 0);
+  [editor insertText:@"a" replacementRange:none];
+  CHECK(sent.count("topKeyPress") == 1);
+}
+
 } // namespace
 
 TEST_CASE("a single-line text input sends keyPress for a key typed and for Escape, the arrows and Backspace") {
@@ -65,4 +92,12 @@ TEST_CASE("a single-line text input sends keyPress for a key typed and for Escap
 
 TEST_CASE("a multiline text input sends keyPress for a key typed and for Escape, the arrows and Backspace") {
   sendsKeyPresses(true);
+}
+
+TEST_CASE("a single-line text input sends no keyPress for an input method's composition") {
+  sendsNoKeyPressWhileComposing(false);
+}
+
+TEST_CASE("a multiline text input sends no keyPress for an input method's composition") {
+  sendsNoKeyPressWhileComposing(true);
 }

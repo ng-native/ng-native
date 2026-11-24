@@ -347,6 +347,68 @@ TEST_CASE("while an input method composes, a controlled value and setTextAndSele
   }
 }
 
+TEST_CASE("a text input sends keyPress for a key typed, and none for an input method's composition") {
+  REQUIRE(ngn::testing::gtkReady());
+  for (bool multiline : {false, true}) {
+    CAPTURE(multiline);
+    MountedViews views;
+    views.add(MountedViews::shadow(2, "TextInput", textInputProps(dynamic::object("multiline", multiline)), {{10, 10}, {150, 80}}));
+    auto *data = ngn::gtk::viewData(views.view(2));
+    auto *field = data->field;
+    ngn::testing::SentEvents<TextInputEventEmitter> sent(*data);
+    // What the field's input method puts in for a key or a commit, as GtkText and GtkTextView do.
+    auto commit = [field, multiline](const char *text) {
+      if (multiline) {
+        gtk_text_buffer_insert_interactive_at_cursor(gtk_text_view_get_buffer(GTK_TEXT_VIEW(field->text)), text, -1, TRUE);
+      } else {
+        int at = gtk_editable_get_position(GTK_EDITABLE(field->text));
+        gtk_editable_insert_text(GTK_EDITABLE(field->text), text, -1, &at);
+      }
+    };
+    auto none = GdkModifierType(0);
+
+    // A key typed sends one, as its text goes in.
+    pressKey(field->text, GDK_KEY_a, none);
+    commit("a");
+    CHECK(sent.count("topKeyPress") == 1);
+
+    // A composition: its first keystroke, which reaches the field before the input method starts
+    // the preedit with it, the keystrokes after it, Return and the commit send none.
+    pressKey(field->text, GDK_KEY_k, none);
+    g_signal_emit_by_name(field->text, "preedit-changed", "k");
+    pressKey(field->text, GDK_KEY_a, none);
+    g_signal_emit_by_name(field->text, "preedit-changed", "\xE3\x81\x8B");
+    pressKey(field->text, GDK_KEY_Return, none);
+    g_signal_emit_by_name(field->text, "preedit-changed", "");
+    commit("\xE3\x81\x8B");
+    CHECK(ngn::gtk::fieldText(*field) == "a\xE3\x81\x8B");
+    CHECK(sent.count("topKeyPress") == 1);
+
+    // A key whose text never goes in leaves nothing waiting: a paste after it sends none.
+    pressKey(field->text, GDK_KEY_x, none);
+    commit("x");
+    CHECK(sent.count("topKeyPress") == 2);
+    pressKey(field->text, GDK_KEY_x, none);
+    commit("pasted");
+    CHECK(sent.count("topKeyPress") == 2);
+    // Backspace, which puts nothing in, sends one as it is pressed.
+    pressKey(field->text, GDK_KEY_BackSpace, none);
+    CHECK(sent.count("topKeyPress") == 3);
+    // An input method that answers a key or more behind (IBus's) still has each key sent.
+    pressKey(field->text, GDK_KEY_b, none);
+    pressKey(field->text, GDK_KEY_c, none);
+    commit("b");
+    commit("c");
+    CHECK(sent.count("topKeyPress") == 5);
+    // Keys a field never puts in wait a few at most.
+    for (int i = 0; i < 20; i++) {
+      pressKey(field->text, GDK_KEY_z, none);
+    }
+    CHECK(field->typedKeys.size() == 8);
+    data->emitter = nullptr;
+  }
+}
+
 TEST_CASE("a text input shows its placeholder in placeholderTextColor while it is empty, one line or many") {
   REQUIRE(ngn::testing::gtkReady());
   for (bool multiline : {false, true}) {

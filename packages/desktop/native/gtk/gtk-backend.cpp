@@ -4,6 +4,7 @@
 #include "accessible-text.h"
 #include "focus.h"
 #include "image-view.h"
+#include "menus.h"
 #if NGN_GSTREAMER
 #include "camera.h"
 #include "video.h"
@@ -302,6 +303,7 @@ void GtkBackend::createView(const ShadowView &view) {
     applyActions(*d, *accessibility);
   }
   applyViewProps(widget, *d);
+  pressOnKeys(widget);
   views_[view.tag] = widget;
 #if NGN_GSTREAMER
   // Once registered, so what they send at once reaches the view: a frame the player shows already,
@@ -454,18 +456,7 @@ void GtkBackend::applyActions(ViewData &d, const AxInfo &info) {
   }
   applyAccessibleActions(
       d.widget, info,
-      {.perform =
-           [this](GtkWidget *widget, AxVerb verb) {
-             ViewData *v = viewData(widget);
-             auto props = v ? std::dynamic_pointer_cast<const facebook::react::ViewProps>(v->props) : nullptr;
-             auto emitter = v ? std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(v->emitter) : nullptr;
-             if (!props) {
-               return false;
-             }
-             SurfaceId surface = v->surfaceId;
-             Tag tag = v->tag;
-             return performAxVerb(*props, emitter.get(), verb, [this, surface, tag] { return hooks.activate(surface, tag); });
-           },
+      {.perform = [this](GtkWidget *widget, AxVerb verb) { return performVerb(widget, verb); },
        .send =
            [](GtkWidget *widget, const std::string &name) {
              ViewData *v = viewData(widget);
@@ -473,6 +464,64 @@ void GtkBackend::applyActions(ViewData &d, const AxInfo &info) {
              auto emitter = v ? std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(v->emitter) : nullptr;
              return props && sendAxAction(*props, emitter.get(), name);
            }});
+}
+
+bool GtkBackend::performVerb(GtkWidget *widget, AxVerb verb) {
+  ViewData *v = viewData(widget);
+  auto props = v ? std::dynamic_pointer_cast<const facebook::react::ViewProps>(v->props) : nullptr;
+  auto emitter = v ? std::dynamic_pointer_cast<const facebook::react::ViewEventEmitter>(v->emitter) : nullptr;
+  if (!props) {
+    return false;
+  }
+  SurfaceId surface = v->surfaceId;
+  Tag tag = v->tag;
+  return performAxVerb(*props, emitter.get(), verb, [this, surface, tag] { return hooks.activate(surface, tag); });
+}
+
+namespace {
+
+// The key that pressed a view and is still down, on the view's widget: its repeats press nothing.
+constexpr const char *kPressingKey = "ngn-pressing-key";
+
+} // namespace
+
+void GtkBackend::pressOnKeys(GtkWidget *widget) {
+  GtkEventController *keys = gtk_event_controller_key_new();
+  g_signal_connect(keys, "key-pressed", G_CALLBACK(+[](GtkEventControllerKey *c, guint keyval, guint, GdkModifierType state, gpointer self) -> gboolean {
+    GtkWidget *view = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(c));
+    bool space = keyval == GDK_KEY_space || keyval == GDK_KEY_KP_Space;
+    bool enter = keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter || keyval == GDK_KEY_ISO_Enter;
+    if ((!space && !enter) || (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK))) {
+      return FALSE;
+    }
+    if (GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(view), kPressingKey)) == keyval) {
+      return TRUE;
+    }
+    // The view's own focus, not a widget's inside it, as the press bubbles up.
+    GtkRoot *root = gtk_widget_get_root(view);
+    if (!root || gtk_root_get_focus(root) != view) {
+      return FALSE;
+    }
+    if (enter && GTK_IS_WINDOW(root) && keyButton(GTK_WINDOW(root), false)) {
+      return FALSE;
+    }
+    if (!static_cast<GtkBackend *>(self)->performVerb(view, AxVerb::Press)) {
+      return FALSE;
+    }
+    g_object_set_data(G_OBJECT(view), kPressingKey, GUINT_TO_POINTER(keyval));
+    return TRUE;
+  }), this);
+  g_signal_connect(keys, "key-released", G_CALLBACK(+[](GtkEventControllerKey *c, guint keyval, guint, GdkModifierType, gpointer) {
+    GtkWidget *view = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(c));
+    if (GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(view), kPressingKey)) == keyval) {
+      g_object_set_data(G_OBJECT(view), kPressingKey, nullptr);
+    }
+  }), nullptr);
+  gtk_widget_add_controller(widget, keys);
+  // A release the view never hears, as the press moved the focus away, ends the key's hold too.
+  g_signal_connect(widget, "notify::has-focus", G_CALLBACK(+[](GtkWidget *view, GParamSpec *, gpointer) {
+    g_object_set_data(G_OBJECT(view), kPressingKey, nullptr);
+  }), nullptr);
 }
 
 void GtkBackend::followRole(const ShadowView &view) {
@@ -483,6 +532,7 @@ void GtkBackend::followRole(const ShadowView &view) {
   }
   GtkWidget *old = it->second;
   GtkWidget *next = makeViewWidget(role, isTextWidget(old));
+  pressOnKeys(next);
   g_object_ref_sink(next);
   // What the backend set on the old widget that the view's props and state do not set again below.
   gtk_widget_set_child_visible(next, gtk_widget_get_child_visible(old));

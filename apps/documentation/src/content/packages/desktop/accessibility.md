@@ -89,7 +89,9 @@ The focus keys, composite widgets and `tabIndex` behave as above, because the co
 order on both desktops. A window's key handling gives Tab, Shift-Tab and a composite widget's
 arrows to the core before GTK sees them, and each move gives real GTK focus to the view's widget,
 so a screen reader hears it. Where a Mac's default keyboard navigation reaches text inputs only,
-Tab on Linux reaches every focusable view.
+Tab on Linux reaches every focusable view. Space and Return press the focused view as they do on a
+Mac (the keypad's Enter too, as it presses a GTK button), and a window's default button takes
+Return first.
 
 The accessibility tree is GTK's own, read by Orca and other AT-SPI clients. Each view's widget is
 made with the GTK role for its ARIA role, from `role` or `accessibilityRole`, and its label,

@@ -106,6 +106,14 @@ class GtkBackend final : public MountingBackend, public DesktopPropsSink {
   void followRole(const ShadowView &view);
   // The view's accessible actions (accessible.h applyAccessibleActions), sent through the core.
   void applyActions(ViewData &d, const AxInfo &info);
+  // One of a view's accessible actions on its widget, through the core (performAxVerb): a press
+  // is its `(accessibilityTap)` or `activate` when it listens, and otherwise a click. Whether it
+  // reached the view.
+  bool performVerb(GtkWidget *widget, AxVerb verb);
+  // Space and Return press the view while its own widget has the focus, as they press a focused
+  // view on macOS and a focused button in GTK. A default button takes Return first, as it does on
+  // macOS, and a key held down presses once.
+  void pressOnKeys(GtkWidget *widget);
   // Points the accessible widget of `tag` at the accessible widgets of the views it is labelled
   // and described by, as relations_ has them.
   void applyRelations(Tag tag);

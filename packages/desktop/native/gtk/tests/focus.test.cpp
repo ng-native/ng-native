@@ -3,6 +3,7 @@
 #include "mounted-views.h"
 
 #include "../focus.h"
+#include "../menus.h"
 
 #include "ngn/native-controls.h"
 
@@ -211,4 +212,103 @@ TEST_CASE("Tab in an open popover is GTK's, which keeps it in the popover, not t
   CHECK(v.press(GDK_KEY_Tab));
   CHECK(v.focus() == v.views.view(3));
   gtk_widget_unparent(popover);
+}
+
+namespace {
+
+// A key pressed on `widget` as it reaches the widget's own key controllers, after the window's:
+// whether one used it.
+bool pressOn(GtkWidget *widget, guint keyval, GdkModifierType state = GdkModifierType(0)) {
+  GListModel *controllers = gtk_widget_observe_controllers(widget);
+  gboolean handled = FALSE;
+  for (guint i = 0; i < g_list_model_get_n_items(controllers) && !handled; ++i) {
+    auto *controller = GTK_EVENT_CONTROLLER(g_list_model_get_item(controllers, i));
+    if (GTK_IS_EVENT_CONTROLLER_KEY(controller)) {
+      g_signal_emit_by_name(controller, "key-pressed", keyval, 0u, state, &handled);
+    }
+    g_object_unref(controller);
+  }
+  g_object_unref(controllers);
+  return handled;
+}
+
+void releaseOn(GtkWidget *widget, guint keyval) {
+  GListModel *controllers = gtk_widget_observe_controllers(widget);
+  for (guint i = 0; i < g_list_model_get_n_items(controllers); ++i) {
+    auto *controller = GTK_EVENT_CONTROLLER(g_list_model_get_item(controllers, i));
+    if (GTK_IS_EVENT_CONTROLLER_KEY(controller)) {
+      g_signal_emit_by_name(controller, "key-released", keyval, 0u, GdkModifierType(0));
+    }
+    g_object_unref(controller);
+  }
+  g_object_unref(controllers);
+}
+
+} // namespace
+
+TEST_CASE("Space and Return press the focused view once while held, as on macOS, and a default button takes Return first") {
+  REQUIRE(ngn::testing::gtkReady());
+  Views v;
+  std::vector<Tag> pressed;
+  v.views.backend->hooks.activate = [&pressed](SurfaceId, Tag tag) {
+    pressed.push_back(tag);
+    return true;
+  };
+  GtkWidget *button = v.views.view(2);
+  // Only the view with the focus: not one a press bubbles up to from another.
+  CHECK_FALSE(pressOn(button, GDK_KEY_space));
+  CHECK(pressed.empty());
+  REQUIRE(gtk_widget_grab_focus(button));
+  CHECK(pressOn(button, GDK_KEY_space));
+  CHECK(pressed == std::vector<Tag>{2});
+  // Held down, the key repeats, and presses nothing more until it is released.
+  CHECK(pressOn(button, GDK_KEY_space));
+  CHECK(pressed.size() == 1);
+  releaseOn(button, GDK_KEY_space);
+  for (guint key : {GDK_KEY_Return, GDK_KEY_KP_Enter, GDK_KEY_space}) {
+    CHECK(pressOn(button, key));
+    releaseOn(button, key);
+  }
+  CHECK(pressed.size() == 4);
+  // With Ctrl, Alt or Super held, or another key, it is no press.
+  CHECK_FALSE(pressOn(button, GDK_KEY_space, GDK_CONTROL_MASK));
+  CHECK_FALSE(pressOn(button, GDK_KEY_Return, GDK_ALT_MASK));
+  CHECK_FALSE(pressOn(button, GDK_KEY_a));
+  CHECK(pressed.size() == 4);
+
+  // A press that moves the focus away never hears its release: the next one presses again.
+  CHECK(pressOn(button, GDK_KEY_space));
+  REQUIRE(gtk_widget_grab_focus(v.views.view(3)));
+  REQUIRE(gtk_widget_grab_focus(button));
+  CHECK(pressOn(button, GDK_KEY_space));
+  releaseOn(button, GDK_KEY_space);
+  CHECK(pressed.size() == 6);
+
+  // A view the press does not reach leaves the key to the window.
+  v.views.backend->hooks.activate = [](SurfaceId, Tag) { return false; };
+  CHECK_FALSE(pressOn(button, GDK_KEY_space));
+  v.views.backend->hooks.activate = [&pressed](SurfaceId, Tag tag) {
+    pressed.push_back(tag);
+    return true;
+  };
+
+  // A view whose role changes gets a new widget, which Space presses too.
+  v.views.update(MountedViews::shadow(2, "View", nullptr, {}), desktopViewProps(dynamic::object("focusable", true)("role", "link")));
+  GtkWidget *link = v.views.view(2);
+  REQUIRE(link != button);
+  REQUIRE(v.focus() == link);
+  CHECK(pressOn(link, GDK_KEY_space));
+  releaseOn(link, GDK_KEY_space);
+  CHECK(pressed.size() == 7);
+
+  // A default button in the window takes Return, and leaves Space to the focused view.
+  v.views.add(MountedViews::shadow(
+      9, "NgNativeButton",
+      ngn::testing::parsedProps<ngn::NativeButtonComponentDescriptor>(dynamic::object("title", "Save")("kind", "default")),
+      {{150, 100}, {80, 30}}));
+  REQUIRE(ngn::gtk::keyButton(v.window(), false));
+  CHECK_FALSE(pressOn(link, GDK_KEY_Return));
+  CHECK(pressed.size() == 7);
+  CHECK(pressOn(link, GDK_KEY_space));
+  CHECK(pressed.size() == 8);
 }

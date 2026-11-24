@@ -56,6 +56,9 @@ A `<menu-item>` takes `label`, `menuRole`, `shortcut`, `[disabled]`, `[(checked)
 `mod` is Cmd on Apple's OSes and Ctrl on Android and Linux. The editing keys (mod+z, x, c, v and a)
 go to a
 focused text input first, so a shortcut on one of them fires only while no text input has focus.
+On macOS and Linux a shortcut with no modifier takes its key from a focused text input too: with
+`shortcut="k"`, pressing K in a field fires the shortcut and types nothing. Give a shortcut a
+modifier on a screen with a text input.
 
 A letter, digit or punctuation key is written as itself: `mod+s`, `mod+,`, `mod++` for the plus
 key. Any other key is written by the name `KeyboardEvent.key` gives it, spelt exactly, so `enter`
@@ -135,8 +138,8 @@ not draw it.
 ```
 
 `[menu]` on a `<pressable>` opens its menu under the element on a press: a tap or a click, a
-screen reader's press, or a key that presses the focused element (Space or Return on macOS, Space,
-Enter or the D-pad centre on Android). `(press)` does not fire then. The menu is
+screen reader's press, or a key that presses the focused element (Space or Return on macOS and
+Linux, Space, Enter or the D-pad centre on Android). `(press)` does not fire then. The menu is
 written as a context menu's is, and a one-way `[checked]` stays as the app binds it, so a menu of
 choices like this one is a pop-up select. `open()` opens it from code, named in the template with
 `#sort="pressMenu"`, and says whether it asked the host to open it: it answers `true` even when the
@@ -145,8 +148,7 @@ host then draws nothing, for an element not on screen.
 macOS draws it as a menu under the element, Linux as a popover menu below it, Android as a
 PopupMenu below it, from its leading edge, and iOS as a menu from the element, which UIKit places.
 On Android and iOS that takes the native side of `@ng-native/components`, which a development
-build has and Expo Go does not. Linux has no key that presses a focused element, so there the
-keyboard does not open it.
+build has and Expo Go does not.
 
 On iOS, UIKit opens a menu only from a touch on a control of its own, so the element gets a clear
 button laid over it, which opens the menu on a touch or a VoiceOver press. The element stays what

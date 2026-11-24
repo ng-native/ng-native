@@ -101,7 +101,9 @@ carries just the new string, matching React Native's `onChangeText`; `(change)`,
 device and in a browser alike. iOS reports no `Enter` from a single-line field, so use
 `(submitEditing)` for the return key there. On macOS and Linux it also names `Escape`, `Tab`,
 `ArrowUp`, `ArrowDown`, `ArrowLeft` and `ArrowRight`, alone or with Shift, as a browser names them,
-so a field can drive a suggestion list; iOS and Android do not send these. `(selectionChange)`
+so a field can drive a suggestion list; iOS and Android do not send these. As on iOS, the keys of
+an input method's composition (Japanese or Pinyin, say) send none on macOS and Linux, its first
+keystroke and its commit included. `(selectionChange)`
 carries `$event.nativeEvent.selection`, a `{ start, end }` that changes as the caret moves or a
 range is selected.
 

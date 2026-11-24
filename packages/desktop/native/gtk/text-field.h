@@ -13,6 +13,7 @@
 
 #include <gtk/gtk.h>
 
+#include <deque>
 #include <optional>
 #include <string>
 #include <utility>
@@ -34,6 +35,11 @@ struct TextField {
   bool replaying{false};
   // Whether an input method is composing: its preedit text is not yet the field's.
   bool composing{false};
+  // The printable keys pressed whose `(keyPress)` waits for the text each puts in, oldest first:
+  // a key reaches the field before its input method, which may start a composition with it
+  // instead, and a composition sends none (React Native iOS's way). An input method that answers
+  // later (IBus's) can be a key or more behind.
+  std::deque<std::string> typedKeys;
   // A controlled value that arrived while an input method composed, with the event count it had
   // seen: applied when composition ends, unless the user changed the text since or a newer value
   // replaced it.
