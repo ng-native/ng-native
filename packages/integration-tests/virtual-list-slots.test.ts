@@ -306,6 +306,24 @@ describe('virtual list sticky header', () => {
       unmount();
     });
 
+    it('tells native no offset along the old axis when the list turns horizontal as the header s range changes', async () => {
+      const { fabric, instance, named, unmount } = await pinned([]);
+      fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 100 } });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await frame();
+      const before = named('set').length;
+      instance.horizontal.set(true);
+      instance.sticky.set([4]);
+      await frame();
+      assert.ok(
+        !named('set')
+          .slice(before)
+          .some(([, , value]) => value === 100),
+        'no y offset for x',
+      );
+      unmount();
+    });
+
     it('draws a lone sticky row from where native is when the list flips at rest', async () => {
       const { native, named } = recorder();
       const { fabric, instance, unmount } = await boot<Separated>('Separated', 400, {

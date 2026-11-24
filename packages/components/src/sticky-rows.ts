@@ -432,7 +432,7 @@ export class StickyRows {
     const range = pinned ? this.headerRange() : STILL;
     const held = this.headerDrive;
     const moved = JSON.stringify(range);
-    const at = this.headerFrom(pinned, moved, from);
+    const at = this.headerFrom(pinned, moved, axis, from);
     const statics = this.list.flip() ?? [];
     // The axis too: a list turned horizontal moves the header along x.
     const key = axis + JSON.stringify(statics);
@@ -457,12 +457,19 @@ export class StickyRows {
    * Where native is told the scroll view is for the header's drive, `pinned` and moved by the range
    * `moved`. Pinned, let go, or moved by a new range at rest, native has no new scroll event to draw
    * it from: it is told where it last said it was. Mid-scroll the next event draws it, and what
-   * native last said trails it. After a jump, `from`, where the list scrolled itself.
+   * native last said trails it, and what it said along the other axis says nothing of `axis`. After a
+   * jump, `from`, where the list scrolled itself.
    */
-  private headerFrom(pinned: boolean, moved: string, from: number | undefined): number | undefined {
+  private headerFrom(
+    pinned: boolean,
+    moved: string,
+    axis: 'x' | 'y',
+    from: number | undefined,
+  ): number | undefined {
     const held = this.headerDrive;
     const changed = held?.pinned !== pinned || (this.resting && held.range !== moved);
-    return changed ? (from ?? this.nativeAt) : from;
+    if (!changed) return from;
+    return from ?? (this.nativeAxis === axis ? this.nativeAt : undefined);
   }
 
   /**
