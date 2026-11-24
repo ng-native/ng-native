@@ -20,7 +20,7 @@
  *   chosen as `{ type: 'contextMenuSelect', nativeID, id }`.
  * - Where it draws menus on a press, `popUpMenu(view, entries)` draws one under the view with that
  *   tag now, and sends the item chosen as the view's `topContextMenuSelect`, as a context menu's
- *   (the desktop host).
+ *   (the desktop host, and Android).
  * - Where it draws context menus, `setTakesLongPress(nativeID, takes)` names a view inside one
  *   whose own `(longPress)` takes a long press first: a long press there opens no menu around it,
  *   as the innermost handler wins in a native app. A right-click still opens the menu on Android.
@@ -185,7 +185,7 @@ export interface NativeMenus {
   setTakesLongPress?(nativeID: string, takes: boolean): void;
   /**
    * Draw `entries` under the view with tag `view` now, and send the item chosen as its
-   * `topContextMenuSelect`. The desktop host.
+   * `topContextMenuSelect`. The desktop host, and Android.
    */
   popUpMenu?(view: number, entries: readonly NativeMenuEntry[]): void;
   subscribe(listener: (event: NativeMenuEvent) => void): () => void;
@@ -330,7 +330,10 @@ export class Menus {
     return false;
   }
 
-  /** Whether the host draws a menu under a view on a press (`popUpMenu`): the desktop host. */
+  /**
+   * Whether the host draws a menu under a view on a press (`popUpMenu`): the desktop host, and
+   * Android.
+   */
   readonly popsUpMenus: boolean = this.native?.popUpMenu !== undefined;
 
   /**

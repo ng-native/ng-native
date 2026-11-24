@@ -133,17 +133,20 @@ not draw it.
 </ng-template>
 ```
 
-`[menu]` on a `<pressable>` opens its menu under the element on a press: a click, a screen
-reader's press, or on macOS Space while it has focus. `(press)` does not fire then. The menu is
+`[menu]` on a `<pressable>` opens its menu under the element on a press: a tap or a click, a
+screen reader's press, or a key that presses the focused element (Space or Return on macOS, Space,
+Enter or the D-pad centre on Android). `(press)` does not fire then. The menu is
 written as a context menu's is, and a one-way `[checked]` stays as the app binds it, so a menu of
 choices like this one is a pop-up select. `open()` opens it from code, named in the template with
 `#sort="pressMenu"`, and says whether it asked the host to open it: it answers `true` even when the
 host then draws nothing, for an element not on screen.
 
-macOS draws it as a menu under the element, and Linux as a popover menu below it. iOS, Android,
-Expo Go and the web host draw none yet: there a press fires `(press)` as it would without
-`[menu]`, and a warning in development says so once. A menu that shows no item opens nothing, and
-the press fires `(press)`.
+macOS draws it as a menu under the element, Linux as a popover menu below it, and Android as a
+PopupMenu below it, from its leading edge. On Android that takes the native side of
+`@ng-native/components`, which a development build has and Expo Go does not. Linux has no key
+that presses a focused element, so there the keyboard does not open it. iOS, Expo Go and the web
+host draw none yet: there a press fires `(press)` as it would without `[menu]`, and a warning in
+development says so once. A menu that shows no item opens nothing, and the press fires `(press)`.
 
 ## Reference
 

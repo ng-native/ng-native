@@ -29,8 +29,10 @@ let warned = false;
  * select is a menu of `[checked]` items. `open()` opens it from code: `#sort="pressMenu"` names it in
  * the template.
  *
- * macOS draws it as an `NSMenu` under the element, and Linux as a popover menu below it. Other
- * hosts draw none yet: there a press fires `(press)`, with one warning in development.
+ * macOS draws it as an `NSMenu` under the element, Linux as a popover menu below it, and Android
+ * as a PopupMenu below it, which takes the `NgNativeMenus` module that Expo Go lacks. Other hosts
+ * (iOS, Expo Go, the web) draw none yet: there a press fires `(press)`, with one warning in
+ * development.
  *
  * The host contract: `Menus.popUpMenu(view, entries)` with the view's tag and the menu as
  * `serializeMenu` makes it. The host sends the item chosen as the view's `topContextMenuSelect`,
@@ -70,8 +72,8 @@ export class PressMenu {
       if (typeof ngDevMode !== 'undefined' && ngDevMode && !warned) {
         warned = true;
         console.warn(
-          '[menu] on a <pressable>: this host draws no menu on a press yet (macOS and Linux ' +
-            'do), so the press fires (press) instead.',
+          '[menu] on a <pressable>: this host draws no menu on a press yet (macOS, Linux and ' +
+            'Android do), so the press fires (press) instead.',
         );
       }
       return false;

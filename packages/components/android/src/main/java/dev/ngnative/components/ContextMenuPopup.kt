@@ -17,11 +17,13 @@ import android.widget.FrameLayout
 import android.widget.PopupMenu
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.WritableMap
+import com.facebook.react.uimanager.IllegalViewOperationException
 import com.facebook.react.uimanager.UIManagerHelper
 import com.facebook.react.uimanager.events.Event
 
 /**
- * A `[contextMenu]` drawn as a PopupMenu at a point in the window, from the entries
+ * A `[contextMenu]` drawn as a PopupMenu at a point in the window, or a `<pressable>`'s `[menu]`
+ * drawn below its view (`showUnder`), from the entries
  * `serializeMenu` makes: labels, separators (dividers between groups, Android 9 and later),
  * submenus, inline sections, checked, disabled and destructive items, and `icon` as a drawable
  * resource's name. A PopupMenu row has no second line or tooltip, so `subtitle` is not shown.
@@ -77,29 +79,13 @@ internal object ContextMenuPopup {
         topMargin = (y - at[1]).toInt()
       },
     )
-    val popup = PopupMenu(activity, anchor, Gravity.NO_GRAVITY)
-    val ids = HashMap<Int, String>()
-    fill(activity, popup.menu, entries, ids, destructiveColour(isLight(activity)))
-    if (popup.menu.size() == 0) {
+    // Later, not while the view tree may be detaching its children.
+    val (popup, done) = popup(activity, anchor, Gravity.NO_GRAVITY, view, entries) {
+      main.post { content.removeView(anchor) }
+    } ?: run {
       content.removeView(anchor)
       return false
     }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) popup.setForceShowIcon(true)
-    popup.setOnMenuItemClickListener { item ->
-      val id = ids[item.itemId] ?: return@setOnMenuItemClickListener false
-      select(view, id)
-      true
-    }
-    // The menu goes with its view: when it unmounts, or its activity is recreated or destroyed.
-    // A submenu open in its own popup goes too.
-    val gone = closingOnDetach(popup.menu, popup::dismiss)
-    view.addOnAttachStateChangeListener(gone)
-    // Later, not while the view tree may be detaching its children.
-    val done = {
-      view.removeOnAttachStateChangeListener(gone)
-      main.post { content.removeView(anchor) }
-    }
-    popup.setOnDismissListener { done() }
     // The anchor has no place until it is laid out, so the menu waits for that.
     anchor.addOnLayoutChangeListener(
       object : View.OnLayoutChangeListener {
@@ -112,6 +98,62 @@ internal object ContextMenuPopup {
       },
     )
     return true
+  }
+
+  /**
+   * The view `resolve` finds for `tag`, or none where it has none, as for a view gone since the
+   * press: React Native's `resolveView` throws for a tag it has no view for.
+   */
+  fun viewFor(tag: Int, resolve: (Int) -> View?): View? =
+    try {
+      resolve(tag)
+    } catch (_: IllegalViewOperationException) {
+      null
+    }
+
+  /**
+   * Show `entries` below `view`, from its leading edge, as a `<pressable>`'s `[menu]` opens on a
+   * press. Whether there was a menu: none for a view not attached to `activity`'s window.
+   */
+  fun showUnder(activity: Activity, view: View, entries: List<Map<String, Any?>>): Boolean {
+    if (!view.isAttachedToWindow) return false
+    val (popup, _) = popup(activity, view, Gravity.START, view, entries) {} ?: return false
+    popup.show()
+    return true
+  }
+
+  /**
+   * A PopupMenu of `entries` at `anchor`, whose choice goes to `view`, and the function that lets
+   * go of it, which runs `release` too and runs as it is dismissed. Null where it shows no item.
+   */
+  private fun popup(
+    activity: Activity,
+    anchor: View,
+    gravity: Int,
+    view: View,
+    entries: List<Map<String, Any?>>,
+    release: () -> Unit,
+  ): Pair<PopupMenu, () -> Unit>? {
+    val popup = PopupMenu(activity, anchor, gravity)
+    val ids = HashMap<Int, String>()
+    fill(activity, popup.menu, entries, ids, destructiveColour(isLight(activity)))
+    if (popup.menu.size() == 0) return null
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) popup.setForceShowIcon(true)
+    popup.setOnMenuItemClickListener { item ->
+      val id = ids[item.itemId] ?: return@setOnMenuItemClickListener false
+      select(view, id)
+      true
+    }
+    // The menu goes with its view: when it unmounts, or its activity is recreated or destroyed.
+    // A submenu open in its own popup goes too.
+    val gone = closingOnDetach(popup.menu, popup::dismiss)
+    view.addOnAttachStateChangeListener(gone)
+    val done = {
+      view.removeOnAttachStateChangeListener(gone)
+      release()
+    }
+    popup.setOnDismissListener { done() }
+    return popup to done
   }
 
   /**
