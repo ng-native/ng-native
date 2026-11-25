@@ -50,6 +50,21 @@ CoralogixRum.init(options);
 app's `.env`, and `coralogixDomain` the region your Coralogix account is in. The key is safe to ship
 in the app, as it can only send data.
 
+The app mounts without waiting for `init`, so a request it sends before the SDK has started carries
+no `traceparent` header. To trace those too, mount in the runnable once the promise settles, at the
+cost of a later first frame. `finally` mounts the app whether `init` resolves or rejects:
+
+```ts
+const started = CoralogixRum.init(options);
+
+AppRegistry.registerRunnable('main', ({ rootTag }) => {
+  started.finally(() => {
+    const app = mount(Number(rootTag), App, getFabricUIManager(), mountOptions());
+    // The rest of the runnable, as before
+  });
+});
+```
+
 On iOS the SDK reports every request the app makes. On Android it reports `fetch` calls, but not
 `HttpClient` from `provideNativeHttpClient()`, which sends over `XMLHttpRequest`, unless the app
 applies the SDK's optional Gradle plugin; its
