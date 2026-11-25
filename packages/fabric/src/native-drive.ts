@@ -284,11 +284,18 @@ export class NativeScrollDriver {
   }
 
   /**
-   * Note a graph connected to a view, for `held`, and tell whoever asked of it. The graph that
-   * set the view's values lets go: the one that plays it sets them from here.
+   * Before a graph that plays or drives a view is connected, whatever else sets the view's props
+   * lets go: the painter where it paints one of `keys`, and the graph that set its values, as the
+   * one that plays it sets them from here. Native keeps one graph a view on React Native's C++
+   * animated module, and one connected before another is let go would be dropped with it.
    */
-  private hold(view: object, viewTag: number, props: number, keys: readonly string[]): void {
+  private take(view: object, keys: readonly string[]): void {
+    this.taking?.(view, keys);
     this.forget(view);
+  }
+
+  /** Note a graph connected to a view, for `held`, and tell whoever asked of it. */
+  private hold(view: object, viewTag: number, props: number, keys: readonly string[]): void {
     const graphs = this.live.get(view) ?? new Map<number, readonly string[]>();
     this.live.set(view, graphs.set(props, keys));
     this.touched?.(view, viewTag, keys);
@@ -327,7 +334,7 @@ export class NativeScrollDriver {
       if (viewTag === null || sourceTag === null) return false;
       drive.viewTag = viewTag;
       const offset = this.offset(source, sourceTag, feed, key);
-      this.taking?.(view, ['transform']);
+      this.take(view, ['transform']);
       drive.nodes = this.build(offset.value, viewTag, property, drive);
       this.hold(view, viewTag, drive.nodes.props, ['transform']);
       this.place(offset.value, drive);
@@ -340,7 +347,7 @@ export class NativeScrollDriver {
       this.tearDown(drive.nodes, drive.viewTag);
       this.letGo(view, drive.nodes.props);
       const offset = this.offsets.get(source)!.get(key)!;
-      this.taking?.(view, ['transform']);
+      this.take(view, ['transform']);
       drive.nodes = this.build(offset.value, drive.viewTag, property, drive);
       this.hold(view, drive.viewTag, drive.nodes.props, ['transform']);
       this.place(offset.value, drive);
@@ -596,7 +603,7 @@ export class NativeScrollDriver {
     const props = this.native.generateNewNodeTag();
     API.createAnimatedNode(props, { type: 'props', props: { style: styleTag } });
     API.connectAnimatedNodes(styleTag, props);
-    this.taking?.(view, channelKeys(channels));
+    this.take(view, channelKeys(channels));
     API.connectAnimatedNodeToView(props, viewTag);
     this.hold(view, viewTag, props, channelKeys(channels));
     return { props, nodes: [props, styleTag, ...made.reverse()] };

@@ -504,6 +504,28 @@ describe('a painted view a scroll drive starts on', () => {
   });
 });
 
+describe('a view a scroll drive has let go, set on native, that a drive starts on again', () => {
+  it('lets the setter go before the drive is connected, as one graph a view is all native keeps', () => {
+    const s = scene(BAR);
+    const scroll = s.engine.createElement('scroll-view');
+    s.engine.appendChild(s.engine.root, scroll);
+    const first = s.engine.driveByScroll(s.view, scroll, 'y', pinnedRange(0))!;
+    s.engine.commit();
+    first.stop();
+    // Once, not in a run: the setter's graph sets it, as no commit can.
+    s.tick(5000, move(10));
+    const from = s.rec.calls.length;
+    s.engine.driveByScroll(s.view, scroll, 'y', pinnedRange(0));
+    s.engine.commit();
+    const tag = s.engine.tagOf(s.view);
+    const order = s.rec.calls
+      .slice(from)
+      .filter(([name, , view]) => (name === 'toView' || name === 'fromView') && view === tag)
+      .map(([name]) => name);
+    assert.deepEqual(order, ['fromView', 'toView']);
+  });
+});
+
 describe('a view a scroll drive has let go, moved twice in a run', () => {
   it('paints the change that hands it to the painter, which a commit cannot change', () => {
     const s = scene(BAR);
