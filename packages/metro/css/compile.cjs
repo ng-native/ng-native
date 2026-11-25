@@ -52,7 +52,7 @@ const {
   AXIS_SHORTHANDS,
 } = require('./properties.cjs');
 const { deferGradient, isTilePlaced, tiledBy, GRADIENTS } = require('./gradients.cjs');
-const { calcWithTokens, fits, motionWithTokens } = require('./token-arithmetic.cjs');
+const { calcWithTokens, fits, mixedTypes, motionWithTokens } = require('./token-arithmetic.cjs');
 const { filter, undrawnOnIos, undrawnOnMacos } = require('./filters.cjs');
 const { expandShorthand } = require('./shorthands.cjs');
 
@@ -456,8 +456,8 @@ function deferCalcToken(parts, context) {
   for (const kind of ['length', 'number']) {
     try {
       const slot = /** @type {any} */ (calcWithTokens(parts, kind, context));
-      // One whose terms cannot come to this kind is not read as it: no width from `1px + 2`.
-      if (slot?.__calc && !slot.__calc.invalid) markers.push(slot.__calc);
+      // One whose terms cannot come to this kind is refused for it: no width from `1px + 2`.
+      if (slot?.__calc) markers.push(slot.__calc);
     } catch (error) {
       if (!(error instanceof CssUnsupported)) throw error;
     }
@@ -687,8 +687,7 @@ function deferVar(value, context) {
   if (varPart?.type !== 'var') {
     // More than one token in a calc(), worked out on device as a tree.
     const tokened = calcWithTokens(parts, kindOf(property), context);
-    if (tokened !== null)
-      return { props: propsFor(property), within: agreeing(tokened, property, context) };
+    if (tokened !== null) return { props: propsFor(property), within: tokened };
     throw new CssUnsupported(
       `${context}: '${property}' mixes var() with other values, which needs a parser on device. ` +
         `calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms ` +
@@ -720,7 +719,7 @@ function deferVar(value, context) {
       `${context}: arithmetic on var() only makes sense for a length, and '${property}' is not`,
     );
   }
-  if (arithmetic && !fits(parts[0], kind)) throw mixedTypes(property, context);
+  if (arithmetic && !fits(parts[0], kind)) throw mixedTypes(context);
 
   return {
     props: propsFor(property),
@@ -731,23 +730,6 @@ function deferVar(value, context) {
     ...(property in UNSET ? { unset: UNSET[property] } : {}),
     ...(property === 'background' ? backgroundLayers() : {}),
   };
-}
-
-/**
- * A math function whose terms do not agree in type, `calc(var(--t) + 2)` for a width, is invalid
- * whatever its tokens hold: refused with a warning, as a value written out of the wrong type is.
- * A token's own math is left to the device, which reads no length from it.
- */
-const mixedTypes = (property, context) =>
-  new CssUnsupported(
-    `${context}: '${property}' adds or compares values of different types in a math function, ` +
-      `such as a number and a length, which CSS finds invalid whatever the tokens in it hold`,
-  );
-
-/** A `calc()` of tokens, refused where its terms cannot agree. See `mixedTypes`. */
-function agreeing(tokened, property, context) {
-  if (tokened?.__calc?.invalid) throw mixedTypes(property, context);
-  return tokened;
 }
 
 /**

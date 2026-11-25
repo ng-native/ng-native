@@ -188,15 +188,20 @@ const mathTypes: MathReader<MathType> = {
     if (op === '*') return productType(a, b);
     if (op === '/') return quotientType(a, b);
     if (a === 'any') return b;
-    return b === 'any' || a === b ? a : null;
+    if (b === 'any' || a === b) return a;
+    // A length and a percentage add up to a length-percentage, which a length slot takes.
+    return [a, b].sort().join('+') === 'length+percentage' ? 'length' : null;
   },
 };
 
-/** A number scales anything, and a token may be a number or the dimension that makes it right. */
+/**
+ * A number scales anything, and a token may be a number or the dimension that makes it right.
+ * ponytail: two dimensions, `1px * 2px`, are unknown, since a later quotient can cancel them.
+ */
 function productType(a: MathType, b: MathType): MathType {
   if (b === 'number') return a;
   if (a === 'number' || a === 'any') return b;
-  return b === 'any' ? a : null;
+  return b === 'any' ? a : 'any';
 }
 
 /** A dimension divided by the same one is a number; nothing is divided by a dimension it is not. */

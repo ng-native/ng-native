@@ -141,9 +141,7 @@ const unreadable = (context, why) =>
  * What a math function comes to as CSS types it: `number`, `length`, `percentage`, `angle` or
  * `time`; `any` for a token, which may hold any of them; or null where its terms do not agree,
  * which CSS finds invalid however its tokens are set: `1px + 2`, `var(--t) + 2` in a length.
- *
- * ponytail: a product of two dimensions (`1px * 1px`) is taken as invalid, which CSS's typed
- * arithmetic only allows when a quotient cancels it again.
+ * Read with the grouping and precedence `arithmeticTree` reads the value with.
  */
 function typeOf(term) {
   const name = term?.type === 'function' ? term.value?.name?.toLowerCase() : undefined;
@@ -165,48 +163,53 @@ const LEAF_TYPES = {
   percentage: 'percentage',
 };
 
-/** The operator a term is, `+ - * /`, or null. */
-const delimiter = (term) =>
-  term?.type === 'token' && term.value?.type === 'delim' ? term.value.value : null;
-
-/** A sum's type: each of its products, which have to agree. */
+/** A sum's type, read as a tree. One that does not read as arithmetic is left as unknown. */
 function typeOfSum(terms) {
-  const summands = [];
-  let product;
-  let dividing = false;
-  for (const term of terms) {
-    const op = delimiter(term);
-    if (op === '+' || op === '-') {
-      summands.push(product);
-      product = undefined;
-    } else if (op === '*' || op === '/') {
-      dividing = op === '/';
-    } else {
-      product = product === undefined ? typeOf(term) : multiplied(product, typeOf(term), dividing);
-    }
+  try {
+    const tree = arithmeticTree(terms, 0, typeOf, () => new Error('not arithmetic'));
+    return tree.next === terms.length ? typeOfTree(tree.value) : 'any';
+  } catch {
+    return 'any';
   }
-  return [...summands, product].reduce(added);
 }
 
-/** Two summands' type: the same, or a token's, which takes the other's. */
+/** A tree of types, `[op, a, b]`, combined from its leaves. */
+function typeOfTree(node) {
+  if (!Array.isArray(node)) return node;
+  const [op, a, b] = node;
+  const left = typeOfTree(a);
+  const right = typeOfTree(b);
+  if (op === '*') return multiplied(left, right, false);
+  if (op === '/') return multiplied(left, right, true);
+  return added(left, right);
+}
+
+/**
+ * Two summands' type: the same, or a token's, which takes the other's. A length and a percentage
+ * add up to a length-percentage, which a length slot takes.
+ */
 function added(a, b) {
   if (a === null || b === null || a === undefined || b === undefined) return null;
   if (a === 'any') return b;
   if (b === 'any' || a === b) return a;
-  return null;
+  const pair = [a, b].sort().join('+');
+  return pair === 'length+percentage' ? 'length' : null;
 }
 
 /**
  * A product's type: a number scales anything, and a token may be a number or the dimension that
  * makes the product right. A quotient of a dimension by the same one is a number, and nothing is
  * divided by a dimension it is not.
+ *
+ * ponytail: a product of two dimensions, `1px * 2px`, is unknown, since a later quotient can
+ * cancel it (`1px * 2px / 1px`); a sum that keeps it is not refused here, as before.
  */
 function multiplied(a, b, dividing) {
   if (a === null || b === null) return null;
   if (b === 'number') return a;
   if (dividing) return a === 'any' || b === 'any' ? 'any' : a === b ? 'number' : null;
   if (a === 'number' || a === 'any') return b === 'any' ? 'any' : b;
-  return b === 'any' ? a : null;
+  return b === 'any' ? a : 'any';
 }
 
 /** Whether a math function's type can be what a slot of `kind` takes, for some token. */
@@ -217,6 +220,16 @@ function fits(term, kind) {
   if (kind === 'length') return type === 'length' || type === 'percentage';
   return type === kind || (kind === 'number' && type === 'percentage');
 }
+
+/**
+ * A math function whose terms do not agree in type, `calc(var(--t) + 2)` for a width, is invalid
+ * whatever its tokens hold: refused with a warning, as a value written out of the wrong type is.
+ */
+const mixedTypes = (context) =>
+  new CssUnsupported(
+    `${context}: a math function adds or compares values of different types, such as a number ` +
+      `and a length, which CSS finds invalid whatever the tokens in it hold`,
+  );
 
 /** A slot's value for the device: settled if it has no token in it, a `__calc` marker if it has. */
 function slot(term, kind, context) {
@@ -236,7 +249,7 @@ function calcWithTokens(parts, kind, context) {
     return null;
   }
   if (kind !== 'length' && kind !== 'number') return null;
-  if (!fits(written[0], kind)) return { __calc: { expression: 0, kind, invalid: true } };
+  if (!fits(written[0], kind)) throw mixedTypes(context);
   return slot(written[0], kind, context);
 }
 
@@ -335,4 +348,4 @@ function motionWithTokens(property, parts, context) {
   }
 }
 
-module.exports = { calcWithTokens, fits, mentionsVar, motionWithTokens, slot };
+module.exports = { calcWithTokens, fits, mentionsVar, mixedTypes, motionWithTokens, slot };
