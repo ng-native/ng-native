@@ -54,13 +54,13 @@ export class Clip {
 ```
 
 `<expo-video>` has the view functions `VideoView`'s ref has, on iOS and Android:
-`enterFullscreen()`, `exitFullscreen()`, `startPictureInPicture()` and `stopPictureInPicture()`, each a promise. Reach
-the element with `viewChild(ExpoVideo)`. Each does nothing before the view is on screen, and on
-macOS, where the desktop host's view has no functions to call. On Android the app's JavaScript is
-paused while the video is full screen, so `exitFullscreen()` is for a native listener there, as with
-`VideoView`. Picture in picture needs `allowsPictureInPicture` and the config plugin's
-`supportsPictureInPicture`, and on Android a device that supports it. `stopPictureInPicture()` is
-iOS only: `expo-video` rejects it on Android.
+`enterFullscreen()`, `exitFullscreen()`, `startPictureInPicture()` and `stopPictureInPicture()`,
+each a promise. Reach the element with `viewChild(ExpoVideo)`. Each does nothing before the view is
+on screen, and on macOS, where the desktop host's view has no functions to call. On Android the
+app's JavaScript is paused while the video is full screen, so `exitFullscreen()` is for a native
+listener there, as with `VideoView`. Picture in picture needs `allowsPictureInPicture` and the
+config plugin's `supportsPictureInPicture`, and on Android a device that supports it.
+`stopPictureInPicture()` is iOS only: `expo-video` rejects it on Android.
 
 ## `videoPlayer(source, options?)` and `audioPlayer(source, options?)`
 
