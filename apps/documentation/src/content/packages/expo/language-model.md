@@ -317,6 +317,46 @@ sent to Apple, Google or anyone else, there is no account or key, and it works o
 the reason to reach for it for personal text - notes, messages, journal entries - that should not
 go to a server.
 
+## In a test
+
+A test runs in Node, where no model can load. `fakeLanguageModel()` from `@ng-native/testing`
+stands in for the native side through `LanguageModel.SOURCE`, and answers each turn with the next
+reply the test gives it. A turn with no reply given yet waits for one, so a test can see the
+interface while the model is still thinking:
+
+```ts
+import { LanguageModel } from '@ng-native/expo/language-model';
+import { fakeLanguageModel, render, screen, userEvent } from '@ng-native/testing';
+import { expect, test } from 'vitest';
+
+test('answers a question with what a tool looked up', async () => {
+  const model = fakeLanguageModel();
+  await render(Assistant, { providers: [{ provide: LanguageModel.SOURCE, useValue: model }] });
+
+  await userEvent.type(screen.getByPlaceholderText('Ask about your records'), 'What is due?');
+  await userEvent.press(screen.getByText('Send'));
+
+  model.reply({
+    toolCalls: [{ tool: 'listItemsDue', arguments: { from: '2026-11-01', to: '2026-11-30' } }],
+    text: 'Rent is due on the 28th.',
+  });
+  expect(await screen.findByText('Rent is due on the 28th.')).toBeTruthy();
+});
+```
+
+A reply is one of:
+
+- a string, the whole answer;
+- `{ toolCalls, text }`, the tool calls the model makes, each answered by the session's handler
+  for it, and then the answer. A call that fails is reported to the model, which answers on;
+- `{ error, code }`, a failure with the native `code`, such as `ERR_CONTEXT_WINDOW_EXCEEDED`, which
+  a session turns into a `LanguageModelContextExceededError`.
+
+`generateObject()` parses its reply as JSON, so give it `JSON.stringify(value)`. `requests` lists
+every turn asked, with its prompt and the configuration of its session (instructions, schema and
+tool declarations), and `setAvailability()` changes what the platform reports, so a test can cover
+a model that is not ready.
+
 ## Limits
 
 - **A small model.** Foundation Models and Gemini Nano are a few billion parameters: good at

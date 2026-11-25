@@ -44,6 +44,13 @@ export {
 } from './desktop-fakes.ts';
 export { injectService, type InjectServiceOptions } from './inject-service.ts';
 export { memoryDatabase, type MemoryDatabase } from './memory-database.ts';
+export {
+  fakeLanguageModel,
+  type FakeLanguageModel,
+  type FakeReply,
+  type FakeRequest,
+  type FakeToolCall,
+} from './fake-language-model.ts';
 export { compileCss, type CompileCssOptions } from './compile-css.ts';
 export type { BoundQueries, ByRoleOptions, Matcher, TextMatchOptions } from './queries.ts';
 export { waitFor, type WaitForOptions } from './wait-for.ts';
