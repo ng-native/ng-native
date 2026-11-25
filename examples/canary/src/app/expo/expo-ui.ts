@@ -294,8 +294,8 @@ import { page } from '../screen-styles.ts';
         @if (android) {
           <x-example
             title="Date and time dialogs"
-            note="Android only. Each dialog shows while it is rendered and closes when the app removes it. A pick here opens the time dialog next, and both write one date."
-            code='<ui-date-picker-dialog [(value)]="when" (dateSelected)="..." (dismissRequest)="..." />'
+            note="Android only. Each dialog shows while it is rendered and closes when the app removes it. A pick here opens the time dialog next, on the same day in any time zone."
+            code='<ui-date-picker-dialog [initialDate]="day()" (dateSelected)="..." (dismissRequest)="..." />'
           >
             <pressable (press)="dialog.set('date')">
               <text class="body">When: {{ when()?.toLocaleString() ?? 'not set' }}</text>
@@ -307,8 +307,8 @@ import { page } from '../screen-styles.ts';
               @if (dialog() === 'date') {
                 <ui-date-picker-dialog
                   confirmButtonLabel="Next"
-                  [(value)]="when"
-                  (dateSelected)="dialog.set('time')"
+                  [initialDate]="whenDay()"
+                  (dateSelected)="pickDay($event.nativeEvent.date)"
                   (dismissRequest)="dialog.set(null)"
                 />
               }
@@ -503,9 +503,16 @@ export class ExpoUiPage {
   protected readonly dialog = signal<'date' | 'time' | 'range' | null>(null);
   protected readonly when = signal<Date | null>(null);
   protected readonly stay = signal<UiDateRange | null>(null);
+  /** The local day of `when`, as the date dialog takes a day: midnight UTC. */
+  protected readonly whenDay = computed(() => {
+    const when = this.when();
+    return when && Date.UTC(when.getFullYear(), when.getMonth(), when.getDate());
+  });
+  /** A range dialog's days are midnight UTC, so they are shown in UTC to stay the days picked. */
   protected readonly stayText = computed(() => {
     const stay = this.stay();
-    return stay ? stay.start.toDateString() + ' to ' + stay.end.toDateString() : 'not set';
+    const day = (date: Date) => date.toLocaleDateString(undefined, { timeZone: 'UTC' });
+    return stay ? day(stay.start) + ' to ' + day(stay.end) : 'not set';
   });
   protected readonly on = signal(true);
   protected readonly level = signal(0.5);
@@ -570,4 +577,14 @@ export class ExpoUiPage {
   protected readonly hostFill = {};
   protected readonly hostForm = { minHeight: 180 };
   protected readonly hostChart = { height: 180 };
+
+  /**
+   * The date dialog's day is midnight UTC, which is the evening before west of UTC. The time dialog
+   * keeps the local day it opens on, so it opens on the picked day at local midnight.
+   */
+  protected pickDay(date: number): void {
+    const day = new Date(date);
+    this.when.set(new Date(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()));
+    this.dialog.set('time');
+  }
 }

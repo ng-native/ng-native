@@ -162,15 +162,19 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   remove it on `(dateSelected)` and `(dismissRequest)`, as the dialog does not close itself. Each is
   a Signal Forms field like `UiDatePicker`: it opens on `initialDate`, or else on its `value`, and a
   confirm writes the pick back as a `Date` and emits `touch`; a dismissal writes nothing. The date
-  dialog reports the picked day at midnight UTC, and takes `variant` (`'picker'` or `'input'`) and
-  `selectableDates`, an optional `start` and `end`. The time dialog keeps the day it opens on, or
-  today, and takes `is24Hour`. Both take `confirmButtonLabel`, `dismissButtonLabel`, `color`, and
-  `elementColors`, a colour per part of the calendar or clock that wins over `color` for that part.
-  The date dialog also takes `showVariantToggle`, and with `@expo/ui` 58 or later `showTitle` and
-  `showHeadline`.
+  dialog reports the picked day at midnight UTC, which west of UTC is the evening before in local
+  time, so read its day with `getUTCFullYear()`, `getUTCMonth()` and `getUTCDate()`. It takes
+  `variant` (`'picker'` or `'input'`) and `selectableDates`, an optional `start` and `end`. The
+  time dialog keeps the local day it opens on, or today, and takes `is24Hour`: to ask for a time
+  after a date, open it on the picked day at local midnight,
+  `new Date(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate())`. Both take
+  `confirmButtonLabel`, `dismissButtonLabel`, `color`, and `elementColors`, a colour per part of
+  the calendar or clock that wins over `color` for that part. The date dialog also takes
+  `showVariantToggle`, and with `@expo/ui` 58 or later `showTitle` and `showHeadline`.
 - **`UiDateRangePickerDialog`** - Android only, with `@expo/ui` 58 or later: Compose's date range
   picker dialog, shown and removed the same way, on `(dateRangeSelected)` and `(dismissRequest)`.
-  Its `value` is a `UiDateRange`, a `start` and an `end` `Date` at midnight UTC, or null. It opens
+  Its `value` is a `UiDateRange`, a `start` and an `end` `Date` at midnight UTC, or null, so show
+  its days in UTC, with `toLocaleDateString(undefined, { timeZone: 'UTC' })`. It opens
   on `initialStartDate` and `initialEndDate`, or else on its `value`, and its confirm button waits
   for both ends. It takes the date dialog's other inputs.
 - **`UiPicker`** - a SwiftUI `Picker` on iOS, Compose's segmented buttons or dropdown menu on
