@@ -39,6 +39,31 @@ describe('sticky levels on rows that size themselves, placed from JavaScript', (
     assert.equal(drawn(15), top(15), 'the entries scroll under them, at their own places');
   });
 
+  it('pins them where a negative rowGap makes the rows rendered ahead longer than those above', async () => {
+    // Day 2's entries, rows 3 to 6, shorter than the gap: the year, the month and day 8, rendered
+    // ahead of the window, come to more than every row before it. Day 8's own are tall, so day 14
+    // is far below and pushes nothing off.
+    const gap = -20;
+    const short = new Map([
+      ...[3, 4, 5, 6].map((index) => [index, 5] as const),
+      ...[9, 10, 11, 12, 13].map((index) => [index, 100] as const),
+    ]);
+    const at = (index: number) => {
+      let sum = 0;
+      for (let k = 0; k < index; k++) sum += (short.get(k) ?? size(k)) + gap;
+      return sum;
+    };
+    const { drawn, placed, measure, scroll, window } = await boot({}, gap);
+    for (const [index, height] of short) await measure(index, height);
+    const y = at(9) + 5;
+    await scroll(y);
+    assert.deepEqual([0, 1, 8].map(drawn), [y, y + 50, y + 90]);
+    const after = window()
+      .map((r) => r.index)
+      .filter((index) => index > 8);
+    assert.deepEqual(after.map(placed), after.map(at), 'the rows after them at their own places');
+  });
+
   it('renders each pinned row the window has left behind', async () => {
     const { shown, scroll } = await boot();
     await scroll(650);

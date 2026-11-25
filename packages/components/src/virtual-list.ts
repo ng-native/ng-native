@@ -1009,14 +1009,22 @@ export class VirtualList<T> extends ScrollViewProps {
    */
   protected readonly spacer = computed(() => {
     const span = this.span();
-    let lead = span ? this.topOf(span.first) : 0;
-    const ahead = this.rendersAhead();
-    if (span && ahead.length > 0) {
-      if (this.sticky.native) lead = this.topOf(ahead[0]!);
-      else for (const index of ahead) lead -= this.heightOf(index) + this.rowGap();
-    }
-    return this.horizontal() ? { width: Math.max(0, lead) } : { height: Math.max(0, lead) };
+    const lead = span ? Math.max(0, this.flowStart(span.first, this.rendersAhead())) : 0;
+    return this.horizontal() ? { width: lead } : { height: lead };
   });
+
+  /**
+   * Where the first row rendered in flow starts: `first`'s place, less each row rendered ahead of
+   * it, or where native moves them, the first of those rows' own place. Less than nothing where a
+   * negative gap overlaps the rows not rendered, which the spacer cannot be: the first row takes
+   * the rest as a margin (`rowsFor`).
+   */
+  private flowStart(first: number, ahead: readonly number[]): number {
+    if (this.sticky.native && ahead.length > 0) return this.topOf(ahead[0]!);
+    let start = this.topOf(first);
+    for (const index of ahead) start -= this.heightOf(index) + this.rowGap();
+    return start;
+  }
 
   /**
    * The rows rendered ahead of the window: the pinned rows it has left behind, and where native
@@ -1047,8 +1055,8 @@ export class VirtualList<T> extends ScrollViewProps {
     const ahead = this.rendersAhead();
     this.releaseRecycled(first, last, ahead);
     // Where flow puts each row ahead of the window, where JavaScript moves the pinned ones.
-    let at = this.topOf(first);
-    for (const index of ahead) at -= this.heightOf(index) + this.rowGap();
+    const start = this.flowStart(first, ahead);
+    let at = start;
     // A pinned row is on screen even when its own place in the list is not, which is the whole
     // point of it, so it is rendered whether or not the window reaches that far.
     for (const index of ahead) {
@@ -1085,7 +1093,16 @@ export class VirtualList<T> extends ScrollViewProps {
     if (ahead.length > 0 && this.sticky.native && this.measuring()) {
       this.placeAhead(rows, ahead.length + 1, pinned);
     }
+    if (start < 0) this.startBefore(rows, start);
     return rows;
+  }
+
+  /** Start the first row in flow at `start`, below zero, where the spacer cannot reach. */
+  private startBefore(rows: VirtualRow<T>[], start: number): void {
+    const [row] = rows;
+    if (!row || !this.measuring()) return;
+    const margin = this.horizontal() ? 'marginLeft' : 'marginTop';
+    rows[0] = this.hold({ ...row, style: { ...row.style, [margin]: start } });
   }
 
   /**
