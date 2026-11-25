@@ -160,11 +160,11 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
 - **`UiDatePickerDialog`** and **`UiTimePickerDialog`** - Android only: Compose's date and time
   picker dialogs, shown while they are rendered. Show one behind an `@if` inside a `<ui-host>`, and
   remove it on `(dateSelected)` and `(dismissRequest)`, as the dialog does not close itself. Each is
-  a Signal Forms field like `UiDatePicker`: it opens on its `value` and a confirm writes the pick
-  back as a `Date` and emits `touch`; a dismissal writes nothing. The date dialog reports the
-  picked day at midnight UTC, and takes `variant` (`'picker'` or `'input'`) and `selectableDates`,
-  an optional `start` and `end`. The time dialog keeps `value`'s day, or today, and takes
-  `is24Hour`. Both take `confirmButtonLabel`, `dismissButtonLabel` and `color`.
+  a Signal Forms field like `UiDatePicker`: it opens on `initialDate`, or else on its `value`, and a
+  confirm writes the pick back as a `Date` and emits `touch`; a dismissal writes nothing. The date
+  dialog reports the picked day at midnight UTC, and takes `variant` (`'picker'` or `'input'`) and
+  `selectableDates`, an optional `start` and `end`. The time dialog keeps the day it opens on, or
+  today, and takes `is24Hour`. Both take `confirmButtonLabel`, `dismissButtonLabel` and `color`.
 - **`UiPicker`** - a SwiftUI `Picker` on iOS, Compose's segmented buttons or dropdown menu on
   Android, and a Signal Forms field. `options` draws the choices;
   see [Choices: `UiPicker`](#choices-uipicker) below.

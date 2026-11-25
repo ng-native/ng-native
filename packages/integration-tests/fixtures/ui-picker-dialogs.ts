@@ -19,6 +19,7 @@ import {
           confirmButtonLabel="Set"
           dismissButtonLabel="Back"
           color="#ff0000"
+          [initialDate]="opensOn()"
           [selectableDates]="range()"
           [formField]="f.start"
           (dateSelected)="open.set(null)"
@@ -29,6 +30,7 @@ import {
         <ui-time-picker-dialog
           nativeID="time"
           [is24Hour]="false"
+          [initialDate]="opensOn()"
           [formField]="f.end"
           (dateSelected)="open.set(null)"
           (dismissRequest)="open.set(null)"
@@ -38,6 +40,7 @@ import {
   `,
 })
 export class UiPickerDialogs {
+  readonly opensOn = signal<string | undefined>(undefined);
   readonly range = signal<{ start: string } | undefined>({ start: '2026-01-01T00:00:00.000Z' });
   readonly open = signal<'date' | 'time' | null>('date');
   readonly data = signal<{ start: Date | null; end: Date | null }>({

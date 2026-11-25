@@ -11,6 +11,7 @@ import { registerExpoUiViews } from '@ng-native/expo';
 import { compileFixture } from './compile.ts';
 
 interface Dialogs {
+  opensOn: WritableSignal<string | undefined>;
   range: WritableSignal<{ start: string } | undefined>;
   open: WritableSignal<'date' | 'time' | null>;
   data: WritableSignal<{ start: Date | null; end: Date | null }>;
@@ -44,6 +45,22 @@ describe('a date picker dialog', () => {
     assert.equal(props['confirmButtonLabel'], 'Set');
     assert.equal(props['dismissButtonLabel'], 'Back');
     assert.notEqual(props['color'] ?? null, null, 'the colour reaches Compose');
+  });
+
+  it('opens on initialDate in place of the field s date, and on the field s once it is unset', async () => {
+    const instance = await boot();
+    instance.opensOn.set('2026-03-04T00:00:00.000Z');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(
+      screen.getByTestId('date').props['initialDate'],
+      Date.parse('2026-03-04T00:00:00.000Z'),
+    );
+    instance.opensOn.set(undefined);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(
+      screen.getByTestId('date').props['initialDate'],
+      Date.parse('2026-10-01T00:00:00.000Z'),
+    );
   });
 
   it('lets Compose take any date again once the range is unset', async () => {
@@ -80,6 +97,12 @@ describe('a time picker dialog', () => {
     const props = screen.getByTestId('time').props;
     assert.equal(props['initialDate'] ?? null, null);
     assert.equal(props['is24Hour'], false);
+    instance.opensOn.set('2026-03-04T07:15:00.000Z');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(
+      screen.getByTestId('time').props['initialDate'],
+      Date.parse('2026-03-04T07:15:00.000Z'),
+    );
   });
 
   it('writes the confirmed time into the form', async () => {

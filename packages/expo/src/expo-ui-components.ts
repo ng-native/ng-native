@@ -735,7 +735,7 @@ function reportDialogPicks(value: ModelSignal<Date | null>, touch: OutputEmitter
   selector: 'ui-date-picker-dialog',
   template: '',
   host: {
-    '[initialDate]': 'initialDate()',
+    '[initialDate]': 'resolvedInitialDate()',
     '[variant]': 'variant()',
     '[selectableDates]': 'resolvedSelectableDates()',
     '[confirmButtonLabel]': 'confirmButtonLabel()',
@@ -745,6 +745,8 @@ function reportDialogPicks(value: ModelSignal<Date | null>, touch: OutputEmitter
 })
 export class UiDatePickerDialog {
   protected readonly nativeView = nativeView();
+  /** What the dialog opens on in place of `value`, for a dialog bound without a form. */
+  readonly initialDate = input(undefined, { transform: milliseconds });
   readonly variant = input<'picker' | 'input'>();
   readonly selectableDates = input<{ readonly start?: UiDate; readonly end?: UiDate }>();
   readonly confirmButtonLabel = input<string>();
@@ -758,7 +760,9 @@ export class UiDatePickerDialog {
   /** Cancel, Back or a tap outside: the dialog should be removed. */
   readonly dismissRequest = output<NativeSyntheticEvent<Record<string, never>>>();
 
-  protected readonly initialDate = computed(() => this.value()?.getTime() ?? null);
+  protected readonly resolvedInitialDate = computed(
+    () => this.initialDate() ?? this.value()?.getTime() ?? null,
+  );
   protected readonly resolvedSelectableDates = computed(() => {
     const range = this.selectableDates();
     return (
@@ -780,7 +784,7 @@ export class UiDatePickerDialog {
   selector: 'ui-time-picker-dialog',
   template: '',
   host: {
-    '[initialDate]': 'initialDate()',
+    '[initialDate]': 'resolvedInitialDate()',
     '[is24Hour]': 'is24Hour()',
     '[confirmButtonLabel]': 'confirmButtonLabel()',
     '[dismissButtonLabel]': 'dismissButtonLabel()',
@@ -789,6 +793,8 @@ export class UiDatePickerDialog {
 })
 export class UiTimePickerDialog {
   protected readonly nativeView = nativeView();
+  /** What the dialog opens on in place of `value`, for a dialog bound without a form. */
+  readonly initialDate = input(undefined, { transform: milliseconds });
   readonly is24Hour = input<boolean>(undefined, { transform: optionalBoolean });
   readonly confirmButtonLabel = input<string>();
   readonly dismissButtonLabel = input<string>();
@@ -801,7 +807,9 @@ export class UiTimePickerDialog {
   /** Cancel, Back or a tap outside: the dialog should be removed. */
   readonly dismissRequest = output<NativeSyntheticEvent<Record<string, never>>>();
 
-  protected readonly initialDate = computed(() => this.value()?.getTime() ?? null);
+  protected readonly resolvedInitialDate = computed(
+    () => this.initialDate() ?? this.value()?.getTime() ?? null,
+  );
 
   constructor() {
     reportDialogPicks(this.value, this.touch);
