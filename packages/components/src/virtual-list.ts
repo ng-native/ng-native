@@ -23,6 +23,7 @@ import {
   type StaticTransform,
   nativePlatform,
 } from '@ng-native/fabric';
+import { IN_FORM_SHEET } from '@ng-native/device';
 import { HeightIndex } from './height-index.ts';
 import { type KeyboardShouldPersistTaps, dismissKeyboardOnTap } from './keyboard-taps.ts';
 import { RefreshControl } from './refresh-control.ts';
@@ -407,10 +408,11 @@ export class VirtualList<T> extends ScrollViewProps {
 
   protected readonly separator = contentChild<VirtualListSeparator<T>>(VirtualListSeparator);
   private readonly refreshControl = contentChild(RefreshControl);
+  private readonly inSheet = inject(IN_FORM_SHEET);
 
-  /** See ScrollView: inside Android's swipe layout the list must see a drag first. */
+  /** See ScrollView: inside Android's swipe layout or a form sheet the list must see a drag first. */
   protected readonly nestedScroll = computed(() =>
-    nativePlatform() === 'android' && this.refreshControl() ? true : undefined,
+    nativePlatform() === 'android' && (this.inSheet || this.refreshControl()) ? true : undefined,
   );
 
   /** Viewports filled past the overscan, before and after the visible rows in index order. */

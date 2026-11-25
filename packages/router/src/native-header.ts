@@ -35,7 +35,7 @@ import {
   inject,
   input,
 } from '@angular/core';
-import { ColorScheme, OS_VERSION, SCREEN_IN_FRONT } from '@ng-native/device';
+import { ColorScheme, IN_FORM_SHEET, OS_VERSION, SCREEN_IN_FRONT } from '@ng-native/device';
 import { IN_TAB } from './in-tab.ts';
 import { NATIVE_HEADER_DEFAULTS } from './native-bar-defaults.ts';
 import { NATIVE_HEADER_PALETTE } from './native-header-palette.ts';
@@ -119,7 +119,7 @@ export type HeaderInterfaceStyle = 'unspecified' | 'light' | 'dark';
     '[backButtonInCustomView]': 'backButtonInCustomView()',
     '[disableBackButtonMenu]': 'disableBackButtonMenu()',
     '[hideBackButton]': 'hideBackButton()',
-    '[consumeTopInset]': 'consumeTopInset()',
+    '[consumeTopInset]': 'consumeTopInset() ?? (android && !inSheet)',
     '[consumeLeftInset]': 'consumeLeftInset()',
     '[consumeRightInset]': 'consumeRightInset()',
     '[consumeBottomInset]': 'consumeBottomInset()',
@@ -133,6 +133,8 @@ export class NativeHeader {
 
   /** Told whether this is a bar the page starts below. See `screen-header.ts`. */
   private readonly above = inject(SCREEN_HEADER, { optional: true });
+  protected readonly inSheet = inject(IN_FORM_SHEET);
+  protected readonly android = nativePlatform() === 'android';
 
   /** The items written in this header that are native bar buttons. */
   protected readonly barButtons = inject(HeaderBarButtons);
@@ -351,10 +353,9 @@ export class NativeHeader {
    * Defaulted per platform because getting it wrong is invisible in a screenshot until you look
    * for it: react-native-screens leaves it false, Android 15 draws every app edge to edge, and
    * the result is a title behind the clock. iOS has a navigation controller doing this itself.
+   * Off in a form sheet, which never reaches the status bar.
    */
-  readonly consumeTopInset = input(nativePlatform() === 'android', {
-    transform: optionalBoolean,
-  });
+  readonly consumeTopInset = input(undefined, { transform: optionalBoolean });
   readonly consumeLeftInset = input(undefined, { transform: optionalBoolean });
   readonly consumeRightInset = input(undefined, { transform: optionalBoolean });
   readonly consumeBottomInset = input(undefined, { transform: optionalBoolean });

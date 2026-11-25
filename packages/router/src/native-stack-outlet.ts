@@ -57,6 +57,7 @@ import {
 } from '@angular/router';
 import { Location, PlatformLocation } from '@angular/common';
 import {
+  IN_FORM_SHEET,
   NavigationBar,
   OS_VERSION,
   SCREEN_IN_FRONT,
@@ -425,6 +426,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       environmentInjector,
       screen,
       inFront,
+      presentation,
       PRESENTED,
     );
     this.carrySystemBars(screen, untracked(this.systemBars));
@@ -587,7 +589,14 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     // run, so the outlet's positioning always wins whatever a page's host style says.
     const screen = this.createScreen(presentation);
     const inFront = signal(true);
-    const { ref, unbind } = this.createPage(component, route, environmentInjector, screen, inFront);
+    const { ref, unbind } = this.createPage(
+      component,
+      route,
+      environmentInjector,
+      screen,
+      inFront,
+      presentation,
+    );
     this.carrySystemBars(screen, untracked(this.systemBars));
     this.coverBar(ref, inFront, presentation);
     // The page's own host style, including any `position` or inset it declared, has now landed
@@ -656,6 +665,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     environmentInjector: EnvironmentInjector,
     screen: unknown,
     inFront: WritableSignal<boolean>,
+    presentation: ScreenPresentation | undefined,
     outlet = this.name,
   ): { ref: ComponentRef<unknown>; unbind: () => void } {
     let ref: ComponentRef<unknown> | undefined;
@@ -667,7 +677,15 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     try {
       ref = createComponent(component, {
         environmentInjector,
-        elementInjector: this.outletInjector(route, inFront, screen, header, shown, outlet),
+        elementInjector: this.outletInjector(
+          route,
+          inFront,
+          screen,
+          header,
+          shown,
+          presentation,
+          outlet,
+        ),
         hostElement: screen as Element,
       });
       this.applicationRef.attachView(ref.hostView);
@@ -1425,6 +1443,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     screen: unknown,
     header: WritableSignal<boolean>,
     shown: Signal<boolean>,
+    presentation: ScreenPresentation | undefined,
     outlet = this.name,
   ): Injector {
     const outer = this.injector.get(SCREEN_IN_FRONT);
@@ -1434,6 +1453,14 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       providers: [
         { provide: SCREEN_IN_FRONT, useValue: computed(() => outer() && inFront()) },
         { provide: SCREEN_SHOWN, useValue: computed(() => outerShown() && shown()) },
+        // A push stays in the sheet it is pushed in; any other presentation covers it.
+        {
+          provide: IN_FORM_SHEET,
+          useValue:
+            (presentation?.stackPresentation ?? 'push') === 'push'
+              ? this.injector.get(IN_FORM_SHEET)
+              : presentation?.stackPresentation === 'formSheet',
+        },
         {
           provide: HOLDING_SCREEN,
           useValue: {

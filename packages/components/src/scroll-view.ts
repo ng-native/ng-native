@@ -10,6 +10,7 @@ import {
   output,
   viewChild,
 } from '@angular/core';
+import { IN_FORM_SHEET } from '@ng-native/device';
 import { type HostNode, type NativeSyntheticEvent, nativePlatform } from '@ng-native/fabric';
 import type { Point, Rect, Size } from './events.ts';
 import { type KeyboardShouldPersistTaps, dismissKeyboardOnTap } from './keyboard-taps.ts';
@@ -129,6 +130,7 @@ export class ScrollView extends ScrollViewProps {
   readonly contentSizeChange = output<Size>();
 
   private readonly refreshControl = contentChild(RefreshControl);
+  private readonly inSheet = inject(IN_FORM_SHEET);
   private readonly content = viewChild.required('content', { read: ElementRef });
   private readonly sticky = new StickyHeaders(this.engine, this.node, () => !!this.horizontal());
 
@@ -139,12 +141,15 @@ export class ScrollView extends ScrollViewProps {
 
   /**
    * RN's `nestedScrollEnabled ?? true` for a scroll view inside Android's swipe layout: the scroll
-   * view has to see a drag before the layout wrapped around it does, or every drag is a pull.
+   * view has to see a drag before the layout wrapped around it does, or every drag is a pull. A
+   * form sheet's drag gives way the same way, or a drag down on scrolled content moves the sheet.
    */
   protected readonly resolvedNestedScroll = computed(
     () =>
       this.nestedScrollEnabled() ??
-      (nativePlatform() === 'android' && this.refreshControl() ? true : undefined),
+      (nativePlatform() === 'android' && (this.inSheet || this.refreshControl())
+        ? true
+        : undefined),
   );
 
   constructor() {

@@ -77,6 +77,7 @@ export {
 } from './navigation-bar.ts';
 export { SCREEN_IN_FRONT } from './screen-in-front.ts';
 export { SCREEN_SHOWN } from './screen-shown.ts';
+export { IN_FORM_SHEET } from './in-form-sheet.ts';
 export { NATIVE_HISTORY } from './native-history.ts';
 export { APPLE, DESKTOP, OS, OS_NAMES, type OsName } from './os.ts';
 export {

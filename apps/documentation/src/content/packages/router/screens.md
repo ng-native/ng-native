@@ -398,6 +398,11 @@ appeared, and true from then on. It is combined the same way, so a page in a tab
 shown once its screen, its tab and the screen the tabs are on have all appeared. On iOS,
 `<refresh-control>` waits for it before it starts spinning.
 
+`IN_FORM_SHEET` is true on a screen presented as a `formSheet`, and on a screen pushed in a stack
+inside one. On Android, `<scroll-view>` and `<virtual-list>` turn nested scrolling on in a form
+sheet, so a drag scrolls the content before it moves the sheet, and `<native-header>` leaves out the
+status bar's height, which a sheet never reaches.
+
 ## Above every screen
 
 A sheet or a modal is presented above the app's root view, so a toast positioned absolutely at the
