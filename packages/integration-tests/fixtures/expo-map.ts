@@ -1,7 +1,9 @@
 import { Component, signal, viewChild } from '@angular/core';
 import {
   MapView,
+  type MapAnnotation,
   type MapCameraPosition,
+  type MapImage,
   type MapCircle,
   type MapMarker,
   type MapPolygon,
@@ -84,4 +86,41 @@ export class ExpoMapFixture {
   readonly markerClicks: unknown[] = [];
   readonly zooms: unknown[] = [];
   readonly shapeClicks: unknown[] = [];
+}
+
+/** The props and events one platform's map has: Apple's annotations, Google's options. */
+@Component({
+  selector: 'expo-map-platform-fixture',
+  imports: [MapView],
+  template: `
+    <expo-map
+      [markers]="markers"
+      [annotations]="annotations"
+      [mapOptions]="{ mapId: 'abc' }"
+      [userLocation]="{ coordinates: { latitude: 1, longitude: 2 }, followUserLocation: true }"
+      [contentPadding]="{ top: 10, bottom: 20 }"
+      (annotationClick)="events.push(['annotation', $event.nativeEvent.id])"
+      (mapLoaded)="events.push(['loaded'])"
+      (mapLongClick)="events.push(['long', $event.nativeEvent.coordinates])"
+      (poiClick)="events.push(['poi', $event.nativeEvent.name])"
+    />
+  `,
+})
+export class ExpoMapPlatformFixture {
+  /** An image as `useImage` gives it: a shared object, which native takes by its id. */
+  protected readonly image = { __expo_shared_object_id__: 42 } as unknown as MapImage;
+  protected readonly markers: MapMarker[] = [
+    { id: 'm', coordinates: { latitude: 1, longitude: 2 }, icon: this.image },
+    { id: 'plain', coordinates: { latitude: 1, longitude: 2 } },
+  ];
+  protected readonly annotations: MapAnnotation[] = [
+    {
+      id: 'a',
+      coordinates: { latitude: 1, longitude: 2 },
+      text: 'A',
+      backgroundColor: 'red',
+      icon: this.image,
+    },
+  ];
+  readonly events: unknown[] = [];
 }

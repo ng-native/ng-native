@@ -130,8 +130,9 @@ same inputs, outputs and functions, so import it for either.
 
 - **`markers`** - the pins. `id`, `coordinates` and `title` work on both platforms, and the `id` is
   how a tap says which marker it was. `systemImage` (an SF Symbol), `monogram` and `tintColor` are
-  Apple's; `snippet`, `draggable`, `showCallout`, `anchor` and `zIndex` are Google's. Each platform
-  ignores the other's.
+  Apple's; `snippet`, `draggable`, `showCallout`, `anchor`, `zIndex` and `icon` are Google's. Each
+  platform ignores the other's. `icon` is an image as `expo-image`'s `useImage` returns it, sent as
+  its shared object's id, as `expo-maps`' own view sends it.
 - **`polylines`** - lines, such as a route: `{ id, coordinates, color, width }`. To draw one along
   the Earth's curve, set `contourStyle` to `'GEODESIC'` for iOS and `geodesic` to `true` for
   Android.
@@ -147,6 +148,11 @@ same inputs, outputs and functions, so import it for either.
 - **`uiSettings`** - which controls are shown: `compassEnabled`, `myLocationButtonEnabled`,
   `scaleBarEnabled`, `togglePitchEnabled` on both, and Google's zoom, gesture and toolbar switches.
 - **`colorScheme`** - `LIGHT` or `DARK` on both, `AUTOMATIC` on iOS, `FOLLOW_SYSTEM` on Android.
+- **`annotations`** - iOS only: markers drawn as `text`, an `icon` image or both on a
+  `backgroundColor`, with the marker's own fields.
+- **`mapOptions`**, **`userLocation`**, **`contentPadding`** - Android only: Google's map options
+  (such as a cloud `mapId`), where the map shows the user in place of its own location, and the
+  edges something covers, which the logo and controls keep clear of.
 
 `expo-maps`' enums are typed as their string values, so `mapType: 'HYBRID'` needs no import of
 `expo-maps` itself. A shape's colors are written as a template writes any color (`'#ff5a36'`,
@@ -184,6 +190,10 @@ Each is the view's own event, so the payload is `$event.nativeEvent`:
   visible region's `latitudeDelta` and `longitudeDelta`. Also sent once when the map first appears.
 - **`(polylineClick)`**, **`(polygonClick)`**, **`(circleClick)`** - a tap on a shape: the shape,
   with its `id`. Its colors come back as native holds them rather than as the strings you gave.
+- **`(annotationClick)`** - iOS only: a tap on an annotation, with its `id`.
+- **`(mapLoaded)`**, **`(mapLongClick)`**, **`(poiClick)`** - Android only: the map has loaded, a
+  long press on the map (`{ coordinates }`), and a tap on a place the map labels
+  (`{ name, coordinates }`).
 
 ## Moving the camera from code
 
@@ -229,12 +239,8 @@ if (place) this.markers.set([{ id: 'home', coordinates: place, title: 'Home' }])
 
 ## Limits
 
-- The inputs and outputs are what `expo-maps` supports on both platforms. Apple's annotations and
-  `selectAnnotation`, and Google's `userLocation`, `contentPadding` and `mapOptions`, are one
-  platform's only and not typed here; neither is a Google marker's `icon`, which is an image shared
-  object this does not map yet.
-- Google's `onMapLoaded`, `onMapLongClick` and `onPOIClick`, Google Street View, and Apple's Look
-  Around are not wrapped.
+- Apple's `selectAnnotation`, Google Street View, and Apple's Look Around are not wrapped.
+- On macOS the desktop host draws no annotations.
 - `expo-maps` is marked alpha by Expo and may change between SDK versions.
 
 ## Reference

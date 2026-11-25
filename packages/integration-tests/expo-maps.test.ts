@@ -182,6 +182,52 @@ describe('the map view', () => {
     assert.deepEqual(fixture.zooms, [14]);
   });
 
+  it("sends Apple's annotations and Google's options, and an image by its shared object's id", async () => {
+    const mod = await compileFixture('fixtures/expo-map.ts');
+    registerExpoMap('android');
+    const fabric = createFakeFabric();
+    const app = mount(1, mod['ExpoMapPlatformFixture'] as Type<unknown>, fabric, {
+      providers: [{ provide: MapView.SOURCE, useValue: null }],
+    });
+    try {
+      const props = view(fabric).props;
+      assert.deepEqual(props['markers'], [
+        { id: 'm', coordinates: { latitude: 1, longitude: 2 }, icon: 42 },
+        { id: 'plain', coordinates: { latitude: 1, longitude: 2 } },
+      ]);
+      assert.deepEqual(props['annotations'], [
+        {
+          id: 'a',
+          coordinates: { latitude: 1, longitude: 2 },
+          text: 'A',
+          backgroundColor: 'red',
+          icon: 42,
+        },
+      ]);
+      assert.deepEqual(props['mapOptions'], { mapId: 'abc' });
+      assert.deepEqual(props['userLocation'], {
+        coordinates: { latitude: 1, longitude: 2 },
+        followUserLocation: true,
+      });
+      assert.deepEqual(props['contentPadding'], { top: 10, bottom: 20 });
+      fabric.emit(view(fabric), 'topAnnotationClick', { id: 'a' });
+      fabric.emit(view(fabric), 'topMapLoaded', {});
+      fabric.emit(view(fabric), 'topMapLongClick', { coordinates: { latitude: 3, longitude: 4 } });
+      // expo-maps names it onPOIClick, so native sends topPOIClick.
+      fabric.emit(view(fabric), 'topPOIClick', { name: 'Cafe', coordinates: {} });
+      app.applicationRef.tick();
+      const fixture = app.componentRef.instance as { events: unknown[] };
+      assert.deepEqual(fixture.events, [
+        ['annotation', 'a'],
+        ['loaded'],
+        ['long', { latitude: 3, longitude: 4 }],
+        ['poi', 'Cafe'],
+      ]);
+    } finally {
+      app.applicationRef.destroy();
+    }
+  });
+
   /** View functions that only record what they were called with. */
   const recorder = () => {
     const calls: { name: string; tag: number; args: unknown[] }[] = [];

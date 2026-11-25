@@ -73,11 +73,28 @@ type Plain<T> = T extends string
 export type MapCoordinates = Coordinates;
 export type MapCameraPosition = import('expo-maps').CameraPosition;
 
+/** An image, as `expo-image`'s `useImage` gives it: native takes it by its shared object's id. */
+export type MapImage = NonNullable<GoogleMaps.Marker['icon']>;
+
 /**
  * A marker. `id`, `coordinates` and `title` work on both platforms; `systemImage`, `monogram` and
- * `tintColor` are Apple's, `snippet`, `draggable`, `showCallout`, `anchor` and `zIndex` Google's.
+ * `tintColor` are Apple's, `snippet`, `draggable`, `showCallout`, `anchor`, `zIndex` and `icon`
+ * Google's.
  */
-export type MapMarker = Plain<AppleMaps.Marker> & Plain<Omit<GoogleMaps.Marker, 'icon'>>;
+export type MapMarker = Plain<AppleMaps.Marker> &
+  Plain<Omit<GoogleMaps.Marker, 'icon'>> & { readonly icon?: MapImage };
+
+/** A marker drawn as its `text`, `icon` or both, on a background. Apple's, so iOS only. */
+export type MapAnnotation = Plain<Omit<AppleMaps.Annotation, 'icon'>> & {
+  readonly icon?: MapImage;
+};
+
+/** Google's map options, such as a cloud `mapId`. Android only. */
+export type MapOptions = NonNullable<GoogleMaps.MapProps['mapOptions']>;
+/** Where Google's map shows the user, in place of its own location. Android only. */
+export type MapUserLocation = NonNullable<GoogleMaps.MapProps['userLocation']>;
+/** The edges of Google's map that something covers, which its logo and controls keep clear of. */
+export type MapContentPadding = NonNullable<GoogleMaps.MapProps['contentPadding']>;
 
 /** The map's properties: Apple's on iOS, Google's on Android. */
 export type MapProperties = Plain<AppleMaps.MapProperties> | Plain<GoogleMaps.MapProperties>;
@@ -139,6 +156,11 @@ export interface MapSelectOptions {
 
 export type MapClickEvent = NativeSyntheticEvent<{ readonly coordinates: MapCoordinates }>;
 export type MapMarkerClickEvent = NativeSyntheticEvent<MapMarker>;
+export type MapAnnotationClickEvent = NativeSyntheticEvent<MapAnnotation>;
+export type MapPoiClickEvent = NativeSyntheticEvent<{
+  readonly name: string;
+  readonly coordinates: MapCoordinates;
+}>;
 export type MapCameraMoveEvent = NativeSyntheticEvent<CameraMoveEvent>;
 /** A tapped shape, as native holds it: its colours are native's own values, not strings. */
 type Tapped<T> = Omit<T, 'color' | 'lineColor'> & {
@@ -176,7 +198,11 @@ export function registerExpoMap(platform: 'ios' | 'android' | 'macos'): void {
   exportAs: 'map',
   template: '',
   host: {
-    '[markers]': 'markers()',
+    '[markers]': 'nativeMarkers()',
+    '[annotations]': 'nativeAnnotations()',
+    '[mapOptions]': 'mapOptions()',
+    '[userLocation]': 'userLocation()',
+    '[contentPadding]': 'contentPadding()',
     '[polylines]': 'nativePolylines()',
     '[polygons]': 'nativePolygons()',
     '[circles]': 'nativeCircles()',
@@ -228,6 +254,14 @@ export class MapView {
   readonly properties = input<MapProperties>();
   readonly uiSettings = input<MapUiSettings>();
   readonly colorScheme = input<MapColorScheme>();
+  /** Markers drawn as text or an image on a background. iOS only. */
+  readonly annotations = input<readonly MapAnnotation[]>();
+  /** Android only. */
+  readonly mapOptions = input<MapOptions>();
+  /** Android only. */
+  readonly userLocation = input<MapUserLocation>();
+  /** Android only. */
+  readonly contentPadding = input<MapContentPadding>();
 
   /** A tap on the map, not on a marker. */
   readonly mapClick = output<MapClickEvent>();
@@ -239,6 +273,18 @@ export class MapView {
   readonly polylineClick = output<MapPolylineClickEvent>();
   readonly polygonClick = output<MapPolygonClickEvent>();
   readonly circleClick = output<MapCircleClickEvent>();
+  /** A tap on an annotation. iOS only. */
+  readonly annotationClick = output<MapAnnotationClickEvent>();
+  /** The map has loaded. Android only. */
+  readonly mapLoaded = output<NativeSyntheticEvent<Record<string, never>>>();
+  /** A long press on the map. Android only. */
+  readonly mapLongClick = output<MapClickEvent>();
+  /** A tap on a place the map labels, such as a shop. Android only. */
+  readonly poiClick = output<MapPoiClickEvent>();
+
+  // As `expo-maps`' own views send them: an image by its shared object's id.
+  protected readonly nativeMarkers = computed(() => this.markers()?.map(withImageId));
+  protected readonly nativeAnnotations = computed(() => this.annotations()?.map(withImageId));
 
   protected readonly nativePolylines = computed(() =>
     this.polylines()?.map((line) => ({ ...line, color: this.colour(line.color) })),
@@ -258,8 +304,14 @@ export class MapView {
 
   constructor() {
     const stop = this.engine.setEventListener(this.node, 'topCameraMove', () => this.appear());
+    // `expo-maps` names it `onPOIClick`, which no output name reaches: `(poiClick)` would be
+    // `topPoiClick`.
+    const stopPoi = this.engine.setEventListener(this.node, 'topPOIClick', (event) =>
+      this.poiClick.emit(event as MapPoiClickEvent),
+    );
     inject(DestroyRef).onDestroy(() => {
       stop();
+      stopPoi();
       this.release(false);
     });
   }
@@ -347,4 +399,11 @@ function desktopMaps(): MapViewFunctions | null {
       await host.selectMarker?.(this.nativeTag, id ?? null, options ?? null);
     },
   };
+}
+
+/** An item with its `icon` as native takes it: the image's shared object id. */
+function withImageId<T extends { readonly icon?: MapImage }>(item: T): T {
+  if (item.icon === undefined) return item;
+  const icon = item.icon as unknown as { readonly __expo_shared_object_id__?: number };
+  return { ...item, icon: icon.__expo_shared_object_id__ } as unknown as T;
 }
