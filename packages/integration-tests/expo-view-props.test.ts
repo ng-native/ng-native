@@ -218,7 +218,8 @@ describe('the typed Expo views', () => {
 /** The props a view is registered with, which an unset input leaves in place. */
 function registered(id: string): Record<string, unknown> {
   if (id === 'blur-plain') return { intensity: 50, tint: 'default' };
-  // expo-camera's CameraView sends flash as off unless set: iOS's own default is auto.
-  if (id === 'camera-plain') return { flashMode: 'off' };
+  // expo-camera's CameraView sends flash as off unless set: iOS's own default is auto. It sends
+  // barcodeScannerEnabled always, true only with an onBarcodeScanned handler.
+  if (id === 'camera-plain') return { flashMode: 'off', barcodeScannerEnabled: false };
   return {};
 }
