@@ -144,10 +144,10 @@ camera opens:
 ```
 
 `scannerAvailable` is false where there is no document camera: the iOS simulator, macOS, Android
-and the web. There `scanDocument` answers no pages without opening anything, so hide the button;
-`recognize` still reads an image the app already has. A failure of the camera itself rejects with
-`ERR_DOCUMENT_SCAN`. Saving the files the pages are in is up to the app: the system may remove
-them from the caches directory.
+and the web. There `scanDocument` answers no pages without opening anything, so hide the button.
+In the simulator and on macOS, `recognize` still reads an image the app already has. A failure of
+the camera itself rejects with `ERR_DOCUMENT_SCAN`. Saving the files the pages are in is up to the
+app: the system may remove them from the caches directory.
 
 ## Turning text into a typed object
 
@@ -177,7 +177,7 @@ if (this.model.available()) {
 
 In Expo Go, on Android, on the web and in Node tests there is no native module, and
 `available()` is false. On Android and the web `recognize` answers no text and `scanDocument` no
-pages; in Expo Go and in Node both reject with a `MissingModuleError` that says why. A test
+pages; in Expo Go on iOS and in Node both reject with a `MissingModuleError` that says why. A test
 provides a stand-in through `TextRecognition.SOURCE`:
 
 ```ts

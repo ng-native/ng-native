@@ -61,9 +61,8 @@ public final class TextRecognitionModule: Module {
         promise.reject("ERR_DOCUMENT_SCAN", "There is no screen to show the document camera on")
         return
       }
-      let scan = DocumentScan(options: options, queue: self.queue) { [weak self] in
-        self?.scan = nil
-      }
+      // The scan is let go when it ends, which is all that frees it.
+      let scan = DocumentScan(options: options, queue: self.queue) { self.scan = nil }
       scan.promise = promise
       self.scan = scan
       let camera = VNDocumentCameraViewController()
@@ -199,40 +198,52 @@ final class DocumentScan: NSObject, VNDocumentCameraViewControllerDelegate {
   ) {
     // The pages are taken out on the main thread, where VisionKit hands them over.
     let pages = (0..<scan.pageCount).map { scan.imageOfPage(at: $0) }
-    controller.dismiss(animated: true)
-    queue.async { self.finish { try self.read(pages) } }
+    // Settled once the camera has gone, so the next scan finds the screen free to present on.
+    controller.dismiss(animated: true) {
+      self.queue.async { self.finish { try self.read(pages) } }
+    }
   }
 
   func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
-    controller.dismiss(animated: true)
-    finish { [] }
+    controller.dismiss(animated: true) { self.finish { [] } }
   }
 
   func documentCameraViewController(
     _ controller: VNDocumentCameraViewController, didFailWithError error: Error
   ) {
-    controller.dismiss(animated: true)
-    finish { throw TextRecognitionModule.ReadFailure(
-      code: "ERR_DOCUMENT_SCAN", message: error.localizedDescription) }
+    controller.dismiss(animated: true) {
+      self.finish {
+        throw TextRecognitionModule.ReadFailure(
+          code: "ERR_DOCUMENT_SCAN", message: error.localizedDescription)
+      }
+    }
   }
 
   private func read(_ pages: [UIImage]) throws -> [[String: Any]] {
     let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
     let id = UUID().uuidString
-    return try pages.enumerated().map { index, page in
-      let url = folder.appendingPathComponent("ng-native-scan-\(id)-\(index + 1).jpg")
-      guard let data = page.jpegData(compressionQuality: 0.9) else {
-        throw TextRecognitionModule.ReadFailure(
-          code: "ERR_DOCUMENT_SCAN", message: "Page \(index + 1) could not be saved")
+    var saved: [URL] = []
+    do {
+      return try pages.enumerated().map { index, page in
+        let url = folder.appendingPathComponent("ng-native-scan-\(id)-\(index + 1).jpg")
+        guard let data = page.jpegData(compressionQuality: 0.9) else {
+          throw TextRecognitionModule.ReadFailure(
+            code: "ERR_DOCUMENT_SCAN", message: "Page \(index + 1) could not be saved")
+        }
+        try data.write(to: url)
+        saved.append(url)
+        guard let image = TextRecognitionModule.image(at: url.absoluteString) else {
+          throw TextRecognitionModule.ReadFailure(
+            code: "ERR_IMAGE_LOAD", message: "No image could be read at \(url.absoluteString)")
+        }
+        var found = try TextRecognitionModule.read(image, options)
+        found["imageUri"] = url.absoluteString
+        return found
       }
-      try data.write(to: url)
-      guard let image = TextRecognitionModule.image(at: url.absoluteString) else {
-        throw TextRecognitionModule.ReadFailure(
-          code: "ERR_IMAGE_LOAD", message: "No image could be read at \(url.absoluteString)")
-      }
-      var found = try TextRecognitionModule.read(image, options)
-      found["imageUri"] = url.absoluteString
-      return found
+    } catch {
+      // A failed scan answers no pages, so the ones already saved would never be found again.
+      for url in saved { try? FileManager.default.removeItem(at: url) }
+      throw error
     }
   }
 
