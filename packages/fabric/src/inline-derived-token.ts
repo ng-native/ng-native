@@ -154,10 +154,73 @@ function numberFallback(
   return percentage ? { percentage: token.number! } : token?.number;
 }
 
+/**
+ * What arithmetic comes to as CSS types it, as `typeOf` in the compiler's `token-arithmetic.cjs`
+ * does: a token is `any`, and null is terms that do not agree, `1px + 2`, which CSS finds invalid.
+ */
+type MathType = 'number' | 'length' | 'percentage' | 'angle' | 'time' | 'any' | null;
+
+const UNIT_TYPES: Readonly<Record<string, MathType>> = {
+  '': 'number',
+  '%': 'percentage',
+  px: 'length',
+  rem: 'length',
+  deg: 'angle',
+  grad: 'angle',
+  rad: 'angle',
+  turn: 'angle',
+  ms: 'time',
+  s: 'time',
+};
+
+const mathTypes: MathReader<MathType> = {
+  leaf(cursor) {
+    const name = match(cursor, VAR)?.[1];
+    if (name) {
+      reference(cursor, name);
+      return 'any';
+    }
+    const found = match(cursor, LITERAL) ?? fail();
+    return UNIT_TYPES[(found[2] ?? '').toLowerCase()] ?? fail();
+  },
+  combine(op, a, b) {
+    if (a === null || b === null) return null;
+    if (op === '*') return productType(a, b);
+    if (op === '/') return quotientType(a, b);
+    if (a === 'any') return b;
+    return b === 'any' || a === b ? a : null;
+  },
+};
+
+/** A number scales anything, and a token may be a number or the dimension that makes it right. */
+function productType(a: MathType, b: MathType): MathType {
+  if (b === 'number') return a;
+  if (a === 'number' || a === 'any') return b;
+  return b === 'any' ? a : null;
+}
+
+/** A dimension divided by the same one is a number; nothing is divided by a dimension it is not. */
+function quotientType(a: MathType, b: MathType): MathType {
+  if (b === 'number') return a;
+  if (a === 'any' || b === 'any') return 'any';
+  return a === b ? 'number' : null;
+}
+
+/** Whether arithmetic of `type` can be what a slot of `kind` takes, for some token. */
+function fits(type: MathType, kind: Marker['kind']): boolean {
+  if (type === null) return false;
+  if (type === 'any') return true;
+  if (kind === 'length') return type === 'length' || type === 'percentage';
+  return type === kind || (kind === 'number' && type === 'percentage');
+}
+
 /** Arithmetic of tokens, read as a length and as a number, whichever each reading makes of it. */
 function calcToken(text: string): TokenValue | undefined {
   if (!MATH_FUNCTION.test(text)) return undefined;
+  const type = whole(text, (cursor) => readMath(cursor, mathTypes));
   const markers = (['length', 'number'] as const).flatMap((kind): Marker[] => {
+    // One whose terms cannot come to this kind is not read as it: no width from `1px + 2`.
+    if (type !== undefined && !fits(type, kind)) return [];
     const expression = whole(text, (cursor) => readMath(cursor, tokenArithmetic(kind)));
     return expression === undefined ? [] : [{ expression, kind }];
   });

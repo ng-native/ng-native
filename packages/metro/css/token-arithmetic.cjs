@@ -137,6 +137,87 @@ const unreadable = (context, why) =>
       `unit beside a token needs layout the device does not do here.`,
   );
 
+/**
+ * What a math function comes to as CSS types it: `number`, `length`, `percentage`, `angle` or
+ * `time`; `any` for a token, which may hold any of them; or null where its terms do not agree,
+ * which CSS finds invalid however its tokens are set: `1px + 2`, `var(--t) + 2` in a length.
+ *
+ * ponytail: a product of two dimensions (`1px * 1px`) is taken as invalid, which CSS's typed
+ * arithmetic only allows when a quotient cancels it again.
+ */
+function typeOf(term) {
+  const name = term?.type === 'function' ? term.value?.name?.toLowerCase() : undefined;
+  if (name === 'calc') return typeOfSum(meaningful(term.value.arguments));
+  if (MATH.has(name)) {
+    return commaSeparated(term.value.arguments)
+      .map((side) => typeOfSum(meaningful(side)))
+      .reduce(added);
+  }
+  return LEAF_TYPES[term?.type === 'token' ? term.value?.type : term?.type] ?? 'any';
+}
+
+/** A written term's type, by its kind; a `var()` or anything unknown is a token's, `any`. */
+const LEAF_TYPES = {
+  length: 'length',
+  angle: 'angle',
+  time: 'time',
+  number: 'number',
+  percentage: 'percentage',
+};
+
+/** The operator a term is, `+ - * /`, or null. */
+const delimiter = (term) =>
+  term?.type === 'token' && term.value?.type === 'delim' ? term.value.value : null;
+
+/** A sum's type: each of its products, which have to agree. */
+function typeOfSum(terms) {
+  const summands = [];
+  let product;
+  let dividing = false;
+  for (const term of terms) {
+    const op = delimiter(term);
+    if (op === '+' || op === '-') {
+      summands.push(product);
+      product = undefined;
+    } else if (op === '*' || op === '/') {
+      dividing = op === '/';
+    } else {
+      product = product === undefined ? typeOf(term) : multiplied(product, typeOf(term), dividing);
+    }
+  }
+  return [...summands, product].reduce(added);
+}
+
+/** Two summands' type: the same, or a token's, which takes the other's. */
+function added(a, b) {
+  if (a === null || b === null || a === undefined || b === undefined) return null;
+  if (a === 'any') return b;
+  if (b === 'any' || a === b) return a;
+  return null;
+}
+
+/**
+ * A product's type: a number scales anything, and a token may be a number or the dimension that
+ * makes the product right. A quotient of a dimension by the same one is a number, and nothing is
+ * divided by a dimension it is not.
+ */
+function multiplied(a, b, dividing) {
+  if (a === null || b === null) return null;
+  if (b === 'number') return a;
+  if (dividing) return a === 'any' || b === 'any' ? 'any' : a === b ? 'number' : null;
+  if (a === 'number' || a === 'any') return b === 'any' ? 'any' : b;
+  return b === 'any' ? a : null;
+}
+
+/** Whether a math function's type can be what a slot of `kind` takes, for some token. */
+function fits(term, kind) {
+  const type = typeOf(term);
+  if (type === null) return false;
+  if (type === 'any') return true;
+  if (kind === 'length') return type === 'length' || type === 'percentage';
+  return type === kind || (kind === 'number' && type === 'percentage');
+}
+
 /** A slot's value for the device: settled if it has no token in it, a `__calc` marker if it has. */
 function slot(term, kind, context) {
   const written = tree(term, kind, context);
@@ -155,6 +236,7 @@ function calcWithTokens(parts, kind, context) {
     return null;
   }
   if (kind !== 'length' && kind !== 'number') return null;
+  if (!fits(written[0], kind)) return { __calc: { expression: 0, kind, invalid: true } };
   return slot(written[0], kind, context);
 }
 
@@ -253,4 +335,4 @@ function motionWithTokens(property, parts, context) {
   }
 }
 
-module.exports = { calcWithTokens, mentionsVar, motionWithTokens, slot };
+module.exports = { calcWithTokens, fits, mentionsVar, motionWithTokens, slot };
