@@ -34,14 +34,16 @@ reported too. It returns a promise that resolves once the SDK has started.
 ```ts
 import { CoralogixDomain, CoralogixRum } from '@coralogix/react-native-plugin';
 
-CoralogixRum.init({
+const options = {
   application: 'my-app',
   environment: __DEV__ ? 'development' : 'production',
   public_key: process.env.EXPO_PUBLIC_CORALOGIX_RUM_KEY!,
   coralogixDomain: CoralogixDomain.EU2,
   version: '1.0.0',
   traceParentInHeader: { enabled: true },
-});
+};
+
+CoralogixRum.init(options);
 ```
 
 `public_key` is your RUM integration's public key, set as `EXPO_PUBLIC_CORALOGIX_RUM_KEY` in the
@@ -56,7 +58,8 @@ applies the SDK's optional Gradle plugin; its
 ## Name screens after routes
 
 Coralogix groups errors and vitals by view. Set the view whenever Angular's Router finishes a
-navigation, so each screen is reported under its route:
+navigation, so each screen is reported under its route's path, such as `/orders/:id`. The path
+leaves out the URL's parameters and query string, which can hold IDs or tokens:
 
 ```ts
 import { inject } from '@angular/core';
@@ -65,9 +68,13 @@ import { CoralogixRum } from '@coralogix/react-native-plugin';
 
 export class App {
   constructor() {
-    inject(Router).events.subscribe((event) => {
+    const router = inject(Router);
+    router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
-        CoralogixRum.setViewContext({ view: event.urlAfterRedirects });
+        let route = router.routerState.snapshot.root;
+        while (route.firstChild) route = route.firstChild;
+        const path = route.pathFromRoot.map((r) => r.routeConfig?.path).filter(Boolean);
+        CoralogixRum.setViewContext({ view: '/' + path.join('/') });
       }
     });
   }
@@ -108,9 +115,9 @@ CoralogixRum.setUserContext({
 
 ## Session Replay
 
-Session Replay records what the user saw before an error. Every piece of text is masked unless you
-turn that off, and you choose what share of sessions to record. Start it once `CoralogixRum.init`
-has finished, by chaining it to the call in `src/main.ts`:
+Session Replay records what the user saw before an error, and you choose what share of sessions
+to record. Start it once `CoralogixRum.init` has finished, by chaining it to the `init` call in
+`src/main.ts` in place of the one above:
 
 ```ts
 import { CoralogixRum, SessionReplay } from '@coralogix/react-native-plugin';
@@ -122,11 +129,13 @@ CoralogixRum.init(options).then(() =>
     sessionRecordingSampleRate: 10,
     autoStartSessionRecording: true,
     maskAllTexts: true,
+    maskAllImages: true,
   }),
 );
 ```
 
-`options` is the object passed to `init` above.
+Text is masked by default and images are not, so the sample masks both. Keep both on until replays
+from a staging build show nothing sensitive, then relax them.
 
 ## Where to go next
 
