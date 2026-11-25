@@ -26,6 +26,7 @@ import { PNG } from 'pngjs';
 import { dependents, modulesOf, scriptOf } from '@ng-native/testing/device/bundle-modules';
 import { mockedSpecifiers } from '@ng-native/testing/device/mocks';
 import { devicePool } from '@ng-native/testing/device/pool';
+import { readRequest } from '@ng-native/testing/device/wire';
 
 const define = (id: number, deps: number[], name: string, body = '') =>
   `__d(function (global, require) {\n  ${body}\n},${id},[${deps.join(',')}],${JSON.stringify(name)});`;
@@ -135,7 +136,8 @@ async function setup(options: Parameters<typeof devicePool>[0] = {}) {
       signal: requests.signal,
     });
     const text = await response.text();
-    return text ? JSON.parse(text) : null;
+    // As the test host reads the pool's requests.
+    return text ? (readRequest(text) as any) : null;
   };
   const app = (session: string, platform = 'ios') => ({
     poll: (state: { reply?: unknown; defined?: number[]; hashes?: Record<string, string> } = {}) =>
@@ -526,6 +528,44 @@ describe('the device pool', () => {
         wait(1000).then(() => null),
       ]);
       assert.equal(response?.status, 400);
+    } finally {
+      await run.done();
+    }
+  });
+
+  it("gives the app Vitest's test name patterns as RegExps, in the config and in each file", async () => {
+    const run = await setup();
+    try {
+      const phone = run.app('one');
+      const { worker } = run.worker();
+      const starting = worker.start();
+      const first = phone.poll();
+      await starting;
+      // `-t '^included probe$'` reaches the config, and a file Vitest reruns can carry its own.
+      worker.send(request('start', { config: { testNamePattern: /^included probe$/ } }) as never);
+      const start = await first;
+      const config = start.context.config;
+      assert.ok(config.testNamePattern instanceof RegExp, 'a RegExp, not {}');
+      assert.equal(String(config.testNamePattern), '/^included probe$/');
+      // How Vitest's runner skips a test the pattern does not match.
+      assert.equal('excluded probe'.match(config.testNamePattern), null, 'the excluded test skips');
+      assert.ok('included probe'.match(config.testNamePattern), 'the included test runs');
+
+      const test = join(run.root, 'src/a.device.ts');
+      const second = phone.poll({
+        reply: {
+          __vitest_worker_response__: true,
+          type: 'started',
+          deviceRequest: start.deviceRequest,
+        },
+      });
+      await wait(50);
+      worker.send(
+        request('run', { files: [{ filepath: test, testNamePattern: /probe$/gi }] }) as never,
+      );
+      const spec = (await second).context.files[0];
+      assert.ok(spec.testNamePattern instanceof RegExp);
+      assert.equal(String(spec.testNamePattern), '/probe$/gi', 'flags kept');
     } finally {
       await run.done();
     }

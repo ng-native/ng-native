@@ -36,6 +36,7 @@ import { mockedSpecifiers } from './mocks.ts';
 import { progress, tail } from './command.ts';
 import { metroFor } from './metro-server.ts';
 import { DEFAULT_PORT } from './port.ts';
+import { writeRequest } from './wire.ts';
 import { type AppLauncher, type LaunchedApp } from './launcher.ts';
 import {
   colorsIn,
@@ -863,7 +864,7 @@ class Bridge {
     const message = session.queue.shift()!;
     // The app answers with the id, so an answer is matched to its request, and counted once.
     const id = session.nextRequest++;
-    response.end(JSON.stringify({ ...message, deviceRequest: id }));
+    response.end(writeRequest({ ...message, deviceRequest: id }));
     session.lastType = message.type;
     session.owed.add(id);
     this.watch(session);

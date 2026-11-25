@@ -127,8 +127,9 @@ export async function runFiles(
 
     override async onBeforeRunSuite(suite: unknown): Promise<void> {
       await super.onBeforeRunSuite?.(suite);
-      const file = suite as { filepath?: string };
-      if (file.filepath) {
+      const file = suite as { filepath?: string; mode?: string };
+      // Vitest sets up a file's snapshot state only when the file runs: `-t` can skip all of it.
+      if (file.filepath && file.mode !== 'skip') {
         inferInlineSnapshotFrames(
           this.snapshotClient.getSnapshotState(file.filepath),
           file.filepath,

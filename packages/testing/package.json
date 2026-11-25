@@ -33,6 +33,7 @@
     "./device/loader": "./src/device/loader.ts",
     "./device/mock-registry": "./src/device/mock-registry.ts",
     "./device/bundle-modules": "./src/device/bundle-modules.ts",
+    "./device/wire": "./src/device/wire.ts",
     "./device/metro": {
       "types": "./device/metro.d.cts",
       "default": "./device/metro.cjs"
@@ -89,6 +90,10 @@
       "./device/bundle-modules": {
         "types": "./dist/device/bundle-modules.d.ts",
         "default": "./dist/device/bundle-modules.js"
+      },
+      "./device/wire": {
+        "types": "./dist/device/wire.d.ts",
+        "default": "./dist/device/wire.js"
       },
       "./device/metro": {
         "types": "./device/metro.d.cts",

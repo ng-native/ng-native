@@ -15,6 +15,7 @@ import { setHarness } from './harness.ts';
 import { hashes, modules } from './loader.ts';
 import { DEFAULT_PORT } from './port.ts';
 import { runFiles, serializeError, type RunRequest } from './run.ts';
+import { readRequest } from './wire.ts';
 
 /** React Native's own modules, which only a device has: a `require` Node never runs. */
 interface ReactNative {
@@ -122,7 +123,7 @@ async function serve(url: string, status: (text: string) => void): Promise<void>
         method: 'POST',
         body: JSON.stringify(poll(reply)),
       });
-      request = (await response.json()) as Request | null;
+      request = readRequest(await response.text()) as Request | null;
     } catch {
       status(`Waiting for Vitest at ${url}`);
       await new Promise((resolve) => setTimeout(resolve, 500));
