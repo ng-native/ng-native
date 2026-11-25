@@ -1,14 +1,14 @@
 ---
 title: Monitoring
-summary: Report crashes, slow screens and sessions from your app to Coralogix, named after your routes.
+summary: Report crashes, slow screens and sessions to Coralogix, named after your routes.
 ---
 
 # Monitoring
 
 See how your app behaves on real devices: the crashes, slow screens and failed requests your users
 hit, and the session around each one. Angular Native renders through React Native's core, so apps
-report to [Coralogix](https://coralogix.com/?utm_source=ng-native&utm_medium=referral&utm_campaign=ng-native)
-through its React Native SDK, on iOS and Android.
+report to Coralogix through its React Native SDK, on iOS and Android:
+[coralogix.com](https://coralogix.com/?utm_source=ng-native&utm_medium=referral&utm_campaign=ng-native).
 
 - **Crashes and errors**, native and JavaScript, with the steps that led to them.
 - **Mobile vitals**: cold and warm starts, slow and frozen frames, memory and CPU.
@@ -29,16 +29,16 @@ Go. Rebuild once after installing it; after that, the dev loop works as before.
 ## Start it before the app
 
 Call `init` at the top of `src/main.ts`, before the app mounts, so errors during startup are
-reported too. It is asynchronous, and events wait until it finishes.
+reported too. It returns a promise that resolves once the SDK has started.
 
 ```ts
-import { CoralogixRum } from '@coralogix/react-native-plugin';
+import { CoralogixDomain, CoralogixRum } from '@coralogix/react-native-plugin';
 
 CoralogixRum.init({
   application: 'my-app',
   environment: __DEV__ ? 'development' : 'production',
   public_key: process.env.EXPO_PUBLIC_CORALOGIX_RUM_KEY,
-  coralogixDomain: 'EU2',
+  coralogixDomain: CoralogixDomain.EU2,
   version: '1.0.0',
   traceParentInHeader: { enabled: true },
 });
@@ -103,22 +103,28 @@ CoralogixRum.setUserContext({
 ## Session Replay
 
 Session Replay records what the user saw before an error. Every piece of text is masked unless you
-turn that off, and you choose what share of sessions to record:
+turn that off, and you choose what share of sessions to record. Start it once `CoralogixRum.init`
+has finished, by chaining it to the call in `src/main.ts`:
 
 ```ts
-import { SessionReplay } from '@coralogix/react-native-plugin';
+import { CoralogixRum, SessionReplay } from '@coralogix/react-native-plugin';
 
-SessionReplay.init({
-  captureScale: 0.5,
-  captureCompressQuality: 0.8,
-  sessionRecordingSampleRate: 10,
-  autoStartSessionRecording: true,
-  maskAllTexts: true,
-});
+CoralogixRum.init(options).then(() =>
+  SessionReplay.init({
+    captureScale: 0.5,
+    captureCompressQuality: 0.8,
+    sessionRecordingSampleRate: 10,
+    autoStartSessionRecording: true,
+    maskAllTexts: true,
+  }),
+);
 ```
+
+`options` is the object passed to `init` above.
 
 ## Where to go next
 
-The [Coralogix React Native SDK reference](https://www.npmjs.com/package/@coralogix/react-native-plugin)
-covers sampling, ignoring errors and URLs, custom spans and timing measurements.
+The SDK's reference covers sampling, ignoring errors and URLs, custom spans and timing
+measurements:
+[@coralogix/react-native-plugin](https://www.npmjs.com/package/@coralogix/react-native-plugin).
 [Deployment](/guide/deployment) covers the release builds you will be monitoring.

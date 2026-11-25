@@ -2,7 +2,7 @@
  * The blog's frame: the landing page's header and footer around a page of its own, so the blog
  * reads as part of the home page rather than of the documentation.
  */
-import { afterNextRender, Component, input, signal } from '@angular/core';
+import { afterNextRender, Component, DestroyRef, inject, input, signal } from '@angular/core';
 import { LandingFooter } from '../landing/footer.ts';
 import { LandingHeader } from '../landing/header.ts';
 import { observePast } from '../landing/scroll.ts';
@@ -31,6 +31,9 @@ export class BlogFrame {
   protected readonly scrolled = signal(false);
 
   constructor() {
-    afterNextRender(() => observePast('.blog-sentinel', (past) => this.scrolled.set(past)));
+    const destroyRef = inject(DestroyRef);
+    afterNextRender(() =>
+      observePast('.blog-sentinel', (past) => this.scrolled.set(past), destroyRef),
+    );
   }
 }

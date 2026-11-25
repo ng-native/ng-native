@@ -500,6 +500,9 @@ landing-header {
   flex-direction: column;
   background: var(--color-paper);
   padding: 1rem var(--gutter) 2rem;
+  /* On a short screen the links and the actions below them can outgrow the window. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* ------------------------------------------------------------------------------------ Hero */

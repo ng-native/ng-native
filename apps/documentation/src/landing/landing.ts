@@ -14,7 +14,7 @@
  * examples rather than one template repeated. Near the end, a dark band introduces the people who
  * maintain the project at Coralogix.
  */
-import { Component, afterNextRender, inject, signal } from '@angular/core';
+import { Component, DestroyRef, afterNextRender, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { html as planSource } from '../examples/plans.ts?excerpt';
 import { html as settingsSource } from '../examples/settings.ts?excerpt';
@@ -424,9 +424,10 @@ export class Home {
       },
     });
 
+    const destroyRef = inject(DestroyRef);
     afterNextRender(() => {
-      observePast('.landing-sentinel', (past) => this.scrolled.set(past));
-      observePast('.landing main > .h-px', (past) => this.pastHero.set(past));
+      observePast('.landing-sentinel', (past) => this.scrolled.set(past), destroyRef);
+      observePast('.landing main > .h-px', (past) => this.pastHero.set(past), destroyRef);
     });
   }
 
