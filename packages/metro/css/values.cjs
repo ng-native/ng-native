@@ -1194,6 +1194,7 @@ function fallbacks(varPart, kind, context) {
   return {
     ...(alternatives.length ? { alternatives } : {}),
     ...(fallback === undefined ? {} : { fallback }),
+    ...mathMark(fallback, varPart),
     ...(derived ? { fallbackToken: converted } : {}),
   };
 }
@@ -1205,6 +1206,24 @@ function fallbacks(varPart, kind, context) {
  */
 const sumOf = (varPart, kind, context) =>
   kind === 'length' ? calcLength(lastFallback(varPart.value?.fallback), context) : undefined;
+
+/**
+ * A math function's result is clamped where a value written out below zero is invalid, and in an
+ * `em` the two compile to the same marker, so which one it was goes with the fallback.
+ */
+const mathMark = (fallback, varPart) =>
+  fallback !== undefined && isMath(lastFallback(varPart.value?.fallback))
+    ? { fallbackMath: true }
+    : {};
+
+/** Whether a fallback, as written, is one math function: `calc(1em - 2em)`. */
+function isMath(raw) {
+  const parts = Array.isArray(raw)
+    ? raw.filter((part) => !(part.type === 'token' && part.value?.type === 'white-space'))
+    : [];
+  const name = parts.length === 1 && parts[0].type === 'function' ? parts[0].value?.name : '';
+  return ['calc', 'min', 'max', 'clamp'].includes(String(name).toLowerCase());
+}
 
 /**
  * What a fallback comes to once every token in it is unset: `var(--a, var(--b, 4px))` ends in

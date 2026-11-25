@@ -464,6 +464,8 @@ export interface DeferredDeclaration {
    * tokens in scope where it is used, as a browser substitutes it there.
    */
   readonly fallbackToken?: TokenValue;
+  /** A written `fallback` that is a math function's result, which is clamped, not invalid. */
+  readonly fallbackMath?: true;
   /**
    * What to write when the reference resolves, whatever it resolves to: `flex: var(--grow)` sets a
    * shrink of 1 and a basis of 0%, but only when there is a grow for them to go with.
@@ -6027,9 +6029,9 @@ function referenced(
 /** A token's value as the declaration uses it: moved by its arithmetic, or unset where invalid. */
 function usedAs(declaration: DeferredDeclaration, token: TokenValue | undefined, value: unknown) {
   if (declaration.adjust) return adjusted(value, declaration.adjust);
-  // A fallback that is a math function is a `fallbackToken`, and one written out is not. Only in
-  // a unit the node decides is the two the same, so that one is read as math.
-  const math = token ? token.fromMath : declaration.fallbackToken || isDeferredLength(value);
+  // A fallback that is a math function is a `fallbackToken`, or is marked as one where it is a
+  // unit the node decides, `calc(1em - 2em)`, which compiles to what `-1em` written out does.
+  const math = token ? token.fromMath : declaration.fallbackToken || declaration.fallbackMath;
   return !math && invalidNegative(value, declaration.props) ? undefined : value;
 }
 

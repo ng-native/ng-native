@@ -2692,11 +2692,12 @@ function sidedFallback(value, context) {
   if (!lengths) return null;
   const [top, right, bottom = top, left = right] = lengths;
   const reference = lone.value.name.ident;
+  const invalid = box === 'padding' ? lengths.find(belowZero) : undefined;
   return [top, right, bottom, left].map((fallback, side) => ({
     props: [`${box}${SIDES[side]}`],
     kind: 'length',
     reference,
-    fallback,
+    fallback: invalid ?? fallback,
   }));
 }
 
@@ -2717,13 +2718,22 @@ function corneredFallback(value, context) {
   if (!radii) return null;
   const [topLeft, topRight, bottomRight = topLeft, bottomLeft = topRight] = radii;
   const reference = lone.value.name.ident;
+  const invalid = radii.find(belowZero);
   return [topLeft, topRight, bottomRight, bottomLeft].map((fallback, corner) => ({
     props: [CORNERS[corner]],
     kind: 'length',
     reference,
-    fallback,
+    fallback: invalid ?? fallback,
   }));
 }
+
+/**
+ * A side's fallback written below zero, in points or in a unit the device settles. A box that
+ * takes nothing below zero finds the whole value invalid for one such side, as CSS does: so every
+ * side is given it, and the device unsets each, where keeping the others would draw half of it.
+ */
+const belowZero = (length) =>
+  typeof length === 'number' ? length < 0 : (length?.__defer?.factor ?? 0) < 0;
 
 /**
  * Two to four lengths written one after the other, or null for anything else. Each as a fallback
