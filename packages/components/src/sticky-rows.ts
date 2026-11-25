@@ -107,7 +107,10 @@ export class StickyRows {
    */
   private readonly drives = new Map<
     HostNode,
-    { drive: ScrollDrive; statics: string; range: string }
+    // `drawn`: native has been told where the scroll view is since the range last changed. A range
+    // changed mid-scroll is told once the scroll pauses: one changed just before then has no
+    // scroll event on its way to draw it.
+    { drive: ScrollDrive; statics: string; range: string; drawn: boolean }
   >();
   /**
    * What native moves the header by, once it has been pinned. Kept, moving it nowhere, when it no
@@ -413,20 +416,23 @@ export class StickyRows {
       const range = JSON.stringify(next.range);
       const held = this.drives.get(view);
       if (held?.statics === statics) {
-        const at = held.range === range ? from : this.drawnFrom(axis, from);
+        const drawn = held.range === range && held.drawn;
+        const at = drawn ? from : this.drawnFrom(axis, from);
         held.range = range;
+        held.drawn = drawn || at !== undefined;
         return held.drive.update(next.range, at);
       }
       held?.drive.stop();
+      const told = this.drawnFrom(axis, from);
       const drive = this.engine.driveByScroll(
         view,
         this.node,
         axis,
         next.range,
         next.statics,
-        this.drawnFrom(axis, from),
+        told,
       );
-      if (drive) this.drives.set(view, { drive, statics, range });
+      if (drive) this.drives.set(view, { drive, statics, range, drawn: told !== undefined });
     });
     for (const [view, held] of this.drives) {
       if (live.has(view)) continue;

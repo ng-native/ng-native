@@ -434,6 +434,20 @@ describe('virtual list sticky header', () => {
       unmount();
     });
 
+    it('draws a range changed just before the scroll pauses once it has, from where native is', async () => {
+      const { fabric, instance, toldSince, named, unmount } = await stickyRows([4]);
+      fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 300 } });
+      await frame();
+      const before = named('set').length;
+      // Inside the settle window: no scroll event is on its way, but the list does not know yet.
+      instance.sticky.set([4, 100]);
+      await frame();
+      clock.rest();
+      await frame();
+      assert.deepEqual(toldSince(before), [300], 'drawn at rest, with no scroll event to draw it');
+      unmount();
+    });
+
     it('lets native go of it when the list goes', async () => {
       const { fabric, drives, unmount } = await pinned([]);
       const tag = header(fabric).reactTag;
