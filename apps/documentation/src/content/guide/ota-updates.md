@@ -26,18 +26,13 @@ state.
 ## On macOS and Linux
 
 EAS Update does not update desktop apps. A packaged Mac or Linux app takes Expo Updates (protocol 1)
-from a server you host, at the `updates.url` in `app.json`: the desktop host downloads the launch
-asset and the update's other assets, checks each against the manifest's hash, and, with
-`updates.codeSigningCertificate` set, checks the manifest's signature. An update whose launch
-crashes before it has shown its first frame for 10 seconds (or been quit cleanly once its bundle has
-loaded) is not run again, so a quit while the bundle is still loading counts as a failed launch;
-once it has, a later crash does not roll it back, and an update downloaded before the app itself was
-updated (by Sparkle, a package manager or Flatpak) does not run over the new version's bundle. The
-[Updates](/packages/expo/updates) service is the same on the desktop: `check()` and `apply()`, with
-`enabled` false in development and without an `updates.url`. The host asks the server with
-`expo-platform` set to `macos` or `linux`. A Linux app keeps its updates in
-`$XDG_DATA_HOME/<app id>/updates`, outside the install folder, which a `deb`, `rpm` or Flatpak
-installs read-only; the package manager or Flatpak still updates the app itself.
+from a server you host, at the `updates.url` in `app.json`, with `expo-platform` set to `macos` or
+`linux`. Each asset is checked against the manifest's hash and, with
+`updates.codeSigningCertificate` set, the manifest's signature. An update whose launch crashes
+before it has shown its first frame for 10 seconds (or been quit cleanly once its bundle has
+loaded) is not run again; a later crash does not roll it back. The [Updates](/packages/expo/updates)
+service is the same as on a phone, with `enabled` false in development and without an
+`updates.url`. See [Updates](/packages/desktop/packaging#updates) for where the host keeps them.
 
 A `dmg` packaged with `--feed-url` also embeds Sparkle, which replaces the whole app, native code
 included, rather than its bundle: see
@@ -45,57 +40,20 @@ included, rather than its bundle: see
 
 ## HotCodePush
 
-HotCodePush, the over-the-air (OTA) update service for React Native, Expo, Capacitor and Cordova,
-ships its Expo SDK as a config plugin. The plugin wires the native projects at prebuild and the CLI
-bundles and uploads the platform you name. An NG Native app needs no change to the SDK: its
-JavaScript API is plain functions, and the plugin edits the files `expo prebuild` writes.
-
-### Install
+[HotCodePush](https://hotcodepush.com) ships its Expo SDK as a config plugin, which works unchanged
+in an NG Native app.
 
 ```sh
 npm install @hotcodepush/expo-ota-updates @ng-native/expo
 npm install --save-dev hotcodepush
+npx hotcodepush init
 ```
 
-`@ng-native/expo` loads the SDK in a service below. Install it at the version of your other
-`@ng-native` packages, and before the build: it carries native modules, a native module changes
-the build's fingerprint, and an update only reaches the builds whose fingerprint it was made for.
-
-Add the plugin after `@ng-native/metro`:
-
-```json
-{
-  "expo": {
-    "plugins": ["@ng-native/metro", "@hotcodepush/expo-ota-updates"]
-  }
-}
-```
-
-Add a `hotcodepush.json` next to `app.json`, with the app id from the
-[console](https://console.hotcodepush.com) and the channel this build follows:
-
-```json
-{
-  "appId": "4f2b7c9e-8d31-4a6e-9b0f-2c5d7e8a1b34",
-  "channel": "production"
-}
-```
-
-Then sign in with `npx hotcodepush login`, or set `HOTCODEPUSH_TOKEN` in CI. A release build runs
-the CLI, which registers the build and uploads the bundle it embeds, so later updates download only
-the files that changed. Signed out, a local build only warns and registers nothing, while a CI
-build fails.
-
-Generate a signing key with `npx hotcodepush signing-key create`. It adds the public key to
-`hotcodepush.json`, the build embeds it, and from then on the app runs only bundles signed with the
-private key. Without a key the app trusts whatever the HotCodePush servers deliver. The private key
-lands in `hotcodepush-private-key.pem` in the working directory. Add that file to `.gitignore`
-before the next commit and keep it where your CI secrets live, since whoever holds it can sign the
-app's updates.
-
-`npx hotcodepush init` does all of this in one step: it installs the package, writes the file, adds
-the plugin entry, signs you in and offers to generate the key. Then build in release, since a debug
-build takes its JavaScript from Metro and no update:
+`init` writes `hotcodepush.json`, adds the plugin, signs you in and offers to generate a signing
+key. Add the plugin after `@ng-native/metro` in `expo.plugins`. Install `@ng-native/expo` before
+the build: it carries native modules, which change the build's fingerprint, and an update only
+reaches the builds whose fingerprint it was made for. Build in release, since a debug build takes
+its JavaScript from Metro:
 
 ```sh
 npx expo prebuild
@@ -141,33 +99,14 @@ export class OtaSync {
 }
 ```
 
-The package's own `SyncResult` type describes the full result, if you import it.
-
-`sync()` runs one cycle, check, download and apply, and resolves a typed result. With the defaults
-the SDK runs the same cycle on its own at every start, downloads in the background and applies the
-update at the start after that, so the app never restarts under the user's hands. A release marked
-mandatory is the exception: by default it applies as soon as it downloads, which restarts the app
-and discards unsaved state such as a half-filled form. Set `mandatoryApplyStrategy` to `manual` in
-`hotcodepush.json` to apply it yourself at a safe moment. A rollback guard watches the first start
-of every update: an update whose bundle does not render in time is rolled back to the one before
-it.
+`sync()` runs one check, download and apply cycle. By default the SDK also runs it at every start
+and applies an update at the start after that; a release marked mandatory applies as soon as it
+downloads, restarting the app, unless `mandatoryApplyStrategy` is `manual`.
 
 ### Release
 
-Change something, then release it to the channel, once per platform. The CLI bundles the platform
-you name with `expo export:embed`, through the app's own Metro config, so the Angular compilation
-runs as in a build, and signs the bundle with the private key:
-
-```sh
-npx hotcodepush release create --platform ios --private-key-path hotcodepush-private-key.pem
-npx hotcodepush release create --platform android --private-key-path hotcodepush-private-key.pem
-```
-
-In CI, put the key's text in `HOTCODEPUSH_SIGNING_KEY`, drop the flag and add `--yes`, since
-nothing can answer the confirmation there. An app without a registered key releases without the
-key.
-
-The installed app downloads the release at its next start and runs it from the start after that.
+`npx hotcodepush release create --platform ios` (and `android`) bundles the app with
+`expo export:embed` through its own Metro config, so the Angular compilation runs as in a build.
 The [Expo SDK docs](https://hotcodepush.com/docs/sdks/expo) cover the configuration, the API and
 the events. The [demo app](https://github.com/hotcodepush-team/ng-native-ota-updates-demo) is the
 template app with the SDK wired in, built on both platforms in CI.

@@ -45,8 +45,9 @@ before mount. See [Localization](/guide/localization).
 
 Loading a language after rendering does not update existing templates; switching language requires
 an app reload; [Transloco](/guide/localization-transloco) switches at runtime with no reload.
-Metro has no build-time translation (`localize-translate`), and `ng extract-i18n`
-cannot build native apps.
+Metro has no build-time translation (`localize-translate`), and messages are extracted with
+`localize-extract` rather than `ng extract-i18n`; see
+[Extracting messages](/guide/localization-extraction).
 
 Plurals and selects work on iOS, Android and the [web host](/packages/web).
 
@@ -55,8 +56,7 @@ only when it is on its HTML allowlist, which no native element is, so `<text>` i
 left out along with its content.
 
 **Workaround:** style a whole plural or select from the element around it. Install `@babel/core@^7`
-next to `@angular/localize`, which depends on Babel 8: without it React Native's unranged Babel
-peer can resolve to 8, and a worklets bundle then fails.
+next to `@angular/localize`; see [Localization](/guide/localization#install).
 
 ## Angular DevTools does not attach
 
@@ -160,10 +160,8 @@ file changes.
 ## No imported value in a component's `host` or `styles`
 
 A component's `host` and `styles` are evaluated at build time from the file they are in: a spread, a
-constant or a `function` declaration in the same file works. `@oxc-angular/vite` compiles one file
-at a time, so unlike Angular's own compiler it cannot follow a value imported from another file, and
-the build fails naming the file, the import and what to write instead.
+constant or a `function` declaration in the same file works, and a value imported from another file
+fails the build, naming the file, the import and what to write instead.
 
 **Workaround:** for `host`, write the bindings in the same file, or share the behavior with a
-directive in `hostDirectives`. For `styles`, put CSS shared between files in a `.css` file and list
-it in `styleUrl` or `styleUrls`.
+directive in `hostDirectives`. For `styles`, see [What `styles` can be](/packages/fabric/css-engine#what-styles-can-be).

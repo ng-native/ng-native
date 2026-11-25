@@ -146,14 +146,7 @@ proxy settings. The host loads it rather than linking it, so neither dpkg nor rp
 find it, and the `deb` and the `rpm` name it themselves; without it, an app installed from either
 does not follow the desktop's proxy settings. A Flatpak's GNOME runtime has it.
 
-`package` makes packages and not repositories. To serve a `deb` or an `rpm`, add it to an apt or dnf
-repository with the distribution's own tools and sign the repository with the key; the package
-manager then updates the app. For a Flatpak, serve the `flatpak-repo` folder over HTTPS:
-
-```sh
-flatpak remote-add --if-not-exists my-app https://example.com/repo --gpg-import=key.gpg
-flatpak install my-app dev.example.MyApp
-```
+`package` makes packages and not repositories: see [Distribute](/guide/desktop-linux#distribute).
 
 An application id is the bundle identifier, with two or more parts of letters, digits, `_` and `-`,
 none starting with a digit, and a Flatpak's has three to five, with a dash only in the last. Its

@@ -11,24 +11,10 @@ from `createRoutes` in `@analogjs/router` itself, not a copy of it, and go to
 `provideNativeRouter` like any other routes, so every page is a screen on a native stack with a
 native header.
 
-It is opt-in and separate from the rest of the framework. An app that does not install it routes
-with a routes array as before, or with [file routes](/packages/router/file-routes) from the router
-itself.
-
-## @ng-native/analog or fileRoutes: which one
-
-Both route the same files, with the same names, to native stacks and tabs.
-
-- **`@ng-native/analog`** routes with `createRoutes` from `@analogjs/router` itself, and reads
-  `src/content` with `@analogjs/content`'s API. Use it to share pages and content with an Analog
-  web app, or to follow Analog's behaviour exactly as it changes.
-- **[`fileRoutes`](/packages/router/file-routes)** from `@ng-native/router` needs no other package
-  and no Metro plugin, and checks the files as the app starts. Start there for an app that is only
-  an app.
-
-A page written for one works in the other. Its `RouteMeta` type comes from the package that
-routes it. [Where it differs from Analog](/packages/router/file-routes#where-it-differs-from-analog)
-lists what `fileRoutes` does differently.
+It is opt-in and separate from the rest of the framework. [`fileRoutes`](/packages/router/file-routes)
+from `@ng-native/router` routes the same files with no other package; use `@ng-native/analog` to
+share pages and content with an Analog web app. See [which
+one](/packages/router/file-routes#fileroutes-or-ng-nativeanalog-which-one).
 
 ## Setup
 
@@ -52,30 +38,11 @@ const { withAnalog } = require('@ng-native/analog/metro');
 module.exports = withAnalog(withAngularNative(getDefaultConfig(__dirname)));
 ```
 
-It turns on `require.context`, which finds the pages, and resolves `@analogjs/router`'s import of
-`@analogjs/content` to an empty module. The router imports that package for Markdown pages only,
-but Metro resolves every import as it bundles, so without this no bundle builds where the package
-is missing, and where it is installed the bundle carries it and its Markdown parser for nothing. An
-import of `@analogjs/content` in the app's own code still resolves to the package, and fails the
-build, naming the package, when it is not installed.
-
-`@analogjs/content` is a required peer of `@analogjs/router`, so npm and pnpm install it, with
-its own required peers (`marked`, `prismjs`, `front-matter` and the `marked` plugins; its image
-peers, `sharp` and `satori`, are optional and left out). It takes up space in `node_modules` and
-none in the app. To keep it out of `node_modules` too, mark it optional where the package manager
-allows. With pnpm, in `pnpm-workspace.yaml`:
-
-```yaml
-packageExtensions:
-  '@analogjs/router':
-    peerDependenciesMeta:
-      '@analogjs/content':
-        optional: true
-```
-
-npm has no equivalent: an optional peer declared elsewhere, `@ng-native/analog` included, does not
-stop it installing a dependency's required one, and `overrides` can only swap it for another
-package.
+It turns on `require.context`, which finds the pages, and stubs `@analogjs/router`'s import of
+`@analogjs/content`, so the bundle does not carry it. An import of `@analogjs/content` in the app's
+own code still resolves to the package. `@analogjs/content` is still installed as a required peer
+of `@analogjs/router`; with pnpm, `packageExtensions` can mark it optional (see
+[pnpm's docs](https://pnpm.io/settings#packageextensions)).
 
 Find the pages with `require.context`, in a file of their own so a test can replace it:
 

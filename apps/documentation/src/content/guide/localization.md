@@ -24,30 +24,10 @@ It provides `localize-extract`, and its peers include `@angular/compiler` and
 languages. Omit `expo-secure-store` if the app follows the device rather than remembering an in-app
 language choice.
 
-### The Babel pin, and why it is not optional
-
-`@angular/localize` 22 uses `@babel/core` 8 for build tools. React Native, Metro's Babel plugins
-and `react-native-worklets` use Babel 7, but React Native declares an unranged `@babel/core` peer.
-Without a direct Babel 7 dependency, a package manager is free to resolve that peer to Babel 8:
-
-- **pnpm** resolves React Native's peer to `@babel/core@8.0.1` in a fresh app or workspace, and
-  the next bundle fails:
-  `[Worklets] Babel plugin exception: Requires Babel "^7.0.0-0", but was loaded with "8.0.1"`.
-  Bundles without worklets still succeed, hiding the problem until worklets are added.
-- **npm** usually nests Babel 8 under `@angular/localize`, but can hoist it to `node_modules`
-  and nest Babel 7 under each Metro package. That layout bundles, but is unreliable.
-
-The `@babel/core@^7` dev dependency makes the peer resolve to Babel 7, keeping Babel 8 private to
-`@angular/localize`. Neither `@angular/localize/init` nor `loadTranslations()` uses Babel at
-runtime. Check the installed versions:
-
-```sh
-pnpm why @babel/core     # or: npm ls @babel/core
-```
-
-`react-native`, `expo` and `react-native-worklets` should show `7.x`; `8.x` should appear only
-under `@angular/localize` and `@angular/compiler-cli`. In pnpm workspaces, also pin Babel in the
-root `package.json`: an unpinned package can move every package's React Native onto Babel 8.
+`@babel/core@^7` is required: `@angular/localize` depends on Babel 8, and without the pin React
+Native's unranged Babel peer can resolve to 8, which fails a bundle with worklets
+(`Requires Babel "^7.0.0-0", but was loaded with "8.0.1"`). In a pnpm workspace, pin it in the root
+`package.json` too.
 
 ### Load the runtime first
 
@@ -174,9 +154,8 @@ export class BasketCount {
 ```
 
 `#` becomes the number. To choose a category in code, use
-`inject(NgLocalization).getPluralCategory(count)` from `@angular/common`: Hermes has
-`Intl.NumberFormat` and `Intl.DateTimeFormat` but no `Intl.PluralRules`, so
-`new Intl.PluralRules(...)` throws on device.
+`inject(NgLocalization).getPluralCategory(count)` from `@angular/common`, not `Intl.PluralRules`,
+which Hermes lacks (see [Formatting](/guide/localization-formatting)).
 
 ## Recipes
 
@@ -192,9 +171,4 @@ export class BasketCount {
 
 ## What does not work yet
 
-- **Build-time translation** (`localize-translate`, one bundle per language) has no Metro
-  integration or verification. Use runtime translation.
-- **`ng extract-i18n`** requires an unsupported browser build. Use `localize-extract` on the Metro
-  bundle; see [Extracting messages](/guide/localization-extraction).
-
-See [Known limitations](/guide/limitations#i18n-is-runtime-only).
+Build-time translation and `ng extract-i18n` are not supported. See [Known limitations](/guide/limitations#i18n-is-runtime-only).

@@ -41,61 +41,14 @@ the same runtime: a real-time 3D `SceneKit` viewport and `UIKit` controls on iOS
 ## Set it up
 
 NativeScript needs a development build (`npx expo run:ios` or `npx expo run:android`), not Expo Go.
-In an Nx workspace, `nx g @ng-native/nx:nativescript <app>` does the setup. Anywhere else:
-
-```sh
-npx expo install @ng-native/nativescript @nativescript/react-native react-native-worklets
-npm install --save-dev @nativescript/types-android
-```
-
-```json
-{
-  "expo": {
-    "plugins": ["@ng-native/metro", "@ng-native/nativescript"]
-  }
-}
-```
-
-```ts
-// src/nativescript.d.ts
-/// <reference types="@nativescript/react-native/types/ios" />
-/// <reference types="@nativescript/types-android" />
-```
-
-```ts
-// src/main.ts
-const app = mount(Number(rootTag), App, getFabricUIManager(), {
-  providers: [provideNativeScript()],
-  // ...and the rest of the options main.ts already passes.
-});
-```
-
-Then rebuild the app. [Setup](/packages/nativescript#setup) covers the options, and an app with a
-`babel.config.js` of its own.
+In an Nx workspace, `nx g @ng-native/nx:nativescript <app>` does the setup. Anywhere else, install
+`@ng-native/nativescript`, add its config plugin and the SDKs' types, and provide it in `mount()`, as
+[Setup](/packages/nativescript#setup) shows.
 
 ## Call an API
 
 `call()` runs the function for the platform the app is on, synchronously, on the JavaScript thread:
-
-```ts
-import { Component, inject } from '@angular/core';
-import { Text } from '@ng-native/components';
-import { NativeScript } from '@ng-native/nativescript';
-
-@Component({
-  selector: 'app-device-name',
-  imports: [Text],
-  template: `<text>{{ model }}</text>`,
-})
-export class DeviceName {
-  private readonly native = inject(NativeScript);
-
-  protected readonly model = this.native.call({
-    ios: () => UIDevice.currentDevice.model,
-    android: () => android.os.Build.MODEL,
-  });
-}
-```
+see the [example](/packages/nativescript) on the package page.
 
 ## Touch the UI
 
@@ -159,7 +112,5 @@ covers props, lifetime, sizing, and the same on Android with an `android.view.Vi
 
 ## Test it
 
-In Node, where [`@ng-native/testing`](/packages/testing) renders components, there is no
-NativeScript: `call()` answers `undefined`, `runOnUI()` resolves to `undefined`, and `<ns-view>` is
-an empty view, so a component using them renders and is tested without a simulator.
-[In a test](/packages/nativescript#in-a-test) covers giving one native answers.
+In Node there is no NativeScript, so a component using it renders and is tested without a
+simulator. See [In a test](/packages/nativescript#in-a-test).

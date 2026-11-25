@@ -50,8 +50,7 @@ There is no `bootstrapApplication`, no `BrowserModule`, and no CSS selector nami
 `index.html` - there is no HTML document at all. The root Angular mounts into is `engine.root`, a
 plain object standing in for `Element`, and it becomes a screen's worth of native views the moment
 the first commit runs rather than by producing markup for a browser to paint. `DOCUMENT` is
-provided as a stub, just enough to satisfy the one Angular internal (`TransferState`, reached the
-moment a `resource()` is created) that calls `getElementById` on it. And there is no zone.js option
+only a [stub](/packages/platform/bootstrapping#what-is-in-the-injector). And there is no zone.js option
 to reach for: `mount()` provides zoneless change detection unconditionally, so the change-detection
 model a zoneless Angular app already uses on the web carries over unchanged.
 
@@ -74,17 +73,10 @@ mount(rootTag, App, getFabricUIManager(), {
 });
 ```
 
-`provideNativeHttpClient(...features)` takes the same `HttpFeature`s `provideHttpClient()` does -
-`withInterceptors()` among them - and configures `HttpClient` with `withXhr()` instead of the
-default `fetch` backend. That is not a style preference. Angular 22's default backend reads a
-response body only through `response.body`'s stream. Expo's `fetch` streams one, but a release
-build of an app whose `src/main.ts` does not import `expo` has React Native's own `fetch`, which is
-`whatwg-fetch` over XHR, whose `Response` has no `body`. There every request resolves with a null
-body and nothing reports why. So does any build with `EXPO_PUBLIC_USE_RN_FETCH` set to `1` or
-`true`, which tells Expo's runtime to leave React Native's `fetch` in place. React Native's
-`XMLHttpRequest` is native and complete, upload progress included, and the XHR backend uses
-`XMLHttpRequest` whatever the global `fetch` is. See
-[Known limitations](/guide/limitations#httpclient-needs-providenativehttpclient).
+`provideNativeHttpClient(...features)` takes the same `HttpFeature`s `provideHttpClient()` does,
+`withInterceptors()` among them, and uses React Native's native `XMLHttpRequest`. Plain
+`provideHttpClient()` can resolve every request with a null body in a release build: see [Known
+limitations](/guide/limitations#httpclient-needs-providenativehttpclient).
 
 A separate entry point, `@ng-native/platform/http`, so an app that never makes a request does not
 pull in `@angular/common`.

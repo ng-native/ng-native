@@ -339,46 +339,14 @@ import { provideTranslocoMessageformat } from '@jsverse/transloco-messageformat'
 providers: [provideTranslocoMessageformat()];
 ```
 
-The plugin builds on `@messageformat/core`, which compiles each message to a function that carries
-the plural rules of its language (generated from CLDR, languages with many forms included). Neither
-package calls `Intl.PluralRules`, which Hermes lacks on iOS and Android, so plurals need no
-polyfill. The runtime does call `Intl.NumberFormat` for number arguments, which Hermes has.
+It does not call `Intl.PluralRules`, which Hermes lacks, so plurals need no polyfill.
 
 ## Extract and validate the keys
 
-`transloco-keys-manager` and `transloco-validator` read source files, so they work on ng-native
-templates as they are. A key is found in these forms:
-
-- `{{ 'key' | transloco }}` in a `<text>` or as a prop binding, such as
-  `[title]="'key' | transloco"`
-- `*transloco="let t"` with `t('key')`
-- a ternary of two literals, such as `(cond ? 'a.b' : 'a.c') | transloco`
-- a `marker()` call in TypeScript
-
-Give each scope an entry in the `scopePathMap` of `transloco.config.ts`, so its keys land in the
-scope's file and not in the global one:
-
-```ts
-// transloco.config.ts
-import { type TranslocoGlobalConfig } from '@jsverse/transloco-utils';
-
-const config: TranslocoGlobalConfig = {
-  rootTranslationsPath: 'src/i18n/',
-  langs: ['en', 'fr', 'ar'],
-  scopePathMap: {
-    settings: 'src/features/settings/i18n/settings',
-  },
-  keysManager: {
-    input: ['src'],
-    output: 'src/i18n',
-  },
-};
-
-export default config;
-```
-
-A key stored as a plain string and only bound later (`{{ item.labelKey | transloco }}`) is
-invisible to the extractor: wrap it in `marker()` where it is defined.
+`transloco-keys-manager` and `transloco-validator` read source files, so they work on Angular
+Native templates as they are, `{{ 'key' | transloco }}` on a `<text>` or a prop binding included.
+Give each scope an entry in `scopePathMap` in `transloco.config.ts`, and wrap a key stored as a
+plain string and bound later in `marker()`. See [Transloco's documentation](https://jsverse.gitbook.io/transloco).
 
 ## Test with Vitest
 
@@ -416,15 +384,11 @@ scope has loaded, so wait for the text and do not read it on the first tick.
 
 ## Known limits
 
-- The native header does not show a route's title, so there is no title strategy to configure. See
-  [Screen titles](#screen-titles).
-- `Intl.PluralRules`, `Intl.RelativeTimeFormat` and `Intl.ListFormat` are missing from Hermes, so
-  code that calls them directly throws on device. Transloco and its messageformat plugin do not.
-  `Intl.NumberFormat` and `Intl.DateTimeFormat` exist on both platforms, but their output differs:
-  Arabic gets Latin digits on iOS and Arabic-Indic digits on Android, and iOS can round
-  differently. Pass `numberingSystem` and `calendar` explicitly where the two must match. See
+- `Intl.NumberFormat` and `Intl.DateTimeFormat` output differs between iOS and Android: Arabic gets
+  Latin digits on iOS and Arabic-Indic digits on Android, and iOS can round differently. Pass
+  `numberingSystem` and `calendar` explicitly where the two must match. Code that calls
+  `Intl.PluralRules`, `Intl.RelativeTimeFormat` or `Intl.ListFormat` directly throws on device; see
   [Formatting and right to left](/guide/localization-formatting).
-- Moving to Transloco from Angular's `i18n` is a rewrite of the texts, not of the build: the two
-  do not read each other's files. Transloco has a migration guide from Angular's `i18n`
-  ([link](https://jsverse.gitbook.io/transloco/migration-guides/migrate-from-angulars-i18n))
-  for the web; the steps for the texts apply to a native app too.
+- Moving from Angular's `i18n` to Transloco rewrites the texts, not the build; Transloco's
+  [migration guide](https://jsverse.gitbook.io/transloco/migration-guides/migrate-from-angulars-i18n)
+  applies to a native app too.

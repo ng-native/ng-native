@@ -22,9 +22,8 @@ reconciler or `react-dom` equivalent.
 @ng-native/fabric      the engine: retained tree, commit, events, CSS
 ```
 
-The engine has no Angular dependency: `@nx/enforce-module-boundaries` bans `@angular/*` imports
-in `@ng-native/fabric`, catching dependencies the tests would miss. It also has no dependency on
-React Native's JavaScript; the host supplies what it needs.
+The engine depends on neither Angular nor React Native's JavaScript; the host supplies what it
+needs. See [Fabric](/packages/fabric).
 
 `@ng-native/platform` contains the only Angular-aware renderer code, fulfilling the role of
 `@angular/platform-browser` for the DOM.
@@ -44,16 +43,8 @@ screen in C++, off the JavaScript thread.
 
 ## The host seam
 
-Two hosts share an explicit contract.
-
-`HostEngine` and `HostNode`, in `@ng-native/fabric`, define only the calls the shared packages
-make. Fabric's `Engine` implements the former and `EngineNode` extends the latter, preserving the
-native path. `@ng-native/web`'s `BrowserEngine` implements both over the DOM without casts.
-
-`worklet-style`, `worklet-scroll` and `native-gesture` sit outside this interface. They inject the
-concrete `Engine` to access Fabric handles for Reanimated and react-native-gesture-handler, rather
-than answer wrongly through a browser stub. A browser build never reaches them: it resolves
-`@ng-native/components/reanimated` and `/gestures` to inert directives that inject nothing.
+The shared packages talk to the engine through `HostEngine` and `HostNode`, which Fabric's engine
+and `@ng-native/web`'s browser engine both implement. See [Native and web](/guide/native-and-web#the-seam).
 
 ## CSS
 
@@ -63,18 +54,13 @@ own engine, Angular Native would silently drop component stylesheets.
 
 Angular Native handles CSS at build time and runtime.
 
-**At build time**, lightningcss parses component stylesheets inside the Metro transform. It converts
-values for React Native, compiles selectors into compounds and combinators, and sorts rules by
-specificity then source order. The device does no sorting. The rule set attaches to the component
-class as a static, which also scopes it: `RendererFactory2.createRenderer(host, type)` receives
-the component definition, whose class reference lets the renderer find its stylesheet without a
-registry or generated ID.
+**At build time**, lightningcss compiles each component's stylesheet inside the Metro transform
+into a rule set attached to the component class, which scopes it to that component. There is no
+runtime CSS parser.
 
-There is no runtime CSS parser: lightningcss is a native Node addon.
-
-**At runtime**, `packages/fabric/src/css.ts` matches and merges rules. It matches right-to-left
-so the rightmost compound rejects most candidates immediately. Precedence, weakest first: native
-defaults, matched CSS, explicit props, inline `[style]`, `!important`.
+**At runtime**, the engine matches and merges rules. Precedence, weakest first: native defaults,
+matched CSS, explicit props, inline `[style]`, `!important`. See
+[the CSS engine](/packages/fabric/css-engine).
 
 The cascade emulates inheritance for `color`, `font*`, `lineHeight`, `letterSpacing`, `textAlign`,
 `textTransform` and `textDecorationLine`. React Native does not inherit text properties: a view's
@@ -98,9 +84,8 @@ code. Declare the element in the template instead.
 
 ## Events
 
-Fabric dispatches events by node tag. The engine keeps the handler table, runs React Native's
-responder negotiation (capture down, bubble up, one node holding the gesture), and calls Angular.
-It uses React Native's event system without adding a synthetic layer.
+The engine runs React Native's own responder system and calls Angular's listeners, with no
+synthetic event layer. See [Components](/packages/components#events).
 
 ## Routing
 

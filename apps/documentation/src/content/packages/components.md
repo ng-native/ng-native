@@ -26,54 +26,26 @@ each commits as - `view` is `View`, `scroll-view` is `ScrollView`, `text` is `Pa
 `<view>` reaches native even with nothing imported. The component in this package takes the element
 name as its selector (`View` is `selector: 'view'`), so importing it does not change the tag. It
 attaches to the same element and adds what the table cannot: typed inputs, React Native's default
-props, accessibility, events, and for `<text>` the text layer itself. There is no second, prefixed
-set of wrappers to reach for; `<view>` with `View` imported is the wrapper.
+props, accessibility, events, and for `<text>` the text layer itself.
 
-That is also what the console message is about. On the first commit of a known element that no
-component has claimed, development builds log:
+The names are React Native's own in kebab case, so React Native's documentation for `ScrollView` is
+the documentation for `<scroll-view>`. Element names are lowercase: `<View>` matches no component
+and would render as an empty box, so the Metro transform fails the build on a capitalized element
+name, naming it. On the web, `text`, `image` and `switch` are created as HTML elements, never SVG.
+
+Development builds log a console message for a known element no component has claimed, for a name
+nothing accounts for (usually a typo), and for a prop an element does not declare:
 
 ```text
 [angular-native] <text> is used in a template that does not import Text. Add it to the
 component's `imports` from '@ng-native/components'; without it the element renders as a plain view.
 ```
 
-A name that nothing accounts for at all - not in the table, not the host of a component, and not
-an element selector of any directive a template imports - is almost always a typo, and gets a
-message of its own, once per name:
-
-```text
-[angular-native] <veiw> is not a known element: no component, directive or registered native
-view claims it, so it renders as an empty view. Check the spelling, or import the component that
-owns it.
-```
-
-Your own components' hosts (`<app-card>`) never trigger it, whatever their selector, and neither
-do names registered with `registerViewName` or `registerExpoView`.
-
-A misspelled input or attribute on an element is caught the same way. `[numberofLines]` on a
-`<text>` binds no input, so Angular hands it on as a property and native ignores it. Development
-builds compare each element's props with what its component declares, its inputs and the native
-props it writes, and log the rest once per element and name:
-
-```text
-[angular-native] <text> has no prop 'numberofLines', so native ignores it. Did you mean
-'numberOfLines'? Check the spelling against the Text page, or declare it with
-declareNativeProps('text', ['numberofLines']) if the native view does read it.
-```
-
-Styles, events, the accessibility and identity props, `data-*` and `aria-*` attributes, a bare
-marker attribute such as `listHeader`, and any attribute a directive in the template selects on or
-takes as an input never trigger it. A prop the native view does read but the component has no input
-for is declared once with `declareNativeProps` from `@ng-native/fabric`. Release builds skip the
-check.
-
-The names carry no prefix on purpose. They are React Native's own names in kebab case, so
-React Native's documentation for `ScrollView` is the documentation for `<scroll-view>`. And `ng-`,
-the obvious prefix, is Angular's: `ng-container` and `ng-template` are framework constructs, and
-an `<ng-view>` would read as one. On the web, where `text`, `image` and `switch` are also SVG
-element names, `@ng-native/web` creates every one of them in the HTML namespace, never as SVG: a
-`<text>` is its own HTML element styled by the reset stylesheet, and a `<switch>` is a real
-checkbox.
+Your own components' hosts never trigger these, nor do names registered with `registerViewName` or
+`registerExpoView`, styles, events, the accessibility and identity props, `data-*` and `aria-*`
+attributes, or an attribute a directive in the template selects on or takes as an input. A prop the
+native view reads but the component has no input for is declared once with `declareNativeProps`
+from `@ng-native/fabric`. Release builds skip the checks.
 
 Most elements come from the package's main entry point:
 
@@ -216,20 +188,3 @@ Markdown document; the [activity indicator](/packages/components/activity-indica
 [modal](/packages/components/modal) page covers presenting content over everything else. The
 [animation](/packages/components/animation) page covers plain CSS transitions, `AnimatedStyle` and
 Reanimated worklets.
-
-## Every page
-
-**Layout** - [layout](/packages/components/layout),
-[safe area](/packages/components/safe-area),
-[scroll view](/packages/components/scroll-view),
-[keyboard-avoiding view](/packages/components/keyboard-avoiding-view),
-[lists](/packages/components/lists)
-
-**Content** - [text](/packages/components/text), [image](/packages/components/image),
-[markdown](/packages/components/markdown),
-[activity indicator](/packages/components/activity-indicator)
-
-**Input** - [input](/packages/components/input), [switch](/packages/components/switch),
-[pressable](/packages/components/pressable), [gestures](/packages/components/gestures)
-
-**Presentation** - [modal](/packages/components/modal), [animation](/packages/components/animation)

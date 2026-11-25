@@ -37,8 +37,7 @@ Android API is callable from TypeScript, and a native view built in TypeScript, 
 Android `View`, can be placed in a template.
 
 `@nativescript/angular` is actively maintained: the [NativeScript/angular
-monorepo](https://github.com/NativeScript/angular) tracks current Angular releases, including
-22.0.0 (August 2026) for Angular 22. Its CSS engine emulates text-property inheritance, solving the
+monorepo](https://github.com/NativeScript/angular) tracks current Angular releases. Its CSS engine emulates text-property inheritance, solving the
 same problem as [CSS on native](/packages/fabric/css-engine). NativeScript targets iOS, Android
 and visionOS, with no browser counterpart to [`@ng-native/web`](/packages/web).
 

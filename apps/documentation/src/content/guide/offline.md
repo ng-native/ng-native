@@ -296,47 +296,10 @@ export class NoteFeed {
 }
 ```
 
-Provide `HttpClient` once through `provideNativeHttpClient()` in `mount()`; see
-[HTTP requests](/packages/platform#http-requests):
-
-```ts
-import { provideNativeHttpClient } from '@ng-native/platform/http';
-
-mount(rootTag, App, getFabricUIManager(), {
-  providers: [provideNativeHttpClient()],
-});
-```
-
-## An interceptor, for the same reconnect signal everywhere
-
-The `effect` handles one feed's reconnection. Use an `HttpInterceptorFn` for request-wide behavior,
-such as retrying a failed `GET` once or tagging requests sent offline for the server:
-
-```ts
-import type { HttpInterceptorFn } from '@angular/common/http';
-import { catchError, throwError } from 'rxjs';
-
-export const offlineAwareInterceptor: HttpInterceptorFn = (req, next) =>
-  next(req).pipe(
-    catchError((error) => {
-      // A network failure here is XHR's own error, not an HTTP status - there was no response to
-      // have a status. Distinguish it from a real 4xx/5xx before deciding whether to retry.
-      if (error.status === 0) {
-        console.warn(`[offline] ${req.method} ${req.url} did not reach the server`);
-      }
-      return throwError(() => error);
-    }),
-  );
-```
-
-```ts
-import { withInterceptors } from '@angular/common/http';
-import { provideNativeHttpClient } from '@ng-native/platform/http';
-
-mount(rootTag, App, getFabricUIManager(), {
-  providers: [provideNativeHttpClient(withInterceptors([offlineAwareInterceptor]))],
-});
-```
+Provide `HttpClient` through `provideNativeHttpClient()` in `mount()`, never plain
+`provideHttpClient()`; see [HTTP requests](/packages/platform#http-requests). It takes
+`withInterceptors()` for request-wide behaviour such as a retry; a request that never reached the
+server fails with `status` 0, not an HTTP status.
 
 ## Pitfalls
 
@@ -351,40 +314,10 @@ The `refresh()` effect uses `connected` to decide whether to try a request. The 
 handles unreachable servers even when `Network` reports internet access. Waiting for `reachable`
 would skip the first cold-start refresh while the estimate is unsettled.
 
-### `HttpClient` needs `provideNativeHttpClient()`
+### `Database` is not inert without `expo-sqlite`
 
-Plain `provideHttpClient()` silently returns null bodies wherever the global `fetch` is React
-Native's own, because its default `fetch` backend cannot read that response's body. The feed can
-appear offline, and its `catch` blocks do not resolve the ambiguity. Always use
-`provideNativeHttpClient()`; see
-[Known limitations](/guide/limitations#httpclient-needs-providenativehttpclient).
-
-### The queue needs an order, a transaction, and a stopping point
-
-`flushPendingWrites()` sorts by `seq`, sends oldest first and stops at the first failure, leaving
-it queued. Reordering changes the user's write sequence; continuing after failure can leave a stuck
-write retrying indefinitely alongside later writes. The `flushing` flag prevents concurrent
-flushes when reconnection coincides with a new write.
-
-`add()` inserts the note and queue entry in one transaction, preventing crashes or write failures
-from leaving unsendable notes. `refresh()` merges server data into the cache and preserves queued
-notes absent from the response because the server has not confirmed them.
-
-### `Database` is not inert without `expo-sqlite` - the queue has to be
-
-Without native modules, `Network.connected()` returns `false` and `Storage` signals retain their
-`initial` values. `Database` instead rejects `notesDb.ready()` on purpose: pretending to hold rows
-it does not have would be worse than saying so. See
-[Without the module](/packages/expo/database#without-the-module).
-
-A SQLite-only cache and queue therefore fail entirely without the module. If `loadFromCache()` or
-`add()` awaits `notesDb.ready()` without `try`/`catch`, it rejects before queuing writes. These
-unawaited calls produce unhandled rejections in Node tests and browser previews without
-`expo-sqlite`.
-
-Keep `queue` as the running app's source of truth. Wrap each `notesDb` call in `try`/`catch` so
-persistence failures cannot stop dependent operations. SQLite adds durability underneath in-memory
-state that already works without it - the same graceful-fallback contract `Network` and `Storage`
-follow automatically, kept by hand here because `Database` will not keep it for you.
-The [Notes example](/examples/notes) uses this pattern in `sync/notes.ts`; its tests exercise the
-feed, queue and merge in Node without `expo-sqlite`.
+Without native modules, `Network.connected()` returns `false` and `Storage` signals keep their
+`initial` values, but `Database` rejects `notesDb.ready()`. See
+[Without the module](/packages/expo/database#without-the-module). Keep `queue` as the running app's
+source of truth and wrap each `notesDb` call in `try`/`catch`, so the feed still works in Node tests
+and browser previews. The [Notes example](/examples/notes) does this in `sync/notes.ts`.

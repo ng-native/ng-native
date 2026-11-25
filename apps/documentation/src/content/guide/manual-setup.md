@@ -80,15 +80,9 @@ Add the package's config plugin to `app.json` as well:
 }
 ```
 
-An app built with the iOS 27 SDK has to adopt the UIKit scene life cycle or it exits at launch, and
-the `AppDelegate.swift` that `expo prebuild` writes does not. The plugin starts React Native from a
-scene delegate instead, passing on the links the app is opened with, and answers the status bar
-from view controllers, which is the only way that SDK still lets an app change it.
-
-On Android the plugin changes nothing unless asked. React Native ships layout animations off
-there, so [`LayoutAnimation`](/packages/device/layout-animation) makes its change without animating
-it; passing `["@ng-native/metro", { "android": { "layoutAnimations": true } }]` turns them on in
-the `MainApplication.kt` that `expo prebuild` writes.
+It adopts the UIKit scene life cycle an app built with the iOS 27 SDK needs to launch. Its options,
+for iPad windows and Android layout animations, are on the [Metro](/packages/metro#the-smallest-setup)
+page.
 
 ## Configure TypeScript
 
@@ -218,8 +212,8 @@ export class App {
 Import each element's component, for example `imports: [View, Text]`. Missing imports render
 plain views and trigger development warnings.
 
-Use lowercase element names. An uppercase name such as `<View>` matches no component's selector;
-the Metro transform fails the build on it.
+Use lowercase element names: the build fails on `<View>` (see
+[Components](/packages/components#one-name-two-layers)).
 
 Run `npx expo start`, then scan the QR code with Expo Go or press `i` or `a` for a simulator.
 Check that each press increments the counter.
@@ -256,19 +250,14 @@ import tailwind from '../.angular-native/app.tailwind.js';
   globalStyles: tailwind,
 ```
 
-Expo's transform worker returns empty native modules for `.css` files, so the generated sheet
-uses `.js`. `withTailwind` runs and watches the Tailwind CLI, updating the sheet when template
-classes change without restarting. Metro generates the sheet and its `.d.ts` in `.angular-native/`
-on startup. Start Metro before the first typecheck, and add `.angular-native/` to `.gitignore`
-since it is rebuilt on every start.
-
-See [Theming and Tailwind](/guide/theming) for how classes work without a browser.
+`withTailwind` builds the sheet into `.angular-native/` when Metro starts and watches templates for
+new classes; add `.angular-native/` to `.gitignore`. See [Tailwind](/packages/tailwind#setup) for
+the options and [Theming and Tailwind](/guide/theming) for how classes work without a browser.
 
 ## The dev loop
 
-Template and style edits hot-swap on the device, preserving component state, and an edited method
-or function is patched onto the running app. An edit to a field, a constructor, a constant or a
-selector reloads the app and returns to the page it left; the console logs why.
+Edits hot-swap on the device, keeping component state; some reload the app instead. See [Hot
+reload](/guide/limitations#hot-reload-has-a-few-full-reload-cases).
 
 ## Where to go next
 

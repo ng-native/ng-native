@@ -13,50 +13,21 @@ const { withAngularNative } = require('@ng-native/metro/config.cjs');
 module.exports = withAngularNative(getDefaultConfig(__dirname));
 ```
 
-`withAngularNative(config, options)` changes the config Expo hands you:
+`withAngularNative(config, options)` gives the config Expo hands you:
 
-- Sets `config.transformer.babelTransformerPath` to its own transformer, which compiles Angular
-  before Expo's own stock transformer runs.
-- Adds `html`, `css` and `scss` to `config.resolver.sourceExts`, so an external template or
-  stylesheet becomes an edge in Metro's module graph and Metro watches it. In a release build the
-  transformer emits those as empty modules; in dev each one carries the hot update for the
-  components that use it (see [hot reload](#hot-reload-without-an-angular-dev-server) below).
-  It also takes `html` back out of `config.resolver.assetExts`, where Expo lists it for its DOM
-  components: Metro checks assets first, and a template bundled as an asset never reaches the
-  transformer.
-- Adds `woff` and `woff2` to `config.resolver.assetExts`, so a web font a
-  [DOM component](/packages/expo/dom-components)'s stylesheet names in a `url()` is exported with
-  its page.
-- Wraps Expo's transform worker (`config.transformerPath`) so that, in dev and on native, a
-  stylesheet reaches the transformer above. Expo's worker otherwise turns every native stylesheet
-  into an empty module before any transformer sees it, which would leave an edited `styleUrl`
-  nothing to carry its update in. Web stylesheets, CSS modules and release builds are left to Expo.
-  A transform worker you configured yourself is left alone, and an edited stylesheet then reloads.
-- Adds three polyfills to `config.serializer.getPolyfills`, which run before `@angular/core` is
-  first evaluated: one clears `ngDevMode` in a production build (Angular's CLI does this at build
-  time normally and Metro does not, so without this a release bundle runs every dev-mode assertion
-  Angular has; the preset also folds it in Terser so the dead branches are stripped), and one
-  defines the globals `animate.enter` and `animate.leave` read to decide whether they do anything at
-  all - `document.documentElement.getAnimations`, `Node.ELEMENT_NODE`, and stand-ins for
-  `AnimationEvent`/`TransitionEvent` that make every animation this environment reports read as a
-  transition (see [Animation](/packages/fabric/animation)), and one defines `FinalizationRegistry`,
-  which Hermes lacks and Angular's signal debug graph constructs while `@angular/core` is first
-  evaluated.
-- Bumps `config.transformer.cacheVersion` with a hash of the compiler's own `.cjs` sources, found by
-  walking the package directory rather than a hand-kept list. In a dev server, it also watches those
-  same sources and logs a warning if they change, because Metro loads the transformer into a worker
-  pool once at startup: an edit to the compiler otherwise reaches nothing until you restart, with no
-  error at all.
-- Wraps each of `config.cacheStores` so a component's cached transform is not reused once a
-  `templateUrl` or `styleUrl` file it read has changed or gone (see
-  [External templates and stylesheets](#external-templates-and-stylesheets)). Only the stores the
-  config has when `withAngularNative` runs are wrapped, so set your own `cacheStores` before calling
-  it. The worker above is what records those files, so with a worker you configured yourself there
-  is nothing to check and a release build needs `--clear` after such an edit.
-- Wraps `config.server.enhanceMiddleware`, keeping one you set before calling it, to reach the dev
-  server Metro starts, which then compiles a component again once a `templateUrl` or `styleUrl` file
-  it read has changed or gone, rather than serving the module it compiled before. One set after
-  `withAngularNative` replaces the wrapper, so wrap the config's own instead.
+- a transformer that compiles Angular components, templates and component CSS before Expo's own,
+- `html`, `css` and `scss` as source files, so Metro watches external templates and stylesheets,
+  and `woff`/`woff2` as assets, for a [DOM component](/packages/expo/dom-components)'s fonts,
+- the polyfills `@angular/core` needs on Hermes: `ngDevMode` cleared in a release build, the
+  globals [`animate.enter` and `animate.leave`](/packages/fabric/animation) read, and
+  `FinalizationRegistry`,
+- a cache that is redone when the compiler, a `templateUrl` or a `styleUrl` file changes, and a dev
+  server that serves the new text of an edited template or stylesheet.
+
+Set your own `cacheStores` and `server.enhanceMiddleware` before calling `withAngularNative`, which
+wraps the ones it finds. With a `transformerPath` of your own, an edited stylesheet reloads rather
+than hot-swaps, and a release build needs `npx expo export --clear` after a template or stylesheet
+edit.
 
 Pass `{ workspaceRoot }` in a monorepo where the framework packages live outside your app's own
 `node_modules` - it adds the workspace root to `watchFolders` and both `node_modules` directories to
@@ -73,9 +44,8 @@ step.
 A matching file goes through the AOT compiler: templates become instructions, the decorator block
 is gone, styles are compiled separately (below). A few things ride along with that:
 
-- A capitalized element name is a hard build failure, not a blank screen: this checks for exactly
-  that shape per component and throws, naming the element it found, rather than letting a green
-  build ship an empty screen.
+- A capitalized element name fails the build, naming the element (see
+  [Components](/packages/components#one-name-two-layers)).
 - A resource import is added for every external template or stylesheet a component uses, so
   Metro's module graph has an edge to it and watches it.
 - Source positions are remapped so a stack trace, warning or debugger points at the file you wrote
@@ -94,30 +64,16 @@ way [Analog](https://analogjs.org) offers it.
 module.exports = withAngularNative(getDefaultConfig(__dirname), { compilation: 'ngp' });
 ```
 
-- It needs Angular 22.2 or later, with `typescript` and `@angular/compiler-cli` installed. Until
-  `@angular/ngp` is published, `@ng-native/metro` ships a build of it made from an Angular commit
-  (`ngp/build.json` names it); an app with `@angular/ngp` installed gets that one instead.
-  `ANGULAR_NATIVE_NGP_COMPILER` names a build to use, and `ANGULAR_NATIVE_NGP_NATIVE_BINDING` a
-  native analyzer in place of the WebAssembly one.
-- Each Metro worker analyzes the app's `tsconfig.json` once, the first time it compiles a
-  component, and compiles a file at a time after that, with that file's `angularCompilerOptions`.
-  `tsconfig` names another file. A component outside that program is compiled by oxc. In dev, a
-  changed file, template or stylesheet is analyzed again before the next file compiles.
-- Metro resolves packages with that tsconfig's `customConditions`, inherited through `extends`.
-  With oxc they come from the app's own `tsconfig.json` alone, so switching `compilation` can change
-  which entry of a package's `exports` Metro picks.
-- Templates and the app's TypeScript are type-checked as they compile, with TypeScript 7's language
-  server, so the build fails on a type error in a template, at its line in the template. That needs
-  `@typescript/native-preview` (or `TSNATIVE_BINARY_PATH`); `disableTypeChecking: true` turns it
-  off. Each Metro worker runs its own checker, against the nearest `tsconfig.json`, so a `tsconfig`
-  other than that one gets a warning. `ANGULAR_NATIVE_TSGO_TIMEOUT_MS` (five minutes by default) is
-  how long a check waits for the checker before starting a new one.
-- A component's cached transform, and with type checking on any app module's, is redone when a file
-  it imports changes, directly or through the files those import. Imports resolve as the tsconfig
-  resolves them, a `paths` alias included; packages in `node_modules` are not followed.
-- Unlike oxc, Angular's compiler reports an element no component in `imports` matches, as `ngc`
-  does.
-- Hot reload works as it does with oxc: a swapped template is still compiled by oxc.
+- It needs Angular 22.2 or later, with `typescript` and `@angular/compiler-cli` installed.
+  `@ng-native/metro` ships a build of `@angular/ngp`; an app with `@angular/ngp` installed uses that
+  one. `ANGULAR_NATIVE_NGP_COMPILER` names another build.
+- It compiles against the app's `tsconfig.json` (`tsconfig` names another file) and its
+  `angularCompilerOptions` and `customConditions`. A component outside that program is compiled by
+  oxc.
+- Templates and TypeScript are type-checked as they compile, so the build fails on a type error at
+  its line in the template. That needs `@typescript/native-preview` (or `TSNATIVE_BINARY_PATH`);
+  `disableTypeChecking: true` turns it off.
+- It reports an element no component in `imports` matches, as `ngc` does.
 - Like `libraryStyles`, it needs the preset in front of Expo's transform worker.
 
 ## Component CSS
@@ -137,7 +93,7 @@ dropped with a warning in the build for the other. CSS that does not parse fails
 
 A `styles` entry the compiler cannot read from the component's own file, such as an imported
 constant or a concatenation with `+`, also fails the build, naming the component and the entry.
-[What `styles` can be](/packages/fabric/css-engine) lists the forms that compile.
+[What `styles` can be](/packages/fabric/css-engine#what-styles-can-be) lists the forms that compile.
 
 ### A library's component CSS
 
@@ -197,73 +153,12 @@ rather than hot-swaps.
 
 ## Hot reload without an Angular dev server
 
-Angular's own HMR fetches a "replace metadata" module over HTTP from a Vite dev server, which Metro
-and Hermes have no equivalent of. So the compiler generates that module and embeds it directly in
-the file it belongs to: on re-evaluation, the embedded block patches the original class - the one
-live views still point at - by calling `ɵɵreplaceMetadata`, and then calls `module.hot.accept()` so
-Metro stops bubbling the change into a full reload.
-
-A template or inline `styles` edit is applied this way. The block decides by hashing the file
-with every component's template and inline styles removed: if that "shape" hash has not moved, only
-those changed and the swap runs, carrying the recompiled rule set for a styles edit.
-
-When it has moved, the class or a function changed, and the block patches the running app from
-the file as it is now. The class every other module holds takes the edited methods, getters and
-lifecycle hooks, so each instance keeps its state; a function at the top of the file is replaced
-behind the one its importers hold. Each reads a count of patches as it runs, so a template or a
-`computed` that called one works its value out again, and an `effect` does not. This reaches a
-component, a service, a directive, and a module of plain functions in the app's own source.
-
-What a patch cannot apply falls back to a full reload through `globalThis.__angularNativeReload`,
-the hook [`mount()` installs in development](/packages/platform/bootstrapping): an edit to
-anything that has already run and will not run again, which
-[Limitations](/guide/limitations#hot-reload-has-a-few-full-reload-cases) lists. That hook exists
-because React Native's own Fast Refresh accepts an update and reports success even when the actual
-reload needed a fresh module evaluation, so without it such an edit would ship, log nothing, and
-leave the app running the code from before the edit while looking like it worked.
-
-A reload returns to the page it left. `withAngularNative` adds an address to the dev server,
-`/__ng-native/route`, where the router leaves its history before the app reloads and collects it
-when the app starts: once, within a minute, and one history for each platform.
-
-A template can change shape freely: the swap rebuilds the component's views with the new
-template's own slot and binding counts, so adding or removing elements, bindings, `@if` or `@for`
-blocks keeps the component's state. If a swap throws partway through anyway - an expression that
-fails on its first render, say - the block logs the error and falls back to a full reload, rather
-than leaving a half-rebuilt view on screen that throws on every change detection after it.
-
-### External templates and stylesheets
-
-An edit to a `templateUrl` or `styleUrl` file swaps in place too, keeping the component's state.
-Metro transforms again only the file that changed, and a component's template and sheet are compiled
-into the component's own module, so left to itself a running dev server would serve that module as
-it was compiled against the old text, to every reload and launch, until the component's `.ts` file
-changed. So before the dev server answers a bundle request or sends a hot update, it checks each
-template and stylesheet a module of the bundle was compiled from against the file as it is now, and
-compiles the module again when one has changed or gone. The hot update then carries the
-component's module compiled against the new text, which swaps it in place, and the next reload or
-launch loads the component as it is now.
-
-The template's or stylesheet's own module carries the same swap. In dev, the transformer finds the
-components that use the file - the source files anywhere in the project (the
-nearest directory above the file with a `package.json`, leaving out `node_modules`, `ios`, `android`
-and build output) naming it in a `templateUrl` or `styleUrl`, whether as `./card.css` beside it or
-`../shared/lab.css` from another directory - and compiles each of them against the new text into
-that module: the same `ɵɵreplaceMetadata` swap, plus the component's recompiled rule set when the
-file is a stylesheet. The module accepts its own update, so nothing bubbles into a reload.
-
-It runs before the component's module (the component imports it), and when the component registers,
-any template or sheet newer than the one it was compiled with is applied first.
-
-A release build empties that module, so it cannot carry the edit there. Instead, the transform
-worker writes down each template and stylesheet a component's transform read, with a hash of its
-text, and the cache stores the preset wraps answer a miss once one of them has changed or been
-deleted. Metro then compiles the component again against the new text. Without that, two
-`npx expo export` runs with only a `.html` or `.css` file edited between them shipped the same
-bundle until `--clear`.
-
-A stylesheet several screens share is swapped on every one of them by the one edit. The ceiling is
-the project: a component in another package of a monorepo that reaches the file across the package
-boundary is not found, and the dev server warns when a template has no component in the project
-using it. An edit to the component's `.ts` file follows the rules above, whichever file its
-template lives in.
+The compiler embeds Angular's HMR update in each component's own module, so Metro's hot reload
+swaps a component in place with no Angular dev server. A template or style edit, inline or in a
+`templateUrl` or `styleUrl` file, and an edited method, getter, lifecycle hook or top-level
+function keep the running app's state. A template can add or remove elements, bindings, `@if` and
+`@for` blocks. An edit a patch cannot apply, or a swap that throws, falls back to a full reload,
+which returns to the page it left. A stylesheet shared by several components swaps in every one of
+them within the project; a component in another package of a monorepo picks up the edit only when
+its own file changes. [Limitations](/guide/limitations#hot-reload-has-a-few-full-reload-cases)
+lists which edits reload.

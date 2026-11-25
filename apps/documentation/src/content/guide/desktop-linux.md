@@ -56,8 +56,7 @@ runtime it brings. The host is built on AlmaLinux 9, so it needs glibc 2.34 at m
 The host checks for each newer API as it starts and uses an older one where it is missing, so a
 newer libadwaita changes how a dialog or a spinner is drawn and not whether the app runs.
 
-The project's CI builds the host on AlmaLinux 9 for x64 and arm64 on every pull request, and
-launches it each night on Ubuntu 24.04 and 26.04, Debian 13, and Fedora 44 and 45. A `deb` is made
+A `deb` is made
 for Debian 13 and Ubuntu 24.04 or later and an `rpm` for Fedora and the RHEL family 9 or later. A
 Flatpak does not depend on the system's libraries.
 
@@ -172,13 +171,10 @@ What the command needs from the app, and stops before building to say what is mi
 - **`--homepage`**, an `https` URL, and **`--categories`**, a list of freedesktop categories with a
   main one, such as `Utility;Office`. Categories default to `Utility`.
 
-Each format installs `<app-id>.desktop`, whose `MimeType` lists the plugin options'
-`documentTypes[].mimeTypes` and the app's URL schemes, the icons, and `<app-id>.metainfo.xml`, built
-from `name`, `description` and `version` and from `--license` and `--homepage`. A `deb`, an `rpm`
-and a Flatpak also install a D-Bus service and mark the desktop entry `DBusActivatable=true`, so
-opening a link or a file starts the app, or hands it to the one that is running (see
-[Windows](/packages/device/app-windows)). The package name is the slug, and the version is
-`version`.
+Each format installs a desktop entry, the icons and AppStream metainfo; a `deb`, an `rpm` and a
+Flatpak also make the app D-Bus activatable, so opening a link or a file starts the app or hands it
+to the one that is running. The package name is the slug, and the version is `version`. [Linux
+packages](/packages/desktop/packaging#linux-packages) lists what each package holds.
 
 The plugin options hold nothing for Linux packaging. `capabilities` still applies, and a Flatpak
 makes each declared path a `--filesystem` permission, and cannot run the system's programs: the
@@ -219,18 +215,9 @@ new package.
 
 ## Prebuilt hosts
 
-Each release of `@ng-native/desktop` publishes a Linux host for x64 and for arm64, in two
-flavours: the debug host `npm run linux` runs, with React Native's debugger, and the release host
-`package` ships. Each is built on AlmaLinux 9 and packed with its `hermesc`, and is not signed. A
-download is checked by the SHA-256 in `prebuilt.json` and deleted if it does not match.
-
-The command uses one when the app links no native desktop code of its own, its host libraries
-(`react-native-screens`, `react-native-safe-area-context`, `react-native-svg`,
-`react-native-webview`, `react-native-worklets` and `react-native-reanimated`) are the versions the
-host was built with, and the app denies none the host has. Otherwise it builds from source, for the
-machine's architecture. A Mac therefore packages for Linux with no Linux machine unless the app has
-native desktop code of its own, which needs a Linux machine of each architecture it packages for.
-`NGN_DESKTOP_FROM_SOURCE=1` always builds from source. See
+`run` and `package` use a prebuilt host for x64 or arm64 when the app links no native desktop code of
+its own, so a Mac packages such an app for Linux with no Linux machine. An app with native desktop
+code builds its host on Linux of each architecture it packages for. See
 [Prebuilt hosts](/packages/desktop/packaging#prebuilt-hosts).
 
 ## What differs on Linux

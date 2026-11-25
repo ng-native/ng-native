@@ -122,9 +122,8 @@ export class App {
 Edit the `title` text and save to see it update on the device. Press the button to increment
 `count`: its label reads "Tapped 1 times", "Tapped 2 times", and so on.
 
-Use lowercase names such as `<view>` and `<text>`. An uppercase name such as `<View>` matches no
-component's selector, and the Metro transform fails the build on it. An element used without its
-import renders a plain view and logs a development warning.
+An uppercase name such as `<View>` fails the build, and an element used without its import renders
+a plain view with a development warning; see [Components](/packages/components#one-name-two-layers).
 
 ## Run `app.test.ts`
 
@@ -190,11 +189,8 @@ browser.
 
 ## Update templates and styles
 
-Template and stylesheet edits preserve component state through Angular's `ɵɵreplaceMetadata`,
-which the Metro transform embeds in the module. No Angular dev server is involved. An edited method
-or function is patched onto the running app as well. An edit that cannot be, to a field, a
-constructor or a constant, reloads the app and returns to the page it left; the console logs why.
-[Limitations](/guide/limitations) lists each case.
+Template, style and method edits hot-swap on the device and keep component state; some edits reload
+the app instead, as [Limitations](/guide/limitations#hot-reload-has-a-few-full-reload-cases) lists.
 
 ## Expo Go or a development build
 

@@ -66,11 +66,8 @@ missing import. The same applies to `ngModel` and Reactive Forms directives.
 
 ## Why no adapter class was needed
 
-`<text-input>` exposes `value` as a `model<string>()`; `<switch>` exposes `checked` as a
-`model<boolean>()`. These names let `FormField` provide two-way binding, disabled/readonly state
-and touched-on-blur handling. See [Text input](/packages/components/input#the-signal-forms-contract)
-for the mapping of `disabled()`/`readonly()` to `editable` and `invalid`/`touched` to
-`data-invalid`/`data-touched` for CSS.
+`<text-input>` and `<switch>` expose `value` and `checked` as `model()`s, which `FormField` binds
+directly. See [The Signal Forms contract](/packages/components/input#the-signal-forms-contract).
 
 ## Style invalid state
 
@@ -230,11 +227,5 @@ a `cents` model, is bound to the field's own value instead:
 <app-price [(cents)]="line().cents().value" />
 ```
 
-**The model is not deeply equal to the data it was given.** Signal Forms keys each item of an
-array with a symbol, so `expect(order()).toEqual({ lines: [...] })` fails on the key.
-`toMatchObject` compares the properties it is given and passes.
-
-**A long array costs more per keystroke.** The form's model is one signal, so a keystroke asks
-every field of every item whether it changed, though only the one line is committed, and a
-`<scroll-view>` mounts a card for every item when the form opens. For hundreds of items, a
+For hundreds of items, a
 [`<virtual-list>`](/packages/components/lists) mounts only the rows on screen.

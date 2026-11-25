@@ -6,8 +6,7 @@ summary: The retained tree, native view mapping and CSS engine underneath every 
 # Fabric
 
 `@ng-native/fabric` is the framework-agnostic engine everything else is built on. Nothing in
-it imports `@angular/core` - that boundary is enforced by a lint rule, not just a comment - so it
-is a retained tree of nodes, a commit step that turns changes into one call into Fabric, and a CSS
+it imports `@angular/core`: it is a retained tree of nodes, a commit step that turns changes into one call into Fabric, and a CSS
 engine with a real cascade, running with no DOM anywhere near it.
 
 You will not usually import from this package directly. [`@ng-native/platform`'s
@@ -18,21 +17,9 @@ that ships no Angular bindings of its own.
 
 ## From an element to a native view
 
-Every element your template writes - `<view>`, `<text>`, `<scroll-view>`, `<pressable>` - is a node
-in a retained tree, and an internal lookup decides what native component it commits as. A small
-table maps the primitives `@ng-native/components` ships to Fabric's own component names:
-`view` to `View`, `text` to `Paragraph`, `scroll-view` to `ScrollView`, `switch` to `Switch`, and so
-on. `pressable` and `touchable-opacity` have no native component of their own and commit as a plain
-`View`, since press handling is JavaScript on top either way.
-
-An element name your app has not registered still renders, as a plain view: an Angular component
-host element always exists in the tree - Angular creates one for `<x-card>` whether or not you
-import anything - so an unmapped name cannot fail the way a missing DOM element would. The cost is
-that a typo'd element name, or a Fabric primitive used without importing its component from
-`@ng-native/components`, renders as an empty box instead of an error; in a dev build it logs a
-console warning naming it. Element names must also be lowercase - a capitalized tag such as `<View>`
-matches no component's selector, so it would be an unmapped name too.
-[Metro](/packages/metro/configuration) catches that at build time and fails loudly instead.
+Every element your template writes is a node in a retained tree, committed as the native component
+its name maps to; [Components](/packages/components#one-name-two-layers) lists the names and the
+development warnings. An element name nothing registers still renders, as a plain view.
 
 A third-party Fabric component - `react-native-screens`, for instance - is added with
 `registerViewName('rns-screen', 'RNSScreen')`, optionally with `defaultProps` for a native view

@@ -18,14 +18,9 @@ lists what it has and the gaps it knows of, area by area, and the
 A library uses its own part of the DOM, so whether one works is a question of what that library
 calls.
 
-Nothing in an app changes until it adds the provider, and everything the provider adds is taken
-away again when the last app that asked for it is destroyed, but for the window's
-`addEventListener`, `removeEventListener` and `dispatchEvent`, and Angular's DOM adapter. The
-window's listeners go with the app, and those three stay, so a service destroyed after the
-provider's own teardown can still take its listener off the window, and one added after is kept
-for the next app. Angular takes a DOM adapter once and never gives it back, so the one the
-package gives Angular as the first app starts, where the app set none of its own, stays: it holds
-nothing of an app, and speaks for the newest one up. Components written for native, the
+Nothing in an app changes until it adds the provider. Everything the provider adds is removed when
+the last app that asked for it is destroyed, except Angular's DOM adapter and the window's
+`addEventListener`, `removeEventListener` and `dispatchEvent`. Components written for native, the
 `@ng-native/components` elements and the app's own, stay the native views they are.
 
 ## Install
