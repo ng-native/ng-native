@@ -6397,11 +6397,54 @@ const isNegativeWritten = (prop: string, text: string): boolean =>
  * prop takes.
  */
 export function boundRefusal(prop: string, text: string): string | undefined {
+  if (CSS_WIDE_TEXT.test(text) && !KEPT_WORD.has(prop) && !inheritsInline(prop, text)) {
+    return 'it is a CSS-wide keyword, which this cascade does not implement for it';
+  }
   if (isNegativeWritten(prop, text)) return 'it is negative';
   if (prop === 'fontSmoothing' && !SMOOTHING_SET.test(text)) return 'it is none of its keywords';
   if (isRefusedMath(prop, text)) return 'its math comes to no type it takes';
   if (isRefusedRatio(prop, text)) return 'it is no ratio';
   return undefined;
+}
+
+/**
+ * Where a CSS-wide keyword set on an element is left as it is: font smoothing, which reads its
+ * own, and a font family, which the `font` shorthand hands on unquoted, so a family named
+ * `"inherit"` cannot be told from the keyword. ponytail: `font-family: inherit` set on an element
+ * is not the parent's family yet; mark the shorthand's family as quoted to tell the two apart.
+ */
+const KEPT_WORD: ReadonlySet<string> = new Set(['fontSmoothing', 'fontFamily']);
+
+/** A CSS-wide keyword, the whole of a value set on an element. */
+const CSS_WIDE_TEXT = /^[ \t\n\r\f]*(?:inherit|initial|unset|revert|revert-layer)[ \t\n\r\f]*$/i;
+
+/**
+ * The props `inherit` is the parent's value of, set on an element as in a stylesheet: the ones
+ * the compiler's `INHERITS` takes it for, by the prop native reads.
+ */
+const INHERITS_INLINE: ReadonlySet<string> = new Set([
+  'color',
+  'backgroundColor',
+  'opacity',
+  ...['width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight'],
+  ...['fontSize', 'fontStyle', 'fontWeight', 'lineHeight'],
+  ...['letterSpacing', 'textAlign', 'textTransform'],
+  ...['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'].map((c) => `border${c}Radius`),
+  ...['', 'Top', 'Right', 'Bottom', 'Left'].flatMap((side) =>
+    ['Width', 'Color', 'Style'].map((part) => `border${side}${part}`),
+  ),
+]);
+
+/**
+ * Whether a CSS-wide keyword set on an element as `prop` is the parent's value: `inherit` for a
+ * prop `INHERITS_INLINE` holds, and `unset` too for one CSS hands down by itself.
+ */
+export function inheritsInline(prop: string, text: string): boolean {
+  // CSS's own whitespace, not `trim()`'s, which takes U+00A0 too.
+  const word = text.replace(/^[ \t\n\r\f]+|[ \t\n\r\f]+$/g, '').toLowerCase();
+  if (prop === 'fontSmoothing') return word === 'inherit' || word === 'unset';
+  if (!INHERITS_INLINE.has(prop)) return false;
+  return word === 'inherit' || (word === 'unset' && prop === 'color');
 }
 
 /** What `-webkit-font-smoothing` is set to on an element: a keyword, a CSS-wide one, or a token. */

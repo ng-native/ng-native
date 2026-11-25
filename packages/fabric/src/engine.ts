@@ -11,6 +11,7 @@
 import {
   boundDeclaration,
   boundRefusal,
+  inheritsInline,
   boundRelativeLength,
   CSS_SPACE,
   faded,
@@ -6619,9 +6620,7 @@ function boundFrom(prop: string, text: string, on: string): DeferredDeclaration 
   }
   if (BOUND_TOKEN.test(text)) return boundDeclaration(prop, tokenFromValue(text), on);
   // The parent's, as a rule's `inherit` is: `unset` too, for a property CSS inherits.
-  if (prop === 'fontSmoothing' && /^[ \t\n\r\f]*(?:inherit|unset)[ \t\n\r\f]*$/i.test(text)) {
-    return { props: [prop], on, inherit: true };
-  }
+  if (inheritsInline(prop, text)) return { props: [prop], on, inherit: true };
   if (prop !== 'transform') return boundRelativeLength(prop, text, on);
   const within = measuredTransform(text);
   return within ? { props: [prop], ...(on === undefined ? {} : { on }), within } : null;

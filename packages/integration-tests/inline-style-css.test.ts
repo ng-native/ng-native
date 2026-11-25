@@ -824,6 +824,8 @@ export class MathRows {
       ['aspectRatio', '1 / 0x10'],
       ['aspectRatio', '1 / -2'],
       ['fontWeight', 'calc(1px)'],
+      // A CSS-wide keyword a stylesheet refuses for it, where the word used to reach native.
+      ['aspectRatio', 'inherit'],
     ];
     const LEFT: [string, string][] = [
       ['width', 'calc(1em + 1vw)'],
@@ -842,7 +844,6 @@ export class MathRows {
       ['flexGrow', 'calc(1 / 0)'],
       ['aspectRatio', '16 / var(--x)'],
       ['aspectRatio', 'auto 16 / 9'],
-      ['aspectRatio', 'inherit'],
       // A shape the reader gives up on, which is not a type it can name.
       ['width', 'clamp(1px, 2px)'],
       ['width', 'min()'],
