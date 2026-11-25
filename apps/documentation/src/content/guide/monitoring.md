@@ -52,15 +52,14 @@ in the app, as it can only send data.
 
 The app mounts without waiting for `init`, so a request it sends before the SDK has started carries
 no `traceparent` header. To trace those too, mount in the runnable once the promise settles, at the
-cost of a later first frame. `finally` mounts the app whether `init` resolves or rejects:
+cost of a later first frame. The `catch` mounts the app even if `init` rejects:
 
 ```ts
-const started = CoralogixRum.init(options);
+const started = CoralogixRum.init(options).catch((error) => console.error(error));
 
 AppRegistry.registerRunnable('main', ({ rootTag }) => {
-  started.finally(() => {
-    const app = mount(Number(rootTag), App, getFabricUIManager(), mountOptions());
-    // The rest of the runnable, as before
+  started.then(() => {
+    // The runnable's body from before, starting with mount(Number(rootTag), App, ...)
   });
 });
 ```
