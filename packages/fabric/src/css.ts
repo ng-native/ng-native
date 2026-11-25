@@ -2220,6 +2220,26 @@ const twins = (pairs: readonly (readonly [string, string])[]): Readonly<Record<s
     ]),
   );
 
+/**
+ * A prop as a parent's inline style sets it: of its two forms, physical and logical, the later, as
+ * the parent settles them; then the whole border the style sets, which a side of its own is over.
+ */
+function inlineSide(
+  inline: Readonly<Record<string, unknown>>,
+  written: readonly string[],
+  prop: string,
+  forms: readonly string[],
+): unknown {
+  const set = forms.filter((form) => inline[form] !== undefined);
+  const last = set.sort((a, b) => written.indexOf(a) - written.indexOf(b)).at(-1);
+  if (last !== undefined) return inline[last];
+  const whole = WHOLE_BORDER.exec(prop);
+  return whole ? inline[`border${whole[1]}`] : undefined;
+}
+
+/** A side's border prop, with the part `borderWidth`, `borderColor` or `borderStyle` sets for all. */
+const WHOLE_BORDER = /^border(?:Top|Right|Bottom|Left|Start|End)(Width|Color|Style)$/;
+
 const TWIN: Readonly<Record<'ltr' | 'rtl', Readonly<Record<string, string>>>> = {
   ltr: twins(SIDES_LTR),
   rtl: twins(SIDES_LTR.map(([logical, physical]) => [logical, mirrored(physical)] as const)),
@@ -5202,12 +5222,13 @@ export class StyleResolver {
     // parent's direction, which is what CSS hands down: the parent's computed physical side. The
     // parent's inline style is over its rules, in either form.
     const twin = TWIN[this.readsRightToLeft(this.parentOf?.style ?? EMPTY) ? 'rtl' : 'ltr'];
+    const written = Object.keys(inline);
     for (const prop of declaration.props) {
       if (!declaration.important && important !== null && prop in important) continue;
       const logical = twin[prop];
       const forms = logical === undefined ? [prop] : [prop, logical];
       const value =
-        forms.map((form) => inline[form]).find((each) => each !== undefined) ??
+        inlineSide(inline, written, prop, forms) ??
         forms.map(ruled).find((each) => each !== undefined);
       if (value === undefined) delete own[prop];
       else own[prop] = value;
