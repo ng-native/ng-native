@@ -3,15 +3,7 @@
  * change here is a change there.
  */
 import { describe, expect, it, vi } from 'vitest';
-import {
-  Component,
-  Service,
-  inject,
-  input,
-  output,
-  resource,
-  signal,
-} from '@angular/core';
+import { Component, Service, inject, input, output, resource, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { FormField, disabled, form, required } from '@angular/forms/signals';

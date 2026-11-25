@@ -650,9 +650,9 @@ Where macOS differs:
 
 ## Without the module
 
-Without `@expo/ui` installed, its elements commit as nothing, as
-[Native views](/packages/expo/native-views#without-the-module) describes. `nativeState()` returns null. A `UiBottomSheet` shows nothing, and
-closes without waiting for a sheet to slide away.
+Without `@expo/ui` installed, its elements commit as nothing, as [Native
+views](/packages/expo/native-views#without-the-module) describes. `nativeState()` returns null. A
+`UiBottomSheet` shows nothing, and closes without waiting for a sheet to slide away.
 
 ## Reference
 

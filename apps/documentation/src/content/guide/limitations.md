@@ -164,4 +164,5 @@ constant or a `function` declaration in the same file works, and a value importe
 fails the build, naming the file, the import and what to write instead.
 
 **Workaround:** for `host`, write the bindings in the same file, or share the behavior with a
-directive in `hostDirectives`. For `styles`, see [What `styles` can be](/packages/fabric/css-engine#what-styles-can-be).
+directive in `hostDirectives`. For `styles`, see [What `styles` can
+be](/packages/fabric/css-engine#what-styles-can-be).

@@ -56,9 +56,10 @@ terminal attached, so Metro's QR code and keyboard shortcuts work as they do und
 A plain `ng test` runs the web app's tests and the native app's, since the Angular CLI runs `test`
 for every project that has one. A plain `ng build` and `ng serve` still mean the web app.
 
-`ng test native` runs on the package's Vitest builder rather than `@angular/build:unit-test`,
-since a native test renders onto the fake Fabric, not a DOM. The Vitest builder's options are `watch`, `filter`
-(only the test files whose path contains it) and `project` (only the Vitest project of that name).
+`ng test native` runs on the package's Vitest builder rather than `@angular/build:unit-test`, since
+a native test renders onto the fake Fabric, not a DOM. The Vitest builder's options are `watch`,
+`filter` (only the test files whose path contains it) and `project` (only the Vitest project of that
+name).
 
 The app's `vitest.config.mts` has three projects, as the template's does: `node`, in Node, which
 the `test` target runs alone (`"options": { "project": "node" }`), and `ios` and `android`, which

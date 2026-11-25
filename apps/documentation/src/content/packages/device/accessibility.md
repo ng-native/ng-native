@@ -97,7 +97,8 @@ active again, which is what refreshes it elsewhere.
 ## Off a device and on the web
 
 Off a device every setting stays at its neutral default forever and `announce()` does nothing. On
-the web, the browser's accessibility tree and `prefers-reduced-motion` cover most of the same ground.
+the web, the browser's accessibility tree and `prefers-reduced-motion` cover most of the same
+ground.
 
 ## Reference
 

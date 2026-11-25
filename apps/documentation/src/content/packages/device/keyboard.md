@@ -142,9 +142,10 @@ const top = computed(() => {
 
 ## Off a device and on the web
 
-Off a device `metrics` stays at `{ height: 0 }` forever. `dismiss()` still blurs the focused field, so a test can see it sent as a `blur`
-command in the fake Fabric's `commands`. On the web, `dismiss()` blurs
-a focused `text-input` and leaves the focus on anything else, such as the button that was clicked.
+Off a device `metrics` stays at `{ height: 0 }` forever. `dismiss()` still blurs the focused field,
+so a test can see it sent as a `blur` command in the fake Fabric's `commands`. On the web,
+`dismiss()` blurs a focused `text-input` and leaves the focus on anything else, such as the button
+that was clicked.
 
 ## Reference
 

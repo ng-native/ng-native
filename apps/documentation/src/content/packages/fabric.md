@@ -5,9 +5,9 @@ summary: The retained tree, native view mapping and CSS engine underneath every 
 
 # Fabric
 
-`@ng-native/fabric` is the framework-agnostic engine everything else is built on. Nothing in
-it imports `@angular/core`: it is a retained tree of nodes, a commit step that turns changes into one call into Fabric, and a CSS
-engine with a real cascade, running with no DOM anywhere near it.
+`@ng-native/fabric` is the framework-agnostic engine everything else is built on. Nothing in it
+imports `@angular/core`: it is a retained tree of nodes, a commit step that turns changes into one
+call into Fabric, and a CSS engine with a real cascade, running with no DOM anywhere near it.
 
 You will not usually import from this package directly. [`@ng-native/platform`'s
 `Renderer2`](/packages/platform/renderer) drives it, and `@ng-native/components` builds

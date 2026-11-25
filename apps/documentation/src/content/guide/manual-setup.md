@@ -5,8 +5,8 @@ summary: Wiring the framework into an Expo app you already have, one file at a t
 
 # Adding it to an existing app
 
-The [Getting started](/guide/getting-started) template is the shorter route. For manual setup in a blank or existing Expo app, complete every step below.
-Each step includes troubleshooting notes.
+The [Getting started](/guide/getting-started) template is the shorter route. For manual setup in a
+blank or existing Expo app, complete every step below. Each step includes troubleshooting notes.
 
 Angular CLI and Nx generators perform this setup and integrate workspace commands: use
 `ng add @ng-native/schematics` ([Angular CLI](/packages/schematics)) or `nx g @ng-native/nx:app`
@@ -81,8 +81,8 @@ Add the package's config plugin to `app.json` as well:
 ```
 
 It adopts the UIKit scene life cycle an app built with the iOS 27 SDK needs to launch. Its options,
-for iPad windows and Android layout animations, are on the [Metro](/packages/metro#the-smallest-setup)
-page.
+for iPad windows and Android layout animations, are on the
+[Metro](/packages/metro#the-smallest-setup) page.
 
 ## Configure TypeScript
 

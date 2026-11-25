@@ -215,10 +215,10 @@ new package.
 
 ## Prebuilt hosts
 
-`run` and `package` use a prebuilt host for x64 or arm64 when the app links no native desktop code of
-its own, so a Mac packages such an app for Linux with no Linux machine. An app with native desktop
-code builds its host on Linux of each architecture it packages for. See
-[Prebuilt hosts](/packages/desktop/packaging#prebuilt-hosts).
+`run` and `package` use a prebuilt host for x64 or arm64 when the app links no native desktop code
+of its own, so a Mac packages such an app for Linux with no Linux machine. An app with native
+desktop code builds its host on Linux of each architecture it packages for. See [Prebuilt
+hosts](/packages/desktop/packaging#prebuilt-hosts).
 
 ## What differs on Linux
 

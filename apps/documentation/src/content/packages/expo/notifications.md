@@ -457,14 +457,13 @@ denied. A notification that arrives while the app is in front shows as a banner 
 The Dock badge is the badge count: `setBadgeCountAsync` sets it, 0 clears it, and a delivered
 notification with `content.badge` sets it too. It needs no permission.
 
-Remote notifications come through APNs. `getDevicePushTokenAsync` resolves `{ type: 'macos', data }`,
-the token in hex to send to APNs from your server. A remote notification with no alert is heard
+Remote notifications come through APNs. `getDevicePushTokenAsync` resolves `{ type: 'macos', data
+}`, the token in hex to send to APNs from your server. A remote notification with no alert is heard
 only while the app runs. APNs registers only an app signed with
 `com.apple.developer.aps-environment`: `package` adds it to a `mas` build of an app that uses
 `expo-notifications`, and to a `dmg` when `ios.entitlements['aps-environment']` is set, which then
-needs a Developer ID profile. A development host has no such entitlement, so there the token
-rejects with what to do. Expo's push service does not deliver to macOS, so `getExpoPushTokenAsync`
-rejects.
+needs a Developer ID profile. A development host has no such entitlement, so there the token rejects
+with what to do. Expo's push service does not deliver to macOS, so `getExpoPushTokenAsync` rejects.
 
 ## On Linux
 

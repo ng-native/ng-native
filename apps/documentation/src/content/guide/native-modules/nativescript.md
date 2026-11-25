@@ -42,8 +42,8 @@ the same runtime: a real-time 3D `SceneKit` viewport and `UIKit` controls on iOS
 
 NativeScript needs a development build (`npx expo run:ios` or `npx expo run:android`), not Expo Go.
 In an Nx workspace, `nx g @ng-native/nx:nativescript <app>` does the setup. Anywhere else, install
-`@ng-native/nativescript`, add its config plugin and the SDKs' types, and provide it in `mount()`, as
-[Setup](/packages/nativescript#setup) shows.
+`@ng-native/nativescript`, add its config plugin and the SDKs' types, and provide it in `mount()`,
+as [Setup](/packages/nativescript#setup) shows.
 
 ## Call an API
 

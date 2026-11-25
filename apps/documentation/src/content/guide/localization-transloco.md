@@ -343,10 +343,11 @@ It does not call `Intl.PluralRules`, which Hermes lacks, so plurals need no poly
 
 ## Extract and validate the keys
 
-`transloco-keys-manager` and `transloco-validator` read source files, so they work on Angular
-Native templates as they are, `{{ 'key' | transloco }}` on a `<text>` or a prop binding included.
-Give each scope an entry in `scopePathMap` in `transloco.config.ts`, and wrap a key stored as a
-plain string and bound later in `marker()`. See [Transloco's documentation](https://jsverse.gitbook.io/transloco).
+`transloco-keys-manager` and `transloco-validator` read source files, so they work on Angular Native
+templates as they are, `{{ 'key' | transloco }}` on a `<text>` or a prop binding included. Give each
+scope an entry in `scopePathMap` in `transloco.config.ts`, and wrap a key stored as a plain string
+and bound later in `marker()`. See [Transloco's
+documentation](https://jsverse.gitbook.io/transloco).
 
 ## Test with Vitest
 
@@ -390,5 +391,6 @@ scope has loaded, so wait for the text and do not read it on the first tick.
   `Intl.PluralRules`, `Intl.RelativeTimeFormat` or `Intl.ListFormat` directly throws on device; see
   [Formatting and right to left](/guide/localization-formatting).
 - Moving from Angular's `i18n` to Transloco rewrites the texts, not the build; Transloco's
-  [migration guide](https://jsverse.gitbook.io/transloco/migration-guides/migrate-from-angulars-i18n)
-  applies to a native app too.
+  [migration
+  guide](https://jsverse.gitbook.io/transloco/migration-guides/migrate-from-angulars-i18n) applies
+  to a native app too.

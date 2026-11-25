@@ -171,4 +171,5 @@ which Hermes lacks (see [Formatting](/guide/localization-formatting)).
 
 ## What does not work yet
 
-Build-time translation and `ng extract-i18n` are not supported. See [Known limitations](/guide/limitations#i18n-is-runtime-only).
+Build-time translation and `ng extract-i18n` are not supported. See [Known
+limitations](/guide/limitations#i18n-is-runtime-only).

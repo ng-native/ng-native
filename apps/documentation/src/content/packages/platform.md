@@ -49,9 +49,9 @@ component created it.
 There is no `bootstrapApplication`, no `BrowserModule`, and no CSS selector naming an element in an
 `index.html` - there is no HTML document at all. The root Angular mounts into is `engine.root`, a
 plain object standing in for `Element`, and it becomes a screen's worth of native views the moment
-the first commit runs rather than by producing markup for a browser to paint. `DOCUMENT` is
-only a [stub](/packages/platform/bootstrapping#what-is-in-the-injector). And there is no zone.js option
-to reach for: `mount()` provides zoneless change detection unconditionally, so the change-detection
+the first commit runs rather than by producing markup for a browser to paint. `DOCUMENT` is only a
+[stub](/packages/platform/bootstrapping#what-is-in-the-injector). And there is no zone.js option to
+reach for: `mount()` provides zoneless change detection unconditionally, so the change-detection
 model a zoneless Angular app already uses on the web carries over unchanged.
 
 The [bootstrapping](/packages/platform/bootstrapping) page covers `mount()`'s options, its return

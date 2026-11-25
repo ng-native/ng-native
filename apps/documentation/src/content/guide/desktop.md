@@ -37,8 +37,8 @@ The template runs on Linux too, with `npm run linux` on a Linux machine: see
 
 The same app runs on Linux, with GTK 4 and libadwaita views. [Build for Linux](/guide/desktop-linux)
 has the setup and packaging. The floor is GTK 4.10 and libadwaita 1.4 with glibc 2.34. A `deb` is
-made for Debian 13 and Ubuntu 24.04 or later, an `rpm` for Fedora and the RHEL family 9 or later, and
-a Flatpak brings its own runtime.
+made for Debian 13 and Ubuntu 24.04 or later, an `rpm` for Fedora and the RHEL family 9 or later,
+and a Flatpak brings its own runtime.
 
 ## What a Mac app has
 

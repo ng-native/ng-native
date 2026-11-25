@@ -144,9 +144,9 @@ keeps going through a `z-index` change and passes. This one shows on a device.
 
 ## On macOS
 
-When the app has them installed, `react-native-worklets` and `react-native-reanimated` work on macOS:
-worklets run on a UI runtime on the main thread, and shared values, animations and worklet styles
-update at the display's rate, with no frames taken while nothing animates.
+When the app has them installed, `react-native-worklets` and `react-native-reanimated` work on
+macOS: worklets run on a UI runtime on the main thread, and shared values, animations and worklet
+styles update at the display's rate, with no frames taken while nothing animates.
 
 `react-native-gesture-handler` works with pan, tap, long press, pinch, rotation, hover, fling,
 manual and native view handlers, and the library's relations (simultaneous, `requireToFail`,

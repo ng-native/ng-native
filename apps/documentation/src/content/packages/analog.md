@@ -11,9 +11,9 @@ from `createRoutes` in `@analogjs/router` itself, not a copy of it, and go to
 `provideNativeRouter` like any other routes, so every page is a screen on a native stack with a
 native header.
 
-It is opt-in and separate from the rest of the framework. [`fileRoutes`](/packages/router/file-routes)
-from `@ng-native/router` routes the same files with no other package; use `@ng-native/analog` to
-share pages and content with an Analog web app. See [which
+It is opt-in and separate from the rest of the framework.
+[`fileRoutes`](/packages/router/file-routes) from `@ng-native/router` routes the same files with no
+other package; use `@ng-native/analog` to share pages and content with an Analog web app. See [which
 one](/packages/router/file-routes#fileroutes-or-ng-nativeanalog-which-one).
 
 ## Setup

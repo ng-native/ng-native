@@ -44,7 +44,8 @@ screen in C++, off the JavaScript thread.
 ## The host seam
 
 The shared packages talk to the engine through `HostEngine` and `HostNode`, which Fabric's engine
-and `@ng-native/web`'s browser engine both implement. See [Native and web](/guide/native-and-web#the-seam).
+and `@ng-native/web`'s browser engine both implement. See [Native and
+web](/guide/native-and-web#the-seam).
 
 ## CSS
 

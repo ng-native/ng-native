@@ -50,7 +50,12 @@ npx hotcodepush init
 ```
 
 `init` writes `hotcodepush.json`, adds the plugin, signs you in and offers to generate a signing
-key. Add the plugin after `@ng-native/metro` in `expo.plugins`. Install `@ng-native/expo` before
+key. With a key, the app runs only bundles signed with it. The private key lands in
+`hotcodepush-private-key.pem` in the working directory: add that file to `.gitignore` before the
+next commit and keep it where your CI secrets live, since whoever holds it can sign the app's
+updates.
+
+Add the plugin after `@ng-native/metro` in `expo.plugins`. Install `@ng-native/expo` before
 the build: it carries native modules, which change the build's fingerprint, and an update only
 reaches the builds whose fingerprint it was made for. Build in release, since a debug build takes
 its JavaScript from Metro:
@@ -105,8 +110,17 @@ downloads, restarting the app, unless `mandatoryApplyStrategy` is `manual`.
 
 ### Release
 
-`npx hotcodepush release create --platform ios` (and `android`) bundles the app with
-`expo export:embed` through its own Metro config, so the Angular compilation runs as in a build.
+`npx hotcodepush release create` bundles the app with `expo export:embed` through its own Metro
+config, so the Angular compilation runs as in a build. An app with a signing key passes it:
+
+```sh
+npx hotcodepush release create --platform ios --private-key-path hotcodepush-private-key.pem
+npx hotcodepush release create --platform android --private-key-path hotcodepush-private-key.pem
+```
+
+In CI, put the key's text in `HOTCODEPUSH_SIGNING_KEY`, drop the flag and add `--yes`, since
+nothing can answer the confirmation there. An app without a registered key drops the flag.
+
 The [Expo SDK docs](https://hotcodepush.com/docs/sdks/expo) cover the configuration, the API and
 the events. The [demo app](https://github.com/hotcodepush-team/ng-native-ota-updates-demo) is the
 template app with the SDK wired in, built on both platforms in CI.

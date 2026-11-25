@@ -217,8 +217,8 @@ Listed after the design system, this preset's `darkMode` and preflight setting w
 system's. Used alone, as in the setup above, it needs no change: it has no `presets` key, so it
 brings Tailwind's defaults itself.
 
-Every Tailwind 3 utility takes effect or is refused with a build warning, except a few that only set a
-value another utility reads, where that utility is the one refused: `snap-mandatory` and
+Every Tailwind 3 utility takes effect or is refused with a build warning, except a few that only set
+a value another utility reads, where that utility is the one refused: `snap-mandatory` and
 `snap-proximity`, read by `snap-x` and `snap-y`. Those do nothing, as the utility they feed does
 nothing.
 
