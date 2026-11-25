@@ -14,9 +14,7 @@ import {
   input,
   model,
   output,
-  signal,
   type OnChanges,
-  type OutputEmitterRef,
   type Signal,
   type SimpleChanges,
 } from '@angular/core';
@@ -27,6 +25,7 @@ import {
   type MenuEntry,
   type MenuGroupRole,
   type MenuRole,
+  outputListened,
 } from '@ng-native/device';
 import type { EngineNode } from '@ng-native/fabric';
 import { ControlledModel } from './controlled-model.ts';
@@ -47,29 +46,6 @@ function registerIn(entry: Signal<MenuEntry>, element: string): void {
   }
   const node = inject(ElementRef).nativeElement as EngineNode;
   inject(DestroyRef).onDestroy(menu.register(entry, node));
-}
-
-/**
- * Count an output's listeners, so an item knows whether the app handles it: as a signal, so the
- * menu follows a listener added or removed after it was first sent.
- */
-function listened(emitter: OutputEmitterRef<void>): Signal<boolean> {
-  const listeners = signal(0);
-  const subscribe = emitter.subscribe.bind(emitter);
-  emitter.subscribe = (callback) => {
-    listeners.update((count) => count + 1);
-    const subscription = subscribe(callback);
-    let stopped = false;
-    return {
-      unsubscribe: () => {
-        if (stopped) return;
-        stopped = true;
-        listeners.update((count) => count - 1);
-        subscription.unsubscribe();
-      },
-    };
-  };
-  return computed(() => listeners() > 0);
 }
 
 /**
@@ -104,7 +80,7 @@ export class MenuItem implements OnChanges {
   readonly icon = input<string | ButtonIcon>();
   readonly select = output<void>();
 
-  private readonly handled = listened(this.select);
+  private readonly handled = outputListened(this.select);
 
   constructor() {
     registerIn(

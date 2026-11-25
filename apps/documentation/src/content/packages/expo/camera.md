@@ -79,8 +79,9 @@ template that imports `Camera` is checked against them: `facing`, `flash`, `zoom
 `responsiveOrientationWhenOrientationLocked` and `ratio`. `flash` and `autofocus` are committed as
 `flashMode` and `autoFocus`, the names the native view reads, as `expo-camera`'s `CameraView`
 renames them. Those two names work as inputs too, and `flash` or `autofocus` wins when both are
-set. `barcodeScannerEnabled` is the native prop `CameraView` sets when it is given
-`onBarcodeScanned`: set it to scan, and `(barcodeScanned)` has each barcode.
+set. The camera scans while `(barcodeScanned)` has a listener, which then has each barcode, as
+`CameraView` turns its native `barcodeScannerEnabled` on when it is given `onBarcodeScanned`.
+`[barcodeScannerEnabled]` set to `false` stops scanning with the listener in place.
 
 ```html
 <expo-camera facing="front" flash="auto" zoom="0.2" enableTorch mirror class="flex-1" />
@@ -90,6 +91,7 @@ A boolean prop works bound, `[enableTorch]="torch()"`, or written bare, `enableT
 attribute is true, and `null` or `undefined` leaves the prop to `expo-camera`'s default. An input
 left unset commits nothing, so the native view keeps its own default, but for `flash`, which is
 `off` unless set, as `expo-camera`'s `CameraView` sends it: the iOS view's own default is `auto`.
+`barcodeScannerEnabled` unset follows the listener, as above.
 
 ## The camera permission
 

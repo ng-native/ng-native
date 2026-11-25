@@ -36,3 +36,19 @@ export class ExpoCameraEarlyFixture implements AfterViewInit {
     this.stopped = this.camera().stopRecording();
   }
 }
+
+/** Scanning by listener: bound, unbound, bound but switched off, and subscribed from code. */
+@Component({
+  selector: 'expo-camera-scan-fixture',
+  imports: [Camera],
+  template: `
+    <expo-camera (barcodeScanned)="scanned = $event" />
+    <expo-camera />
+    <expo-camera [barcodeScannerEnabled]="false" (barcodeScanned)="scanned = $event" />
+    <expo-camera #code />
+  `,
+})
+export class ExpoCameraScanFixture {
+  readonly code = viewChild.required('code', { read: Camera });
+  scanned: unknown = null;
+}

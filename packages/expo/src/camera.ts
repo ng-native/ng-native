@@ -32,6 +32,7 @@
  * the desktop host's `NgNativeCamera`'s, which take the tag as their first argument.
  */
 import { Directive, ElementRef, InjectionToken, inject, input, output } from '@angular/core';
+import { outputListened } from '@ng-native/device';
 import { Engine, type EngineNode, type NativeSyntheticEvent } from '@ng-native/fabric';
 import { desktopHost } from './desktop-host.ts';
 import { expoModule, optional, present } from './native.ts';
@@ -79,7 +80,7 @@ export interface CameraViewFunctions {
     '[selectedLens]': 'selectedLens()',
     '[enableTorch]': 'enableTorch()',
     '[videoStabilizationMode]': 'videoStabilizationMode()',
-    '[barcodeScannerEnabled]': 'barcodeScannerEnabled()',
+    '[barcodeScannerEnabled]': 'barcodeScannerEnabled() ?? scanning()',
     '[barcodeScannerSettings]': 'barcodeScannerSettings()',
     '[responsiveOrientationWhenOrientationLocked]': 'responsiveOrientationWhenOrientationLocked()',
     '[ratio]': 'ratio()',
@@ -149,9 +150,9 @@ export class Camera {
   readonly enableTorch = input<boolean>(undefined, { transform: optionalBoolean });
   readonly videoStabilizationMode = input<CameraViewProps['videoStabilizationMode']>();
   /**
-   * Scans for barcodes, sending `barcodeScanned`. `expo-camera`'s React component sets this native
-   * prop when `onBarcodeScanned` is given; here it is set with the binding. A bare attribute is
-   * true.
+   * Scans for barcodes, sending `barcodeScanned`. On by default while `barcodeScanned` has a
+   * listener, as `expo-camera`'s React component turns it on when `onBarcodeScanned` is given; set
+   * it to choose either way. A bare attribute is true.
    */
   readonly barcodeScannerEnabled = input<boolean>(undefined, { transform: optionalBoolean });
   readonly barcodeScannerSettings = input<CameraViewProps['barcodeScannerSettings']>();
@@ -169,6 +170,7 @@ export class Camera {
   /** A barcode was scanned, with `barcodeScannerEnabled` on. */
   readonly barcodeScanned =
     output<NativeSyntheticEvent<import('expo-camera').BarcodeScanningResult>>();
+  protected readonly scanning = outputListened(this.barcodeScanned);
 
   private readonly functions = inject(Camera.SOURCE);
   private readonly engine = inject(Engine);

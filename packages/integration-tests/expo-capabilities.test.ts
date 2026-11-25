@@ -521,6 +521,29 @@ describe('the camera view', () => {
     }
   });
 
+  it('scans while (barcodeScanned) has a listener, as the React component does', async () => {
+    registerExpoViews('expo-camera');
+    const mod = await compileFixture('fixtures/expo-camera.ts');
+    const fabric = createFakeFabric();
+    const app = mount(1, mod['ExpoCameraScanFixture'] as Type<unknown>, fabric);
+    const props = (index: number) => fabric.committed[0]!.children[index]!.props;
+    assert.equal(props(0)['barcodeScannerEnabled'], true, 'bound in the template');
+    assert.equal(props(1)['barcodeScannerEnabled'], false, 'nothing listening');
+    assert.equal(props(2)['barcodeScannerEnabled'], false, 'the input still decides');
+    const code = (app.componentRef.instance as { code(): Camera }).code();
+    const subscription = code.barcodeScanned.subscribe(() => {});
+    app.applicationRef.tick();
+    assert.equal(props(3)['barcodeScannerEnabled'], true, 'subscribed from code');
+    const other = code.barcodeScanned.subscribe(() => {});
+    subscription.unsubscribe();
+    subscription.unsubscribe();
+    app.applicationRef.tick();
+    assert.equal(props(3)['barcodeScannerEnabled'], true, 'one stopping twice leaves the other');
+    other.unsubscribe();
+    app.applicationRef.tick();
+    assert.equal(props(3)['barcodeScannerEnabled'], false, 'and off again once all stop');
+  });
+
   it('takes a picture from the view on screen, the way a React ref would', async () => {
     registerExpoViews('expo-camera');
     const calls: { tag: unknown; options: unknown }[] = [];
