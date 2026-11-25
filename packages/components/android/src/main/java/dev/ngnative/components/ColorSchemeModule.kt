@@ -156,10 +156,12 @@ private fun refreshField(field: EditText, was: Int, highlight: Int) {
 /** The tints AppCompat gives its own switch drawables, read again; others it leaves alone. */
 private fun refreshSwitch(switch: SwitchCompat) {
   // React Native's `thumbColor` filters the thumb (a state list, whose nine-patch states keep the
-  // filter on their paint and report none) and colours the ripple too, but only a bare one: a
-  // ripple it has wrapped for an outline or a border still follows the theme.
-  val ownRipple =
-    switch.thumbDrawable?.let(::hasFilter) == true && switch.background is RippleDrawable
+  // filter on their paint and report none) and colours the ripple too, which a wrapper for an
+  // outline or a border added later keeps.
+  // ponytail: a ripple has no colour to read back, so with the thumb filtered it is taken as the
+  // app's. One wrapped before `thumbColor` came, which React Native left the theme's, then keeps
+  // the old scheme's ripple; an app's own colour is never painted over.
+  val ownRipple = switch.thumbDrawable?.let(::hasFilter) == true
   val context = switch.context
   val styled =
     context.obtainStyledAttributes(null, R.styleable.SwitchCompat, R.attr.switchStyle, 0)
