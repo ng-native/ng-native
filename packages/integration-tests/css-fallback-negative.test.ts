@@ -51,6 +51,17 @@ describe('a var() fallback below zero, where nothing below zero is taken', () =>
     assert.equal(margin['marginRight'], -1);
   });
 
+  it('unsets every side for a percentage below zero, and clamps a math side alone', () => {
+    const percent = props('.a { padding: 3px; padding: var(--x, 4px -1%) }');
+    assert.equal(percent['paddingTop'] ?? null, null);
+    const math = props('.a { padding: var(--x, 4px calc(1em - 2em)) }');
+    assert.equal(math['paddingTop'], 4, 'a written side above zero stays');
+    assert.equal(math['paddingRight'], 0, "a math side is clamped, as a math function's result is");
+    const radius = props('.a { border-radius: var(--x, 4px calc(1em - 2em)) }');
+    assert.equal(radius['borderTopLeftRadius'], 4);
+    assert.equal(radius['borderTopRightRadius'], 0);
+  });
+
   it('unsets every corner of a radius with one corner below zero', () => {
     const radius = props('.a { border-radius: var(--x, 4px -1px) }');
     assert.equal(radius['borderTopLeftRadius'] ?? null, null);

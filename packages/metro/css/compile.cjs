@@ -2692,12 +2692,12 @@ function sidedFallback(value, context) {
   if (!lengths) return null;
   const [top, right, bottom = top, left = right] = lengths;
   const reference = lone.value.name.ident;
-  const invalid = box === 'padding' ? lengths.find(belowZero) : undefined;
-  return [top, right, bottom, left].map((fallback, side) => ({
+  const invalid = box === 'padding' ? lengths.find(writtenBelowZero) : undefined;
+  return [top, right, bottom, left].map((part, side) => ({
     props: [`${box}${SIDES[side]}`],
     kind: 'length',
     reference,
-    fallback: invalid ?? fallback,
+    ...(invalid ?? part),
   }));
 }
 
@@ -2718,22 +2718,27 @@ function corneredFallback(value, context) {
   if (!radii) return null;
   const [topLeft, topRight, bottomRight = topLeft, bottomLeft = topRight] = radii;
   const reference = lone.value.name.ident;
-  const invalid = radii.find(belowZero);
-  return [topLeft, topRight, bottomRight, bottomLeft].map((fallback, corner) => ({
+  const invalid = radii.find(writtenBelowZero);
+  return [topLeft, topRight, bottomRight, bottomLeft].map((part, corner) => ({
     props: [CORNERS[corner]],
     kind: 'length',
     reference,
-    fallback: invalid ?? fallback,
+    ...(invalid ?? part),
   }));
 }
 
 /**
- * A side's fallback written below zero, in points or in a unit the device settles. A box that
- * takes nothing below zero finds the whole value invalid for one such side, as CSS does: so every
- * side is given it, and the device unsets each, where keeping the others would draw half of it.
+ * A side's fallback written below zero, in points, a percentage or a unit the device settles, and
+ * not the result of a math function, which is clamped instead. A box that takes nothing below zero
+ * finds the whole value invalid for one such side, as CSS does: so every side is given it, and the
+ * device unsets each, where keeping the others would draw half of it.
  */
-const belowZero = (length) =>
-  typeof length === 'number' ? length < 0 : (length?.__defer?.factor ?? 0) < 0;
+function writtenBelowZero({ fallback, fallbackMath }) {
+  if (fallbackMath) return false;
+  if (typeof fallback === 'number') return fallback < 0;
+  if (typeof fallback === 'string') return /^-/.test(fallback.trim());
+  return (fallback?.__defer?.factor ?? 0) < 0;
+}
 
 /**
  * Two to four lengths written one after the other, or null for anything else. Each as a fallback
@@ -2742,10 +2747,16 @@ const belowZero = (length) =>
 function sideLengths(written, context) {
   const parts = meaningful(written ?? []);
   if (parts.length < 2 || parts.length > 4) return null;
-  const lengths = parts.map(
-    (part) => fallbacks({ value: { fallback: [part] } }, 'length', context).fallback,
-  );
-  return lengths.every((each) => each !== undefined) ? lengths : null;
+  // Each side's fallback, and whether it is a math function's, which the device clamps.
+  const lengths = parts.map((part) => {
+    const { fallback, fallbackMath } = fallbacks(
+      { value: { fallback: [part] } },
+      'length',
+      context,
+    );
+    return { fallback, ...(fallbackMath ? { fallbackMath } : {}) };
+  });
+  return lengths.every((each) => each.fallback !== undefined) ? lengths : null;
 }
 
 /**
