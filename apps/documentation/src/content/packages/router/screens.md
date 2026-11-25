@@ -399,9 +399,10 @@ shown once its screen, its tab and the screen the tabs are on have all appeared.
 `<refresh-control>` waits for it before it starts spinning.
 
 `IN_FORM_SHEET` is true on a screen presented as a `formSheet`, and on a screen pushed in a stack
-inside one. On Android, `<scroll-view>` and `<virtual-list>` turn nested scrolling on in a form
-sheet, so a drag scrolls the content before it moves the sheet, and `<native-header>` leaves out the
-status bar's height, which a sheet never reaches.
+inside one. On Android, `<scroll-view>` and `<virtual-list>` default nested scrolling on in a form
+sheet, so a drag scrolls the content before it moves the sheet, and `<native-header>` defaults
+`consumeTopInset` off, as a sheet never reaches the status bar. A `[nestedScrollEnabled]` or
+`[consumeTopInset]` set on the element wins over either default.
 
 ## Above every screen
 

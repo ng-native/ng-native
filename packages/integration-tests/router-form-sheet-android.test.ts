@@ -9,7 +9,14 @@ import { after, afterEach, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import type { Routes } from '@angular/router';
 import { registerPlatformComponents, registerViewName } from '@ng-native/fabric';
-import { cleanup, render, settle, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
+import {
+  cleanup,
+  render,
+  settle,
+  type FakeFabric,
+  type FakeFabricNode,
+  type TestOs,
+} from '@ng-native/testing';
 import { NativeNavigation } from '../router/src/native-navigation.ts';
 import { provideNativeRouter } from '../router/src/provide-native-router.ts';
 import { registerScreenComponents } from '../router/src/screens.ts';
@@ -26,10 +33,10 @@ before(async () => {
 });
 afterEach(cleanup);
 
-async function open(platform: string, how: (navigation: NativeNavigation) => Promise<unknown>) {
-  registerPlatformComponents(platform);
+async function open(platform: TestOs, how: (navigation: NativeNavigation) => Promise<unknown>) {
   registerScreenComponents();
   const app = await render(mod['SheetShell'] as Type<unknown>, {
+    os: platform,
     providers: [provideNativeRouter(mod['sheetRoutes'] as Routes)],
   });
   await settle();
