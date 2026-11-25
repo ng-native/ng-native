@@ -90,10 +90,9 @@ to it.
 
 ## Without the module
 
-On iOS, Android and macOS, a missing `expo-print` - never installed, or installed without the app
-being rebuilt since - leaves the service made, so injecting it does not throw. A call throws a
-`MissingModuleError`; see
-[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
+On iOS, Android and macOS, a missing `expo-print` throws a
+[`MissingModuleError`](/packages/expo/using-a-module#what-happens-without-the-module-installed) on
+the first call. Injecting the service does not throw.
 
 On the web, and in a test that provides no fake,
 `available()` is `false`, `print()` does nothing, and `printToPdf()` and `selectPrinter()` resolve

@@ -115,11 +115,9 @@ On macOS the desktop host draws the same `ASAuthorizationAppleIDButton`, with th
 
 ## Without the module
 
-On iOS, a missing `expo-apple-authentication` - never installed, or installed without the app being
-rebuilt since - leaves the service made, so injecting it does not throw. A call, or a read of a
-value only the module knows, throws a `MissingModuleError`. Its message names the module and the
-commands that fix it; see
-[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
+On iOS, a missing `expo-apple-authentication` throws a
+[`MissingModuleError`](/packages/expo/using-a-module#what-happens-without-the-module-installed) on
+the first call or read that needs it. Injecting the service does not throw.
 
 On Android and the web, and in a test that provides no fake, `available()` resolves to false,
 `signIn()`, `refresh()`, `signOut()` and `credentialState()` resolve to null, and `formatName()`

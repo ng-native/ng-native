@@ -141,11 +141,9 @@ event's attendees and a calendar's own `update()` are not available there.
 
 ## Without the module
 
-On iOS and Android, a missing `expo-calendar` (never installed, or installed without the app being
-rebuilt since) leaves the service made, so injecting it does not throw. A call, or a read of a value
-only the module knows, throws a `MissingModuleError`. Its message names the module and the commands
-that fix it; see
-[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
+On iOS and Android, a missing `expo-calendar` throws a
+[`MissingModuleError`](/packages/expo/using-a-module#what-happens-without-the-module-installed) on
+the first call or read that needs it. Injecting the service does not throw.
 
 On the web, and in a test that provides no fake, every permission is refused, the lists resolve
 empty, and every lookup resolves to `null`.

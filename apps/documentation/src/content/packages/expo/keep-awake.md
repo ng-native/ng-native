@@ -61,11 +61,9 @@ tags for as long as the runtime runs, turns the screen on only when its first ta
 
 ## Without the module
 
-On iOS and Android, a missing `expo-keep-awake` - never installed, or installed without the app
-being rebuilt since - leaves the service made, so injecting it does not throw. A call, or a read of
-a value only the module knows, throws a `MissingModuleError`. Its message names the module and the
-commands that fix it; see
-[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
+On iOS and Android, a missing `expo-keep-awake` throws a
+[`MissingModuleError`](/packages/expo/using-a-module#what-happens-without-the-module-installed) on
+the first call or read that needs it. Injecting the service does not throw.
 
 On the web, and in a test that provides no fake, `hold()` still tracks the tag in `holders` and
 `active`, but nothing on the device changes and `stop` calls into a module that is not there safely.
