@@ -9,9 +9,7 @@ summary: Hold the screen on with a tag, for as long as something needs it and no
 
 <!-- platforms: KeepAwake -->
 
-It is never a bare activate: a screen that holds the display on and never releases it is a phone
-that never sleeps, which the user experiences as a battery fault and never attributes to the app
-that caused it. `hold()` always returns the function that releases it.
+`hold()` always returns the function that releases it.
 
 ## Install
 

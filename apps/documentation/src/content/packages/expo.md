@@ -5,14 +5,9 @@ summary: Angular services over Expo's native modules - battery, haptics, storage
 
 # Expo
 
-`@ng-native/expo` puts Expo's native modules behind ordinary Angular services: signals instead of
-hooks, injection instead of a `use*()` call at the top of a component. Reach for it whenever an app
-wants something Expo already wraps well - battery and brightness, haptics and the clipboard,
-notifications, on-device storage, sensors, a video or audio player, the file system, a small SQLite
-database, fonts, the splash screen, OTA updates, photos, location, biometrics, sign-in, the
-on-device language model, real SwiftUI and Jetpack Compose controls - rather than writing another
-native module wrapper by hand. It is entirely optional: nothing in the rest of the framework depends
-on it, and an app that is not built on Expo skips the package outright.
+`@ng-native/expo` puts Expo's native modules behind Angular services, with signals and injection
+in place of hooks; [Modules](#modules) lists them. It is optional: nothing else in the framework
+depends on it.
 
 ## The smallest useful example
 

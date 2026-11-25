@@ -22,10 +22,6 @@ npx expo install expo-font
 import { loadFonts } from '@ng-native/expo/fonts';
 ```
 
-Unlike most services in this package, this goes through `expo-font`'s own JavaScript rather than
-its native module directly: the module takes descriptors the JavaScript builds out of an asset,
-and rebuilding those here would be copying its internals rather than using it.
-
 ## Declaring faces
 
 A face is declared in CSS, collected at build time, and registered before the app mounts:
@@ -111,7 +107,7 @@ A variable font is one file that covers a range of weights. Declare it once, wit
 
 The face is registered as `Inter-100to900`, a text whose `font-weight` falls in the range is
 pointed at it, and the weight stays on the text for the platform to pick the instance by. A weight
-outside the range takes the face nearest it, as in a browser. From Expo SDK 58:
+outside the range takes the face nearest it, as in a browser. On Expo SDK 58:
 
 - **iOS** draws the font's named instance nearest the weight. A weight between two named instances,
   such as 650, draws one of them.
@@ -120,10 +116,10 @@ outside the range takes the face nearest it, as in a browser. From Expo SDK 58:
 - **Android 9 and earlier** draws the font's default instance, made bolder by the platform at a bold
   weight.
 
-Before Expo SDK 58, expo-font registers only the font's default instance, so the weight picks
-nothing: iOS draws the default instance at every weight, and Android draws it below 700 and its
-system font at 700 and above. The build warns about a face with a range there. On those versions,
-declare one file per weight instead, each with the weight it draws:
+On Expo SDK 57, expo-font registers only the font's default instance, so the weight picks nothing:
+iOS draws the default instance at every weight, and Android draws it below 700 and its system font
+at 700 and above. The build warns about a face with a range there. On SDK 57, declare one file per
+weight instead, each with the weight it draws:
 
 ```css
 @font-face {

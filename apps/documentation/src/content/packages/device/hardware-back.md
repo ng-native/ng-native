@@ -65,8 +65,8 @@ screen that wants to intercept the button itself, such as a form on the first sc
 ## Off a device and on the web
 
 Off a device and on iOS, `handle()` still returns an unsubscribe but nothing ever calls the handler,
-because there is no hardware back button on either. On the web there is no equivalent hardware
-button either; a browser's own back gesture is not the same event.
+because there is no hardware back button on either. On the web the browser's back gesture does not
+reach it.
 
 ## Reference
 

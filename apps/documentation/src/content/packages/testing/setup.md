@@ -70,21 +70,12 @@ ngNative({ inline: [/\/node_modules\/@my-org\//], libraryStyles: ['@my-org/ui'] 
 
 ### `Intl`
 
-Hermes, the engine an app runs on, has `Intl.Collator`, `Intl.DateTimeFormat` and
-`Intl.NumberFormat`, and none of `Intl.DisplayNames`, `Intl.DurationFormat`, `Intl.ListFormat`,
-`Intl.Locale`, `Intl.PluralRules`, `Intl.RelativeTimeFormat` and `Intl.Segmenter`. Node has all of
-them, so tests run without those seven: code that builds one throws a `TypeError` in its test,
-as it does on a device, rather than passing.
-Both `ngNative()` and `@ng-native/testing/register` remove them. The three Hermes has are Node's
-own, so an option Hermes does not support on them, such as `notation: 'compact'` on iOS, still
-works in a test.
-
-An app that polyfills them keeps its polyfill: import it in a Vitest setup file, or in a module
-given to `node --import`, as the app's entry file imports it on a device. `ngNative()` removes them
-ahead of the app's own setup files, so a polyfill that installs only what `Intl` lacks sees them
-missing, as it does on Hermes. Under `node --import`, import the polyfill after
-`@ng-native/testing/register` for the same reason; one installed before it is kept as well. For
-Node's full `Intl` in Vitest instead, give `intl: 'node'`:
+Tests remove the `Intl` classes Hermes lacks, so code that builds one throws a `TypeError` in its
+test, as it does on a device: `Intl.DisplayNames`, `Intl.DurationFormat`, `Intl.ListFormat`,
+`Intl.Locale`, `Intl.PluralRules`, `Intl.RelativeTimeFormat` and `Intl.Segmenter`. Both `ngNative()`
+and `@ng-native/testing/register` remove them. An app that polyfills them imports its polyfill in a
+Vitest setup file, or after `@ng-native/testing/register` under `node --import`. To keep Node's
+full `Intl` in Vitest, pass `intl: 'node'`:
 
 ```ts
 ngNative({ intl: 'node' });
@@ -146,48 +137,18 @@ each test to unmount the one before it.
 
 ## Under the hood
 
-Neither Node nor Vite can run an Angular Native component as written, for three separate reasons,
-and the Vitest plugin and the Node hook each fix all three the same way:
+The Vitest plugin and the Node hook compile every `.ts` file with an Angular decorator with the
+transform Metro uses, run the Angular linker over partially compiled libraries, and process
+`@angular/*`, `@ng-native/*`, `@ng-icons/*` and every package that depends on `@angular/core`
+rather than hand them to Node, so there is one copy of `@angular/core`. They install the globals the
+Metro preset installs, and leave `ngDevMode` undefined, as in a development build. A module sees
+no `require`, as under Node.
 
-- **Decorators.** Both runners strip TypeScript types and nothing else, and a decorator is syntax
-  neither accepts. Every `.ts` file with an Angular decorator is compiled ahead of time by
-  `@ng-native/metro`'s transform first, the one Metro uses for the app bundle. That covers your
-  components and a test file that declares one inline.
-- **Partial compilation.** `@angular/common`, `@angular/router`, `@angular/forms`, the
-  `@ng-native/*` packages and most Angular libraries on npm ship `ɵɵngDeclare*` declarations that
-  have to be linked before they can run. The Angular linker runs over every file that has them, as
-  it does in Metro.
-- **`node_modules`.** Vitest normally hands a dependency straight to Node, which would bypass both
-  steps above, and would give an Angular library Node's own copy of `@angular/core`, a second
-  instance beside the test's: its `inject()` would then fail with NG0203 in an injection context
-  the test set up. So `ngNative()` tells Vitest to process `@angular/*`, `@ng-native/*`,
-  `@ng-icons/*` and every package that lists `@angular/core` as a dependency or a peer itself.
-  Node refuses to strip types from any `.ts` file under `node_modules`, so the Node hook strips
-  them itself for every `.ts` file there, decorated or not.
-
-Both also install the globals the Metro preset installs as polyfills, before `@angular/core` is
-first evaluated: the animation globals Angular looks for to decide whether `animate.enter` and
-`animate.leave` do anything. `ngDevMode` is left undefined, which Angular reads as development, the
-same as a Metro development build. The Vitest plugin also turns off Vitest's `injectCjsGlobals`, and
-on Vitest 4, which passes a `require` regardless, shadows it in every ES module it processes,
-installed `@ng-native/*` packages included, so a module sees no `require` in Vitest just as it sees
-none under Node. The packages read a `require` as the sign they are running in a Metro bundle, and
-would otherwise try to load React Native itself.
-
-Without a `require`, an image referenced the React Native way, `require('./logo.png')`, would throw
-as its module is evaluated, and a lazily loaded screen that uses one would never appear. The Vitest
-plugin and the Node hook both replace each such call in your own source with
-`{ testUri: './logo.png' }`, as React Native's Jest preset does, so the component renders and a test
-can still see which image it was given.
-
-A font a stylesheet declares with `@font-face { src: url('./brand.ttf') }` is a `require` too, one
-the compiler writes, and gets the same stand-in whatever kind of file it names: the component loads,
-and the font file is not read.
-
-A `.md` file is imported as Metro imports it, `{ attributes, content, tokens }`, by the same
-transform: see [Importing .md files](/packages/components/markdown#importing-md-files). A test sees
-the front matter and tokens the bundle has. Under Vitest, an import with a query, such as
-`./post.md?raw`, is left to Vite.
+An image referenced as `require('./logo.png')` in your own source becomes
+`{ testUri: './logo.png' }`, so the component renders and a test can see which image it was given.
+A font a stylesheet declares with `@font-face` gets the same stand-in, and is not read. A `.md`
+file is imported as Metro imports it, `{ attributes, content, tokens }`; see
+[Importing .md files](/packages/components/markdown#importing-md-files).
 
 ## Troubleshooting
 

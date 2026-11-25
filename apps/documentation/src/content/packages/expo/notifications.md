@@ -448,44 +448,33 @@ the module and this service.
 
 ## On macOS
 
-`NgNativeNotifications` is `@ng-native/expo`'s `Notifications` over UNUserNotificationCenter:
-permission, scheduling (an interval, a date, or a calendar trigger, repeating or not), the pending
-and delivered lists, cancelling, dismissing and the badge count. Only `requestPermissionsAsync`
-asks the user. Without permission `scheduleNotificationAsync` resolves null and schedules nothing,
-and a host binary with no bundle identifier (a dev run outside an app) cannot use the notification
-centre and answers denied. A notification that arrives while the app is in front shows as a banner
-with its sound. The host sends `ngNativeNotifications` events on `DeviceEventEmitter`, `{ type:
-'received', notification }` as one is delivered and `{ type: 'response', response }` when the user
-clicks one, which the service reads as `latest()` and `response()`. A date crosses as milliseconds.
+Permission, scheduling (an interval, a date, or a calendar trigger, repeating or not), the pending
+and delivered lists, cancelling, dismissing and the badge count all work. Only
+`requestPermissionsAsync` asks the user. Without permission `scheduleNotificationAsync` resolves
+null and schedules nothing, and a host with no bundle identifier (a dev run outside an app) answers
+denied. A notification that arrives while the app is in front shows as a banner with its sound.
 
 The Dock badge is the badge count: `setBadgeCountAsync` sets it, 0 clears it, and a delivered
 notification with `content.badge` sets it too. It needs no permission.
 
-Remote notifications come through APNs. `getDevicePushTokenAsync` registers and resolves `{ type:
-'macos', data }`, the token in hex to send to APNs from your server, and a new token while the app
-runs arrives as a `{ type: 'token', token }` event, the service's `devicePushToken()`. A remote
-notification reaches the same events as a local one, with the trigger `{ type: 'push', payload }`
-from which the service reads its data; one with no alert is heard only while the app runs. APNs
-registers only an app signed with `com.apple.developer.aps-environment`: `package` adds it
-(`production`) to a `mas` build of an app that uses `expo-notifications`, and to a `dmg` when
-`ios.entitlements['aps-environment']` is set, which then needs a Developer ID profile, as Sign in
-with Apple does. A development host has no such entitlement, so there the token rejects with what
-to do. Expo's push service does not deliver to macOS, so `getExpoPushTokenAsync` rejects.
+Remote notifications come through APNs. `getDevicePushTokenAsync` resolves `{ type: 'macos', data }`,
+the token in hex to send to APNs from your server. A remote notification with no alert is heard
+only while the app runs. APNs registers only an app signed with
+`com.apple.developer.aps-environment`: `package` adds it to a `mas` build of an app that uses
+`expo-notifications`, and to a `dmg` when `ios.entitlements['aps-environment']` is set, which then
+needs a Developer ID profile. A development host has no such entitlement, so there the token
+rejects with what to do. Expo's push service does not deliver to macOS, so `getExpoPushTokenAsync`
+rejects.
 
 ## On Linux
 
-On the GTK host `NgNativeNotifications` shows each notification through the desktop's Notification
-portal, and through GLib's own notifications (GNOME Shell's `org.gtk.Notifications`, or
-`org.freedesktop.Notifications` elsewhere) where no portal answers. Linux has no notification
-scheduler, so the host keeps the scheduled ones in `notifications.json` in the app's data folder
-and fires them from a timer while the app runs. One that came due while the app was closed shows
-once as it next launches, and a repeating one then waits for its next time. Calendar triggers match
-the local time zone. Neither desktop asks for permission, so the status is granted and the
-desktop's own settings decide whether a notification shows. A subtitle shows as the first line of
-the body. A click raises the app and is the response. The
-presented list is the host's own, of the last 64 shown. The badge count goes out as the Unity
-launcher entry's count, which KDE Plasma and Ubuntu's dock show and stock GNOME does not, and
-there are no remote notifications.
+Linux has no notification scheduler, so scheduled notifications fire only while the app runs. One
+that came due while the app was closed shows once as it next launches, and a repeating one then
+waits for its next time. Calendar triggers match the local time zone. Neither desktop asks for
+permission, so the status is granted and the desktop's own settings decide whether a notification
+shows. A subtitle shows as the first line of the body. A click raises the app and is the response.
+The presented list holds the last 64 shown. The badge count shows on KDE Plasma's and Ubuntu's dock,
+not on stock GNOME, and there are no remote notifications.
 
 ## Without the module
 

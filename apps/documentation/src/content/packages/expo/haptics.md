@@ -9,10 +9,7 @@ summary: Impact, notification and selection feedback, fired and forgotten.
 
 <!-- platforms: Haptics -->
 
-It talks to Expo's native module directly rather than through `expo-haptics`'s own JavaScript,
-which adds exactly one thing on top: a throw when the module is missing. Asking for it optionally
-answers the same question without the throw, and sidesteps the enum its functions take. The
-`expo-haptics` package still has to be installed - that is what links the native side.
+The `expo-haptics` package must still be installed: it is what links the native side.
 
 ## Install
 

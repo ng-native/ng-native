@@ -96,10 +96,8 @@ active again, which is what refreshes it elsewhere.
 
 ## Off a device and on the web
 
-Off a device every setting stays at its neutral default forever and `announce()` does nothing,
-because there is no `AccessibilityInfo` underneath it to ask. On the web the browser's own
-accessibility tree and `prefers-reduced-motion` cover most of the same ground; `Accessibility` is
-still the one place `boldText` and `fontScale` come from on native.
+Off a device every setting stays at its neutral default forever and `announce()` does nothing. On
+the web, the browser's accessibility tree and `prefers-reduced-motion` cover most of the same ground.
 
 ## Reference
 

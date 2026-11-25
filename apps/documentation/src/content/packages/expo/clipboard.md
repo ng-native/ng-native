@@ -9,10 +9,6 @@ summary: Read and write the pasteboard, and count changes without prompting for 
 
 <!-- platforms: Clipboard -->
 
-This uses `expo-clipboard`'s own JavaScript rather than its native module directly, because it does
-real work: it carries the event name the change listener subscribes to, and the option defaults
-each call expects.
-
 ## Install
 
 ```sh

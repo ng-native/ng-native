@@ -5,7 +5,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   Component,
-  Injectable,
   Service,
   inject,
   input,
@@ -224,7 +223,7 @@ describe('async work', () => {
   });
 });
 
-@Injectable({ providedIn: 'root' })
+@Service()
 class Weather {
   today(): Promise<string> {
     return fetch('https://example.com/weather').then((response) => response.text());

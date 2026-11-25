@@ -142,10 +142,8 @@ const top = computed(() => {
 
 ## Off a device and on the web
 
-Off a device `metrics` stays at `{ height: 0 }` forever, because there is no `Keyboard` module
-underneath it. `dismiss()` still blurs the focused field, so a test can see it sent as a `blur`
-command in the fake Fabric's `commands`. There is no software keyboard concept on the web in the
-same shape; `Keyboard` is a native-only service. Called on the web all the same, `dismiss()` blurs
+Off a device `metrics` stays at `{ height: 0 }` forever. `dismiss()` still blurs the focused field, so a test can see it sent as a `blur`
+command in the fake Fabric's `commands`. On the web, `dismiss()` blurs
 a focused `text-input` and leaves the focus on anything else, such as the button that was clicked.
 
 ## Reference

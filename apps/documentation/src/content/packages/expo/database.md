@@ -120,18 +120,13 @@ sign-out, delete the rows or the database file explicitly - closing the connecti
 
 ## On macOS
 
-`database()` opens its database through `NgNativeSqlite`. A TurboModule cannot return an object
-with methods, so the host answers a handle, `{id, databasePath, databaseName}`, and each call takes
-the id first; the desktop loader builds `expo-sqlite`'s database on it, with each call also in its
-`Sync` form. A file database lives in `<appData>/SQLite`, or in the `directory` given wherever
-`FileSystem` may write, uses the WAL journal, and cannot be named with a path that leaves its
-folder; `:memory:` is in memory. `withTransactionAsync` runs `BEGIN`,
-the task, then `COMMIT`, or `ROLLBACK` when the task throws. Blobs cross as `{base64}` and come
-back as bytes. A reload closes every open database. Calls run on the JavaScript thread, in order.
+A file database lives in `<appData>/SQLite`, or in the `directory` given wherever `FileSystem` may
+write, uses the WAL journal, and cannot be named with a path that leaves its folder; `:memory:` is
+in memory. Every call also has its `Sync` form, and blobs come back as bytes. A reload closes every
+open database.
 
-The host answers a row without a column list, so a row's keys are not in the order of the `SELECT`.
-`prepareAsync` and `serializeAsync` throw, and `getEachAsync` reads every row before it yields the
-first.
+A row's keys are not in the order of the `SELECT`. `prepareAsync` and `serializeAsync` throw, and
+`getEachAsync` reads every row before it yields the first.
 
 ## Without the module
 

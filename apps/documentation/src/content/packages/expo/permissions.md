@@ -5,12 +5,9 @@ summary: Permission turns any Expo module's get/request pair into signals.
 
 # Permissions
 
-Nearly every Expo module that needs a permission exposes the same shape: a `getXPermissionsAsync`,
-a `requestXPermissionsAsync`, and a `useXPermissions()` hook that is those two plus React state.
-`Permission` rebuilds that hook as signals, for any module's pair of functions - it is not a facade
-per module, so the module stays your app's own dependency, and it is what
-[`ImagePicker`](/packages/expo/image-picker), [`Location`](/packages/expo/location) and
-[`Camera`](/packages/expo/camera) are built on.
+`Permission` turns any Expo module's `getXPermissionsAsync` and `requestXPermissionsAsync` pair into
+signals. [`ImagePicker`](/packages/expo/image-picker), [`Location`](/packages/expo/location) and
+[`Camera`](/packages/expo/camera) use it.
 
 For the camera, the microphone and recording, `cameraPermission()` and `microphonePermission()`
 from `@ng-native/expo/camera`, and `recordingPermission()` from `@ng-native/expo/audio`, each make

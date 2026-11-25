@@ -30,16 +30,11 @@ comparison writes under `__screenshots__`, as the template's does. The dependenc
 workspace's root `package.json`, beside Angular's, and `ng add` installs them. A version the
 workspace already has is left alone.
 
-The project's own `package.json` is never installed from. Expo reads `main` from it to find the
-entry file, and it also lists every dependency the app has at the root's ranges. Expo links the
-native modules that file names and no others, and `expo prebuild`, the first step of
-`ng run native:run-ios`, adds `expo`, `react` or `react-native` if it does not find them there and
-then offers to install them into the project. Accepting would put a second React Native beside
-the root's.
+The project's own `package.json` lists every dependency at the root's ranges, because Expo links
+only the native modules it names, but nothing installs from it: decline when `expo prebuild` offers
+to install packages into the project, or it puts a second React Native beside the root's.
 
-It adds the app beside the web one rather than converting it because there is nothing to convert.
-`@angular/build` has no native target: Metro builds an Angular Native app, through the transform
-in [Metro](/packages/metro), and the project's `angular.json` entry is what connects that to `ng`.
+The web app is left as it is, since Metro, not `@angular/build`, builds the native one.
 
 ## The targets
 
@@ -61,9 +56,8 @@ terminal attached, so Metro's QR code and keyboard shortcuts work as they do und
 A plain `ng test` runs the web app's tests and the native app's, since the Angular CLI runs `test`
 for every project that has one. A plain `ng build` and `ng serve` still mean the web app.
 
-`ng test native` does not use `@angular/build:unit-test`. That builder compiles tests with the web
-build and runs them against a DOM, and a native test renders onto the fake Fabric instead,
-compiled by the same transform Metro uses. The Vitest builder's options are `watch`, `filter`
+`ng test native` runs on the package's Vitest builder rather than `@angular/build:unit-test`,
+since a native test renders onto the fake Fabric, not a DOM. The Vitest builder's options are `watch`, `filter`
 (only the test files whose path contains it) and `project` (only the Vitest project of that name).
 
 The app's `vitest.config.mts` has three projects, as the template's does: `node`, in Node, which
@@ -192,10 +186,8 @@ folder.
 `--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`. It defaults to
 `com.<scope>.<name>`, from the npm scope of the root `package.json`'s name and the app's name with
 anything but letters and digits removed, where `expo prebuild` would otherwise use
-`com.anonymous.<name>`. An app name Android refuses as a segment, such as the Java keyword `native`
-or the Kotlin keyword `object`, gets an `app` prefix: `ng add` in a workspace with no scope names
-the app `com.appnative`. A scope that cannot be a segment is left out, so `@native` with an app
-named `mobile` gives `com.mobile`. A given identifier needs two or more dot-separated segments, each
+`com.anonymous.<name>`; a segment that is a Java or Kotlin keyword, such as `native`, gets an `app`
+prefix. A given identifier needs two or more dot-separated segments, each
 a letter and then letters or digits, none a Java or Kotlin keyword, and the schematic stops with an
 error on one that is not.
 
@@ -213,9 +205,6 @@ pnpm reports these as warnings and installs anyway.
 
 ## Upgrading
 
-`ng update @ng-native/schematics` moves every `@ng-native/*` package the root `package.json` lists
-to the new version with it, since they are released together. It then runs `sync-app-versions`,
-which moves the same packages in the native project's own `package.json`, the list Expo links
-native modules from, keeping a `^` or `~`. Any other migration the update crosses runs beside it;
-they come from `@ng-native/migrate`, and [Updating an app](/guide/updating) lists what each does
-and what is left to do by hand.
+`ng update @ng-native/schematics` moves every `@ng-native/*` package to the new version, in the
+root `package.json` and the native project's own. [Updating an app](/guide/updating) covers the
+migrations it runs and what is left to do by hand.

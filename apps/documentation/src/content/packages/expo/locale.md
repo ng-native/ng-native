@@ -9,11 +9,8 @@ summary: The user's preferred locales and calendar settings, kept current as the
 
 <!-- platforms: Locale -->
 
-Both of `expo-localization`'s getters are synchronous, so unlike the rest of the device-state
-services there is no default to sit at while the platform answers. What makes this worth a service
-is that the answers _change_: a user can switch language in Settings and come back, and a date that
-was formatted correctly a moment ago is then wrong. `Locale` subscribes to that; nothing else in
-the package does.
+Both are known at once, with no default while the platform answers, and both update when the user
+changes language or region in Settings and comes back.
 
 ## Install
 

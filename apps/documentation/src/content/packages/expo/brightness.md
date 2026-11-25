@@ -11,9 +11,7 @@ setting.
 
 <!-- platforms: Brightness -->
 
-The app's own brightness only. The system brightness is a global setting an app can leave changed
-after it is gone, and needs a permission on Android, so reaching for it is a decision to make
-deliberately against Expo's own API rather than a convenience this offers.
+It changes the app's own brightness only. For the system setting, use `expo-brightness` directly.
 
 ## Install
 

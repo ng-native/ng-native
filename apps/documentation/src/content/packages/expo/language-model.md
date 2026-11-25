@@ -38,9 +38,8 @@ npx expo install expo-local-llm
 
 There is no config plugin and no permission to declare. The module adds native code, so it needs
 a development build (`npx expo run:ios`, or EAS) rather than Expo Go, and an app that installs it
-has to rebuild before it can answer. Its iOS code compiles for iOS 16.4 and later, which is Expo
-SDK 57's default deployment target; if you have lowered yours, raise it with
-`expo-build-properties`.
+has to rebuild before it can answer. Its iOS code needs iOS 16.4 or later, Expo's default
+deployment target; an app that has lowered its own raises it with `expo-build-properties`.
 
 ```ts
 import { LanguageModel } from '@ng-native/expo/language-model';
@@ -48,8 +47,8 @@ import { LanguageModel } from '@ng-native/expo/language-model';
 
 ### Android needs minSdk 26
 
-On Android the module asks Gemini Nano through ML Kit's Prompt API, which needs API level 26
-(Android 8.0). Expo SDK 57 builds for 24, so raise it with `expo-build-properties`:
+On Android the module needs API level 26 (Android 8.0), above Expo's default of 24. Raise it with
+`expo-build-properties`:
 
 ```sh
 npx expo install expo-build-properties
@@ -62,9 +61,6 @@ npx expo install expo-build-properties
   }
 }
 ```
-
-`expo-local-llm` marks its Android generation as experimental: it has not been validated on Gemini
-Nano hardware yet.
 
 An app that does not want to raise it can leave the module out of Android's native build instead,
 with `"autolinking": { "android": { "exclude": ["expo-local-llm"] } }` under `expo` in its
@@ -370,8 +366,7 @@ a model that is not ready.
   health data. A refusal arrives as an error.
 - **One conversation per call.** `generate()`, `generateObject()` and `stream()` each start a fresh
   session, so the model does not remember the previous prompt. Use `session()` for a conversation.
-- **Android is less proven.** `expo-local-llm`'s Android side is built on a beta Google SDK and,
-  by its own account, not yet validated on a device.
+- **Android: preview,** built on a beta Google SDK.
 
 ## Reference
 

@@ -25,43 +25,19 @@ for the workspace's own scope, the part before `/` in the `name` of its root `pa
 
 ## What nx add does
 
-It adds `@nx/expo`, at the workspace's own Nx version, and registers `@nx/expo`'s plugin in
-`nx.json`. An Angular Native app is an Expo app, and that plugin already infers an Expo project's
-targets from its `app.json`, `metro.config.js` and `package.json`, so there is nothing to
-reimplement.
+It adds `@nx/expo` at the workspace's own Nx version and registers its plugin in `nx.json`, which
+infers an Expo project's targets from its `app.json`, `metro.config.js` and `package.json`. It does
+not run `@nx/expo:init`, which installs an Expo SDK older than an Angular Native app needs.
 
-It does not run `@nx/expo:init`, which installs Expo itself at the SDK `@nx/expo` was released
-against. On Nx 23.2 that is SDK 56; an Angular Native app needs SDK 57 or 58 and its React, and npm
-refuses to install the two side by side. It adds the two things `init` would have that the app does
-need, at the app's versions: `react-dom` at the app's React, because `@nx/expo` depends on
-`@nx/react` and npm would otherwise take its `react-dom` peer at the newest release, which asks for
-a newer React, and refuse every later install, and `@expo/cli`, which `nx prebuild` loads from the
-workspace root.
+At the workspace root it adds, at the app's versions: `react-dom` and `@expo/cli`, or with
+package-manager workspaces `expo`, `react` and `react-native` in place of `@expo/cli`; Babel 7's
+`@babel/runtime` and `@babel/core`; and `@expo/metro`. Keep the root's `expo`, `react` and
+`react-native` in step with the app's when upgrading it.
 
-With package-manager workspaces it adds `expo`, `react` and `react-native` at the root as well,
-at the app's versions, in place of `@expo/cli`. The package manager resolves `@nx/expo`'s `expo`
-peer in the root's context, and with nothing there to match, pnpm took that Expo's React Native and
-React at the newest versions there were, a second copy of each beside the app's. Keep these root
-versions in step with the app's when upgrading it.
-
-It also adds Babel 7's `@babel/runtime` and `@babel/core` at the workspace root: the runtime Expo's
-Babel preset imports, and the core every plugin in that preset peers on. In an `@nx/angular`
-workspace, `@angular-devkit/build-angular` otherwise puts Babel 8's copies there. Babel 8's runtime
-has no `regenerator`, and Metro warns on every `nx start` that it fell back to another copy, and
-its core leaves each plugin's peer unmet. Angular's build keeps its own Babel 8.
-
-And it adds `@expo/metro` at the root, at the range the app's `expo` depends on. `withNxMetro` in
-the app's `metro.config.js` loads it from the app's directory up, and pnpm keeps a dependency of
-`expo` out of the root's `node_modules`. `expo start` still finds it, through the `NODE_PATH`
-pnpm's `expo` shim sets, but the `typecheck` target loads the config with plain `node`, which
-without it fails with `Unable to load Metro config`.
-
-In a pnpm workspace it also decides the two install scripts `@nx/expo` brings in, through
-`@nx/jest`: `@parcel/watcher` and `unrs-resolver`. It sets them to `false` under `allowBuilds` in
-`pnpm-workspace.yaml`, since both ship prebuilt binaries and their scripts only build from source.
-pnpm 11 otherwise stops the install with `ERR_PNPM_IGNORED_BUILDS` until every such script is
-decided. A decision the workspace already made stays, and an `allowBuilds` written as a flow mapping
-is left as it is, with a warning naming the two to decide.
+In a pnpm workspace it sets `@parcel/watcher` and `unrs-resolver` to `false` under `allowBuilds` in
+`pnpm-workspace.yaml`, so pnpm 11 does not stop the install with `ERR_PNPM_IGNORED_BUILDS`. A
+decision the workspace already made stays, and an `allowBuilds` written as a flow mapping is left as
+it is, with a warning naming the two to decide by hand.
 
 ## The targets
 
@@ -76,27 +52,18 @@ is left as it is, with a warning naming the two to decide.
 | `nx typecheck mobile`   | `project.json` | `ngc --noEmit`, which checks the templates as well as the code |
 | `nx lint mobile`        | `project.json` | `eslint .`, with `--linter=eslint` only                        |
 
-`typecheck` and `test` are the two `@nx/expo` does not provide. Expo's `tsconfig` sets `noEmit`, and
-`@nx/js` disables its own inferred `typecheck` for a project that does, so the generator writes one.
-`test` runs Vitest once, where the target `@nx/vitest` would infer watches. `start` is written too:
-`@nx/expo` infers it as its `@nx/expo:start` executor, which Nx 23 deprecates and warns about on
-every run, so the generator runs the same `expo start` directly. `serve` runs it as well, in place
-of the `expo start --web` `@nx/expo` infers for every Expo app, since the app has no web platform.
-On Nx 23, `nx prebuild` and `nx build` still use `@nx/expo`'s executors, and print the same
-deprecation notice; Nx 24 infers them as the `expo prebuild` and `eas build` commands.
-`typecheck` loads `metro.config.js` before `ngc`, as the template's script does, so that
-once [Tailwind](/packages/tailwind) is added, the sheet `src/main.ts` imports exists on a fresh
-checkout. It declares `.angular-native/` as its output, so a cache hit restores the sheet too.
+`typecheck`, `test` and `start` are written in `project.json`; `@nx/expo` does not provide the
+first two. `test` runs Vitest once rather than watching. `serve` runs `expo start` as well, since
+the app has no web platform. On Nx 23, `nx prebuild` and `nx build` print a deprecation notice from
+`@nx/expo`'s executors. `typecheck` loads `metro.config.js` before `ngc`, so that once
+[Tailwind](/packages/tailwind) is added the sheet `src/main.ts` imports exists on a fresh checkout,
+and declares `.angular-native/` as its output, so a cache hit restores the sheet too.
 
 Where the app reaches its libraries through the package manager's links, the TypeScript preset's
-layout, `typecheck` reads `tsconfig.typecheck.json`, which extends the app's `tsconfig.json` and
-maps every `@ng-native` package to the app's own copy. pnpm gives a library a copy of its own of a
-package whose peers it does not share with the app, which an app that installs
-`react-native-reanimated` or `react-native-gesture-handler` brings about, and `ngc` given both
-copies stops at `NG3004: Unable to import symbol` before it checks a template. Metro and Vitest
-resolve to the app's copy themselves. The mapping is a file of its own because Metro reads the
-`paths` of `tsconfig.json`, and a path skips the `browser` entry of a package's `exports`. An app
-without the file takes it by hand:
+layout, `typecheck` reads `tsconfig.typecheck.json`, which maps every `@ng-native` package to the
+app's own copy. Without it, `ngc` can stop at `NG3004: Unable to import symbol` when pnpm gives a
+library a copy of its own, as installing `react-native-reanimated` or
+`react-native-gesture-handler` can cause. An app without the file adds it by hand:
 
 ```json
 {
@@ -117,20 +84,17 @@ with `node metro.config.js && ngc -p tsconfig.typecheck.json --noEmit` as the `t
 command.
 
 Each app gets a Metro port of its own, so `nx run-many -t start` runs several side by side. The
-first Expo app in the workspace uses Expo's default, 8081, with a plain `expo start`. Each later one
-takes the lowest port no other app's `start` or `serve` uses (`expo start --port 8082`, and so on),
-and Expo Go opens it at `exp://127.0.0.1:8082`. A later app's `run-ios` and `run-android` pass the
-same port (`expo run:ios --port 8082`), since the build bakes in the port its app loads from. The
-first app keeps the ones `@nx/expo` infers. An Expo app whose `start` is inferred counts as on 8081.
+first Expo app uses 8081; each later one takes the lowest port no other app uses
+(`expo start --port 8082`), which Expo Go opens at `exp://127.0.0.1:8082`, and its `run-ios` and
+`run-android` pass the same port.
 
 ## The files
 
 The app is the template's: `src/app/app.ts`, `src/main.ts`, `src/app/app.test.ts` and
 `src/app/app.device.ts` as they are, and an `app.json` named for the project. Its `app.json` names
 `ios` and `android` as the platforms, because Expo adds `web` whenever `react-dom` resolves, and Nx
-always installs one. Its `.gitignore` ignores the `ios/` and `android/` projects `expo prebuild`
-writes, the `.angular-native/` Tailwind generates, and the `-actual.png` and `-diff.png` a failed
-screenshot comparison writes under `__screenshots__`, as the template's does. Three files differ,
+always installs one. Its `.gitignore` is the template's, as
+[an Angular CLI app's](/packages/schematics#what-it-adds) is. Three files differ,
 each because of something Nx does:
 
 - **`metro.config.js`** applies the preset, and the template's `withDeviceTests` around it, around
@@ -154,69 +118,34 @@ each because of something Nx does:
   range `@ng-native/testing` peers on if there is none. The app adds them at once rather than when
   a library needs them, since a library generated after the app is the usual case.
 
-Its `vitest.config.mts` has three projects, as the template's does: `node`, in Node, which the
-`test` target runs alone, and `ios` and `android`, which run `src/**/*.device.ts`
-[inside the app](/packages/testing/in-app-tests) and start Metro, build the app and open it on a
-simulator or emulator themselves. `src/app/app.device.ts` is the example: run
-`npx vitest --project ios` in the app's folder. The first run builds the app, which needs Xcode or
-the Android SDK.
+Its `vitest.config.mts` has the template's `node`, `ios` and `android` projects, which `nx test`
+and `npx vitest --project ios` run as [the Angular CLI's targets](/packages/schematics#the-targets)
+describe.
 
 ## Where the dependencies go
 
-In a workspace with package-manager workspaces, which is Nx's default since 20, the app is a
-workspace package and lists its own dependencies, so pnpm links them. If no workspace glob covers
-its directory, the generator adds one: Nx's TypeScript preset starts with `packages/*` only. That
-is `apps/*` for `apps/mobile`, or `apps/mobile` itself when another directory in `apps` already
-has a `package.json`, so the glob takes in no package the workspace has not listed. In an
-integrated workspace, with one root `package.json` and path aliases, which is what the `@nx/angular`
-preset makes, they go in the root `package.json`. A version already there is left alone. The
-app's own `package.json` still names them all, at the root's ranges, though nothing installs from
-it: Expo links the native modules that file names and no others.
-
-In a workspace package the app takes the root's version of a package the root already lists, when
-every version it allows is one the app accepts. A workspace that saves exact versions
-(`savePrefix: ''` or `saveExact: true` in `pnpm-workspace.yaml`, `save-exact=true` in `.npmrc`,
-`defaultSemverRangePrefix: ""` in `.yarnrc.yml`, or `exact = true` in `bunfig.toml`) gets exact
-versions where it has none already: the newest each of the app's ranges allows, as `npm view`
-finds it from the workspace's root, or the lowest when the registry cannot be reached. `@nx/expo`
-takes the Nx that is running when the workspace lists Nx at a range.
+With package-manager workspaces, Nx's default, the app is a workspace package that lists its own
+dependencies, and the generator adds a workspace glob for its directory when none covers it. In an
+integrated workspace they go in the root `package.json`. A version already there is left alone, and
+a workspace that saves exact versions gets exact versions.
 
 ## Native modules a library imports
 
-Expo's autolinking links the native modules in the app's dependency tree: the packages its
-`package.json` lists, and the `dependencies` and required `peerDependencies` of each of those in
-turn. In an integrated workspace the app imports its libraries through tsconfig path aliases, so
-they are not in that tree, and a native module a library imports is linked only if something in
-the tree brings it in: the app listing it, or another of its dependencies depending on it. When
-nothing does, a module from the Expo SDK still works in Expo Go, which has the SDK's modules built
-in, so the gap shows only in a development or release build, which has no native code for it. A
-module from outside the SDK is missing from Expo Go too. A library that is a workspace package the
-app lists in its `package.json` is walked, so a native module in its `dependencies` or required
-`peerDependencies` is linked, and one it lists only in `devDependencies` or as an optional peer is
-not.
-
-Either way, a module's config plugin writes native settings, such as a usage description iOS needs.
-Expo applies it only when the app's `app.json` names it, apart from a few it applies itself once the
-module is linked, such as `expo-camera`'s and `expo-location`'s. And `npx expo install --check`
-checks the versions of the app's own dependencies only.
+Expo links only the native modules in the app's dependency tree. In an integrated workspace the
+app imports its libraries through path aliases, so a native module a library imports is missing
+from a development or release build unless the app lists it. Expo Go has the SDK's modules built in,
+so there the gap shows only for a module from outside the SDK. A library that is a workspace package
+the app lists has its `dependencies` and required peers linked, and not its `devDependencies` or
+optional peers.
 
 The generator registers `@ng-native/nx:sync-native-modules`, a sync generator, on the app's
-`start`, `export` and `prebuild` targets. Before any of them runs, it reads from Nx's project graph
-what the app's libraries import, directly or through another library, and adds to the app's
-`package.json` each native module there that the app does not list: a package with an Expo module
-config, a podspec or an Android project. A package a library imports can need one too: it counts
-when that package peers on it without marking the peer optional, as `@ng-native/icons` does on
-`react-native-svg`. The range is the root's, or the library's own in a workspace package, or the
-installed version. A module with a config plugin has it added to the app's `app.json`, unless it is
-one Expo applies without being listed.
-
-`nx sync` applies the same changes by hand, and `nx sync:check` fails when there are any to make,
-for CI. It only adds: a module stays listed when no library imports it any more, since the app may
-use it itself. An `@ng-native/expo` service reaches its module only when it is injected, so the
-graph records `@ng-native/expo` rather than the module: list those in the app, as each module's
-page says. An app generated before the sync generator existed registers it by adding
-`"syncGenerators": ["@ng-native/nx:sync-native-modules"]` to those three targets in its
-`project.json`.
+`start`, `export` and `prebuild` targets. Before any of them runs, it adds to the app's
+`package.json` each native module its libraries import that it does not list, and the module's
+config plugin to `app.json` where Expo does not apply it on its own. `nx sync` applies the same
+changes by hand, and `nx sync:check` fails when there are any to make, for CI. It only adds: a
+module stays listed when no library imports it any more. An `@ng-native/expo` service reaches its
+module only when it is injected, so list those modules in the app yourself, as each module's page
+says. `npx expo install --check` checks the versions of the app's own dependencies only.
 
 ## An @nx/angular workspace
 
@@ -342,27 +271,15 @@ for any native module.
 nx g @ng-native/nx:desktop mobile
 ```
 
-This adds macOS and Linux to an app: `@ng-native/desktop` where the app's dependencies go, `macos`
-and `linux` in `expo.platforms` with `experiments.outOfTreePlatforms: true` (Expo drops them from
-every bundle and export without it, and says nothing), `@ng-native/desktop` among the config
-plugins in `app.json`, `/dist/macos` and `/dist/linux` in the app's `.gitignore`, and three
-targets:
-
-| Command                 | What runs                                                                                                                     |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `nx run mobile:macos`   | `ng-native-desktop run`: on a Mac, builds the desktop host and opens the app in it.                                           |
-| `nx run mobile:linux`   | `ng-native-desktop run --os linux`: on Linux, the same, in GTK.                                                               |
-| `nx run mobile:package` | `ng-native-desktop package`: the `.app`, `.dmg` or Mac App Store package; on Linux the app folder, `.deb`, `.rpm` or Flatpak. |
-
-`macos` and `linux` load the app from the dev server `nx start` runs, on the app's own port, and
-`linux` runs on Linux only: on a Mac it stops and names packaging. `package` makes the machine's
-own default package, and passes on what follows it, so `nx run mobile:package --format dmg` makes
-the `.dmg`, `--format mas` the Mac App Store package, and `nx run mobile:package --os linux
---format deb --maintainer "Ada Lovelace <ada@example.com>"` a `.deb` from a Mac. An app that has
-`macos` alone gains `linux`, and running the generator again changes nothing. It stops with an
-error on a project with no `app.json`, which is not an Angular Native app. See
-[`@ng-native/desktop`](/packages/desktop) for the commands and the plugin options, and
-[Build for Linux](/guide/desktop-linux) for the Linux setup.
+This adds macOS and Linux to an app, as
+[the Angular CLI's `desktop` schematic](/packages/schematics#macos-and-linux) does, with
+`@ng-native/desktop` where the app's dependencies go, and three targets: `nx run mobile:macos`,
+`nx run mobile:linux` and `nx run mobile:package`. `macos` and `linux` load the app from the dev
+server `nx start` runs, on the app's own port. `package` passes on what follows it, so
+`nx run mobile:package --format dmg` makes the `.dmg`, `--format mas` the Mac App Store package,
+and `nx run mobile:package --os linux --format deb --maintainer "Ada Lovelace <ada@example.com>"` a
+`.deb` from a Mac. See [`@ng-native/desktop`](/packages/desktop) for the commands and the plugin
+options.
 
 ## iOS and Android
 
@@ -370,19 +287,12 @@ error on a project with no `app.json`, which is not an Angular Native app. See
 nx g @ng-native/nx:mobile desktop
 ```
 
-This adds iOS and Android to a desktop-only app (see [Options](#options)), undoing what
-`--desktopOnly` left out: `ios` and `android` in `expo.platforms` beside `macos` and `linux`, the
-phone
-settings a mobile app's `app.json` has (portrait orientation, `ios.supportsTablet`, and
-`android.package`, which is the iOS bundle identifier), and `expo-status-bar` and `expo-system-ui`
-where the app's dependencies go. It removes the app from the `exclude` list of `@nx/expo`'s plugin
-in `nx.json`, so the plugin infers `run-ios`, `run-android`, `prebuild` and the EAS targets for it
-again. An app whose Metro is not on Expo's default port gets its own `run-ios` and `run-android`
-with that port, as the application generator writes them. A setting the app already has stays as it
-is, and running the generator again changes nothing. It leaves the app's screens, its Vitest
-projects and its `test` target, which runs `node-macos` and `node-linux`, as they are. It stops with
-an error on a
-project with no `app.json`, which is not an Angular Native app.
+This adds iOS and Android to a desktop-only app, as
+[the Angular CLI's `mobile` schematic](/packages/schematics#ios-and-android) does, with
+`expo-status-bar` and `expo-system-ui` where the app's dependencies go. It also removes the app from
+the `exclude` list of `@nx/expo`'s plugin in `nx.json`, so the plugin infers `run-ios`,
+`run-android`, `prebuild` and the EAS targets for it again. An app whose Metro is not on 8081 gets
+its own `run-ios` and `run-android` with that port.
 
 ## Options
 
@@ -398,30 +308,14 @@ root's rules, `@nx/enforce-module-boundaries` among them, apply to the app. An a
 it: pass the tags they name, as in `--tags=type:app,scope:mac`. Where `depConstraints` is empty,
 Nx does not check, and tags change nothing.
 
-`--desktopOnly` makes a desktop-only app from the desktop template (`@ng-native/template-desktop`):
-`macos` and `linux` alone in `expo.platforms`, its sidebar and menu bar starter screen,
-`@ng-native/desktop` and `@ng-native/expo` in place of the phone's status bar and system UI
-packages, and `macos`, `linux` and `package` targets (see [macOS and Linux](#macos-and-linux))
-where a mobile app has its own `run-ios` and `run-android`. `@nx/expo`'s plugin infers `run-ios` and
-`run-android` for every Expo app, whatever
-platforms its `app.json` lists, so the generator adds the app's directory (`apps/desktop/**`) to the
-`exclude` list of each of the plugin's registrations in `nx.json`, and writes the two inferred
-targets that still apply on the desktop, `export` and `install`, in its `project.json`. `prebuild`
-and the
-EAS targets, which build for iOS and Android, are left out too, until
-[`nx g @ng-native/nx:mobile`](#ios-and-android) adds iOS and Android back.
-
-Its `vitest.config.mts` has four projects: `node-macos` and `node-linux`, in Node, which its `test`
-target runs alone (`vitest run --project node-macos --project node-linux`), and `macos` and
-`linux`, which run `src/**/*.device.ts` inside the app and start Metro and open it.
-`src/app/app.device.ts` is the example: run `npx vitest --project macos` (on a Mac) or
-`npx vitest --project linux` (in GTK, on Linux or on a Mac in a container) in the app's folder.
-`nx g @ng-native/nx:init --desktopOnly`, the generator `nx add` runs, makes it the default of
-every app generated in the workspace, in `nx.json`.
-
-`--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`; it defaults to
-`com.<scope>.<name>`, from the workspace's npm scope and the app's name with anything but letters
-and digits removed, where `expo prebuild` would otherwise use `com.anonymous.<name>`.
+`--desktopOnly` and `--bundleIdentifier` work as
+[`--desktop-only` and `--bundleIdentifier`](/packages/schematics#options) do for the Angular CLI.
+In Nx, a desktop-only app is also added to the `exclude` list of `@nx/expo`'s plugin in `nx.json`,
+with `export` and `install` written in its `project.json`, so it has no `run-ios`, `run-android`,
+`prebuild` or EAS targets until [`nx g @ng-native/nx:mobile`](#ios-and-android) adds iOS and
+Android back. Its `test` target runs `vitest run --project node-macos --project node-linux`.
+`nx g @ng-native/nx:init --desktopOnly`, the generator `nx add` runs, makes it the default of every
+app generated in the workspace, in `nx.json`.
 
 ## Upgrading
 

@@ -517,7 +517,7 @@ Every library's own component stylesheets are compiled, so a test draws a librar
 their styles. `libraryStyles` narrows that as the Metro preset's option of the same name does: a
 list of the only npm packages, or `false` for none. The `@ng-native/*` packages' are compiled
 whatever it says.
-[Setup](/packages/testing/setup#under-the-hood) says why each is needed.
+[Setup](/packages/testing/setup#under-the-hood) describes what each does.
 
 ## `@ng-native/testing/register`
 

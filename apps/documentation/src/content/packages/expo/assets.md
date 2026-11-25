@@ -5,11 +5,8 @@ summary: Bundled images, downloaded before they are needed, as an Angular resour
 
 # Assets
 
-`assets(modules)` downloads the images a screen should not pop in with. `useAssets()` is a hook
-around `Asset.loadAsync`, which is already a plain promise with no React in it - what is worth
-having is the reason the hook exists: a screen that shows an image bundled with the app still has
-to wait for it the first time, and a splash screen or a skeleton is only useful if something says
-when the wait is over.
+`assets(modules)` downloads the images a screen should not pop in with, and says when they are
+ready, so a splash screen or a skeleton knows when the wait is over.
 
 <!-- platforms: assets -->
 

@@ -10,11 +10,7 @@ Six motion and environment sensors, bound to `expo-sensors`: `Accelerometer`, `G
 
 <!-- platforms: Accelerometer, Gyroscope, Magnetometer, DeviceMotion, Barometer, LightSensor -->
 
-Every one of them is the same object underneath - `addListener`, `setUpdateInterval`,
-`isAvailableAsync` - so this is one `Sensor` class parameterized by the reading, not one per
-sensor. That is also why these are injection tokens rather than six `@Service()` classes: a
-`@Service()` class cannot be generic in the thing it reports, so each sensor is a distinct
-`InjectionToken<Sensor<T>>` that shares the one implementation.
+Each is an injection token for a `Sensor` typed by its reading, so all six share one API.
 
 ## Install
 

@@ -10,14 +10,10 @@ summary: The screen orientation, and locking it, through expo-screen-orientation
 
 <!-- platforms: DeviceOrientation -->
 
-`DeviceOrientation` wraps `expo-screen-orientation`'s own `getOrientationAsync()`, which reports how
-the screen is currently laid out - the same value the platform uses to decide whether to rotate -
-not the physical attitude of the device measured against gravity. A layout that only wants to know
-which way its own view is laid out should reach for the CSS `orientation` media feature instead,
-which needs none of this. Locking the screen with `lock()` changes what this signal can report:
-once locked to portrait, `DeviceOrientation` reports portrait, whatever way the phone is actually
-held. An app that needs the phone's physical attitude - a level, a game controller - wants a motion
-sensor from [Sensors](/packages/expo/sensors), not this.
+It reports how the screen is laid out, not how the device is held: once `lock()` locks it to
+portrait, it reports portrait whatever way the phone is turned. For the layout alone, the CSS
+`orientation` media feature needs none of this; for the device's physical attitude, use a motion
+sensor from [Sensors](/packages/expo/sensors).
 
 ## Install
 

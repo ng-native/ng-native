@@ -131,8 +131,7 @@ The notification is then an ordinary ongoing one, with the same timer, progress 
 ## Only on Android
 
 On iOS and the web there is no such notification, and `start()` answers false. The same is so in
-Expo Go and in a build made before `@ng-native/expo` was installed, which do not have its native
-half.
+Expo Go and in a build without `@ng-native/expo`'s native half.
 
 ## In a test
 

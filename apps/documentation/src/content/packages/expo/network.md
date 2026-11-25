@@ -5,13 +5,10 @@ summary: Connection type and a reachability estimate, as signals - not proof a r
 
 # Network
 
-`Network` exposes the platform's connection and internet-reachability estimates. Handle request
-failures separately to determine whether your server is reachable. `connected` is whether there is
-a connection of any kind; `reachable` forwards the platform's own `isInternetReachable` estimate,
-which on iOS is the same value as `connected` and is not the result of probing your server or
-anything else. Treat `reachable` as a signal worth branching an offline banner on, not as
-confirmation that a request will succeed - a `try`/`catch` around the request itself is what
-actually knows that.
+`Network` exposes the platform's connection and internet-reachability estimates. `connected` is
+whether there is a connection of any kind; `reachable` is the platform's `isInternetReachable`
+estimate, the same value as `connected` on iOS, and not a probe of your server. Branch an offline
+banner on it, and handle a failed request where it fails.
 
 <!-- platforms: Network -->
 

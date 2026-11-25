@@ -61,9 +61,8 @@ shared, and as dismissed when the picker closes, the service fails, no window is
 
 ## Off a device and on the web
 
-Off a device `share()` always resolves to `false`, because there is no `Share` module underneath it.
-The Web Share API is the nearest browser equivalent, but `Sharing` does not call it; a web build
-wanting the same affordance should call `navigator.share` directly.
+Off a device `share()` always resolves to `false`. `Sharing` does not call the Web Share API on the
+web.
 
 ## Reference
 

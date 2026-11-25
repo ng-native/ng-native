@@ -9,13 +9,8 @@ Most Expo modules need nothing from this package: `requireNativeModule`, `EventE
 `SharedObject` and `SharedRef` have no React in them, so a module that only calls into native is
 used as its own documentation says. [A module with no
 service](/packages/expo/using-a-module#a-module-with-no-service) shows how to load one so that a
-test can load the file too. What needs something is a module that _renders_. Its React wrapper
-reaches the Fabric component through `requireNativeViewManager`, which caches a host component,
-builds a view config for React's renderer, and derives the Fabric component's name from the module
-name. None of the React parts are reachable without React, and none of them are needed - the engine
-writes props onto the shadow node itself, and Expo's Fabric views take their props as an untyped
-map, so there is no codegen'd prop list to satisfy. What is left, and what this page is about, is
-the name.
+test can load the file too. A module that _renders_ needs its view registered as an element by
+name, which is what this page covers.
 
 These are all on the bare `@ng-native/expo` import - none of them is bound to one optional module.
 
@@ -267,14 +262,10 @@ not come across, and a component that renders nothing is what that looks like.
 
 ## Deriving the name yourself
 
-**`expoViewName(moduleName, viewName?)`** computes the exact Fabric component name
-`requireNativeViewManager` would, for a module `registerExpoView` does not already know about:
-`ViewManagerAdapter_<moduleName>` (or `ViewManagerAdapter_<moduleName>_<viewName>` for a named
-view), plus a per-app suffix. The suffix is the part that cannot be hardcoded: Expo Go runs many
-projects in one binary, so it namespaces every view name with a per-app identifier; a standalone
-build has none. Get it wrong and the view commits as `UnimplementedNativeView` with no error - the
-same failure mode as a misspelled name. `registerExpoView` calls this for you; reach for it
-directly only if you are registering a name some other way.
+**`expoViewName(moduleName, viewName?)`** returns the Fabric component name of an Expo module's
+view, including the per-app suffix Expo Go adds, for registering a name some other way than
+`registerExpoView`, which calls it for you. A wrong name commits as `UnimplementedNativeView` with
+no error.
 
 ## Without the module
 

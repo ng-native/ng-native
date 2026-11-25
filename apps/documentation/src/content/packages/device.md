@@ -29,22 +29,17 @@ export class Header {
 }
 ```
 
-A service nobody injects is never constructed, so there is no cost to importing the package and
-using only what a screen actually needs. Reach for a service here rather than reading React
-Native's own module directly - `Dimensions`, `Appearance`, `AppState` and the rest - because the
-service is what turns a callback-based API into a signal a `computed()` or a template can read
-without a manual subscription to tear down, and because it is what still works when there is no
-device: in a unit test, in `mount`'s own bootstrap, in anything that imports this code without a
-phone underneath it.
+A service nobody injects is never constructed, so importing the package costs nothing. Use these
+services rather than React Native's own modules (`Dimensions`, `Appearance`, `AppState` and the
+rest): each gives a signal with no subscription to tear down, and each still works in a unit test or
+anywhere else without a device.
 
 ## Off a device
 
-Every service here falls back to doing nothing when there is no React Native underneath it: no
-`nativeFabricUIManager`, no listeners, and a value that just sits at its neutral default. That is
-what makes the package importable by a test suite, by `mount`, and by anything else that runs this
-code somewhere other than a phone. `ColorScheme` reports `light`, `Screen` reports a zero-sized
-window, `AppState` reports `active`, and so on - nothing throws, and nothing waits forever for a
-platform that is not going to answer.
+With no native module underneath it, every service does nothing and its value sits at a neutral
+default: `ColorScheme` reports `light`, `Screen` reports a zero-sized window, `AppState` reports
+`active`, and so on. Nothing throws, and nothing waits for an answer. Each service's page lists its
+own defaults.
 
 Most services also expose a `SOURCE` injection token, which a test overrides to drive the service
 without a device underneath it (`SafeArea` is the exception - it has no native module behind it,
