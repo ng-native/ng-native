@@ -10,10 +10,6 @@ messages, and `loadTranslations()` from `@angular/localize` to load a language. 
 CLI, Metro cannot bake a language into each build. Translations load at runtime before mount, so
 one build carries every language.
 
-Verification covers installation in a template app and iOS/Android bundles through `expo export`.
-`localisation.test.ts` covers most of the remaining examples through the Metro preset's compiler,
-except where explicitly noted as unverified.
-
 ## Install
 
 ```sh

@@ -79,8 +79,6 @@ picture's proportions. To keep that fit, set `resizeMode="stretch"`.
 Events are element events, not outputs: `(load)`, `(error)`, `(loadStart)`, `(loadEnd)`,
 `(progress)`.
 
-<!-- api: Image -->
-
 ## Image background
 
 `<image-background>` lays an image behind projected content. There is no native component for
@@ -96,3 +94,7 @@ that `[style]` and projected content share.
 ```
 
 <!-- api: ImageBackground -->
+
+## Reference
+
+<!-- api: Image -->

@@ -12,7 +12,21 @@ by [@ng-native/analog](/packages/analog) without being renamed. Nothing else is 
 routes are plain `@angular/router` routes, made by the router package, and go to
 `provideNativeRouter` like any others.
 
-## Setting it up
+## fileRoutes or @ng-native/analog: which one
+
+Both route the same files, with the same names, to native stacks and tabs.
+
+- **`fileRoutes`** is part of the router: no other package, no Metro plugin, and routes made by
+  the router itself, which checks them as the app starts. Start here for an app that is only an
+  app.
+- **[`@ng-native/analog`](/packages/analog)** routes with `createRoutes` from `@analogjs/router`
+  itself, and reads `src/content` with `@analogjs/content`'s API. Use it to share pages and
+  content with an Analog web app, or to follow Analog's behaviour exactly as it changes.
+
+A page written for one works in the other. Its `RouteMeta` type comes from the package that
+routes it.
+
+## Setup
 
 Find the pages with Metro's `require.context`, in a file of their own so a test can replace it:
 
@@ -215,7 +229,24 @@ routes a `.md` page with the same file, so one `markdownPage` component serves b
   only read as it loads, so for one of those it is the navigation that fails, with the same
   message.
 
-## Testing
+## Where it differs from Analog
+
+- **A catch-all's parameter.** `[...slug].page.ts` gives the rest of the URL as `slug`; Analog
+  gives it only for `[[...slug]]`, and matches `[...slug]` as `**`. Both match the same URLs.
+- **`canMatch` passes a page over.** In Analog a page refused by its `canMatch` leaves an empty
+  screen rather than falling through to the next route.
+- **`pathMatch` is `'full'` for a redirect** unless the page says otherwise, where Analog leaves it
+  to the page and Angular rejects the route without it.
+- **Order.** A static path comes before a group's layout, a parameter and a catch-all; Analog sorts
+  by name, with layouts after pages.
+- **Mistakes throw.** Two files for one URL, or a malformed name, throw at startup instead of one
+  of them being used.
+- **Markdown pages** are drawn by the app's `markdownPage` component, with `filename` from the
+  pages folder and no `toc`.
+- **Not on native.** `.page.server.ts` loads, API routes and `meta` tags have nothing to run on in
+  an app.
+
+## In a test
 
 Vitest has no `require.context`. Replace the module that calls it with an `import.meta.glob` of
 the same files, which `fileRoutes` takes as it is:
@@ -240,34 +271,3 @@ A glob's keys are read from the first `pages/` in them, so `/src/app/pages/about
 `./pages/about.page.ts` are both `/about`. A glob that loads each file routes its pages lazily, and
 an eager one (`{ eager: true }`) routes them as they are. `"types": ["vite/client"]` in the app's
 `tsconfig.json`, with `vite` among its dev dependencies, types `import.meta.glob`.
-
-## fileRoutes or @ng-native/analog: which one
-
-Both route the same files, with the same names, to native stacks and tabs.
-
-- **`fileRoutes`** is part of the router: no other package, no Metro plugin, and routes made by
-  the router itself, which checks them as the app starts. Start here for an app that is only an
-  app.
-- **[`@ng-native/analog`](/packages/analog)** routes with `createRoutes` from `@analogjs/router`
-  itself, and reads `src/content` with `@analogjs/content`'s API. Use it to share pages and
-  content with an Analog web app, or to follow Analog's behaviour exactly as it changes.
-
-A page written for one works in the other. Its `RouteMeta` type comes from the package that
-routes it.
-
-## Where it differs from Analog
-
-- **A catch-all's parameter.** `[...slug].page.ts` gives the rest of the URL as `slug`; Analog
-  gives it only for `[[...slug]]`, and matches `[...slug]` as `**`. Both match the same URLs.
-- **`canMatch` passes a page over.** In Analog a page refused by its `canMatch` leaves an empty
-  screen rather than falling through to the next route.
-- **`pathMatch` is `'full'` for a redirect** unless the page says otherwise, where Analog leaves it
-  to the page and Angular rejects the route without it.
-- **Order.** A static path comes before a group's layout, a parameter and a catch-all; Analog sorts
-  by name, with layouts after pages.
-- **Mistakes throw.** Two files for one URL, or a malformed name, throw at startup instead of one
-  of them being used.
-- **Markdown pages** are drawn by the app's `markdownPage` component, with `filename` from the
-  pages folder and no `toc`.
-- **Not on native.** `.page.server.ts` loads, API routes and `meta` tags have nothing to run on in
-  an app.

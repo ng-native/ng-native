@@ -106,6 +106,17 @@ file url or body, an audio or video source, a web view's file page and `Asset.do
 SQLite database opens or is made only where `FileSystem` can write. Anything else is refused with an
 error naming the path, the same whether or not a file is there.
 
+## `paths`
+
+The folders an app writes to, as uris: `cache` and `document`, and the user's `home`, `desktop` and
+`downloads`, `temp` and the app's `appData`. Each is `null` where the OS has no such folder or the
+app cannot reach it, which on iOS and Android is all but `cache` and `document`.
+
+## `pickDirectory()`
+
+Deprecated: use [`DocumentPicker.pickDirectory()`](/packages/expo/document-picker), which answers
+the same. This one goes in a later release.
+
 ## On macOS
 
 `NgNativeFileSystem` answers flat calls over `file:` uris, and the desktop loader builds the
@@ -146,17 +157,6 @@ Each call is answered synchronously as well as with a promise (`statSync`, `read
 is on iOS and Android: `exists` and `size` are read when asked, `create()`, `write()` and
 `delete()` are done when they return and throw their failure, `textSync()` reads at once, and
 `text()` and `bytes()` answer a promise.
-
-## `paths`
-
-The folders an app writes to, as uris: `cache` and `document`, and the user's `home`, `desktop` and
-`downloads`, `temp` and the app's `appData`. Each is `null` where the OS has no such folder or the
-app cannot reach it, which on iOS and Android is all but `cache` and `document`.
-
-## `pickDirectory()`
-
-Deprecated: use [`DocumentPicker.pickDirectory()`](/packages/expo/document-picker), which answers
-the same. This one goes in a later release.
 
 ## Without the module
 

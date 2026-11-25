@@ -28,7 +28,7 @@ package gives Angular as the first app starts, where the app set none of its own
 nothing of an app, and speaks for the newest one up. Components written for native, the
 `@ng-native/components` elements and the app's own, stay the native views they are.
 
-## Installing
+## Install
 
 ```sh
 npm install @ng-native/web-compat @ng-native/icons

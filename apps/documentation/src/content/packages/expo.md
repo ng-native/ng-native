@@ -14,7 +14,7 @@ on-device language model, real SwiftUI and Jetpack Compose controls - rather tha
 native module wrapper by hand. It is entirely optional: nothing in the rest of the framework depends
 on it, and an app that is not built on Expo skips the package outright.
 
-## The smallest thing that works
+## The smallest useful example
 
 Every module this package wraps is an optional peer dependency, so installing the package pulls in
 no native code on its own - you install the specific module because your app wants that

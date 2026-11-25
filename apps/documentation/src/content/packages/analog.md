@@ -389,7 +389,7 @@ to run on in an app:
 - **`@analogjs/platform` and its Vite plugin.** Metro builds the app, with `@ng-native/metro`'s
   compiler.
 
-## Testing
+## In a test
 
 Vitest has no `require.context`. Replace the module that calls it with an `import.meta.glob` of the
 same files, which `pageRoutes` takes as it is:

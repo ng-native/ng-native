@@ -79,7 +79,8 @@ starts, the command checks the toolchain and stops with a fix-it line for each p
 | Git, curl, unzip, xz | installed            |
 | Perl with `shasum`   | installed            |
 | Python 3, pkg-config | installed            |
-| Pango, GLib, X11     | development packages |
+| Pango, Fontconfig    | development packages |
+| GLib, X11            | development packages |
 | OpenSSL 3, nghttp2   | development packages |
 | zlib, SQLite         | development packages |
 
@@ -87,15 +88,15 @@ On Debian and Ubuntu:
 
 ```sh
 sudo apt install clang lld cmake ninja-build git curl unzip xz-utils perl python3 pkg-config \
-  libgtk-4-dev libadwaita-1-dev libsecret-1-dev libpango1.0-dev libglib2.0-dev libx11-dev \
-  libssl-dev libnghttp2-dev zlib1g-dev libsqlite3-dev
+  libgtk-4-dev libadwaita-1-dev libsecret-1-dev libpango1.0-dev libfontconfig-dev libglib2.0-dev \
+  libx11-dev libssl-dev libnghttp2-dev zlib1g-dev libsqlite3-dev
 ```
 
 On Fedora, and on RHEL 9 and its rebuilds:
 
 ```sh
 sudo dnf install clang lld cmake ninja-build git curl unzip xz perl perl-Digest-SHA python3 \
-  pkgconf-pkg-config gtk4-devel libadwaita-devel libsecret-devel pango-devel glib2-devel \
+  pkgconf-pkg-config gtk4-devel libadwaita-devel libsecret-devel pango-devel fontconfig-devel glib2-devel \
   libX11-devel openssl-devel libnghttp2-devel zlib-devel sqlite-devel
 ```
 
@@ -127,8 +128,7 @@ Everything an app's tests do on Linux works from a Mac, at three depths.
   no tools. The `rpm` and the Flatpak run in containers, through Docker or Podman.
 
 What the container cannot show is on a real desktop: Orca, Wayland, input methods, fractional
-scaling and the KDE conventions. The project checks those by hand on an Ubuntu virtual machine
-before each release.
+scaling and the KDE conventions.
 
 ## Package the app
 

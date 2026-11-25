@@ -20,7 +20,7 @@ npx expo install expo-web-browser
 import { Browser } from '@ng-native/expo/browser';
 ```
 
-## The smallest thing that works
+## The smallest useful example
 
 ```ts
 import { Component, inject } from '@angular/core';
@@ -65,16 +65,6 @@ mean to open, usually `https:` and the app's own, before passing it to `open()`,
 As of iOS 11, `SFSafariViewController` no longer shares cookies with Safari - `signIn()`'s
 `ASWebAuthenticationSession` does, which is why sign-in uses it and `open()` does not.
 
-## On Linux
-
-`open(url)` and `signIn(url, redirectUrl)` open the page in the person's default browser, through
-the desktop's OpenURI portal. While a sign-in runs, a dialog over the app says it goes on in the
-browser, and its Cancel resolves `signIn()` to null. The sign-in ends on the first link back to the
-app on `redirectUrl`'s scheme, which the desktop hands to the running app, and the app's
-`DeepLinks` never hear that link. The link reaches the app only from an installed package, whose
-desktop entry registers the app's schemes as `x-scheme-handler` types; a run from the dev server
-has none registered. `preferEphemeralSession` does nothing, since the browser keeps its own cookies.
-
 ## The full OAuth flow, with PKCE
 
 `signIn()` covers a redirect-and-read-the-URL flow. For the full flow - PKCE, a provider's
@@ -106,6 +96,16 @@ if (result.type === 'success') {
 
 `expo-auth-session` is a separate package (`npx expo install expo-auth-session`); `Browser` does
 not depend on it.
+
+## On Linux
+
+`open(url)` and `signIn(url, redirectUrl)` open the page in the person's default browser, through
+the desktop's OpenURI portal. While a sign-in runs, a dialog over the app says it goes on in the
+browser, and its Cancel resolves `signIn()` to null. The sign-in ends on the first link back to the
+app on `redirectUrl`'s scheme, which the desktop hands to the running app, and the app's
+`DeepLinks` never hear that link. The link reaches the app only from an installed package, whose
+desktop entry registers the app's schemes as `x-scheme-handler` types; a run from the dev server
+has none registered. `preferEphemeralSession` does nothing, since the browser keeps its own cookies.
 
 ## Without the module
 

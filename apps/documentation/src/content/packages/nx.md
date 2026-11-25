@@ -31,7 +31,7 @@ targets from its `app.json`, `metro.config.js` and `package.json`, so there is n
 reimplement.
 
 It does not run `@nx/expo:init`, which installs Expo itself at the SDK `@nx/expo` was released
-against. On Nx 23.2 that is SDK 56; an Angular Native app needs SDK 58 and React 19.3.0, and npm
+against. On Nx 23.2 that is SDK 56; an Angular Native app needs SDK 57 or 58 and its React, and npm
 refuses to install the two side by side. It adds the two things `init` would have that the app does
 need, at the app's versions: `react-dom` at the app's React, because `@nx/expo` depends on
 `@nx/react` and npm would otherwise take its `react-dom` peer at the newest release, which asks for

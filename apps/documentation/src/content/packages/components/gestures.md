@@ -43,7 +43,7 @@ export class Draggable {
 }
 ```
 
-## Installing
+## Install
 
 The gestures need three native libraries, installed at the versions this Expo SDK expects:
 
@@ -168,28 +168,6 @@ gives it no view of its own. Not on macOS: `hitSlop`, the library's own componen
 (`RNGestureHandlerButton`, the version 3 detector's view), the UI runtime's `_setGestureStateSync`
 (a worklet's state manager goes through Reanimated's `setGestureState`), and force touch.
 
-## Testing a component with gestures
-
-Under the documented Vitest setup, `ngNative()` resolves `@ng-native/components/gestures` and
-`react-native-gesture-handler` to stand-ins, because the real ones reach React Native source Node
-cannot load. A root component wrapped in `<gesture-root>`, and any screen with a `[gesture]`,
-render and take presses as they would without them: `<gesture-root>` renders a plain view and
-`[gesture]` keeps its view uncollapsed, with no recognizer attached. `Gesture.Pan()` and the other
-builders take any configuration call and keep the callbacks they were given on `callbacks`, so a
-test of what a gesture does calls one directly. `gestureOf` finds the gesture on a view, or the one
-of a kind inside a composed gesture such as `Gesture.Race(pan, tap)`, which is how a test reaches
-a gesture a row component built for itself:
-
-```ts
-import { gestureOf, render, screen } from '@ng-native/testing';
-
-await render(Draggable);
-gestureOf(screen.getByTestId('box'), 'Pan').callbacks['onUpdate']!({ translationX: 40 });
-```
-
-The worklets a gesture drives are stood in for too: see
-[the testing setup](/packages/testing/setup).
-
 ## Callbacks must not close over `this`
 
 A callback passed to a gesture must not read `this`. The library's Babel plugin rewrites every
@@ -230,6 +208,30 @@ constructor() {
 It takes a `DestroyRef` as its second argument where it is called outside an injection context,
 for a service or a function of its own. The same goes for any other function a worklet calls back
 on the JavaScript thread, such as `runOnJS`'s.
+
+## In a test
+
+Under the documented Vitest setup, `ngNative()` resolves `@ng-native/components/gestures` and
+`react-native-gesture-handler` to stand-ins, because the real ones reach React Native source Node
+cannot load. A root component wrapped in `<gesture-root>`, and any screen with a `[gesture]`,
+render and take presses as they would without them: `<gesture-root>` renders a plain view and
+`[gesture]` keeps its view uncollapsed, with no recognizer attached. `Gesture.Pan()` and the other
+builders take any configuration call and keep the callbacks they were given on `callbacks`, so a
+test of what a gesture does calls one directly. `gestureOf` finds the gesture on a view, or the one
+of a kind inside a composed gesture such as `Gesture.Race(pan, tap)`, which is how a test reaches
+a gesture a row component built for itself:
+
+```ts
+import { gestureOf, render, screen } from '@ng-native/testing';
+
+await render(Draggable);
+gestureOf(screen.getByTestId('box'), 'Pan').callbacks['onUpdate']!({ translationX: 40 });
+```
+
+The worklets a gesture drives are stood in for too: see
+[the testing setup](/packages/testing/setup).
+
+## Reference
 
 <!-- api: NativeGesture -->
 

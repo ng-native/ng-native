@@ -186,6 +186,6 @@ With no `size`, an icon is `var(--ng-icon__size, 1em)`, as on the web. Inside ng
 Otherwise it is as big as the text around it. A `font-size` on the icon or above it sizes it, and
 so does a width and height. With no font size in scope that is 16 points.
 
-## API
+## Reference
 
 <!-- api: NgIcon -->

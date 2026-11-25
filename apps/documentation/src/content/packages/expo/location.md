@@ -21,7 +21,7 @@ npx expo install expo-location
 import { Location } from '@ng-native/expo/location';
 ```
 
-## The smallest thing that works
+## The smallest useful example
 
 ```ts
 import { Component, inject, type OnDestroy } from '@angular/core';

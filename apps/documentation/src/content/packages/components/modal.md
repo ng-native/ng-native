@@ -93,4 +93,6 @@ keeps the app's insets, and a `<safe-area-view>` inside it:
 `(requestClose)` fires for the Android back button or an iOS swipe-to-dismiss. `(show)`,
 `(dismiss)` and `(orientationChange)` are the others.
 
+## Reference
+
 <!-- api: Modal -->

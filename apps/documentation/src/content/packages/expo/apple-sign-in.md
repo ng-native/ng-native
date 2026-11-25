@@ -37,7 +37,7 @@ import { registerExpoViews } from '@ng-native/expo';
 registerExpoViews('apple-sign-in-button');
 ```
 
-## The smallest thing that works
+## The smallest useful example
 
 ```ts
 import { Component, inject } from '@angular/core';

@@ -11,7 +11,7 @@ drawn are the OS's own. The files are Vitest files, run by Vitest's own runner i
 `vitest` runs them as it runs Node tests: it starts Metro, builds and installs the app, boots the
 simulator or emulator, and reports to the same terminal, watch mode and CI.
 
-## Set up
+## Setup
 
 An app made from the template, or by `@ng-native/nx` or `@ng-native/schematics`, at this release or
 later has all of this already, with `ios` and `android` projects (`macos` for a desktop-only app)

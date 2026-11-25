@@ -12,7 +12,7 @@ screen: its outlets create and destroy real `RNSScreen` views, so a push is a ge
 transition with the platform's own animation, swipe-back gesture, and a real
 `UINavigationController`/`Fragment` underneath it, not something drawn to look like one.
 
-## Setting it up
+## Setup
 
 ```sh
 npm install @ng-native/router @angular/router

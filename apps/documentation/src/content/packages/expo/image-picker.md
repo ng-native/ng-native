@@ -21,7 +21,7 @@ npx expo install expo-image-picker
 import { ImagePicker, type PickedAsset } from '@ng-native/expo/image-picker';
 ```
 
-## The smallest thing that works
+## The smallest useful example
 
 ```ts
 import { Component, inject, signal } from '@angular/core';
@@ -65,6 +65,28 @@ export class Avatar {
   (`'images'`, `'videos'`, `'livePhotos'`), `allowsEditing`, `quality`, `allowsMultipleSelection`
   and the rest.
 
+## Permissions
+
+Two separate permissions, each a `Permission` (see [Permissions](/packages/expo/permissions)):
+
+- **`libraryPermission`** guards reading the library yourself, outside `pick()` - the picker itself
+  needs nothing. Ask for it only if your app browses or uploads from the library directly.
+- **`cameraPermission`** is what `capture()` asks for itself, via `ensure()`. Read
+  `cameraPermission.blocked()` to know when to send the person to Settings instead of asking again.
+
+Add to `Info.plist`:
+
+```xml
+<key>NSPhotoLibraryUsageDescription</key>
+<string>Allow this app to access your photos</string>
+<key>NSCameraUsageDescription</key>
+<string>Allow this app to access your camera</string>
+<key>NSMicrophoneUsageDescription</key>
+<string>Allow this app to access your microphone</string>
+```
+
+Android's permissions are added automatically by the module's config plugin.
+
 ## On macOS
 
 macOS has no system camera screen, so `capture()` shows the desktop host's own as a sheet on the
@@ -103,28 +125,6 @@ asked for once. The video is a QuickTime movie, H.264 where an x264 or OpenH264 
 and an AAC encoder is installed. With no Camera portal the permission is denied, and on a computer
 with no camera `capture()` rejects. Without GStreamer's PipeWire plugin there is no camera at all:
 `capture()` resolves to an empty list and `cameraPermission` reads as denied.
-
-## Permissions
-
-Two separate permissions, each a `Permission` (see [Permissions](/packages/expo/permissions)):
-
-- **`libraryPermission`** guards reading the library yourself, outside `pick()` - the picker itself
-  needs nothing. Ask for it only if your app browses or uploads from the library directly.
-- **`cameraPermission`** is what `capture()` asks for itself, via `ensure()`. Read
-  `cameraPermission.blocked()` to know when to send the person to Settings instead of asking again.
-
-Add to `Info.plist`:
-
-```xml
-<key>NSPhotoLibraryUsageDescription</key>
-<string>Allow this app to access your photos</string>
-<key>NSCameraUsageDescription</key>
-<string>Allow this app to access your camera</string>
-<key>NSMicrophoneUsageDescription</key>
-<string>Allow this app to access your microphone</string>
-```
-
-Android's permissions are added automatically by the module's config plugin.
 
 ## Without the module
 

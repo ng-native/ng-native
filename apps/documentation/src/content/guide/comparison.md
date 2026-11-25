@@ -86,8 +86,7 @@ Forms, CSS, Expo and React Native facades, and Reanimated worklet animations. Re
 release`) run on the iOS simulator and Android emulator, producing Hermes bytecode with no Angular
 compiler and `ngDevMode` false.
 
-Many platform facades have unit tests and typechecks but no hardware verification. Simulator checks
-also cover CSS behavior beyond unit tests; see the canary's verify screen and
+Many platform facades have unit tests and typechecks but no hardware verification. For CSS, see
 [CSS on native](/packages/fabric/css-engine). Treat this as a working prototype. See
 [Known limitations](/guide/limitations) for specific gaps.
 

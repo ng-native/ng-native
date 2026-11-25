@@ -20,7 +20,7 @@ npx expo install expo-local-authentication
 import { Biometrics } from '@ng-native/expo/biometrics';
 ```
 
-## The smallest thing that works
+## The smallest useful example
 
 ```ts
 import { Component, inject } from '@angular/core';
@@ -91,8 +91,8 @@ and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
 On the web, and in a test that provides no fake, **`authenticate()` fails rather than passes**
-without the module - `{ success: false, error: 'not_available' }` - unlike every other service here,
-which falls back to reporting nothing. A lock that opens when its sensor is missing is not a lock.
+without the module - `{ success: false, error: 'not_available' }` - unlike most services,
+which fall back to reporting nothing. A lock that opens when its sensor is missing is not a lock.
 `available()` resolves to `false` and `kinds()` to an empty list.
 
 ## Reference

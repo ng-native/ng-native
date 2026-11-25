@@ -228,7 +228,7 @@ collects the taps and writes its value back.
 Home screen widgets need iOS 16.4 or newer, the oldest version `expo-widgets` and Expo build for. On
 Android and the web, `expo-widgets` answers with a stand-in, and `widget()` does nothing.
 
-## Testing
+## In a test
 
 Pass a stand-in for the widget, an object with `updateSnapshot`, `getTimeline` and `reload`, and
 provide `WIDGET_EVENTS` to tap it. To check a `timeline`, give the stand-in an `updateTimeline` as

@@ -13,7 +13,7 @@ const { withAngularNative } = require('@ng-native/metro/config.cjs');
 module.exports = withAngularNative(getDefaultConfig(__dirname));
 ```
 
-`withAngularNative(config, options)` does five things to the config Expo hands you:
+`withAngularNative(config, options)` changes the config Expo hands you:
 
 - Sets `config.transformer.babelTransformerPath` to its own transformer, which compiles Angular
   before Expo's own stock transformer runs.

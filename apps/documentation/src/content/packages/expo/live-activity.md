@@ -451,7 +451,7 @@ Live Activities need iOS 16.4 or newer, the oldest version `expo-widgets` and Ex
 Android and the web, `expo-widgets` answers with a stand-in, and `start()` answers false.
 Android's counterpart is an [ongoing notification](/packages/expo/ongoing-notification).
 
-## Testing
+## In a test
 
 A layout file imports in a Vitest test as it is: with no `expo-widgets` to hand the layout to,
 `createLiveActivity` answers an activity that never starts. To check what the app sends, pass

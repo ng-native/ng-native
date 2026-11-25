@@ -164,8 +164,6 @@ rather than about 2ms.
 </scroll-view>
 ```
 
-<!-- api: ScrollView -->
-
 ## Refresh control
 
 `<refresh-control>` is a pull-to-refresh spinner, used as a direct child of a `<scroll-view>` or
@@ -202,3 +200,7 @@ the swipe layout, the way React Native's `ScrollView.js` splits it, and the scro
 rest. Layout that comes from a class stays on the scroll view.
 
 <!-- api: RefreshControl -->
+
+## Reference
+
+<!-- api: ScrollView -->

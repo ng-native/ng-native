@@ -111,6 +111,13 @@ const db = database('app.db', migrations, {
 Without it a schema's `REFERENCES ... ON DELETE CASCADE` is declared and not enforced, with no
 error. If `onOpen` throws, the connection is closed and `ready()` rejects with its error.
 
+## Closing
+
+`close()` releases the database connection, and resolves even if opening it had failed. It does
+not delete stored data. The next call to
+`ready()` reopens the database; most apps can leave the connection open. To remove data on
+sign-out, delete the rows or the database file explicitly - closing the connection is not that.
+
 ## On macOS
 
 `database()` opens its database through `NgNativeSqlite`. A TurboModule cannot return an object
@@ -125,13 +132,6 @@ back as bytes. A reload closes every open database. Calls run on the JavaScript 
 The host answers a row without a column list, so a row's keys are not in the order of the `SELECT`.
 `prepareAsync` and `serializeAsync` throw, and `getEachAsync` reads every row before it yields the
 first.
-
-## Closing
-
-`close()` releases the database connection, and resolves even if opening it had failed. It does
-not delete stored data. The next call to
-`ready()` reopens the database; most apps can leave the connection open. To remove data on
-sign-out, delete the rows or the database file explicitly - closing the connection is not that.
 
 ## Without the module
 

@@ -53,45 +53,10 @@ Diagnostics prevent unsupported styles from silently doing nothing.
 ## The preset
 
 `@ng-native/tailwind` contains three files: `shared.css` for platform-independent styles, plus
-`native.css` and `web.css`, which import it and define four platform-dependent variants.
-
-### `hover:` is the pressed state
-
-`:hover` is permanently unsupported by the native matcher and dropped with a build warning. The
-`hover:` variant instead matches `:active`, which the engine sets on touched views and their
-ancestors, letting hover classes express touch engagement.
-
-`data-hover` is for a trackpad, a mouse or a pencil, through React Native's W3C pointer events,
-which are off until an app [turns them on](/packages/platform/renderer#pointer-events). Components
-must listen for these events and set the attribute themselves. Without a pointer the variant
-remains a press state.
-
-```css
-/* native.css */
-@custom-variant hover (&:active, &[data-hover]);
-
-/* web.css */
-@custom-variant hover (&:hover, &:active, &[data-hover]);
-```
-
-The browser variant includes `:active` for touchscreen laptops and phone browsers, where `:hover`
-may never fire or may stick after a tap. Use `press:` and `hovered:` to distinguish the states.
-
-### `focus-visible:` is `focus:` on native
-
-The web distinguishes keyboard focus from clicks to avoid unnecessary rings. On phones, focus
-comes from keyboards, remotes or assistive technology, where rings are useful. Since
-`:focus-visible` is also dropped with a build warning, the native variant aliases it to focus.
-
-Both platforms also match `data-focus` so a wrapper can show its control's focus ring. The native
-text field receives focus, while its wrapper owns the border, radius and padding; the control's
-composed behavior informs the wrapper.
-
-### `ios:`, `android:`, `web:`, `native:`
-
-`mount` adds `platform-ios`, `platform-android` or `platform-web` to the root, enabling Tailwind's
-platform variants. Variants for absent classes compile but never match, so shared classes such as
-`ios:pt-2` are harmless on the web.
+`native.css` and `web.css`, which import it. They define the platform variants (`ios:`,
+`android:`, `macos:`, `linux:`, `desktop:`, `web:`, `native:`) and what `hover:`, `press:`,
+`focus-visible:` and `disabled:` match on each OS; [Variants](/packages/tailwind/variants) covers
+each one.
 
 ### `dark:` follows a class
 

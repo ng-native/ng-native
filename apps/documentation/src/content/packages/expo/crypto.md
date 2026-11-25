@@ -11,7 +11,7 @@ comes from instead.
 
 <!-- platforms: Crypto -->
 
-It is the one Expo service that is not inert without its module. An empty identifier is a key
+Unlike most Expo services, it is not inert without its module. An empty identifier is a key
 every record shares, and an empty hash matches every input, and neither looks wrong until the data
 is. So without `expo-crypto` installed, every call throws, and the error names the package.
 

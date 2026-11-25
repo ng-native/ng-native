@@ -28,7 +28,7 @@ import {
 } from '@ng-native/expo';
 ```
 
-## The smallest thing that works
+## The smallest useful example
 
 ```ts
 import { registerExpoViews, registerNativeViews } from '@ng-native/expo';

@@ -11,9 +11,6 @@ item in it. Tabs are declared as content, the same way a header is declared in a
 template, because a badge is a signal that changes, a title may be translated, and a tab might
 not exist until a feature flag says so - none of which a static route config can express:
 
-<!-- api: NativeTabsOutlet -->
-<!-- api: NativeTab -->
-
 ```ts
 @Component({
   selector: 'x-tabs',
@@ -363,3 +360,9 @@ it. iOS hides that, because a scroll view insets its own content by the safe are
 not, and draws edge to edge, so the page's first line lands under the clock. Wrap such a page in
 `<safe-area-view [edges]="['top']">` - on iOS the scroll view inside then no longer overlaps the
 unsafe area and adds nothing of its own, so the inset is not doubled.
+
+## Reference
+
+<!-- api: NativeTabsOutlet -->
+
+<!-- api: NativeTab -->

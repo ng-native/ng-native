@@ -5,17 +5,11 @@ summary: Pushing, replacing, presenting and resetting a native stack through Nat
 
 # Screens and navigation
 
-<!-- api: NativeStackOutlet -->
-
 `<native-stack-outlet>` is a `RouterOutlet` that renders a real stack instead of swapping one view
 for another: each activated route's component is created on its own screen, and screens below the
 top stay mounted so their native state survives a push. `nativeRouterLink` covers a plain push;
 for replacing, presenting or resetting, inject `NativeNavigation`, a small typed layer over
 `Router.navigate()` that still leaves the router as the source of truth.
-
-<!-- api: NativeRouterLink -->
-
-<!-- api: NativeNavigation -->
 
 ```ts
 import { Component, inject } from '@angular/core';
@@ -428,3 +422,11 @@ It fills the window and follows it through a rotation. `[modal]="true"` keeps Vo
 it while it shows, for a cover that blocks the app.
 
 <!-- api: FullWindowOverlay -->
+
+## Reference
+
+<!-- api: NativeStackOutlet -->
+
+<!-- api: NativeRouterLink -->
+
+<!-- api: NativeNavigation -->

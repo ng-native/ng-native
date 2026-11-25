@@ -72,4 +72,6 @@ reports each flip to the form and sends native nothing back.
 `disabled` ignores touches, grays the control out, and changes the state a screen reader
 announces.
 
+## Reference
+
 <!-- api: @ng-native/components#Switch -->

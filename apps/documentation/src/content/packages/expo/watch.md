@@ -164,7 +164,7 @@ embedded with it. Install the phone app on the iPhone and the watch app, found i
 `Watch` folder, on the watch. The watch simulator sleeps after a few seconds, which makes it
 unreachable; `update` still arrives.
 
-## Testing
+## In a test
 
 `Watch.SOURCE` stands in for the watch:
 

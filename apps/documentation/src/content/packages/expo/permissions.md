@@ -29,7 +29,7 @@ permission functions you are calling.
 import { Permission } from '@ng-native/expo';
 ```
 
-## The smallest thing that works
+## The smallest useful example
 
 ```ts
 import * as Camera from 'expo-camera';

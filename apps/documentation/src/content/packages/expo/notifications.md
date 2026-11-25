@@ -91,18 +91,6 @@ waited for - it has to be asked for. `Notifications` does this on construction, 
 notification routing is got wrong: an app that only listens for new taps does nothing on a cold
 start from a notification.
 
-## Without the module
-
-On iOS and Android, a missing `expo-notifications` - never installed, or installed without the app
-being rebuilt since - leaves the service made, so injecting it does not throw. A call, or a read of
-a value only the module knows, throws a `MissingModuleError`. Its message names the module and the
-commands that fix it; see
-[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
-
-On the web, and in a test that provides no fake, `latest` and `response` stay `null`, `take()`
-always returns `null`, `dismissAll()` and `setBadge()` do nothing, and both push token methods
-resolve to `null`.
-
 ## Push notifications from your server
 
 Getting a push to a device from your own backend is three things: a token that identifies the
@@ -498,6 +486,18 @@ the body. A click raises the app and is the response. The
 presented list is the host's own, of the last 64 shown. The badge count goes out as the Unity
 launcher entry's count, which KDE Plasma and Ubuntu's dock show and stock GNOME does not, and
 there are no remote notifications.
+
+## Without the module
+
+On iOS and Android, a missing `expo-notifications` - never installed, or installed without the app
+being rebuilt since - leaves the service made, so injecting it does not throw. A call, or a read of
+a value only the module knows, throws a `MissingModuleError`. Its message names the module and the
+commands that fix it; see
+[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
+
+On the web, and in a test that provides no fake, `latest` and `response` stay `null`, `take()`
+always returns `null`, `dismissAll()` and `setBadge()` do nothing, and both push token methods
+resolve to `null`.
 
 ## Reference
 

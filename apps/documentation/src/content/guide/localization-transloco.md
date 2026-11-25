@@ -347,7 +347,7 @@ polyfill. The runtime does call `Intl.NumberFormat` for number arguments, which 
 ## Extract and validate the keys
 
 `transloco-keys-manager` and `transloco-validator` read source files, so they work on ng-native
-templates as they are. A key is found in these forms, all verified inside native templates:
+templates as they are. A key is found in these forms:
 
 - `{{ 'key' | transloco }}` in a `<text>` or as a prop binding, such as
   `[title]="'key' | transloco"`

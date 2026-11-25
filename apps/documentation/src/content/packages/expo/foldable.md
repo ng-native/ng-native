@@ -104,7 +104,7 @@ available, `'unknown'`, no fold and no angle. On iOS and Android with neither `e
 `expo-foldables` installed, injecting it does not throw; a call, or a read of a value only the
 module knows, throws an error that says what to install.
 
-## Testing
+## In a test
 
 `Foldable.SOURCE` stands in for `expo-foldables`, and `Foldable.HINGE` for `expo-hinge`:
 
@@ -112,3 +112,7 @@ module knows, throws an error that says what to install.
 { provide: Foldable.SOURCE, useValue: fakeFoldables },
 { provide: Foldable.HINGE, useValue: { getHinge: () => hinge, addHingeListener: (listener) => subscription } },
 ```
+
+## Reference
+
+<!-- api: Foldable -->

@@ -7,8 +7,6 @@ summary: A native navigation bar for a screen, with its search field, bottom too
 
 A screen that wants a navigation bar declares `<native-header>` in its template:
 
-<!-- api: NativeHeader -->
-
 ```ts
 @Component({
   selector: 'x-detail',
@@ -543,3 +541,7 @@ A header owns the top safe-area inset, so a screen that has one should not also 
 `<safe-area-view>` - that would clear the notch twice. And a screen opened with `present()` has no
 header at all, because it sits outside the navigation controller the header configures; see
 [Screens and navigation](/packages/router/screens) for what such a screen owns instead.
+
+## Reference
+
+<!-- api: NativeHeader -->

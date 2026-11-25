@@ -124,7 +124,7 @@ backend.
 A backend sends to the FID with FCM's HTTP v1 `messages.send`, authorized with an OAuth 2.0 token
 for a service account of the Firebase project:
 
-```bash
+```sh
 curl -X POST "https://fcm.googleapis.com/v1/projects/$PROJECT_ID/messages:send" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \

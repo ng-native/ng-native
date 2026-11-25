@@ -29,10 +29,6 @@ Scan the QR code with [Expo Go](https://expo.dev/go), or press `i` or `a` for a 
 Angular component renders native views: `<view>` becomes a `UIView` on iOS or an
 `android.view.View` on Android, with a press handler and no React in the render path.
 
-Before each release, checks publish every package to a registry, generate a template app with the
-command above, install dependencies by version, typecheck, test and bundle it. Any failure blocks
-the release.
-
 ## Edit `app.ts` and check the counter
 
 Import each element as an Angular component and use lowercase names. The template generates this

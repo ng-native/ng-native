@@ -67,7 +67,7 @@ location permissions into the Android manifest:
 Then ask for it at runtime, for example with [Location](/packages/expo/location). A map without the
 user's location needs neither.
 
-## The smallest thing that works
+## The smallest useful example
 
 ```ts
 import { Component, signal, viewChild } from '@angular/core';

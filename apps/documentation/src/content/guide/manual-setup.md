@@ -5,8 +5,7 @@ summary: Wiring the framework into an Expo app you already have, one file at a t
 
 # Adding it to an existing app
 
-The [Getting started](/guide/getting-started) template is the shorter route, verified end to end
-before each release. For manual setup in a blank or existing Expo app, complete every step below.
+The [Getting started](/guide/getting-started) template is the shorter route. For manual setup in a blank or existing Expo app, complete every step below.
 Each step includes troubleshooting notes.
 
 Angular CLI and Nx generators perform this setup and integrate workspace commands: use
@@ -196,7 +195,7 @@ import { Pressable, Text, View } from '@ng-native/components';
   template: `
     <view class="box">
       <text>tapped {{ count() }} times</text>
-      <pressable (touchEnd)="bump()"><text>tap me</text></pressable>
+      <pressable (press)="bump()"><text>tap me</text></pressable>
     </view>
   `,
   styles: `

@@ -30,7 +30,7 @@ npx expo install @ng-native/desktop
 Then, in `app.json`, add `macos` (and `linux`, for Linux) to `expo.platforms`, set
 `expo.experiments.outOfTreePlatforms` to
 `true` (without it Expo drops `macos` from every bundle and export, and says nothing), add
-`@ng-native/desktop` to `expo.plugins`, and add two scripts to `package.json`:
+`@ng-native/desktop` to `expo.plugins`, and add these scripts to `package.json`:
 
 ```json
 {

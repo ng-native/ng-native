@@ -223,7 +223,7 @@ A file that imports React Native's own source, which is Flow and which Node cann
 to load with a syntax error and no file or line. `ngNative()` stands in for the gesture entry
 points, `@ng-native/components/gestures` and `react-native-gesture-handler`, so a component with
 a `<gesture-root>` or a `[gesture]` tests as it is; see
-[Gestures](/packages/components/gestures#testing-a-component-with-gestures).
+[Gestures](/packages/components/gestures#in-a-test).
 
 It stands in for the animation entry points too: `@ng-native/components/reanimated`,
 `react-native-reanimated` and `react-native-worklets`. A shared value is a signal, a

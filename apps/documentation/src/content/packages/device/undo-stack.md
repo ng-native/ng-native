@@ -69,3 +69,7 @@ where neither is focused. A reload clears the history.
 `provideDesktopFakes()`, and `render(X, { os: 'macos' })`, give `UndoStack` a fake undo manager.
 `fakeUndo()` from `@ng-native/testing` makes one to hold: `chooseUndo()` and `chooseRedo()` play
 Edit > Undo and Edit > Redo, and `undoTitle` and `redoTitle` read what the menu items say.
+
+## Reference
+
+<!-- api: UndoStack -->

@@ -26,7 +26,7 @@ import { registerExpoUiViews } from '@ng-native/expo';
 import { UiHost, UiMenu, UiButton } from '@ng-native/expo/expo-ui-components';
 ```
 
-## The smallest thing that works
+## The smallest useful example
 
 ```ts
 import { Platform } from 'react-native';
