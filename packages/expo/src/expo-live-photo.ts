@@ -17,7 +17,7 @@ export type LivePhotoPlaybackStyle = 'full' | 'hint';
 
 /** `expo-live-photo`'s view functions, which its `LivePhotoView` ref has. */
 export interface LivePhotoViewFunctions {
-  startPlayback(playbackStyle?: LivePhotoPlaybackStyle): unknown;
+  startPlayback(playbackStyle: LivePhotoPlaybackStyle): unknown;
   stopPlayback(): unknown;
 }
 
@@ -76,7 +76,8 @@ export class ExpoLivePhoto {
       this.functions,
       'startPlayback',
       this.engine.tagOf(this.node),
-      ...(playbackStyle === undefined ? [] : [playbackStyle]),
+      // The native function takes a style; `LivePhotoView` passes `full` when none is given.
+      playbackStyle ?? 'full',
     );
   }
 

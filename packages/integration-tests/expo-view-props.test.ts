@@ -270,9 +270,34 @@ describe('the view functions of expo-video and expo-live-photo', () => {
         ['startPictureInPicture', videoTag],
         ['stopPictureInPicture', videoTag],
         ['startPlayback', photoTag, 'hint'],
-        ['startPlayback', photoTag],
+        ['startPlayback', photoTag, 'full'],
         ['stopPlayback', photoTag],
       ]);
+    } finally {
+      app.applicationRef.destroy();
+    }
+  });
+
+  it('do nothing before the view is on screen, even without the module', async () => {
+    const { ExpoVideo } = await import('@ng-native/expo');
+    const mod = await compileFixture('fixtures/expo-view-functions.ts');
+    registerExpoViews('expo-video');
+    // The missing-module stand-in: a function read off it throws what to install.
+    const missing = Object.defineProperty({}, 'enterFullscreen', {
+      get() {
+        throw new Error('expo-video is not installed');
+      },
+    });
+    const app = mount(
+      1,
+      mod['ExpoViewFunctionsEarlyFixture'] as Type<unknown>,
+      createFakeFabric(),
+      {
+        providers: [{ provide: ExpoVideo.SOURCE, useValue: missing }],
+      },
+    );
+    try {
+      await (app.componentRef.instance as { called: Promise<void> }).called;
     } finally {
       app.applicationRef.destroy();
     }

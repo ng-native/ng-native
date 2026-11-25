@@ -467,7 +467,9 @@ export async function callViewFunction<T>(
   nativeTag: number | null,
   ...args: unknown[]
 ): Promise<void> {
+  // The tag first: reading a function off the missing-module stand-in throws what to install.
+  if (nativeTag === null) return;
   const fn = functions?.[name] as ((...args: unknown[]) => unknown) | undefined;
-  if (typeof fn !== 'function' || nativeTag === null) return;
+  if (typeof fn !== 'function') return;
   await fn.call({ nativeTag }, ...args);
 }
