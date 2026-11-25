@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2644,
-    "dropped": 508,
+    "rules": 2643,
+    "dropped": 510,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -168,8 +168,14 @@
       "border": {
         "var() cannot be used in the 'border' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
       },
+      "border-bottom": {
+        "'border-bottom: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
+      },
       "border-collapse": {
         "'border-collapse' has no React Native equivalent: no style prop of a native view does what it does.": 1
+      },
+      "border-top": {
+        "'border-top: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "caption-side": {
         "'caption-side' has no React Native equivalent: no style prop of a native view does what it does.": 2
