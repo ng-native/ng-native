@@ -64,6 +64,21 @@ describe('arithmetic on a token, where a number is taken', () => {
     assert.match(mixed.warnings.join(), /values of different types/);
   });
 
+  it('is a length for line-height when the arithmetic gives a number token its unit', () => {
+    const { props } = view(
+      '.a { --n: 2; font-size: 10px; line-height: calc(var(--n) * 1px) }',
+      'text',
+    );
+    assert.equal(props['lineHeight'], 2);
+  });
+
+  it('keeps a length a token times a dimension divided back comes to', () => {
+    const fabric = view(
+      '.a { --a: 4px; --b: 2px; --t: calc(var(--a) * 1px / 1px + var(--b)); width: var(--t) }',
+    );
+    assert.equal(fabric.props['width'], 6);
+  });
+
   it("unsets flex-grow from a length token, which is no number: to 0, CSS's initial value", () => {
     const { props } = view('.a { flex-grow: 1 } .a { --g: 2px; flex-grow: calc(var(--g) * 2) }');
     assert.equal(props['flexGrow'], 0);

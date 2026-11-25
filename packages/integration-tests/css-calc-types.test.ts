@@ -103,6 +103,11 @@ describe('a calc() adding a number to a length', () => {
     assert.equal(props('.a { opacity: var(--o) }', { '--o': 'calc(1px / 2px)' })['opacity'], 0.5);
   });
 
+  it('keeps a token set on the element that is a dimension times a token, divided back', () => {
+    const tokens = { '--a': '4px', '--b': '2px', '--t': 'calc(var(--a) * 1px / 1px + var(--b))' };
+    assert.equal(props('.a { width: var(--t) }', tokens)['width'], 6);
+  });
+
   it('follows a token set on the element, which a token holding the mixed sum is too', () => {
     assert.equal(props('.a { width: calc(var(--t) + 2px) }', { '--t': '1px' })['width'], 3);
     assert.equal(

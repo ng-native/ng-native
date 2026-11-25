@@ -200,8 +200,10 @@ const mathTypes: MathReader<MathType> = {
  */
 function productType(a: MathType, b: MathType): MathType {
   if (b === 'number') return a;
-  if (a === 'number' || a === 'any') return b;
-  return b === 'any' ? a : 'any';
+  if (a === 'number') return b;
+  // A token times a dimension is that dimension, or its square if the token is one, which a
+  // later quotient can cancel: unknown until the token is.
+  return 'any';
 }
 
 /** A dimension divided by the same one is a number; nothing is divided by a dimension it is not. */

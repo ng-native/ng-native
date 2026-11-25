@@ -1469,6 +1469,11 @@ const TOKEN_RANGE_CASES = [
  */
 const TOKEN_TYPE_CASES = [
   ...tokenRow('a number token', 'padding-left', '1', 'padding-left', 'calc(var(--t) + 2px)'),
+  // Arithmetic on a number token where a number is taken, and a line height either way.
+  ...tokenRow('a number token scaled', 'flex-grow', '2', 'flex-grow', 'calc(var(--t) * 1.5)'),
+  ...tokenRow('a number token halved', 'opacity', '1', 'opacity', 'calc(var(--t) / 2)'),
+  ...tokenRow('a multiple token scaled', 'line-height', '2', 'line-height', 'calc(var(--t) * 1.5)'),
+  ...tokenRow('a number given its unit', 'line-height', '2', 'line-height', 'calc(var(--t) * 1px)'),
   ...tokenRow(
     'a number given its unit',
     'padding-left',

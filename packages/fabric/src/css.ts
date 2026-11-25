@@ -6016,7 +6016,9 @@ function referenced(
   let value = token ? formFor(token, declaration) : fallbackOf(declaration, tokens);
   // `calc(var(--n) * 1px)`: the arithmetic gives a unitless token its unit, which is the usual
   // way to turn a count into a length. So it reads the bare number, and a length is no such thing.
-  if (token && declaration.adjust?.number && declaration.kind === 'length') {
+  // A line height too: `calc(var(--n) * 1px)` is a length of the token's number, not a multiple.
+  const lengthOf = declaration.kind === 'length' || declaration.kind === 'lineHeight';
+  if (token && declaration.adjust?.number && lengthOf) {
     value = token.number;
   }
   if (declaration.kind === 'display') return displayOf(value);

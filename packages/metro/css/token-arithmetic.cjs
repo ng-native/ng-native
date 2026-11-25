@@ -208,8 +208,10 @@ function multiplied(a, b, dividing) {
   if (a === null || b === null) return null;
   if (b === 'number') return a;
   if (dividing) return a === 'any' || b === 'any' ? 'any' : a === b ? 'number' : null;
-  if (a === 'number' || a === 'any') return b === 'any' ? 'any' : b;
-  return b === 'any' ? a : 'any';
+  if (a === 'number') return b;
+  // A token times a dimension is that dimension, or its square if the token is one, which a
+  // later quotient can cancel: unknown until the token is.
+  return 'any';
 }
 
 /** Whether a math function's type can be what a slot of `kind` takes, for some token. */

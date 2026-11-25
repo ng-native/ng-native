@@ -2008,6 +2008,70 @@
     }
   },
   {
+    "name": "a number token scaled in flex-grow, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-grow": "3"
+    }
+  },
+  {
+    "name": "a number token scaled in flex-grow, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "flex-grow": "3"
+    }
+  },
+  {
+    "name": "a number token halved in opacity, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "0.5"
+    }
+  },
+  {
+    "name": "a number token halved in opacity, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "0.5"
+    }
+  },
+  {
+    "name": "a multiple token scaled in line-height, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "48px"
+    }
+  },
+  {
+    "name": "a multiple token scaled in line-height, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "48px"
+    }
+  },
+  {
+    "name": "a number given its unit in line-height, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "2px"
+    }
+  },
+  {
+    "name": "a number given its unit in line-height, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "line-height": "2px"
+    }
+  },
+  {
     "name": "a number given its unit in padding-left, in the stylesheet",
     "expected": {
       "color": "rgb(0, 0, 0)",
