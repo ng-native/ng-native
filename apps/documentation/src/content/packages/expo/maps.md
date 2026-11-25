@@ -190,7 +190,7 @@ Each is the view's own event, so the payload is `$event.nativeEvent`:
   visible region's `latitudeDelta` and `longitudeDelta`. Also sent once when the map first appears.
 - **`(polylineClick)`**, **`(polygonClick)`**, **`(circleClick)`** - a tap on a shape: the shape,
   with its `id`. Its colors come back as native holds them rather than as the strings you gave.
-- **`(annotationClick)`** - iOS only: a tap on an annotation, with its `id`.
+- **`(annotationClick)`** - iOS 18 and later: a tap on an annotation, with its `id`.
 - **`(mapLoaded)`**, **`(mapLongClick)`**, **`(poiClick)`** - Android only: the map has loaded, a
   long press on the map (`{ coordinates }`), and a tap on a place the map labels
   (`{ name, coordinates }`).

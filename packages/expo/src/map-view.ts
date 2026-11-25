@@ -54,6 +54,7 @@ import {
   input,
   output,
   signal,
+  type InputSignal,
 } from '@angular/core';
 import { Engine, type EngineNode, type NativeSyntheticEvent } from '@ng-native/fabric';
 import type { AppleMaps, CameraMoveEvent, Coordinates, GoogleMaps } from 'expo-maps';
@@ -257,11 +258,11 @@ export class MapView {
   /** Markers drawn as text or an image on a background. iOS only. */
   readonly annotations = input<readonly MapAnnotation[]>();
   /** Android only. */
-  readonly mapOptions = input<MapOptions>();
+  readonly mapOptions: InputSignal<MapOptions | undefined> = input<MapOptions>();
   /** Android only. */
-  readonly userLocation = input<MapUserLocation>();
+  readonly userLocation: InputSignal<MapUserLocation | undefined> = input<MapUserLocation>();
   /** Android only. */
-  readonly contentPadding = input<MapContentPadding>();
+  readonly contentPadding: InputSignal<MapContentPadding | undefined> = input<MapContentPadding>();
 
   /** A tap on the map, not on a marker. */
   readonly mapClick = output<MapClickEvent>();
@@ -273,7 +274,7 @@ export class MapView {
   readonly polylineClick = output<MapPolylineClickEvent>();
   readonly polygonClick = output<MapPolygonClickEvent>();
   readonly circleClick = output<MapCircleClickEvent>();
-  /** A tap on an annotation. iOS only. */
+  /** A tap on an annotation. iOS 18 and later. */
   readonly annotationClick = output<MapAnnotationClickEvent>();
   /** The map has loaded. Android only. */
   readonly mapLoaded = output<NativeSyntheticEvent<Record<string, never>>>();
