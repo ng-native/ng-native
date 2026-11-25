@@ -322,7 +322,9 @@ go to a server.
 A test runs in Node, where no model can load. `fakeLanguageModel()` from `@ng-native/testing`
 stands in for the native side through `LanguageModel.SOURCE`, and answers each turn with the next
 reply the test gives it. A turn with no reply given yet waits for one, so a test can see the
-interface while the model is still thinking:
+interface while the model is still thinking. This test covers the `Assistant` component and the
+`listItemsDue` tool from [A conversation, with tools](#a-conversation-with-tools), imported from
+wherever the app keeps them:
 
 ```ts
 import { LanguageModel } from '@ng-native/expo/language-model';
