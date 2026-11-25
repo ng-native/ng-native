@@ -61,7 +61,7 @@ describe('arithmetic on a token, where a number is taken', () => {
     assert.deepEqual(added.warnings, []);
     assert.equal(added.props['lineHeight'], 12);
     const mixed = view('.a { --l: 10px; line-height: calc(var(--l) + 2px + 1) }', 'text');
-    assert.match(mixed.warnings.join(), /different types in a math function/);
+    assert.match(mixed.warnings.join(), /values of different types/);
   });
 
   it("unsets flex-grow from a length token, which is no number: to 0, CSS's initial value", () => {
