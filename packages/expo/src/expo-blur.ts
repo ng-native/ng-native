@@ -11,7 +11,17 @@
  * On Android the view on its own draws its tint, not a blur: `expo-blur` blurs there only the
  * content of an `<expo-blur-target>` given as `[blurTarget]`, with a `blurMethod` other than `none`.
  */
-import { Component, Injector, afterNextRender, effect, inject, input, signal } from '@angular/core';
+import {
+  Component,
+  Injector,
+  afterEveryRender,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+  type AfterRenderRef,
+} from '@angular/core';
 import { Engine, type EngineNode } from '@ng-native/fabric';
 import type { ExpoBlurTarget } from './expo-blur-target.ts';
 import { optionalNumber } from './transforms.ts';
@@ -74,16 +84,31 @@ export class ExpoBlur {
     effect(() => this.follow(this.blurTarget()?.node ?? null));
   }
 
-  /** The target's tag. A view not yet committed has none, so it is read again once it has. */
+  /** Reading the target's tag after each render, while it has none. */
+  private waiting: AfterRenderRef | undefined;
+
+  /**
+   * The target's tag. A view not yet committed has none, and one hidden with `display: none` has
+   * none until it is shown, so it is read after each render until it has one.
+   */
   private follow(node: EngineNode | null): void {
+    this.waiting?.destroy();
+    this.waiting = undefined;
     const tag = node && this.engine.tagOf(node);
     this.targetTag.set(tag ?? null);
     if (!node || tag !== null) return;
-    afterNextRender(
-      () => {
-        if (this.blurTarget()?.node === node) this.targetTag.set(this.engine.tagOf(node));
-      },
-      { injector: this.injector },
+    // Out of the effect that calls this, which may not register a render hook itself.
+    const waiting = untracked(() =>
+      afterEveryRender(
+        () => {
+          const found = this.engine.tagOf(node);
+          if (found === null) return;
+          waiting.destroy();
+          this.targetTag.set(found);
+        },
+        { injector: this.injector },
+      ),
     );
+    this.waiting = waiting;
   }
 }

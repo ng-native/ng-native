@@ -49,6 +49,22 @@ describe('a blur target', () => {
     assert.equal(byID(fabric, 'target').viewName, 'View');
   });
 
+  it('commits the tag of a target hidden at first, once it is shown', async () => {
+    registerExpoViews('expo-blur', 'expo-blur-target');
+    const mod = await compileFixture('fixtures/expo-blur-target.ts');
+    const app = await render(mod['ExpoBlurHiddenTargetFixture'] as Type<unknown>, {
+      os: 'android',
+    });
+    await settle();
+    const fixture = app.componentRef.instance as { hidden: { set(value: boolean): void } };
+    fixture.hidden.set(false);
+    await settle();
+    // A render after the one that committed it, as any later change makes.
+    await settle();
+    const target = byID(app.fabric, 'target');
+    assert.equal(byID(app.fabric, 'blur').props['blurTargetId'], target.reactTag);
+  });
+
   it('takes blurTargetId off the blur once the target goes', async () => {
     const { fabric, componentRef } = await open('android');
     (componentRef.instance as { shown: { set(value: boolean): void } }).shown.set(false);

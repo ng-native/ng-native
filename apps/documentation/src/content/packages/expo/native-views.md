@@ -92,6 +92,10 @@ content of a `BlurTargetView` it is given; see
 `BlurView` does. Elsewhere the target is a plain view.
 
 ```ts
+import { Component } from '@angular/core';
+import { Image } from '@ng-native/components';
+import { ExpoBlur, ExpoBlurTarget } from '@ng-native/expo';
+
 @Component({
   imports: [ExpoBlur, ExpoBlurTarget, Image],
   template: `
