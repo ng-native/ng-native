@@ -218,6 +218,8 @@ function fits(term, kind) {
   if (type === null) return false;
   if (type === 'any') return true;
   if (kind === 'length') return type === 'length' || type === 'percentage';
+  // A line height is a length, or a number that multiplies the font size.
+  if (kind === 'lineHeight') return type === 'length' || type === 'number';
   return type === kind || (kind === 'number' && type === 'percentage');
 }
 

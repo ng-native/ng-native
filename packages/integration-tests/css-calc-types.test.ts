@@ -65,8 +65,9 @@ describe('a calc() adding a number to a length', () => {
   it('keeps a length added to a percentage, a group, and a square divided back', () => {
     // The percentage waits for layout, so the warning is what says it was taken.
     const warnings: string[] = [];
-    props('.a { --gap: 10px; width: calc(var(--gap) + 50% + 2px) }', {}, warnings);
+    const percent = props('.a { --gap: 10px; width: calc(var(--gap) + 50% + 2px) }', {}, warnings);
     assert.deepEqual(warnings, []);
+    assert.notEqual(percent['width'], 10, 'not the weaker rule, which a dropped sum would leave');
     const group = props('.a { --t: 3px; width: calc(1px * (var(--t) / 1px + 2)) }');
     assert.equal(group['width'], 5);
     const square = props('.a { --t: 4px; width: calc(var(--t) + 1px * 2px / 1px) }');
@@ -83,6 +84,12 @@ describe('a calc() adding a number to a length', () => {
     assert.equal(padding['paddingTop'], 3);
     assert.equal(padding['paddingRight'], 3, 'not the 0 the side was written as');
     assert.match(warnings.join(), /values of different types/);
+  });
+
+  it('keeps a number added to a line height token, which multiplies the font size', () => {
+    const warnings: string[] = [];
+    props('.a { --lh: 1.5; line-height: calc(var(--lh) + 0.5) }', {}, warnings);
+    assert.deepEqual(warnings, []);
   });
 
   it('in a number, a length is the odd one: the opacity is unset', () => {
