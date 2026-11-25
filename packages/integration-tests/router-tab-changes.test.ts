@@ -113,14 +113,111 @@ describe('a tab added after start', () => {
     assert.equal(beta().props['preventNativeSelection'], true, 'and on the screen made again');
   });
 
+  it('goes to the first tab when the tab in front is taken away', async () => {
+    await tap('beta');
+    // Each commit's tabs and selection, to find the one that takes the screen away.
+    const commits: [number, string][] = [];
+    const completeRoot = fabric.completeRoot;
+    fabric.completeRoot = (...args) => {
+      completeRoot.apply(fabric, args);
+      commits.push([host().children.length, selected()]);
+    };
+    try {
+      betaEnabled.set(false);
+      await idle();
+    } finally {
+      fabric.completeRoot = completeRoot;
+    }
+    assert.deepEqual(
+      commits.find(([tabs]) => tabs === 1),
+      [1, 'home'],
+      'selected in the commit that takes the screen away, so Android has a selection to make',
+    );
+    assert.equal(router.url, '/home');
+    assert.equal(selected(), 'home');
+    assert.equal(pageOf('home').length, 1, 'the first tab shows its page');
+    assert.deepEqual(
+      host().children.map((screen) => screen.props['screenKey']),
+      ['home'],
+      'and the tab taken away has left the bar',
+    );
+  });
+
+  it('keeps a page presented over the bar when the tab under it is taken away', async () => {
+    await tap('beta');
+    assert.equal(await router.navigateByUrl('/beta(presented:home)'), true);
+    await idle();
+    betaEnabled.set(false);
+    await idle();
+    assert.equal(router.url, '/home(presented:home)');
+    assert.equal(selected(), 'home');
+  });
+
+  it('leaves a screen pushed over the bar in front when the tab under it is taken away', async () => {
+    cleanup();
+    const app = await render(mod['Shell'] as Type<unknown>, {
+      providers: [
+        provideNativeRouter([
+          ...(mod['routes'] as Routes),
+          { path: 'settings', component: mod['Home'] as Type<unknown> },
+        ]),
+      ],
+    });
+    fabric = app.fabric;
+    router = app.componentRef.injector.get(Router);
+    await idle();
+    await tap('beta');
+    assert.equal(await router.navigateByUrl('/settings'), true);
+    await idle();
+    betaEnabled.set(false);
+    await idle();
+    assert.equal(router.url, '/settings', 'not popped by a navigation into the bar');
+  });
+
+  it('leaves a kept first tab behind a guard to the router when the tab in front is taken away', async () => {
+    cleanup();
+    let allowed = true;
+    const [bar] = mod['routes'] as Routes;
+    const children = bar!.children!.map((child) =>
+      child.path === 'home' ? { ...child, canActivate: [() => allowed] } : child,
+    );
+    const app = await render(mod['Shell'] as Type<unknown>, {
+      providers: [provideNativeRouter([{ ...bar!, children }])],
+    });
+    fabric = app.fabric;
+    router = app.componentRef.injector.get(Router);
+    await idle();
+    await tap('beta');
+    allowed = false;
+    betaEnabled.set(false);
+    await idle();
+    assert.equal(router.url, '/beta', 'the guard refused');
+    assert.notEqual(selected(), 'home', 'native was not told to show the page the guard refused');
+  });
+
+  it('stays on the tab in front when another tab is taken away', async () => {
+    await tap('beta');
+    await tap('home');
+    betaEnabled.set(false);
+    await idle();
+    assert.equal(router.url, '/home');
+    assert.equal(selected(), 'home');
+    assert.deepEqual(
+      host().children.map((screen) => screen.props['screenKey']),
+      ['home'],
+      'the tab taken away has left the bar',
+    );
+  });
+
   it('shows the page of the tab in front, taken away and added again while it is showing', async () => {
     await tap('beta');
     betaEnabled.set(false);
     await idle();
     betaEnabled.set(true);
     await idle();
+    await tap('beta');
     assert.equal(router.url, '/beta');
-    assert.equal(pageOf('beta').length, 1, 'with no tap or navigation to read the tabs again');
+    assert.equal(pageOf('beta').length, 1, 'the page is in the tab that is in the bar');
   });
 
   it('opens a tab a flag added after start, on a navigation', async () => {

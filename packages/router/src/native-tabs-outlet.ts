@@ -270,9 +270,14 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
 
     // An `@if` that takes a tab away and brings it back makes a new element: its page follows it
     // at once, since the tab may be the one showing, with no tap or navigation to read them on.
+    // One that takes the tab in front away leaves nothing showing, so the first tab comes in front.
     effect(() => {
-      this.declared();
-      if (this.entries.length > 0) untracked(() => this.readTabs());
+      const declared = this.declared();
+      if (this.entries.length === 0) return;
+      untracked(() => {
+        this.readTabs();
+        if (this.selected && !declared.includes(this.selected.tab)) this.leaveTaken(declared);
+      });
     });
 
     // A push inside a tab's own stack reuses the tab's route, so this outlet is never activated
@@ -717,6 +722,26 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     if (!this.isActivated || !isShowing(this.router, selected.route)) return false;
     void this.router.navigateByUrl(this.urlOf(first));
     return true;
+  }
+
+  /**
+   * The tab in front was taken out of the bar: select the first tab still in it, in the commit
+   * that removes the screen, so Android rebuilds the bar with a selection to make, and navigate
+   * there, as the router decides what is on screen, keeping a page presented over the bar. Not
+   * while a screen pushed over the bar is in front, which a navigation would pop. The tab's entry
+   * stays, so the tab comes back where it was left if it is added again.
+   */
+  private leaveTaken(declared: readonly NativeTab[]): void {
+    const first = this.entries.find((entry) => entry.key === declared[0]?.path());
+    const router = this.router;
+    if (!first || !router) return;
+    if (this.tabOf(withoutPresented(router, router.url)) !== this.selected) return;
+    // A page kept behind a guard waits for it, as a tap on it does: see `guardSelection`.
+    if (!guardedAt(first.route)) this.request(first);
+    const url = router.parseUrl(this.urlOf(first));
+    const presented = router.parseUrl(router.url).root.children[PRESENTED];
+    if (presented) url.root.children[PRESENTED] = presented;
+    void router.navigateByUrl(url);
   }
 
   /** Keep the tab in front on the url it has reached, as long as the url is still inside it. */
