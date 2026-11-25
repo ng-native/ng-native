@@ -53,6 +53,13 @@ export class Clip {
 }
 ```
 
+`<expo-video>` has the view functions `VideoView`'s ref has, on iOS and Android: `enterFullscreen()`,
+`exitFullscreen()`, `startPictureInPicture()` and `stopPictureInPicture()`, each a promise. Reach
+the element with `viewChild(ExpoVideo)`. Each does nothing before the view is on screen, and on
+macOS, where the desktop host's view has no functions to call. On Android the app's JavaScript is
+paused while the video is full screen, so `exitFullscreen()` is for a native listener there, as with
+`VideoView`.
+
 ## `videoPlayer(source, options?)` and `audioPlayer(source, options?)`
 
 Both must be called in an injection context - a field initializer or a constructor - the same

@@ -437,3 +437,37 @@ export function expoModuleNow<T>(
   if (error) throw error;
   return found;
 }
+
+/**
+ * A native view's functions, as `expo-modules-core` puts them on a React ref: the module's
+ * `ViewPrototypes` entry for the view, `<module>_<view>`, each called with `{ nativeTag }` as
+ * `this`. Null where the module has no such view; the missing-module stand-in where the package's
+ * native half is not in the build, so a call says what to install.
+ */
+export function viewFunctions<T>(
+  module: string,
+  nativeModule: string,
+  viewName: string,
+  options?: ModuleOptions,
+): T | null {
+  const core = optional(() => require('expo-modules-core') as typeof import('expo-modules-core'));
+  const found = expoModule(
+    module,
+    () => core?.requireOptionalNativeModule<{ ViewPrototypes?: Record<string, T> }>(nativeModule),
+    options,
+  );
+  if (found && !present(found)) return found as unknown as T;
+  return found?.ViewPrototypes?.[`${nativeModule}_${viewName}`] ?? null;
+}
+
+/** Call a view function on the view committed for `node`: nothing before it reaches the screen. */
+export async function callViewFunction<T>(
+  functions: T | null,
+  name: keyof T,
+  nativeTag: number | null,
+  ...args: unknown[]
+): Promise<void> {
+  const fn = functions?.[name] as ((...args: unknown[]) => unknown) | undefined;
+  if (typeof fn !== 'function' || nativeTag === null) return;
+  await fn.call({ nativeTag }, ...args);
+}

@@ -111,13 +111,19 @@ export { ExpoImage, type ExpoImageContentFit, type ExpoImageSource } from './exp
 export { ExpoBlur, type BlurMethod, type BlurTint } from './expo-blur.ts';
 export { ExpoBlurTarget } from './expo-blur-target.ts';
 export { ExpoGL } from './expo-gl.ts';
-export { ExpoLivePhoto, type LivePhotoAsset } from './expo-live-photo.ts';
+export {
+  ExpoLivePhoto,
+  type LivePhotoAsset,
+  type LivePhotoPlaybackStyle,
+  type LivePhotoViewFunctions,
+} from './expo-live-photo.ts';
 export { ExpoMeshGradient } from './expo-mesh-gradient.ts';
 export {
   ExpoVideo,
   type VideoButtonOptions,
   type VideoContentFit,
   type VideoFullscreenOptions,
+  type VideoViewFunctions,
   type VideoViewPlayer,
 } from './expo-video.ts';
 export {

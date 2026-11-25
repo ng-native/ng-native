@@ -223,3 +223,58 @@ function registered(id: string): Record<string, unknown> {
   if (id === 'camera-plain') return { flashMode: 'off', barcodeScannerEnabled: false };
   return {};
 }
+
+describe('the view functions of expo-video and expo-live-photo', () => {
+  it('call the view on screen with its tag, as the React refs do', async () => {
+    const { ExpoVideo, ExpoLivePhoto } = await import('@ng-native/expo');
+    const mod = await compileFixture('fixtures/expo-view-functions.ts');
+    registerExpoViews('expo-video', 'expo-live-photo');
+    const calls: unknown[][] = [];
+    const record = (name: string) =>
+      async function (this: { nativeTag: number }, ...args: unknown[]) {
+        calls.push([name, this.nativeTag, ...args]);
+      };
+    const video = {
+      enterFullscreen: record('enterFullscreen'),
+      exitFullscreen: record('exitFullscreen'),
+      startPictureInPicture: record('startPictureInPicture'),
+      stopPictureInPicture: record('stopPictureInPicture'),
+    };
+    const livePhoto = {
+      startPlayback: record('startPlayback'),
+      stopPlayback: record('stopPlayback'),
+    };
+    const fabric = createFakeFabric();
+    const app = mount(1, mod['ExpoViewFunctionsFixture'] as Type<unknown>, fabric, {
+      providers: [
+        { provide: ExpoVideo.SOURCE, useValue: video },
+        { provide: ExpoLivePhoto.SOURCE, useValue: livePhoto },
+      ],
+    });
+    try {
+      const fixture = app.componentRef.instance as {
+        video(): InstanceType<typeof ExpoVideo>;
+        livePhoto(): InstanceType<typeof ExpoLivePhoto>;
+      };
+      const [videoTag, photoTag] = fabric.committed[0]!.children.map((node) => node.reactTag);
+      await fixture.video().enterFullscreen();
+      await fixture.video().exitFullscreen();
+      await fixture.video().startPictureInPicture();
+      await fixture.video().stopPictureInPicture();
+      await fixture.livePhoto().startPlayback('hint');
+      await fixture.livePhoto().startPlayback();
+      await fixture.livePhoto().stopPlayback();
+      assert.deepEqual(calls, [
+        ['enterFullscreen', videoTag],
+        ['exitFullscreen', videoTag],
+        ['startPictureInPicture', videoTag],
+        ['stopPictureInPicture', videoTag],
+        ['startPlayback', photoTag, 'hint'],
+        ['startPlayback', photoTag],
+        ['stopPlayback', photoTag],
+      ]);
+    } finally {
+      app.applicationRef.destroy();
+    }
+  });
+});

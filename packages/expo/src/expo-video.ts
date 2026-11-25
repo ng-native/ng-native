@@ -11,9 +11,26 @@
  * `expo-video`'s `surfaceType` is not here: its React component reads it to choose between two
  * Android views, and no native view reads it. See the player docs for the texture view.
  */
-import { Component, computed, input, output } from '@angular/core';
-import type { NativeSyntheticEvent } from '@ng-native/fabric';
+import {
+  Component,
+  ElementRef,
+  InjectionToken,
+  computed,
+  inject,
+  input,
+  output,
+} from '@angular/core';
+import { Engine, type EngineNode, type NativeSyntheticEvent } from '@ng-native/fabric';
+import { callViewFunction, currentPlatform, viewFunctions } from './native.ts';
 import { optionalBoolean } from './transforms.ts';
+
+/** `expo-video`'s view functions, which its `VideoView` ref has. */
+export interface VideoViewFunctions {
+  enterFullscreen(): Promise<void>;
+  exitFullscreen(): Promise<void>;
+  startPictureInPicture(): Promise<void>;
+  stopPictureInPicture(): Promise<void>;
+}
 
 export type VideoContentFit = 'contain' | 'cover' | 'fill';
 
@@ -73,6 +90,20 @@ type VideoEvent = NativeSyntheticEvent<Record<string, never>>;
   },
 })
 export class ExpoVideo {
+  /** The view's functions. Overridden in a test. */
+  static readonly SOURCE = new InjectionToken<VideoViewFunctions | null>(
+    'angular-native.videoViewSource',
+    {
+      // The view `<expo-video>` commits as: `SurfaceVideoView` on Android, `VideoView` on iOS.
+      factory: () =>
+        viewFunctions<VideoViewFunctions>(
+          'expo-video',
+          'ExpoVideo',
+          currentPlatform() === 'android' ? 'SurfaceVideoView' : 'VideoView',
+        ),
+    },
+  );
+
   /** The player the view shows. Bound to null, the view shows none. */
   readonly player = input<VideoViewPlayer>();
   /** Shows the platform's playback controls. True unless set. */
@@ -106,6 +137,39 @@ export class ExpoVideo {
   readonly fullscreenExit = output<VideoEvent>();
   readonly pictureInPictureStart = output<VideoEvent>();
   readonly pictureInPictureStop = output<VideoEvent>();
+
+  private readonly functions = inject(ExpoVideo.SOURCE);
+  private readonly engine = inject(Engine);
+  private readonly node = inject<ElementRef<EngineNode>>(ElementRef).nativeElement;
+
+  /**
+   * Show the video full screen, as `VideoView`'s ref does. Nothing without the module, or before
+   * the view reaches the screen.
+   */
+  enterFullscreen(): Promise<void> {
+    return this.call('enterFullscreen');
+  }
+
+  /**
+   * Leave full screen. On Android the app's JavaScript is paused while the video is full screen,
+   * so this runs from a native listener there, as with `VideoView`.
+   */
+  exitFullscreen(): Promise<void> {
+    return this.call('exitFullscreen');
+  }
+
+  /** Go picture in picture, with `allowsPictureInPicture` and the config plugin's support. */
+  startPictureInPicture(): Promise<void> {
+    return this.call('startPictureInPicture');
+  }
+
+  stopPictureInPicture(): Promise<void> {
+    return this.call('stopPictureInPicture');
+  }
+
+  private call(name: keyof VideoViewFunctions): Promise<void> {
+    return callViewFunction(this.functions, name, this.engine.tagOf(this.node));
+  }
 
   protected readonly playerId = computed(() => {
     const player = this.player();

@@ -42,6 +42,7 @@ import { Storage } from '@ng-native/expo/async-storage';
 import { Updates } from '@ng-native/expo/updates';
 import { Brightness, type NativeBrightness } from '@ng-native/expo/brightness';
 import { cameraPermission, microphonePermission } from '@ng-native/expo/camera';
+import { ExpoLivePhoto, ExpoVideo } from '@ng-native/expo';
 import { recordingPermission } from '@ng-native/expo/audio';
 import { nativePlatform, registerPlatformComponents } from '@ng-native/fabric';
 import type { InjectionToken } from '@angular/core';
@@ -1439,5 +1440,45 @@ describe('the brightness source', () => {
     } finally {
       registerPlatformComponents('ios');
     }
+  });
+});
+
+describe("the video and live photo views' functions", () => {
+  const prototypes = {
+    ExpoVideo_VideoView: { name: 'ios video' },
+    ExpoVideo_SurfaceVideoView: { name: 'android video' },
+    ExpoLivePhoto_LivePhotoView: { name: 'live photo' },
+  };
+  const core = { requireOptionalNativeModule: () => ({ ViewPrototypes: prototypes }) };
+  const on = (OS: string) => ({ 'react-native': { Platform: { OS } }, 'expo-modules-core': core });
+
+  it('are the prototypes of the view each element commits as, per platform', () => {
+    assert.equal(
+      withModules(on('ios'), () => defaultSource(ExpoVideo.SOURCE)),
+      prototypes.ExpoVideo_VideoView,
+    );
+    assert.equal(
+      withModules(on('android'), () => defaultSource(ExpoVideo.SOURCE)),
+      prototypes.ExpoVideo_SurfaceVideoView,
+    );
+    assert.equal(
+      withModules(on('ios'), () => defaultSource(ExpoLivePhoto.SOURCE)),
+      prototypes.ExpoLivePhoto_LivePhotoView,
+    );
+  });
+
+  it('are none in Node, and none for the live photo on Android, where it has no view', () => {
+    assert.equal(
+      withModules({}, () => defaultSource(ExpoVideo.SOURCE)),
+      null,
+    );
+    const empty = {
+      'react-native': { Platform: { OS: 'android' } },
+      'expo-modules-core': { requireOptionalNativeModule: () => null },
+    };
+    assert.equal(
+      withModules(empty, () => defaultSource(ExpoLivePhoto.SOURCE)),
+      null,
+    );
   });
 });
