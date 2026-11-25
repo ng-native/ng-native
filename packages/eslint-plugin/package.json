@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/eslint-plugin",
-  "version": "0.27.0",
+  "version": "0.29.0",
   "description": "ESLint rules for Angular Native: the DOM events, HTML controls and browser APIs that compile but do nothing on a device.",
   "keywords": [
     "angular",

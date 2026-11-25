@@ -4,94 +4,94 @@
     {
       "reactNative": "0.88.0",
       "flavour": "debug",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-macos-universal-debug.tar.gz",
-      "sha256": "c6547c9ecdec30e5568afb2cd5c3f2d5212f483f98e985a5e2b56fef0c4ff419",
+      "url": "https://github.com/ng-native/ng-native/releases/download/v0.29.0/ng-native-desktop-host-0.29.0-rn-0.88.0-macos-universal-debug.tar.gz",
+      "sha256": "30d7dd928a795622f9b0cb8d112e70c525c61d0e0b83bf3dd6a464ffb7faf016",
       "libraries": {
-        "react-native-screens": "4.30.0",
-        "react-native-safe-area-context": "5.10.1",
+        "react-native-screens": "4.30.1",
+        "react-native-safe-area-context": "5.11.1",
         "react-native-svg": "15.16.0",
         "react-native-worklets": "0.13.0",
         "react-native-reanimated": "4.7.1"
       },
-      "inputs": "0a10788349417cc834b9e0b2f97cbbb3185a38f2f36299cbf737e76f9d24c716"
+      "inputs": "003d915cc276d2dad3154baaab344431336ed32958ccb5a7559e55d010773e6f"
     },
     {
       "reactNative": "0.88.0",
       "flavour": "release",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-macos-universal.tar.gz",
-      "sha256": "fd6da08b299895489cf2ad12ce290c2c69f88997767fd1514f5cb8a234200fa2",
+      "url": "https://github.com/ng-native/ng-native/releases/download/v0.29.0/ng-native-desktop-host-0.29.0-rn-0.88.0-macos-universal.tar.gz",
+      "sha256": "2779ca4a00809c9e2f36c4da8ec331d42163c770676a710892affb5800510de2",
       "libraries": {
-        "react-native-screens": "4.30.0",
-        "react-native-safe-area-context": "5.10.1",
+        "react-native-screens": "4.30.1",
+        "react-native-safe-area-context": "5.11.1",
         "react-native-svg": "15.16.0",
         "react-native-worklets": "0.13.0",
         "react-native-reanimated": "4.7.1"
       },
-      "inputs": "b9e2bdaeaddaad700cfe40150549db4d3efd9f16b49010c23049be387ce49c62"
+      "inputs": "879028c54f73ce51a7ecb0dac7928f7145a661912ee891b1303556c5924e1349"
     },
     {
       "reactNative": "0.88.0",
       "flavour": "debug",
       "os": "linux",
       "arch": "x64",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-linux-x64-debug.tar.gz",
-      "sha256": "96555986cb7e7f156d1fd2826587cc36451ea94ba93de635bd8daf6c72eef6fe",
+      "url": "https://github.com/ng-native/ng-native/releases/download/v0.29.0/ng-native-desktop-host-0.29.0-rn-0.88.0-linux-x64-debug.tar.gz",
+      "sha256": "f461c91b9f56432d626b53c6e0d6454679a548fe9dbbdd6ead42123c0a2303c7",
       "libraries": {
-        "react-native-screens": "4.30.0",
-        "react-native-safe-area-context": "5.10.1",
+        "react-native-screens": "4.30.1",
+        "react-native-safe-area-context": "5.11.1",
         "react-native-svg": "15.16.0",
         "react-native-worklets": "0.13.0",
         "react-native-reanimated": "4.7.1"
       },
-      "inputs": "b735426f8962943f9bccd575232c8ec267c0c2bcf92780a576bb02215fcd9ce3"
+      "inputs": "a275af27212582db015b3db09b331935ff6b3d8232a8f3b2e8e388394270f9cf"
     },
     {
       "reactNative": "0.88.0",
       "flavour": "release",
       "os": "linux",
       "arch": "x64",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-linux-x64.tar.gz",
-      "sha256": "979c07198c6138a704c91649aed13c1a877d80b8e247bb2d0a3dbbf39c54ab7c",
+      "url": "https://github.com/ng-native/ng-native/releases/download/v0.29.0/ng-native-desktop-host-0.29.0-rn-0.88.0-linux-x64.tar.gz",
+      "sha256": "ef8da46168575c6cad1cfd73eaa413fde6383c6b80e685f04e20f313a493c9f8",
       "libraries": {
-        "react-native-screens": "4.30.0",
-        "react-native-safe-area-context": "5.10.1",
+        "react-native-screens": "4.30.1",
+        "react-native-safe-area-context": "5.11.1",
         "react-native-svg": "15.16.0",
         "react-native-worklets": "0.13.0",
         "react-native-reanimated": "4.7.1"
       },
-      "inputs": "22ba2060ea208746013460a5ba6ef3ff1c8161831ddbe684516a2d3476085559"
+      "inputs": "a44642c582d538c8a65b45003ab26d4f347d91f29efa43ffcdfeeb9d1e488920"
     },
     {
       "reactNative": "0.88.0",
       "flavour": "debug",
       "os": "linux",
       "arch": "arm64",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-linux-arm64-debug.tar.gz",
-      "sha256": "f578ecf89b55634be13a9030a78c1895ef3979ce7f5ef7b187c2fe3fe038f07f",
+      "url": "https://github.com/ng-native/ng-native/releases/download/v0.29.0/ng-native-desktop-host-0.29.0-rn-0.88.0-linux-arm64-debug.tar.gz",
+      "sha256": "1fe0fe05141f4861df9de2764fc0289912905f72325259809cffd2e7529fe21f",
       "libraries": {
-        "react-native-screens": "4.30.0",
-        "react-native-safe-area-context": "5.10.1",
+        "react-native-screens": "4.30.1",
+        "react-native-safe-area-context": "5.11.1",
         "react-native-svg": "15.16.0",
         "react-native-worklets": "0.13.0",
         "react-native-reanimated": "4.7.1"
       },
-      "inputs": "7ecfe1eb1912bb0b651eaacfca5e51c5ba906384a453ce9913d000d1d0ee429a"
+      "inputs": "d66d2d4d4f151b413242652b156989af191d4ac814e9830a9b85336d72e6fde3"
     },
     {
       "reactNative": "0.88.0",
       "flavour": "release",
       "os": "linux",
       "arch": "arm64",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v0.27.0/ng-native-desktop-host-0.27.0-rn-0.88.0-linux-arm64.tar.gz",
-      "sha256": "928595e25100de9aeb195284a61f5196b779109f75077e9e8ff673838834b5eb",
+      "url": "https://github.com/ng-native/ng-native/releases/download/v0.29.0/ng-native-desktop-host-0.29.0-rn-0.88.0-linux-arm64.tar.gz",
+      "sha256": "95e96e6666fb0f0b23bb563cc37f2ecf11345eddf9efdb557390b77f67d00faf",
       "libraries": {
-        "react-native-screens": "4.30.0",
-        "react-native-safe-area-context": "5.10.1",
+        "react-native-screens": "4.30.1",
+        "react-native-safe-area-context": "5.11.1",
         "react-native-svg": "15.16.0",
         "react-native-worklets": "0.13.0",
         "react-native-reanimated": "4.7.1"
       },
-      "inputs": "259fcf15601db608e2840cd6e8636f106b3078303fb41a9699cab05ef2184585"
+      "inputs": "d3b00b53da475a6feeeb704727f96d24d36011bbfad3eed71efb03889b4f228b"
     }
   ]
 }
