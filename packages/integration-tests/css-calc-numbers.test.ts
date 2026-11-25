@@ -64,6 +64,14 @@ describe('arithmetic on a token, where a number is taken', () => {
     assert.match(mixed.warnings.join(), /values of different types/);
   });
 
+  it('adds a number to the multiple for line-height, which multiplies the font size', () => {
+    const { props } = view(
+      '.a { --l: 2; font-size: 10px; line-height: calc(var(--l) + 1) }',
+      'text',
+    );
+    assert.equal(props['lineHeight'], 30);
+  });
+
   it('is a length for line-height when the arithmetic gives a number token its unit', () => {
     const { props } = view(
       '.a { --n: 2; font-size: 10px; line-height: calc(var(--n) * 1px) }',

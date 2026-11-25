@@ -352,4 +352,12 @@ function motionWithTokens(property, parts, context) {
   }
 }
 
-module.exports = { calcWithTokens, fits, mentionsVar, mixedTypes, motionWithTokens, slot };
+module.exports = {
+  calcWithTokens,
+  fits,
+  mentionsVar,
+  mixedTypes,
+  motionWithTokens,
+  slot,
+  typeOf,
+};

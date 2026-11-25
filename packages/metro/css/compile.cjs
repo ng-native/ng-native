@@ -52,7 +52,13 @@ const {
   AXIS_SHORTHANDS,
 } = require('./properties.cjs');
 const { deferGradient, isTilePlaced, tiledBy, GRADIENTS } = require('./gradients.cjs');
-const { calcWithTokens, fits, mixedTypes, motionWithTokens } = require('./token-arithmetic.cjs');
+const {
+  calcWithTokens,
+  fits,
+  mixedTypes,
+  motionWithTokens,
+  typeOf,
+} = require('./token-arithmetic.cjs');
 const { filter, undrawnOnIos, undrawnOnMacos } = require('./filters.cjs');
 const { expandShorthand } = require('./shorthands.cjs');
 
@@ -724,12 +730,19 @@ function deferVar(value, context) {
     props: propsFor(property),
     kind,
     reference,
-    ...(arithmetic?.adjust ? { adjust: arithmetic.adjust } : {}),
+    ...(arithmetic?.adjust ? { adjust: lineHeightAdjust(arithmetic.adjust, kind, parts[0]) } : {}),
     ...fallbacks(varPart, kind, context),
     ...(property in UNSET ? { unset: UNSET[property] } : {}),
     ...(property === 'background' ? backgroundLayers() : {}),
   };
 }
+
+/**
+ * A line height's arithmetic that comes to a number, `calc(var(--l) + 1)`: a multiple of the font
+ * size, so what is added is added to the multiple, not in points.
+ */
+const lineHeightAdjust = (adjust, kind, math) =>
+  kind === 'lineHeight' && typeOf(math) === 'number' ? { ...adjust, multiple: true } : adjust;
 
 /** The kinds a token with arithmetic around it is read as: a length, a number, a line height. */
 const ARITHMETIC_KINDS = new Set(['length', 'number', 'lineHeight']);
