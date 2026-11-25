@@ -1001,10 +1001,6 @@
     "border-collapse",
     "border-separate"
   ],
-  "dropped 'border-color': '…' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": [
-    "!divide-inherit",
-    "divide-inherit"
-  ],
   "dropped 'border-color': '…' is not a value native can take": [
     "!border-[0.35]",
     "!border-[200ms]",

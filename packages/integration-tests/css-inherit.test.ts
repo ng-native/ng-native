@@ -122,6 +122,56 @@ describe('inherit, for a property CSS hands down anyway', () => {
   });
 });
 
+describe('inherit, written for a border', () => {
+  // Chrome inherits each of the twelve longhands: width, style and colour on each side.
+  const CSS =
+    '.box { border: 2px solid rgb(1, 2, 3) } .sides { border-top: 4px solid rgb(4, 5, 6) } ' +
+    '.own { border: 9px dotted rgb(9, 9, 9) } .same { border: inherit }';
+  const BORDER = ['borderWidth', 'borderStyle', 'borderColor', 'borderTopWidth', 'borderTopColor'];
+  const border = (props: Record<string, unknown>) =>
+    Object.fromEntries(BORDER.map((key) => [key, props[key] ?? null]));
+
+  it("is the parent's border, over one a weaker rule wrote", () => {
+    const s = scene(CSS);
+    s.element('own same', s.element('box'));
+    s.element('box', s.engine.root);
+    assert.deepEqual(border(s.props('own same')), border(s.props('box')));
+    assert.equal(s.props('own same')['borderWidth'], 2);
+    assert.equal(s.props('own same')['borderColor'], 'rgb(1, 2, 3)');
+  });
+
+  it("is each side's value, as the parent has it", () => {
+    const s = scene(CSS);
+    s.element('same', s.element('box sides'));
+    assert.equal(s.props('same')['borderTopWidth'], 4);
+    assert.equal(s.props('same')['borderTopColor'], 'rgb(4, 5, 6)');
+    const sides = (props: Record<string, unknown>) =>
+      ['Right', 'Bottom', 'Left'].map((side) => [
+        props[`border${side}Width`] ?? props['borderWidth'],
+      ]);
+    assert.deepEqual(sides(s.props('same')), sides(s.props('box sides')));
+    assert.deepEqual(sides(s.props('same')), [[2], [2], [2]]);
+  });
+
+  it('compiles with no warning, and so do its longhands', () => {
+    const said: string[] = [];
+    const css =
+      '.a { border: inherit } .b { border-width: inherit } .c { border-color: inherit } ' +
+      '.d { border-style: inherit } .e { border-top: inherit } .f { border-left-color: inherit }';
+    compileCss(css, 'app.css', { onUnsupported: (m) => said.push(m) });
+    assert.deepEqual(said, []);
+  });
+
+  it("is refused for a side's style, and a logical side, which it cannot take whole", () => {
+    // Native has one style for every side, and a logical side's parent value is a physical one.
+    for (const css of ['.a { border-top-style: inherit }', '.a { border-inline-start: inherit }']) {
+      const said: string[] = [];
+      compileCss(css, 'app.css', { onUnsupported: (m) => said.push(m) });
+      assert.match(said.join(), /CSS-wide keyword/, css);
+    }
+  });
+});
+
 describe('inherit, written for a background', () => {
   // A table's rows and cells are `background: inherit`, each from the one around it, so that a
   // header that stays over the rows as they scroll covers them with the table's own colour.

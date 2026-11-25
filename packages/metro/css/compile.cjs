@@ -2536,6 +2536,7 @@ const INHERITED_IN_CSS = new Set(['-webkit-font-smoothing']);
  */
 const INHERITS = {
   'border-radius': CORNERS,
+  ...borderInherits(),
   // The colour, which is the part of a background a view has a value of to hand on.
   background: ['backgroundColor'],
   font: FONT,
@@ -2549,6 +2550,34 @@ const INHERITS = {
   ),
   '-webkit-font-smoothing': ['fontSmoothing'],
 };
+
+/**
+ * The border properties `inherit` is taken for, each with the props it is the parent's values of:
+ * a side's width and colour, and the one style native has for every side. `border: inherit` is
+ * all of them, as Chrome inherits all twelve longhands. A side's style has no prop of its own, so
+ * `border-top-style: inherit` is refused as a side's style is.
+ */
+function borderInherits() {
+  // The physical sides: a logical one is an alias of one of them, resolved by the direction.
+  const physical = ['Top', 'Right', 'Bottom', 'Left'];
+  const widths = ['borderWidth', ...physical.map((side) => `border${side}Width`)];
+  const colours = ['borderColor', ...physical.map((side) => `border${side}Color`)];
+  // ponytail: `border-inline-start: inherit` stays refused. Its parent may set the physical side,
+  // which has to be found through the direction; add it when a library needs it.
+  const sides = { top: 'Top', right: 'Right', bottom: 'Bottom', left: 'Left' };
+  const table = {
+    border: [...widths, ...colours, 'borderStyle'],
+    'border-width': widths,
+    'border-color': colours,
+    'border-style': ['borderStyle'],
+  };
+  for (const [side, prop] of Object.entries(sides)) {
+    table[`border-${side}`] = [`border${prop}Width`, `border${prop}Color`];
+    table[`border-${side}-width`] = [`border${prop}Width`];
+    table[`border-${side}-color`] = [`border${prop}Color`];
+  }
+  return table;
+}
 
 /** `box-shadow: none` or `text-shadow: none` written to `out`, and whether `property` was one. */
 function noShadow(property, out) {
