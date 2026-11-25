@@ -964,6 +964,8 @@ describe('streaming', () => {
       '| a | b |\n|:-|-:|\n| `1` | [2](https://example.com) |\n\nDone ~~gone~~.\n',
       '# Title\n\n- *one*\n- two `x`\n  - nested **b**\n\n> quote *em*\n> more\n\n1. a\n2. [b](c)\n',
       'Text\n\n```ts\nconst a = `b`;\n```\n\n~~~\ncode\n~~~\n\nSetext\n---\n',
+      'Steps:\n\n1. One\n\n2. Two\n\n10) Ten\n\n11) Eleven\n',
+      'Done.\n***Note:*** restart.\nThen\n___this___ and\n* * *x\n\n***\n',
       '*x\n*x y\n\nEnd *a *b _c [d] [e](f) `g *h* and **i\n\n> *q\n> *q _r\n',
       'Intro\n- `cx` and *em*\n- [l](u)\n\nNext\n> - *a*\n',
       'a | b\n- | :-:\n1 | 2\n\nTitle\n===\n\n> Quoted\n> ---\n\n- item\n  ---\n',

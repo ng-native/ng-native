@@ -152,13 +152,16 @@ function heldInline(inline: readonly Token[], tail: string, start: number): numb
 }
 
 /**
- * A line of `=`, of dashes with pipes, colons and spaces, or of a lone `+`, `*` or number with
- * `.` or `)`, after any quote markers. Until it ends it may be a setext underline, a list item,
- * a table's delimiter row or a thematic break, and a marker with no text yet is not a list item,
- * so it would draw as text in the paragraph above.
+ * A line of `=`, of dashes with pipes, colons and spaces, of a lone `+`, `*` or number with or
+ * without its `.` or `)`, or of three or more `*` or `_` with spaces, after any quote markers.
+ * Until it ends it may be a setext underline, a list item, a table's delimiter row or a thematic
+ * break, and a marker with no text yet is not a list item, so it would draw as text in the
+ * paragraph above. A number whose `.` has not arrived, or a run of `*` or `_` that more text turns
+ * into an emphasis, would otherwise end the block above as it lexes, and keep it ended: a list
+ * split in two, or a paragraph whose next line starts `***Note:***` drawn as two.
  */
 const UNDERLINE =
-  /^(?:[ \t]*>)*(?:[ \t]*=+[ \t]*|[|: \t]*-[-|: \t]*|[ \t]*(?:[+*]|\d{1,9}[.)])[ \t]*)$/;
+  /^(?:[ \t]*>)*(?:[ \t]*=+[ \t]*|[|: \t]*-[-|: \t]*|[ \t]*(?:[+*]|\d{1,9}[.)]?|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})[ \t]*)$/;
 
 /** Where `tail` is cut so its last block shows nothing half written, or null to show all of it. */
 function holdBackAt(tail: string, tokens: readonly Token[]): number | null {
