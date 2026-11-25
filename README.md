@@ -2,7 +2,7 @@
 
 <!-- prettier-ignore-start -->
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
-[![All Contributors](https://img.shields.io/badge/all_contributors-18-orange.svg?style=flat-square)](#contributors-)
+[![All Contributors](https://img.shields.io/badge/all_contributors-19-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 <!-- prettier-ignore-end -->
 
@@ -187,6 +187,7 @@ Thanks goes to these wonderful people:
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/medbenmakhlouf"><img src="https://avatars.githubusercontent.com/u/13701406?v=4&size=100" width="100px" height="100px" alt="Mohamed Ben Makhlouf"/><br /><sub><b>Mohamed Ben Makhlouf</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=medbenmakhlouf" title="Documentation">📖</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/Knat-Dev"><img src="https://avatars.githubusercontent.com/u/42738259?v=4&size=100" width="100px" height="100px" alt="Dor Peled"/><br /><sub><b>Dor Peled</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=Knat-Dev" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://robingenz.dev"><img src="https://avatars.githubusercontent.com/u/13857929?v=4&size=100" width="100px" height="100px" alt="Robin Genz"/><br /><sub><b>Robin Genz</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=robingenz" title="Documentation">📖</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://www.p4ck3tz.com"><img src="https://avatars.githubusercontent.com/u/174056391?v=4&size=100" width="100px" height="100px" alt="Frank Kuhn"/><br /><sub><b>Frank Kuhn</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=phr4nky" title="Code">💻</a></td>
     </tr>
   </tbody>
 </table>
