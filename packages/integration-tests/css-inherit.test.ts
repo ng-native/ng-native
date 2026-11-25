@@ -192,6 +192,26 @@ describe('inherit, written for a border', () => {
     assert.equal(t.props('same')['borderTopWidth'], 1, "a side of the parent's own is over it");
   });
 
+  it("keeps a parent's important side over its inline whole border", () => {
+    const s = scene(
+      '.box { border: 2px solid rgb(1, 2, 3); border-left-width: 2px !important } ' +
+        '.same { border: inherit }',
+    );
+    const parent = s.element('box');
+    s.engine.setProp(parent, 'style', { borderWidth: 6 });
+    s.element('same', parent);
+    assert.equal(s.props('same')['borderLeftWidth'], 2);
+    assert.equal(s.props('same')['borderRightWidth'], 6);
+  });
+
+  it("takes a parent's border width set as a whole from a token", () => {
+    const s = scene(
+      '.box { --w: 5px; border-style: solid; border-width: var(--w) } .same { border: inherit }',
+    );
+    s.element('same', s.element('box'));
+    assert.equal(s.props('same')['borderTopWidth'] ?? s.props('same')['borderWidth'], 5);
+  });
+
   it("keeps the parent's border over a border: none the element's own rules wrote", () => {
     const s = scene(
       '.box { border: 4px solid rgb(1, 2, 3) } .same { border: none; border: inherit }',
