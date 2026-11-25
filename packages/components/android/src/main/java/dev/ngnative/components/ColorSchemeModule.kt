@@ -4,6 +4,11 @@ import android.app.UiModeManager
 import android.content.Context
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.DrawableContainer
+import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.NinePatchDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.Build
 import android.os.Handler
@@ -150,6 +155,9 @@ private fun refreshField(field: EditText, was: Int, highlight: Int) {
 
 /** The tints AppCompat gives its own switch drawables, read again; others it leaves alone. */
 private fun refreshSwitch(switch: SwitchCompat) {
+  // React Native's `thumbColor` colours the ripple too, and filters the thumb: a state list, whose
+  // nine-patch states keep the filter on their paint and report none.
+  val ownRipple = switch.thumbDrawable?.let(::hasFilter) == true
   val context = switch.context
   val styled =
     context.obtainStyledAttributes(null, R.styleable.SwitchCompat, R.attr.switchStyle, 0)
@@ -163,8 +171,8 @@ private fun refreshSwitch(switch: SwitchCompat) {
     switch.trackTintList =
       AppCompatResources.getColorStateList(context, R.color.abc_tint_switch_track)
   }
-  // The theme's borderless item background, whose colour is `colorControlHighlight`.
-  val ripple = switch.background as? RippleDrawable ?: return
+  if (ownRipple) return
+  val ripple = themeRipple(switch.background) ?: return
   val highlight = context.obtainStyledAttributes(intArrayOf(R.attr.colorControlHighlight))
   try {
     highlight.getColorStateList(0)?.let(ripple::setColor)
@@ -172,6 +180,28 @@ private fun refreshSwitch(switch: SwitchCompat) {
     highlight.recycle()
   }
 }
+
+/** Whether a colour filter is on [drawable], or on the state a state list shows. */
+private fun hasFilter(drawable: Drawable): Boolean {
+  val shown = if (drawable is DrawableContainer) drawable.current ?: drawable else drawable
+  return drawable.colorFilter != null ||
+    shown.colorFilter != null ||
+    (shown as? NinePatchDrawable)?.paint?.colorFilter != null ||
+    (shown as? BitmapDrawable)?.paint?.colorFilter != null
+}
+
+/**
+ * The theme's borderless item background, whose colour is `colorControlHighlight`: a ripple with
+ * no layers, where React Native's `backgroundColor` makes one around a colour. Found inside the
+ * layers React Native wraps it in for an outline, a border or a shadow.
+ */
+private fun themeRipple(drawable: Drawable?): RippleDrawable? =
+  when (drawable) {
+    is RippleDrawable -> drawable.takeIf { it.numberOfLayers == 0 }
+    is LayerDrawable ->
+      (0 until drawable.numberOfLayers).firstNotNullOfOrNull { themeRipple(drawable.getDrawable(it)) }
+    else -> null
+  }
 
 /**
  * AppCompat's thumb tint, which it builds in code: `colorSwitchThumbNormal`, and
