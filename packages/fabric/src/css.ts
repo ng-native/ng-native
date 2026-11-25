@@ -6398,6 +6398,8 @@ const isNegativeWritten = (prop: string, text: string): boolean =>
  */
 export function boundRefusal(prop: string, text: string): string | undefined {
   if (CSS_WIDE_TEXT.test(text) && !KEPT_WORD.has(prop) && !inheritsInline(prop, text)) {
+    // `pointer-events: inherit`, which the engine settles itself (`nativePointerEvents`).
+    if (prop === 'pointerEvents' && /inherit/i.test(text)) return undefined;
     return 'it is a CSS-wide keyword, which this cascade does not implement for it';
   }
   if (isNegativeWritten(prop, text)) return 'it is negative';

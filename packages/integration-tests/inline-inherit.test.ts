@@ -30,6 +30,7 @@ import { View } from '../components/src/view.ts';
       <view nativeID="attribute" style="width: inherit; border-top-width: inherit"></view>
       <view nativeID="bound" [style.width]="'inherit'"></view>
       <view nativeID="display" style="display: inherit"></view>
+      <view nativeID="pointer" style="pointer-events: inherit"></view>
       <text nativeID="colour" style="color: inherit">a</text>
     </view>
   \`,
@@ -73,5 +74,10 @@ describe("inherit in an element's own style", () => {
     const { props, warnings } = await scene();
     assert.equal(props('display')['display'] ?? null, null);
     assert.match(warnings.join('\n'), /display/);
+    assert.doesNotMatch(
+      warnings.join('\n'),
+      /pointer/,
+      "pointer-events: inherit is the engine's own",
+    );
   });
 });
