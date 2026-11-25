@@ -490,6 +490,18 @@ function timerMilliseconds(value: UiTimerInterval | null | undefined) {
   return lower === undefined || upper === undefined ? undefined : { lower, upper };
 }
 
+/** The dates a Compose picker can pick, as it takes them: each end in milliseconds, or null. */
+export interface UiSelectableDates {
+  readonly start?: UiDate;
+  readonly end?: UiDate;
+}
+
+function selectableMilliseconds(range: UiSelectableDates | undefined) {
+  return (
+    range && { start: milliseconds(range.start) ?? null, end: milliseconds(range.end) ?? null }
+  );
+}
+
 /**
  * A SwiftUI `Text`, or Compose's on Android. Its text is what is written inside it,
  * `<ui-text>Us {{ score }}</ui-text>`, as `<text>` takes its own, or `text`, which wins over it.
@@ -654,12 +666,7 @@ export class UiDatePicker {
   });
   protected readonly initialDate = computed(() => this.value()?.getTime() ?? null);
   /** Compose takes `range` as `selectableDates`, each end in milliseconds. */
-  protected readonly selectableDates = computed(() => {
-    const range = this.range();
-    return (
-      range && { start: milliseconds(range.start) ?? null, end: milliseconds(range.end) ?? null }
-    );
-  });
+  protected readonly selectableDates = computed(() => selectableMilliseconds(this.range()));
   /**
    * SwiftUI's picker reads `disabled` and `accessibilityLabel` as modifiers, and Compose's reads
    * `accessibilityLabel` as the `semantics` modifier's `contentDescription`.
@@ -705,6 +712,50 @@ export class UiDatePicker {
 /** How long after a date picker appears its first report is taken to be about itself. */
 const APPEARING_MS = 1000;
 
+/** Material's date picker parts a picker dialog can colour, each falling back to the theme's. */
+export type UiDatePickerColorName =
+  | 'containerColor'
+  | 'titleContentColor'
+  | 'headlineContentColor'
+  | 'weekdayContentColor'
+  | 'subheadContentColor'
+  | 'navigationContentColor'
+  | 'yearContentColor'
+  | 'disabledYearContentColor'
+  | 'currentYearContentColor'
+  | 'selectedYearContentColor'
+  | 'disabledSelectedYearContentColor'
+  | 'selectedYearContainerColor'
+  | 'disabledSelectedYearContainerColor'
+  | 'dayContentColor'
+  | 'disabledDayContentColor'
+  | 'selectedDayContentColor'
+  | 'disabledSelectedDayContentColor'
+  | 'selectedDayContainerColor'
+  | 'disabledSelectedDayContainerColor'
+  | 'todayContentColor'
+  | 'todayDateBorderColor'
+  | 'dayInSelectionRangeContentColor'
+  | 'dayInSelectionRangeContainerColor'
+  | 'dividerColor';
+
+/** Material's time picker parts a picker dialog can colour, each falling back to the theme's. */
+export type UiTimePickerColorName =
+  | 'containerColor'
+  | 'clockDialColor'
+  | 'clockDialSelectedContentColor'
+  | 'clockDialContentColor'
+  | 'selectorColor'
+  | 'periodSelectorBorderColor'
+  | 'periodSelectorSelectedContainerColor'
+  | 'periodSelectorContainerColor'
+  | 'periodSelectorSelectedContentColor'
+  | 'periodSelectorContentColor'
+  | 'timeSelectorSelectedContainerColor'
+  | 'timeSelectorContainerColor'
+  | 'timeSelectorSelectedContentColor'
+  | 'timeSelectorContentColor';
+
 /** What a picker dialog sends when the user confirms: the moment, in milliseconds since the epoch. */
 export type UiDateSelectedEvent = NativeSyntheticEvent<{ readonly date: number }>;
 
@@ -737,10 +788,14 @@ function reportDialogPicks(value: ModelSignal<Date | null>, touch: OutputEmitter
   host: {
     '[initialDate]': 'resolvedInitialDate()',
     '[variant]': 'variant()',
+    '[showVariantToggle]': 'showVariantToggle()',
+    '[showTitle]': 'showTitle()',
+    '[showHeadline]': 'showHeadline()',
     '[selectableDates]': 'resolvedSelectableDates()',
     '[confirmButtonLabel]': 'confirmButtonLabel()',
     '[dismissButtonLabel]': 'dismissButtonLabel()',
     '[color]': 'color()',
+    '[elementColors]': 'elementColors()',
   },
 })
 export class UiDatePickerDialog {
@@ -748,10 +803,18 @@ export class UiDatePickerDialog {
   /** What the dialog opens on in place of `value`, for a dialog bound without a form. */
   readonly initialDate = input(undefined, { transform: milliseconds });
   readonly variant = input<'picker' | 'input'>();
-  readonly selectableDates = input<{ readonly start?: UiDate; readonly end?: UiDate }>();
+  /** Whether the dialog has the button that switches between the calendar and typing a date. */
+  readonly showVariantToggle = input<boolean>(undefined, { transform: optionalBoolean });
+  /** Whether the dialog shows its title, such as "Select date". `@expo/ui` 58 and later. */
+  readonly showTitle = input<boolean>(undefined, { transform: optionalBoolean });
+  /** Whether the dialog shows its headline, the date picked. `@expo/ui` 58 and later. */
+  readonly showHeadline = input<boolean>(undefined, { transform: optionalBoolean });
+  readonly selectableDates = input<UiSelectableDates>();
   readonly confirmButtonLabel = input<string>();
   readonly dismissButtonLabel = input<string>();
   readonly color = input<string>();
+  /** A colour per part of the calendar, which wins over `color` for that part. */
+  readonly elementColors = input<Readonly<Partial<Record<UiDatePickerColorName, string>>>>();
   /** The picked date: what `[formField]` binds. */
   readonly value = model<Date | null>(null);
   /** The user confirmed, which is when a form shows a field's errors. */
@@ -763,12 +826,9 @@ export class UiDatePickerDialog {
   protected readonly resolvedInitialDate = computed(
     () => this.initialDate() ?? this.value()?.getTime() ?? null,
   );
-  protected readonly resolvedSelectableDates = computed(() => {
-    const range = this.selectableDates();
-    return (
-      range && { start: milliseconds(range.start) ?? null, end: milliseconds(range.end) ?? null }
-    );
-  });
+  protected readonly resolvedSelectableDates = computed(() =>
+    selectableMilliseconds(this.selectableDates()),
+  );
 
   constructor() {
     reportDialogPicks(this.value, this.touch);
@@ -789,6 +849,7 @@ export class UiDatePickerDialog {
     '[confirmButtonLabel]': 'confirmButtonLabel()',
     '[dismissButtonLabel]': 'dismissButtonLabel()',
     '[color]': 'color()',
+    '[elementColors]': 'elementColors()',
   },
 })
 export class UiTimePickerDialog {
@@ -799,6 +860,8 @@ export class UiTimePickerDialog {
   readonly confirmButtonLabel = input<string>();
   readonly dismissButtonLabel = input<string>();
   readonly color = input<string>();
+  /** A colour per part of the clock, which wins over `color` for that part. */
+  readonly elementColors = input<Readonly<Partial<Record<UiTimePickerColorName, string>>>>();
   /** The picked time: what `[formField]` binds. */
   readonly value = model<Date | null>(null);
   /** The user confirmed, which is when a form shows a field's errors. */
@@ -813,6 +876,86 @@ export class UiTimePickerDialog {
 
   constructor() {
     reportDialogPicks(this.value, this.touch);
+  }
+}
+
+/** A range of days a `ui-date-range-picker-dialog` picks, each at midnight UTC. */
+export interface UiDateRange {
+  readonly start: Date;
+  readonly end: Date;
+}
+
+/** What a range dialog sends when the user confirms: each end in milliseconds since the epoch. */
+export type UiDateRangeSelectedEvent = NativeSyntheticEvent<{
+  readonly start: number | null;
+  readonly end: number | null;
+}>;
+
+/**
+ * Compose's `DateRangePickerDialog`, Android only and `@expo/ui` 58 or later: the system dialog for
+ * a range of days, shown while it is rendered and removed as `ui-date-picker-dialog` is, on
+ * `(dateRangeSelected)` and `(dismissRequest)`. A Signal Forms field through its `value` model, a
+ * `UiDateRange` (or null): it opens on `initialStartDate` and `initialEndDate`, or else on `value`,
+ * and its confirm button waits for both ends, then writes them back.
+ */
+@Component({
+  selector: 'ui-date-range-picker-dialog',
+  template: '',
+  host: {
+    '[initialStartDate]': 'resolvedStartDate()',
+    '[initialEndDate]': 'resolvedEndDate()',
+    '[variant]': 'variant()',
+    '[showVariantToggle]': 'showVariantToggle()',
+    '[showTitle]': 'showTitle()',
+    '[showHeadline]': 'showHeadline()',
+    '[selectableDates]': 'resolvedSelectableDates()',
+    '[confirmButtonLabel]': 'confirmButtonLabel()',
+    '[dismissButtonLabel]': 'dismissButtonLabel()',
+    '[color]': 'color()',
+    '[elementColors]': 'elementColors()',
+  },
+})
+export class UiDateRangePickerDialog {
+  protected readonly nativeView = nativeView();
+  /** What the dialog opens on in place of `value`, for a dialog bound without a form. */
+  readonly initialStartDate = input(undefined, { transform: milliseconds });
+  readonly initialEndDate = input(undefined, { transform: milliseconds });
+  readonly variant = input<'picker' | 'input'>();
+  readonly showVariantToggle = input<boolean>(undefined, { transform: optionalBoolean });
+  readonly showTitle = input<boolean>(undefined, { transform: optionalBoolean });
+  readonly showHeadline = input<boolean>(undefined, { transform: optionalBoolean });
+  readonly selectableDates = input<UiSelectableDates>();
+  readonly confirmButtonLabel = input<string>();
+  readonly dismissButtonLabel = input<string>();
+  readonly color = input<string>();
+  /** A colour per part of the calendar, which wins over `color` for that part. */
+  readonly elementColors = input<Readonly<Partial<Record<UiDatePickerColorName, string>>>>();
+  /** The picked range: what `[formField]` binds. */
+  readonly value = model<UiDateRange | null>(null);
+  /** The user confirmed, which is when a form shows a field's errors. */
+  readonly touch = output<void>();
+  readonly dateRangeSelected = output<UiDateRangeSelectedEvent>();
+  /** Cancel, Back or a tap outside: the dialog should be removed. */
+  readonly dismissRequest = output<NativeSyntheticEvent<Record<string, never>>>();
+
+  protected readonly resolvedStartDate = computed(
+    () => this.initialStartDate() ?? this.value()?.start.getTime() ?? null,
+  );
+  protected readonly resolvedEndDate = computed(
+    () => this.initialEndDate() ?? this.value()?.end.getTime() ?? null,
+  );
+  protected readonly resolvedSelectableDates = computed(() =>
+    selectableMilliseconds(this.selectableDates()),
+  );
+
+  constructor() {
+    // Compose enables its confirm button only once both ends are picked.
+    listen('topDateRangeSelected', ({ start, end }) => {
+      if (typeof start !== 'number' || typeof end !== 'number') return;
+      this.value.set({ start: new Date(start), end: new Date(end) });
+      this.touch.emit();
+    });
+    reportClicksOn('topDateRangeSelected');
   }
 }
 

@@ -13,9 +13,17 @@ import { compileFixture } from './compile.ts';
 interface Dialogs {
   opensOn: WritableSignal<string | undefined>;
   range: WritableSignal<{ start: string } | undefined>;
-  open: WritableSignal<'date' | 'time' | null>;
-  data: WritableSignal<{ start: Date | null; end: Date | null }>;
-  f: { start(): { touched(): boolean }; end(): { touched(): boolean } };
+  open: WritableSignal<'date' | 'time' | 'range' | null>;
+  data: WritableSignal<{
+    start: Date | null;
+    end: Date | null;
+    stay: { start: Date; end: Date } | null;
+  }>;
+  f: {
+    start(): { touched(): boolean };
+    end(): { touched(): boolean };
+    stay(): { touched(): boolean };
+  };
 }
 
 let mod: Record<string, unknown>;
@@ -44,6 +52,10 @@ describe('a date picker dialog', () => {
     assert.equal(props['variant'], 'input');
     assert.equal(props['confirmButtonLabel'], 'Set');
     assert.equal(props['dismissButtonLabel'], 'Back');
+    assert.equal(props['showVariantToggle'], false);
+    assert.equal(props['showTitle'], false);
+    assert.equal(props['showHeadline'], false);
+    assert.deepEqual(props['elementColors'], { selectedDayContainerColor: '#00ff00' });
     assert.notEqual(props['color'] ?? null, null, 'the colour reaches Compose');
   });
 
@@ -97,6 +109,7 @@ describe('a time picker dialog', () => {
     const props = screen.getByTestId('time').props;
     assert.equal(props['initialDate'] ?? null, null);
     assert.equal(props['is24Hour'], false);
+    assert.deepEqual(props['elementColors'], { clockDialColor: '#0000ff' });
     instance.opensOn.set('2026-03-04T07:15:00.000Z');
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(
@@ -121,5 +134,58 @@ describe('a time picker dialog', () => {
       screen.getByTestId('time').props['initialDate'],
       Date.parse('2026-10-01T18:30:00.000Z'),
     );
+  });
+});
+
+describe('a date range picker dialog', () => {
+  async function openRange() {
+    const instance = await boot();
+    instance.open.set('range');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return instance;
+  }
+
+  it('opens on the field s range, in milliseconds', async () => {
+    await openRange();
+    const props = screen.getByTestId('range').props;
+    assert.equal(props['initialStartDate'], Date.parse('2026-12-20T00:00:00.000Z'));
+    assert.equal(props['initialEndDate'], Date.parse('2026-12-27T00:00:00.000Z'));
+    assert.equal(props['showTitle'], false);
+    assert.deepEqual(props['selectableDates'], {
+      start: Date.parse('2026-01-01T00:00:00.000Z'),
+      end: null,
+    });
+  });
+
+  it('writes the confirmed range into the form, and the app removes it', async () => {
+    const instance = await openRange();
+    await fireEvent(screen.getByTestId('range'), 'dateRangeSelected', {
+      start: Date.parse('2027-01-02T00:00:00.000Z'),
+      end: Date.parse('2027-01-09T00:00:00.000Z'),
+    });
+    const stay = instance.data().stay;
+    assert.equal(stay?.start.toISOString(), '2027-01-02T00:00:00.000Z');
+    assert.equal(stay?.end.toISOString(), '2027-01-09T00:00:00.000Z');
+    assert.equal(instance.f.stay().touched(), true);
+    assert.equal(screen.queryByTestId('range'), null);
+  });
+
+  it('takes no range with an end missing', async () => {
+    const instance = await openRange();
+    await fireEvent(screen.getByTestId('range'), 'dateRangeSelected', {
+      start: Date.parse('2027-01-02T00:00:00.000Z'),
+      end: null,
+    });
+    assert.equal(instance.data().stay?.start.toISOString(), '2026-12-20T00:00:00.000Z');
+    assert.equal(instance.f.stay().touched(), false);
+  });
+
+  it('opens on nothing once the field is empty', async () => {
+    const instance = await openRange();
+    instance.data.set({ ...instance.data(), stay: null });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const props = screen.getByTestId('range').props;
+    assert.equal(props['initialStartDate'], null);
+    assert.equal(props['initialEndDate'], null);
   });
 });

@@ -164,7 +164,15 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   confirm writes the pick back as a `Date` and emits `touch`; a dismissal writes nothing. The date
   dialog reports the picked day at midnight UTC, and takes `variant` (`'picker'` or `'input'`) and
   `selectableDates`, an optional `start` and `end`. The time dialog keeps the day it opens on, or
-  today, and takes `is24Hour`. Both take `confirmButtonLabel`, `dismissButtonLabel` and `color`.
+  today, and takes `is24Hour`. Both take `confirmButtonLabel`, `dismissButtonLabel`, `color`, and
+  `elementColors`, a colour per part of the calendar or clock that wins over `color` for that part.
+  The date dialog also takes `showVariantToggle`, and with `@expo/ui` 58 or later `showTitle` and
+  `showHeadline`.
+- **`UiDateRangePickerDialog`** - Android only, with `@expo/ui` 58 or later: Compose's date range
+  picker dialog, shown and removed the same way, on `(dateRangeSelected)` and `(dismissRequest)`.
+  Its `value` is a `UiDateRange`, a `start` and an `end` `Date` at midnight UTC, or null. It opens
+  on `initialStartDate` and `initialEndDate`, or else on its `value`, and its confirm button waits
+  for both ends. It takes the date dialog's other inputs.
 - **`UiPicker`** - a SwiftUI `Picker` on iOS, Compose's segmented buttons or dropdown menu on
   Android, and a Signal Forms field. `options` draws the choices;
   see [Choices: `UiPicker`](#choices-uipicker) below.
@@ -702,6 +710,7 @@ closes without waiting for a sheet to slide away.
 <!-- api: UiText -->
 <!-- api: UiDatePicker -->
 <!-- api: UiDatePickerDialog -->
+<!-- api: UiDateRangePickerDialog -->
 <!-- api: UiTimePickerDialog -->
 <!-- api: UiPicker -->
 <!-- api: UiBottomSheet -->

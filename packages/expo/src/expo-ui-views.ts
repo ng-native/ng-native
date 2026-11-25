@@ -32,6 +32,7 @@ export const EXPO_UI_VIEWS: Readonly<Record<string, readonly [string | null, str
   'control-group': ['ControlGroupView', null],
   'date-picker': ['DatePickerView', 'DateTimePickerView'],
   'date-picker-dialog': [null, 'DatePickerDialogView'],
+  'date-range-picker-dialog': [null, 'DateRangePickerDialogView'],
   'disclosure-group': ['DisclosureGroupView', null],
   divider: ['DividerView', 'HorizontalDividerView'],
   'docked-search-bar': [null, 'DockedSearchBarView'],

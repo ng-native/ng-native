@@ -7,6 +7,10 @@ import {
   UiChart,
   UiColorPicker,
   UiDatePicker,
+  UiDatePickerDialog,
+  type UiDateRange,
+  UiDateRangePickerDialog,
+  UiTimePickerDialog,
   UiDivider,
   UiForm,
   UiGauge,
@@ -28,6 +32,7 @@ import {
   UiVStack,
 } from '@ng-native/expo';
 import { Pressable, ScrollView, Text, View } from '@ng-native/components';
+import { nativePlatform } from '@ng-native/fabric';
 import { NativeHeader } from '@ng-native/router';
 import { Example, Section } from '../example.ts';
 import { page } from '../screen-styles.ts';
@@ -74,6 +79,9 @@ import { page } from '../screen-styles.ts';
     UiChart,
     UiColorPicker,
     UiDatePicker,
+    UiDatePickerDialog,
+    UiDateRangePickerDialog,
+    UiTimePickerDialog,
     UiDivider,
     UiForm,
     UiGauge,
@@ -282,6 +290,45 @@ import { page } from '../screen-styles.ts';
             ></ui-date-picker>
           </ui-host>
         </x-example>
+
+        @if (android) {
+          <x-example
+            title="Date and time dialogs"
+            note="Android only. Each dialog shows while it is rendered and closes when the app removes it. A pick here opens the time dialog next, and both write one date."
+            code='<ui-date-picker-dialog [(value)]="when" (dateSelected)="..." (dismissRequest)="..." />'
+          >
+            <pressable (press)="dialog.set('date')">
+              <text class="body">When: {{ when()?.toLocaleString() ?? 'not set' }}</text>
+            </pressable>
+            <pressable (press)="dialog.set('range')">
+              <text class="body">Stay: {{ stayText() }}</text>
+            </pressable>
+            <ui-host [style]="{ height: 1 }">
+              @if (dialog() === 'date') {
+                <ui-date-picker-dialog
+                  confirmButtonLabel="Next"
+                  [(value)]="when"
+                  (dateSelected)="dialog.set('time')"
+                  (dismissRequest)="dialog.set(null)"
+                />
+              }
+              @if (dialog() === 'time') {
+                <ui-time-picker-dialog
+                  [(value)]="when"
+                  (dateSelected)="dialog.set(null)"
+                  (dismissRequest)="dialog.set(null)"
+                />
+              }
+              @if (dialog() === 'range') {
+                <ui-date-range-picker-dialog
+                  [(value)]="stay"
+                  (dateRangeSelected)="dialog.set(null)"
+                  (dismissRequest)="dialog.set(null)"
+                />
+              }
+            </ui-host>
+          </x-example>
+        }
       </x-section>
 
       <x-section title="Indicators" note="Presentational, so nothing has to be wired to them.">
@@ -452,6 +499,14 @@ export class ExpoUiPage {
   protected readonly page = page;
 
   protected readonly taps = signal(0);
+  protected readonly android = nativePlatform() === 'android';
+  protected readonly dialog = signal<'date' | 'time' | 'range' | null>(null);
+  protected readonly when = signal<Date | null>(null);
+  protected readonly stay = signal<UiDateRange | null>(null);
+  protected readonly stayText = computed(() => {
+    const stay = this.stay();
+    return stay ? stay.start.toDateString() + ' to ' + stay.end.toDateString() : 'not set';
+  });
   protected readonly on = signal(true);
   protected readonly level = signal(0.5);
   protected readonly guests = signal(2);
