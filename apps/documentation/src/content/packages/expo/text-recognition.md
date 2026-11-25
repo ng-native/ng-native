@@ -94,6 +94,61 @@ The options:
 A file that is not an image, or a URI that is not a file, rejects with `ERR_IMAGE_LOAD`. A failure
 in Vision rejects with `ERR_TEXT_RECOGNITION`.
 
+## Scanning a document
+
+`scanDocument()` opens the system's document camera, VisionKit's, which finds the page's edges,
+straightens it and lets the person scan several pages before saving. It answers each page with its
+`imageUri`, a JPEG in the app's caches directory, and the text read in it, the same as `recognize`
+answers. The person cancelling answers no pages. It takes the same `languages` and `level`.
+
+```ts
+import { Component, inject, signal } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
+import { TextRecognition, type ScannedPage } from '@ng-native/expo/text-recognition';
+
+@Component({
+  selector: 'app-scan',
+  imports: [Pressable, Text],
+  template: `
+    @if (ocr.scannerAvailable()) {
+      <pressable (press)="scan()"><text>Scan a letter</text></pressable>
+    }
+    @for (page of pages(); track page.imageUri) {
+      <text>{{ page.text }}</text>
+    }
+  `,
+})
+export class Scan {
+  protected readonly ocr = inject(TextRecognition);
+  protected readonly pages = signal<readonly ScannedPage[]>([]);
+
+  protected async scan(): Promise<void> {
+    this.pages.set(await this.ocr.scanDocument());
+  }
+}
+```
+
+The camera needs a reason shown to the person, in `app.json`, or iOS stops the app when the
+camera opens:
+
+```json
+{
+  "expo": {
+    "ios": {
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scans documents to read their text."
+      }
+    }
+  }
+}
+```
+
+`scannerAvailable` is false where there is no document camera: the iOS simulator, macOS, Android
+and the web. There `scanDocument` answers no pages without opening anything, so hide the button;
+`recognize` still reads an image the app already has. A failure of the camera itself rejects with
+`ERR_DOCUMENT_SCAN`. Saving the files the pages are in is up to the app: the system may remove
+them from the caches directory.
+
 ## Turning text into a typed object
 
 With the [on-device language model](/packages/expo/language-model) available, `generateObject` turns
@@ -111,15 +166,19 @@ if (this.model.available()) {
 
 ## Platform differences
 
-- **iOS:** Vision's `VNRecognizeTextRequest`, on iOS 16.4 and later.
-- **macOS:** the same Vision request in the desktop host, with the same answers.
-- **Android:** not yet available. `available()` is false and `recognize` rejects.
+- **iOS:** Vision's `VNRecognizeTextRequest`, on iOS 16.4 and later, and VisionKit's document
+  camera on a device with a camera.
+- **macOS:** the same Vision request in the desktop host, with the same answers. No document
+  camera.
+- **Android:** not yet available. `available()` is false, `recognize` answers no text and
+  `scanDocument` answers no pages.
 
 ## Without the native module
 
-In Expo Go, on Android, on the web and in Node tests there is no native module: `available()` is
-false and `recognize` rejects with a `MissingModuleError` that says why. A test provides a stand-in
-through `TextRecognition.SOURCE`:
+In Expo Go, on Android, on the web and in Node tests there is no native module, and
+`available()` is false. On Android and the web `recognize` answers no text and `scanDocument` no
+pages; in Expo Go and in Node both reject with a `MissingModuleError` that says why. A test
+provides a stand-in through `TextRecognition.SOURCE`:
 
 ```ts
 import { injectService } from '@ng-native/testing';

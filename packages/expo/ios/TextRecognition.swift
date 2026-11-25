@@ -1,6 +1,7 @@
 import ExpoModulesCore
 import ImageIO
 import Vision
+import VisionKit
 
 enum TextRecognitionLevel: String, Enumerable {
   case accurate
@@ -35,57 +36,97 @@ public final class TextRecognitionModule: Module {
         promise.reject("ERR_IMAGE_LOAD", "No image could be read at \(uri)")
         return
       }
-      let request = VNRecognizeTextRequest()
-      request.recognitionLevel = options.level == .fast ? .fast : .accurate
-      if let languages = options.languages, !languages.isEmpty {
-        // Vision ignores a code it does not list, so one it cannot read is refused here.
-        let supported = (try? request.supportedRecognitionLanguages()) ?? []
-        let resolved = languages.map { Self.language($0, in: supported) }
-        let unsupported = zip(languages, resolved).filter { $0.1 == nil }.map { $0.0 }
-        if !unsupported.isEmpty {
-          promise.reject(
-            "ERR_TEXT_RECOGNITION",
-            "Vision cannot read \(unsupported.joined(separator: ", ")) at this level. It can read "
-              + supported.joined(separator: ", "))
-          return
-        }
-        request.recognitionLanguages = resolved.compactMap { $0 }
-      } else if #available(iOS 16.0, *) {
-        request.automaticallyDetectsLanguage = true
-      }
       do {
-        try VNImageRequestHandler(cgImage: image.cgImage, orientation: image.orientation)
-          .perform([request])
+        promise.resolve(try Self.read(image, options))
+      } catch let failure as ReadFailure {
+        promise.reject(failure.code, failure.message)
       } catch {
         promise.reject("ERR_TEXT_RECOGNITION", error.localizedDescription)
+      }
+    }.runOnQueue(queue)
+
+    /// The simulator, and an iPad or iPhone without a camera, have no document camera.
+    Function("scannerAvailable") { VNDocumentCameraViewController.isSupported }
+
+    AsyncFunction("scanDocument") { (options: TextRecognitionOptions, promise: Promise) in
+      guard VNDocumentCameraViewController.isSupported else {
+        promise.reject("ERR_SCANNER_UNAVAILABLE", "This device has no document camera")
         return
       }
-      let size = image.uprightSize
-      var texts: [String] = []
-      var lines: [[String: Any]] = []
-      for observation in request.results ?? [] {
-        guard let candidate = observation.topCandidates(1).first else { continue }
-        texts.append(candidate.string)
-        let box = VNImageRectForNormalizedRect(
-          observation.boundingBox, Int(size.width), Int(size.height))
-        lines.append([
-          "text": candidate.string,
-          "confidence": Double(candidate.confidence),
-          "box": [
-            "x": box.minX,
-            "y": size.height - box.maxY,
-            "width": box.width,
-            "height": box.height,
-          ],
-        ])
+      guard self.scan == nil else {
+        promise.reject("ERR_SCAN_IN_PROGRESS", "A document scan is already open")
+        return
       }
-      promise.resolve([
-        "text": texts.joined(separator: "\n"),
-        "lines": lines,
-        "width": size.width,
-        "height": size.height,
+      guard let presenter = self.appContext?.utilities?.currentViewController() else {
+        promise.reject("ERR_DOCUMENT_SCAN", "There is no screen to show the document camera on")
+        return
+      }
+      let scan = DocumentScan(options: options, queue: self.queue) { [weak self] in
+        self?.scan = nil
+      }
+      scan.promise = promise
+      self.scan = scan
+      let camera = VNDocumentCameraViewController()
+      camera.delegate = scan
+      presenter.present(camera, animated: true)
+    }.runOnQueue(.main)
+  }
+
+  /// The scan the document camera is open for. Kept here, since the camera holds its delegate
+  /// weakly.
+  private var scan: DocumentScan?
+
+  struct ReadFailure: Error {
+    let code: String
+    let message: String
+  }
+
+  /// The text Vision reads in `image`, with each line's box in the image's upright pixels.
+  static func read(_ image: OrientedImage, _ options: TextRecognitionOptions) throws -> [String: Any] {
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = options.level == .fast ? .fast : .accurate
+    if let languages = options.languages, !languages.isEmpty {
+      // Vision ignores a code it does not list, so one it cannot read is refused here.
+      let supported = (try? request.supportedRecognitionLanguages()) ?? []
+      let resolved = languages.map { Self.language($0, in: supported) }
+      let unsupported = zip(languages, resolved).filter { $0.1 == nil }.map { $0.0 }
+      if !unsupported.isEmpty {
+        throw ReadFailure(
+          code: "ERR_TEXT_RECOGNITION",
+          message: "Vision cannot read \(unsupported.joined(separator: ", ")) at this level. It can read "
+            + supported.joined(separator: ", "))
+      }
+      request.recognitionLanguages = resolved.compactMap { $0 }
+    } else if #available(iOS 16.0, *) {
+      request.automaticallyDetectsLanguage = true
+    }
+    try VNImageRequestHandler(cgImage: image.cgImage, orientation: image.orientation)
+      .perform([request])
+    let size = image.uprightSize
+    var texts: [String] = []
+    var lines: [[String: Any]] = []
+    for observation in request.results ?? [] {
+      guard let candidate = observation.topCandidates(1).first else { continue }
+      texts.append(candidate.string)
+      let box = VNImageRectForNormalizedRect(
+        observation.boundingBox, Int(size.width), Int(size.height))
+      lines.append([
+        "text": candidate.string,
+        "confidence": Double(candidate.confidence),
+        "box": [
+          "x": box.minX,
+          "y": size.height - box.maxY,
+          "width": box.width,
+          "height": box.height,
+        ],
       ])
-    }.runOnQueue(queue)
+    }
+    return [
+      "text": texts.joined(separator: "\n"),
+      "lines": lines,
+      "width": size.width,
+      "height": size.height,
+    ]
   }
 
   /// The code Vision lists for `code`: itself, or else the first with the same language, so
@@ -100,7 +141,7 @@ public final class TextRecognitionModule: Module {
     String(code.split(separator: "-").first ?? Substring(code)).lowercased()
   }
 
-  private struct OrientedImage {
+  struct OrientedImage {
     let cgImage: CGImage
     let orientation: CGImagePropertyOrientation
 
@@ -118,7 +159,7 @@ public final class TextRecognitionModule: Module {
   }
 
   /// The first image in the file a `file://` URI, or a plain path, names.
-  private static func image(at uri: String) -> OrientedImage? {
+  static func image(at uri: String) -> OrientedImage? {
     let url: URL
     if let parsed = URL(string: uri), parsed.scheme != nil {
       guard parsed.isFileURL else { return nil }
@@ -133,5 +174,78 @@ public final class TextRecognitionModule: Module {
     let raw = (properties?[kCGImagePropertyOrientation] as? UInt32) ?? 1
     return OrientedImage(
       cgImage: cgImage, orientation: CGImagePropertyOrientation(rawValue: raw) ?? .up)
+  }
+}
+
+/**
+ One open document camera. Each page it scans is saved as a JPEG in the caches directory, where
+ the system may remove it, and read like `recognize()` reads an image. Cancelled, it answers no
+ pages.
+ */
+final class DocumentScan: NSObject, VNDocumentCameraViewControllerDelegate {
+  var promise: Promise?
+  private let options: TextRecognitionOptions
+  private let queue: DispatchQueue
+  private let ended: () -> Void
+
+  init(options: TextRecognitionOptions, queue: DispatchQueue, ended: @escaping () -> Void) {
+    self.options = options
+    self.queue = queue
+    self.ended = ended
+  }
+
+  func documentCameraViewController(
+    _ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan
+  ) {
+    // The pages are taken out on the main thread, where VisionKit hands them over.
+    let pages = (0..<scan.pageCount).map { scan.imageOfPage(at: $0) }
+    controller.dismiss(animated: true)
+    queue.async { self.finish { try self.read(pages) } }
+  }
+
+  func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
+    controller.dismiss(animated: true)
+    finish { [] }
+  }
+
+  func documentCameraViewController(
+    _ controller: VNDocumentCameraViewController, didFailWithError error: Error
+  ) {
+    controller.dismiss(animated: true)
+    finish { throw TextRecognitionModule.ReadFailure(
+      code: "ERR_DOCUMENT_SCAN", message: error.localizedDescription) }
+  }
+
+  private func read(_ pages: [UIImage]) throws -> [[String: Any]] {
+    let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+    let id = UUID().uuidString
+    return try pages.enumerated().map { index, page in
+      let url = folder.appendingPathComponent("ng-native-scan-\(id)-\(index + 1).jpg")
+      guard let data = page.jpegData(compressionQuality: 0.9) else {
+        throw TextRecognitionModule.ReadFailure(
+          code: "ERR_DOCUMENT_SCAN", message: "Page \(index + 1) could not be saved")
+      }
+      try data.write(to: url)
+      guard let image = TextRecognitionModule.image(at: url.absoluteString) else {
+        throw TextRecognitionModule.ReadFailure(
+          code: "ERR_IMAGE_LOAD", message: "No image could be read at \(url.absoluteString)")
+      }
+      var found = try TextRecognitionModule.read(image, options)
+      found["imageUri"] = url.absoluteString
+      return found
+    }
+  }
+
+  private func finish(_ answer: () throws -> [[String: Any]]) {
+    guard let promise else { return }
+    self.promise = nil
+    do {
+      promise.resolve(try answer())
+    } catch let failure as TextRecognitionModule.ReadFailure {
+      promise.reject(failure.code, failure.message)
+    } catch {
+      promise.reject("ERR_DOCUMENT_SCAN", error.localizedDescription)
+    }
+    DispatchQueue.main.async(execute: ended)
   }
 }

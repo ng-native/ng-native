@@ -5,10 +5,12 @@
  * private readonly ocr = inject(TextRecognition);
  *
  * const { text, lines } = await this.ocr.recognize(photo.uri, { languages: ['en-GB'] });
+ * const pages = await this.ocr.scanDocument();
  * ```
  *
  * On iOS it is Vision's `VNRecognizeTextRequest`, which runs on the device, offline, and does
- * not need Apple Intelligence.
+ * not need Apple Intelligence. `scanDocument` opens VisionKit's document camera, which finds the
+ * page's edges and straightens it, and reads each page it scans.
  *
  * Expo Go cannot load native code of its own, Android has no recognizer yet, and Node has none,
  * so there `available` is false and `recognize` rejects with a `MissingModuleError`.
@@ -61,9 +63,18 @@ export interface RecognizedText {
   readonly height: number;
 }
 
+/** One page the document camera scanned, and the text read in it. */
+export interface ScannedPage extends RecognizedText {
+  /** The page as a JPEG in the app's caches directory, where the system may remove it. */
+  readonly imageUri: string;
+}
+
 /** This package's native text recognition module. A test provides a stand-in. */
 export interface NativeTextRecognition {
   recognize(imageUri: string, options: TextRecognitionOptions): Promise<RecognizedText>;
+  /** iOS only: the desktop host's module has neither. */
+  scannerAvailable?(): boolean;
+  scanDocument?(options: TextRecognitionOptions): Promise<readonly ScannedPage[]>;
 }
 
 const MODULE = 'NgNativeTextRecognition';
@@ -103,6 +114,14 @@ export class TextRecognition {
   readonly available: Signal<boolean> = signal(this.native !== null).asReadonly();
 
   /**
+   * Whether `scanDocument` can open the document camera: an iOS build on a device with a camera.
+   * False in the simulator, on macOS, Android and the web.
+   */
+  readonly scannerAvailable: Signal<boolean> = signal(
+    this.native?.scannerAvailable?.() ?? false,
+  ).asReadonly();
+
+  /**
    * The text in the image at `imageUri`, a `file://` URI such as the camera, the image picker or
    * a downloaded asset gives. Rejects when the image cannot be read. On Android and the web, where
    * there is no Vision, it answers no text; on iOS and macOS a missing module rejects with a
@@ -118,9 +137,28 @@ export class TextRecognition {
       }
       return Promise.reject(missing());
     }
-    const languages = options.languages?.map(byScript);
-    return this.native.recognize(imageUri, languages ? { ...options, languages } : options);
+    return this.native.recognize(imageUri, byScripts(options));
   }
+
+  /**
+   * Opens the system's document camera, and answers each page scanned with the text read in it,
+   * as `recognize` reads an image. Empty if they cancelled, and where `scannerAvailable` is false.
+   * Rejects with a `MissingModuleError` in an iOS build without the module.
+   */
+  scanDocument(options: TextRecognitionOptions = {}): Promise<readonly ScannedPage[]> {
+    const platform = currentPlatform();
+    if (!this.native && platform !== 'android' && platform !== 'web' && !absentByDesign(MODULE)) {
+      return Promise.reject(missing());
+    }
+    // No document camera here: nothing scanned, as when the person cancels.
+    if (!this.native?.scanDocument || !this.scannerAvailable()) return Promise.resolve([]);
+    return this.native.scanDocument(byScripts(options));
+  }
+}
+
+function byScripts(options: TextRecognitionOptions): TextRecognitionOptions {
+  const languages = options.languages?.map(byScript);
+  return languages ? { ...options, languages } : options;
 }
 
 /** The languages Vision lists by script rather than by region: `zh-Hant`, `yue-Hans`. */

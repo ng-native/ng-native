@@ -11,7 +11,10 @@
     "ios": {
       "bundleIdentifier": "dev.angularnative.canary",
       "supportsTablet": true,
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "The canary scans documents with the camera to read their text."
+      }
     },
     "android": {
       "package": "dev.angularnative.canary"

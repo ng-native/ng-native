@@ -1,14 +1,19 @@
 import { Component, inject, signal } from '@angular/core';
 import { Image, Pressable, ScrollView, Text, View } from '@ng-native/components';
 import { Image as Assets } from 'react-native';
-import { TextRecognition, type RecognizedText } from '@ng-native/expo/text-recognition';
+import {
+  TextRecognition,
+  type RecognizedText,
+  type ScannedPage,
+} from '@ng-native/expo/text-recognition';
 import { NativeHeader } from '@ng-native/router';
 import { page } from '../screen-styles.ts';
 
 const SAMPLE = require('../../../assets/receipt.png') as number;
 
 /**
- * `TextRecognition`: the text in a bundled receipt, with each line's confidence and box.
+ * `TextRecognition`: the text in a bundled receipt, with each line's confidence and box, and the
+ * pages the document camera scans.
  */
 @Component({
   selector: 'x-text-recognition',
@@ -29,6 +34,17 @@ const SAMPLE = require('../../../assets/receipt.png') as number;
           <text class="hint">{{ describe(line) }}</text>
         }
       }
+      <text class="body" testID="scanner-available">Scanner: {{ ocr.scannerAvailable() }}</text>
+      <pressable class="button" testID="scan" (press)="scan()">
+        <text class="button-label">Scan a document</text>
+      </pressable>
+      @if (pages(); as scanned) {
+        <text class="hint" testID="page-count">{{ scanned.length }} pages</text>
+        @for (scannedPage of scanned; track scannedPage.imageUri) {
+          <image [source]="{ uri: scannedPage.imageUri }" [style]="preview" resizeMode="contain" />
+          <text class="body">{{ scannedPage.text }}</text>
+        }
+      }
       @if (error(); as message) {
         <text class="body danger" testID="error">{{ message }}</text>
       }
@@ -40,6 +56,7 @@ export class TextRecognitionPage {
   protected readonly page = page;
   protected readonly sample = SAMPLE;
   protected readonly result = signal<RecognizedText | null>(null);
+  protected readonly pages = signal<readonly ScannedPage[] | null>(null);
   protected readonly error = signal<string | null>(null);
 
   protected readonly preview = { width: '100%', aspectRatio: 1.5 };
@@ -65,6 +82,17 @@ export class TextRecognitionPage {
     const { x, y, width, height } = line.box;
     const box = [x, y, width, height].map(Math.round).join(', ');
     return `${line.text} (${line.confidence.toFixed(2)}) at ${box}`;
+  }
+
+  protected async scan(): Promise<void> {
+    this.error.set(null);
+    try {
+      const scanned = await this.ocr.scanDocument();
+      console.log('[text-recognition] scanned', JSON.stringify(scanned));
+      this.pages.set(scanned);
+    } catch (failure) {
+      this.error.set(failure instanceof Error ? failure.message : String(failure));
+    }
   }
 
   private async read(uri: string): Promise<void> {
