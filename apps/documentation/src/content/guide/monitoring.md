@@ -37,15 +37,21 @@ import { CoralogixDomain, CoralogixRum } from '@coralogix/react-native-plugin';
 CoralogixRum.init({
   application: 'my-app',
   environment: __DEV__ ? 'development' : 'production',
-  public_key: process.env.EXPO_PUBLIC_CORALOGIX_RUM_KEY,
+  public_key: process.env.EXPO_PUBLIC_CORALOGIX_RUM_KEY!,
   coralogixDomain: CoralogixDomain.EU2,
   version: '1.0.0',
   traceParentInHeader: { enabled: true },
 });
 ```
 
-`public_key` is your RUM integration's public key, and `coralogixDomain` the region your Coralogix
-account is in. The key is safe to ship in the app, as it can only send data.
+`public_key` is your RUM integration's public key, set as `EXPO_PUBLIC_CORALOGIX_RUM_KEY` in the
+app's `.env`, and `coralogixDomain` the region your Coralogix account is in. The key is safe to ship
+in the app, as it can only send data.
+
+On iOS the SDK reports every request the app makes. On Android it reports `fetch` calls, but not
+`HttpClient` from `provideNativeHttpClient()`, which sends over `XMLHttpRequest`, unless the app
+applies the SDK's optional Gradle plugin; its
+[README](https://www.npmjs.com/package/@coralogix/react-native-plugin) covers adding it.
 
 ## Name screens after routes
 
