@@ -731,7 +731,8 @@ function deferVar(value, context) {
     kind,
     reference,
     ...(arithmetic?.adjust ? { adjust: lineHeightAdjust(arithmetic.adjust, kind, parts[0]) } : {}),
-    ...fallbacks(varPart, kind, context),
+    // `calc(var(--n, 2) * 1px)`: the arithmetic gives the fallback its unit, as it does the token.
+    ...fallbacks(varPart, arithmetic?.adjust?.number ? 'number' : kind, context),
     ...(property in UNSET ? { unset: UNSET[property] } : {}),
     ...(property === 'background' ? backgroundLayers() : {}),
   };

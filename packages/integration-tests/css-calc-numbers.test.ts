@@ -78,6 +78,11 @@ describe('arithmetic on a token, where a number is taken', () => {
       'text',
     );
     assert.equal(props['lineHeight'], 2);
+    const fallback = view(
+      '.a { font-size: 10px; line-height: calc(var(--missing, 2) * 1px) }',
+      'text',
+    );
+    assert.equal(fallback.props['lineHeight'], 2, 'a fallback given its unit too');
   });
 
   it('keeps a length a token times a dimension divided back comes to', () => {
