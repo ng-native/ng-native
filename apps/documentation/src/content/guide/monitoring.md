@@ -43,7 +43,7 @@ const options = {
   traceParentInHeader: { enabled: true },
 };
 
-CoralogixRum.init(options);
+CoralogixRum.init(options).catch(console.error);
 ```
 
 `public_key` is your RUM integration's public key, set as `EXPO_PUBLIC_CORALOGIX_RUM_KEY` in the
@@ -55,7 +55,7 @@ no `traceparent` header. To trace those too, mount in the runnable once the prom
 cost of a later first frame. The `catch` mounts the app even if `init` rejects:
 
 ```ts
-const started = CoralogixRum.init(options).catch((error) => console.error(error));
+const started = CoralogixRum.init(options).catch(console.error);
 
 AppRegistry.registerRunnable('main', ({ rootTag }) => {
   started.then(() => {
@@ -136,16 +136,18 @@ to record. Start it once `CoralogixRum.init` has finished, by chaining it to the
 ```ts
 import { CoralogixRum, SessionReplay } from '@coralogix/react-native-plugin';
 
-CoralogixRum.init(options).then(() =>
-  SessionReplay.init({
-    captureScale: 0.5,
-    captureCompressQuality: 0.8,
-    sessionRecordingSampleRate: 10,
-    autoStartSessionRecording: true,
-    maskAllTexts: true,
-    maskAllImages: true,
-  }),
-);
+CoralogixRum.init(options)
+  .then(() =>
+    SessionReplay.init({
+      captureScale: 0.5,
+      captureCompressQuality: 0.8,
+      sessionRecordingSampleRate: 10,
+      autoStartSessionRecording: true,
+      maskAllTexts: true,
+      maskAllImages: true,
+    }),
+  )
+  .catch(console.error);
 ```
 
 Text is masked by default and images are not, so the sample masks both. Keep both on until replays
