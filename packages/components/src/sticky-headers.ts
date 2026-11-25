@@ -83,6 +83,8 @@ export class StickyHeaders {
       );
       if (content) this.measureNow(node, content);
     }
+    // With nothing sticky nothing hears the scroll view, so where it was last heard goes stale.
+    if (headers.length === 0) this.offsetAxis = null;
     this.headers = headers;
     this.apply();
   }

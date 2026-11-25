@@ -687,6 +687,25 @@ describe('scroll view sticky headers', () => {
     unmount();
   });
 
+  it('forgets the position it heard once nothing is sticky, as nothing hears where it goes next', async () => {
+    const { fabric, instance, toldSince, named, drives, unmount } = await stickyScroll([1]);
+    fabric.emit(scrollView(fabric), 'topScroll', { contentOffset: { y: 120 } });
+    clock.rest();
+    await frame();
+    instance.sticky.set([]);
+    await frame();
+    // The scroll view goes on to 250 unheard: 120 is stale now.
+    const content = scrollView(fabric).children[0]!;
+    fabric.frames.set(content.viewName, { x: 0, y: -250, width: 400, height: 1000 });
+    fabric.frames.set('body-1', { x: 0, y: -150, width: 400, height: 30 });
+    const before = named('set').length;
+    instance.sticky.set([1]);
+    await frame();
+    assert.ok(drives().get(byID(fabric, 'body-1')[0]!.reactTag), 'driven');
+    assert.deepEqual(toldSince(before), [], 'not the 120 it heard before it stopped listening');
+    unmount();
+  });
+
   it('asks for every scroll event while anything is sticky, as RN does', async () => {
     const { fabric, unmount } = await boot('StickyScroll');
     assert.equal(scrollView(fabric).props['scrollEventThrottle'], 1);
