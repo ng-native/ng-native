@@ -169,6 +169,24 @@ describe('inherit, written for a border', () => {
     }
   });
 
+  it("is the parent's inline logical side over a physical one its rules give it", () => {
+    const s = scene('.box { border: 2px solid rgb(1, 2, 3) } .same { border: inherit }');
+    const parent = s.element('box');
+    s.engine.setProp(parent, 'style', { borderStartWidth: 4 });
+    s.element('same', parent);
+    assert.equal(s.props('same')['borderLeftWidth'], 4);
+    assert.equal(s.props('same')['borderRightWidth'], 2);
+  });
+
+  it("keeps the parent's border over a border: none the element's own rules wrote", () => {
+    const s = scene(
+      '.box { border: 4px solid rgb(1, 2, 3) } .same { border: none; border: inherit }',
+    );
+    s.element('same', s.element('box'));
+    assert.equal(s.props('same')['borderTopWidth'], 4);
+    assert.notEqual(s.props('same')['borderTopStyle'], 'none');
+  });
+
   it('compiles with no warning, and so do its longhands', () => {
     const said: string[] = [];
     const css =

@@ -2566,11 +2566,13 @@ function borderInherits() {
   // ponytail: `border-inline-start: inherit` stays refused. Its parent may set the physical side,
   // which has to be found through the direction; add it when a library needs it.
   const sides = { top: 'Top', right: 'Right', bottom: 'Bottom', left: 'Left' };
+  // A side's own style, which `border: none` sets and would otherwise keep each side drawn as none.
+  const styles = ['borderStyle', ...physical.map((side) => `border${side}Style`)];
   const table = {
-    border: [...widths, ...colours, 'borderStyle'],
+    border: [...widths, ...colours, ...styles],
     'border-width': widths,
     'border-color': colours,
-    'border-style': ['borderStyle'],
+    'border-style': styles,
   };
   for (const [side, prop] of Object.entries(sides)) {
     table[`border-${side}-width`] = [`border${prop}Width`];
