@@ -235,7 +235,7 @@ export class DesktopPage {
   protected readonly pressMenuNote =
     this.os === 'macos' || this.os === 'linux'
       ? 'A click opens the sort menu under the card, with the order chosen checked.'
-      : 'This OS draws no menu on a press yet, so a press here does nothing.';
+      : 'A press opens the sort menu, with the order chosen checked. Expo Go draws none.';
   /** The card's own nativeID, renamed and taken away in turn: its menu follows each. */
   protected readonly cardName = signal<string | undefined>(undefined);
   protected readonly over = signal(false);

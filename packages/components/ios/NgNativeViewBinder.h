@@ -36,6 +36,11 @@ typedef void (^NgNativeViewDetach)(UIView *view, id token);
 // answers its own, so a caller can tell the binding it started with from a later one of the same
 // name. Main thread.
 - (nullable id)tokenFor:(NSString *)nativeID;
+// What attaching the view bound to `nativeID` answered, looking for that view now if it has not
+// been found, however long the binder would otherwise wait: for a view the user has just touched,
+// which is mounted and in a window. Nil when `nativeID` is not bound, or no view has it. Main
+// thread.
+- (nullable id)tokenFindingNow:(NSString *)nativeID;
 // Detach every view. Main thread.
 - (void)unbindAll;
 // Check each view still is the one with its `nativeID`, and look for the ones not found yet. Main

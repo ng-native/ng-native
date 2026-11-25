@@ -18,8 +18,9 @@
  * - On iOS it is a TurboModule with `setContextMenu(nativeID, entries)` too, for the same reason.
  *   React Native's iOS view sends no event it does not know either, so the module sends the item
  *   chosen as `{ type: 'contextMenuSelect', nativeID, id }`. Its `setPressMenu(nativeID, entries)`
- *   lays a menu a press opens over that view, and sends the item chosen as
- *   `{ type: 'pressMenuSelect', nativeID, id }`: UIKit opens a menu on a touch, but not from code.
+ *   keeps a menu a press opens for that view, and sends the item chosen as
+ *   `{ type: 'pressMenuSelect', nativeID, id }`. From iOS 17.4, where its `opensPressMenus`
+ *   constant is true, `openPressMenu(nativeID)` opens it from code too.
  * - Where it draws menus on a press, `popUpMenu(view, entries)` draws one under the view with that
  *   tag now, and sends the item chosen as the view's `topContextMenuSelect`, as a context menu's
  *   (the desktop host, and Android).
@@ -225,14 +226,20 @@ export interface NativeMenus {
    * one on a touch but has no way to open one from code.
    */
   setPressMenu?(nativeID: string, entries: readonly NativeMenuEntry[] | null): void;
+  /**
+   * Open the menu `setPressMenu` gave the view with `nativeID`, now, for a press its own touch did
+   * not open it on. iOS 17.4 and later.
+   */
+  openPressMenu?(nativeID: string): void;
   subscribe(listener: (event: NativeMenuEvent) => void): () => void;
 }
 
 interface MenusModule {
-  getConstants?(): { menuBar?: boolean; appName?: string };
+  getConstants?(): { menuBar?: boolean; appName?: string; opensPressMenus?: boolean };
   /** An Expo module's constants, which are its properties. */
   readonly menuBar?: boolean;
   readonly appName?: string;
+  readonly opensPressMenus?: boolean;
   setMenuBar?(groups: unknown): void;
   setShortcuts?(shortcuts: unknown): void;
   setHistory?(surface: number, history: unknown): void;
@@ -240,6 +247,7 @@ interface MenusModule {
   setTakesLongPress?(nativeID: string, takes: boolean): void;
   popUpMenu?(view: number, entries: unknown): void;
   setPressMenu?(nativeID: string, entries: unknown): void;
+  openPressMenu?(nativeID: string): void;
   /** An Expo module's own events. */
   addListener?(event: string, listener: (event: unknown) => void): { remove(): void };
 }
@@ -273,7 +281,7 @@ export function menusSource(): NativeMenus | null {
     setMenuBar: (groups) => module.setMenuBar?.(groups),
     setShortcuts: (shortcuts) => module.setShortcuts?.(shortcuts),
     setHistory: (surface, history) => module.setHistory?.(surface, history),
-    ...contextMenuMethods(module),
+    ...contextMenuMethods(module, constants.opensPressMenus === true),
     subscribe: (listener) => {
       const subscription = listen((event) => listener(event as NativeMenuEvent));
       return () => subscription?.remove();
@@ -284,19 +292,26 @@ export function menusSource(): NativeMenus | null {
 /**
  * The menu methods a module may lack, bound, and none it lacks: a host without the context menu
  * ones reads props, and one without `popUpMenu` or `setPressMenu` leaves a press to `(press)`.
+ * `openPressMenu` only where the module says it opens one (`opens`): iOS 17.4 and later.
  */
 function contextMenuMethods(
   module: MenusModule,
-): Pick<NativeMenus, 'setContextMenu' | 'setTakesLongPress' | 'popUpMenu' | 'setPressMenu'> {
+  opens: boolean,
+): Pick<
+  NativeMenus,
+  'setContextMenu' | 'setTakesLongPress' | 'popUpMenu' | 'setPressMenu' | 'openPressMenu'
+> {
   const setContextMenu = module.setContextMenu?.bind(module);
   const setTakesLongPress = module.setTakesLongPress?.bind(module);
   const popUpMenu = module.popUpMenu?.bind(module);
   const setPressMenu = module.setPressMenu?.bind(module);
+  const openPressMenu = opens ? module.openPressMenu?.bind(module) : undefined;
   return {
     ...(setContextMenu && { setContextMenu }),
     ...(setTakesLongPress && { setTakesLongPress }),
     ...(popUpMenu && { popUpMenu }),
     ...(setPressMenu && { setPressMenu }),
+    ...(openPressMenu && { openPressMenu }),
   };
 }
 
@@ -390,6 +405,17 @@ export class Menus {
    * opens it on a touch itself: iOS.
    */
   readonly pressMenuByNativeId: boolean = this.native?.setPressMenu !== undefined;
+
+  /**
+   * Whether the host opens a press menu by `nativeID` from code (`openPressMenu`): iOS 17.4 and
+   * later.
+   */
+  readonly opensPressMenus: boolean = this.native?.openPressMenu !== undefined;
+
+  /** Open the menu `setPressMenu` gave the view with `nativeID`, now. */
+  openPressMenu(nativeID: string): void {
+    this.native?.openPressMenu?.(nativeID);
+  }
 
   /** What choosing an item does, by the `nativeID` of the view whose press menu it is in. */
   private readonly pressMenuChoices = new Map<string, (id: string) => void>();

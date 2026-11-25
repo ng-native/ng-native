@@ -104,6 +104,25 @@ static RCTViewComponentView *viewNamed(NSString *nativeID)
   XCTAssertEqualObjects(_calls.lastObject, @"detach row token", @"a recycled view leaves its superview first");
 }
 
+- (void)testFindsABoundViewAtOnceWhenAskedWhileItWaitsToLookAgain
+{
+  [_binder bind:@"row"];
+  [_binder refresh];
+  [_binder refresh];
+  NSUInteger searches = _binder.searches;
+  XCTAssertGreaterThan(_binder.searchInterval, 0.25, @"backing off while the view is missing");
+  [_root addSubview:viewNamed(@"row")];
+  [_binder refresh];
+  XCTAssertEqualObjects(_calls, @[], @"not looked for again yet");
+  XCTAssertEqualObjects([_binder tokenFindingNow:@"row"], @"token");
+  XCTAssertEqualObjects(_calls, @[ @"attach row" ]);
+  XCTAssertEqualObjects([_binder tokenFindingNow:@"row"], @"token");
+  XCTAssertEqual(_binder.searches, searches + 1, @"once found, it is not looked for again");
+  [_root addSubview:viewNamed(@"other")];
+  XCTAssertNil([_binder tokenFindingNow:@"other"], @"a name not bound is not looked for");
+  XCTAssertEqualObjects(_calls, @[ @"attach row" ]);
+}
+
 - (void)testDetachesOnUnbind
 {
   [_root addSubview:viewNamed(@"row")];
@@ -309,6 +328,35 @@ static UIAction *itemOf(UIButton *button, NSUInteger index)
   view.frame = CGRectMake(0, 0, 200, 60);
   [view layoutIfNeeded];
   XCTAssertTrue(CGRectEqualToRect(button.frame, view.bounds), @"it follows the view's size");
+}
+
+- (void)testTakesATouchAnywhereOnTheViewAsSwiftUIsMenuDoes
+{
+  UIView *view = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 120, 44)];
+  [view addSubview:[[UIView alloc] initWithFrame:CGRectMake(0, 0, 60, 44)]];
+  NgNativePressMenuButton *button = NgNativeAddPressMenu(view, sortEntries(YES), ^(NSString *itemId) {
+  });
+  XCTAssertEqual([view hitTest:CGPointMake(30, 22) withEvent:nil], button, @"over a child");
+  XCTAssertEqual([view hitTest:CGPointMake(90, 22) withEvent:nil], button);
+}
+
+- (void)testOpensNothingFromCodeWhileTheMenuIsShowing
+{
+  NgNativePressMenuButton *button = NgNativeAddPressMenu([UIView new], sortEntries(YES), ^(NSString *itemId) {
+  });
+  UIContextMenuInteraction *interaction = button.contextMenuInteraction;
+  UIContextMenuConfiguration *configuration = [UIContextMenuConfiguration configurationWithIdentifier:nil
+                                                                                      previewProvider:nil
+                                                                                       actionProvider:nil];
+  XCTAssertFalse(button.showing);
+  [button contextMenuInteraction:interaction willDisplayMenuForConfiguration:configuration animator:nil];
+  XCTAssertTrue(button.showing);
+  // Opening a menu needs a window, which this bundle has none of: a request to open one that is
+  // showing must not reach UIKit at all.
+  XCTAssertFalse(NgNativeOpenPressMenu(button), @"a touch on the button opened it, and React Native's press follows");
+  [button contextMenuInteraction:interaction willEndForConfiguration:configuration animator:nil];
+  XCTAssertFalse(button.showing, @"closed again");
+  XCTAssertFalse(NgNativeOpenPressMenu(nil));
 }
 
 - (void)testGoesInTheViewThatHoldsTheChildren

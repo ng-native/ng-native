@@ -4,6 +4,7 @@ import {
   ElementRef,
   InjectionToken,
   Injector,
+  computed,
   effect,
   forwardRef,
   inject,
@@ -31,8 +32,8 @@ const drawsNone =
   '[menu] on a <pressable>: this host draws no menu on a press yet (macOS, Linux, Android and ' +
   'iOS do), so the press fires (press) instead.';
 const opensNoneOnIos =
-  "PressMenu.open(): iOS opens a press menu only on a touch or a screen reader's press, and has " +
-  'no way to open one from code, so this opens none.';
+  "PressMenu.open(): before iOS 17.4 a press menu opens only on a touch or a screen reader's " +
+  'press, and there is no way to open one from code, so this opens none.';
 
 /** The warnings given in development, each once. */
 const warned = new Set<string>();
@@ -51,15 +52,19 @@ function warnOnce(message: string): void {
  * the template.
  *
  * macOS draws it as an `NSMenu` under the element, Linux as a popover menu below it, Android as a
- * PopupMenu below it, and iOS as a UIMenu from a clear button laid over the element, which a touch
- * or VoiceOver's activation opens. Android and iOS take the `NgNativeMenus` module that Expo Go
- * lacks. iOS has no way to open the menu from code, so `open()` there opens none. Other hosts
- * (Expo Go, the web) draw none yet: there a press fires `(press)`, with one warning in development.
+ * PopupMenu below it, and iOS as a UIMenu from a clear button laid over the element, which opens it
+ * as a touch goes down, as SwiftUI's `Menu` does. From iOS 17.4 a press on the element opens it as
+ * `open()` does, for a tap made before the button is laid; the host ignores the request while the
+ * menu is showing, as it is after the button's own touch. Before 17.4 iOS had no way to open one
+ * from code, so `open()` there opens none. Android and iOS take the
+ * `NgNativeMenus` module that Expo Go lacks. Other hosts (Expo Go, the web) draw none yet:
+ * there a press fires `(press)`, with one warning in development.
  *
  * The host contract: `Menus.popUpMenu(view, entries)` with the view's tag and the menu as
  * `serializeMenu` makes it, and the item chosen sent as the view's `topContextMenuSelect`, as a
  * context menu's. On iOS, `Menus.setPressMenu(nativeID, entries)` instead, as the menu changes, and
- * null while the pressable is disabled; the choice comes back by the view's `nativeID`.
+ * null while the pressable is disabled, with `Menus.openPressMenu(nativeID)` to open it from iOS
+ * 17.4; the choice comes back by the view's `nativeID`.
  */
 @Directive({
   selector: 'pressable[menu]',
@@ -77,6 +82,10 @@ export class PressMenu {
   /** iOS's host, which takes the menu by `nativeID` and opens it on a touch itself. */
   private readonly byNativeId = this.os === 'ios' && this.menus.pressMenuByNativeId;
   private readonly disabled = signal<() => boolean>(() => false);
+  /** The menu as iOS's host has it: none while the pressable is disabled. */
+  private readonly shown = computed(() => (this.disabled()() ? null : this.built.sent()));
+  /** The `nativeID` the menu was last sent to iOS's host under. */
+  private sentAs: string | null = null;
 
   constructor() {
     const stop = this.engine.setEventListener(this.node, 'topContextMenuSelect', (event) => {
@@ -92,11 +101,14 @@ export class PressMenu {
   }
 
   /**
-   * Whether a press is the menu's: on iOS the host's own touch opened it, wherever it has the
-   * menu; elsewhere `open()` opens it now.
+   * Whether a press is the menu's: before iOS 17.4 the host's own touch opened it, wherever it has
+   * the menu; elsewhere `open()` opens it now. On iOS React Native's press follows the button's own
+   * touch, and a screen reader's, and the host ignores that request while the menu is showing.
    */
   takePress(): boolean {
-    return this.byNativeId ? untracked(this.built.sent) !== null : this.open();
+    return this.byNativeId && !this.menus.opensPressMenus
+      ? untracked(this.built.sent) !== null
+      : this.open();
   }
 
   /**
@@ -104,9 +116,15 @@ export class PressMenu {
    * does not mean the menu showed: the host draws none for a view it is not showing (no window on
    * macOS, not mapped on Linux), and does not report that. False when no request is sent: the menu
    * shows no item, the element has no view yet, or the host draws no press menu, or opens it only
-   * on a touch (iOS).
+   * on a touch (iOS before 17.4).
    */
   open(): boolean {
+    if (this.byNativeId && this.menus.opensPressMenus) {
+      const nativeID = this.sentAs;
+      if (nativeID === null || untracked(this.shown) === null) return false;
+      this.menus.openPressMenu(nativeID);
+      return true;
+    }
     const entries = untracked(this.built.sent);
     if (!entries) return false;
     if (!this.menus.popsUpMenus) {
@@ -125,15 +143,17 @@ export class PressMenu {
    */
   private sendByNativeId(): void {
     const choose = (id: string) => this.built.choose(id);
-    const shown = () => (this.disabled()() ? null : this.built.sent());
     const send = byNativeId(
       this.engine,
       this.node,
-      (nativeID) => this.menus.setPressMenu(nativeID, untracked(shown), choose),
+      (nativeID) => {
+        this.sentAs = nativeID;
+        this.menus.setPressMenu(nativeID, untracked(this.shown), choose);
+      },
       (nativeID) => this.menus.setPressMenu(nativeID, null, choose),
     );
     effect(() => {
-      shown();
+      this.shown();
       send();
     });
   }

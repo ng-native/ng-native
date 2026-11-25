@@ -7,6 +7,8 @@
 
 @implementation NgNativePressMenuButton {
   NgNativeMenuChoose _choose;
+  // Whether the menu is showing, from UIKit's display until its dismissal.
+  BOOL _showing;
 }
 
 - (instancetype)initWithChoose:(NgNativeMenuChoose)choose
@@ -17,11 +19,31 @@
     self.backgroundColor = UIColor.clearColor;
     self.showsMenuAsPrimaryAction = YES;
     self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    // React Native's view is the accessibility element, with the app's label, role and state;
-    // VoiceOver's activation of it taps its middle, which lands here.
+    // React Native's view is the accessibility element, with the app's label, role and state.
     self.isAccessibilityElement = NO;
   }
   return self;
+}
+
+- (void)contextMenuInteraction:(UIContextMenuInteraction *)interaction
+    willDisplayMenuForConfiguration:(UIContextMenuConfiguration *)configuration
+                           animator:(id<UIContextMenuInteractionAnimating>)animator
+{
+  [super contextMenuInteraction:interaction willDisplayMenuForConfiguration:configuration animator:animator];
+  _showing = YES;
+}
+
+- (void)contextMenuInteraction:(UIContextMenuInteraction *)interaction
+       willEndForConfiguration:(UIContextMenuConfiguration *)configuration
+                      animator:(id<UIContextMenuInteractionAnimating>)animator
+{
+  [super contextMenuInteraction:interaction willEndForConfiguration:configuration animator:animator];
+  _showing = NO;
+}
+
+- (BOOL)showing
+{
+  return _showing;
 }
 
 - (void)setEntries:(NSArray *)entries
@@ -42,4 +64,16 @@ NgNativePressMenuButton *NgNativeAddPressMenu(UIView *view, NSArray *entries, Ng
   button.frame = holder.bounds;
   [holder addSubview:button];
   return button;
+}
+
+BOOL NgNativeOpenPressMenu(NgNativePressMenuButton *button)
+{
+  if (button == nil || button.showing) {
+    return NO;
+  }
+  if (@available(iOS 17.4, *)) {
+    [button performPrimaryAction];
+    return YES;
+  }
+  return NO;
 }
