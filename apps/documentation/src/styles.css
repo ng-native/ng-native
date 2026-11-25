@@ -40,6 +40,9 @@
  */
 @import './landing/landing.css';
 
+/* The blog's cards and a post's prose, over the landing page's tokens. See `blog/blog.css`. */
+@import './blog/blog.css';
+
 /* The course's workspace, buttons and editor colours. See `learn/learn.css`. */
 @import './learn/learn.css';
 
@@ -338,6 +341,65 @@
 .prose a:hover {
   color: var(--brand);
   text-decoration-color: var(--brand);
+}
+
+/* A link to another page drawn as a card, with Coralogix's mark: Deployment's pointer to Monitoring. */
+.prose a.doc-link-card {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  margin: 1.25rem 0 0.5rem;
+  padding: 1rem 1.125rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  font-weight: 400;
+  text-decoration: none;
+  transition: border-color 150ms;
+}
+
+.prose a.doc-link-card:hover {
+  color: var(--fg-primary);
+  border-color: var(--border-strong);
+}
+
+.doc-link-card-dot {
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, #13e989 0 72%, #86ffc9 72%);
+}
+
+.doc-link-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.doc-link-card-title {
+  display: block;
+  font-weight: 600;
+  color: var(--fg-primary);
+  line-height: 1.4;
+}
+
+.doc-link-card-text {
+  display: block;
+  margin-top: 0.125rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--fg-tertiary);
+}
+
+.doc-link-card-cta {
+  flex: none;
+  font-size: 0.875rem;
+  font-weight: 550;
+}
+
+@media (width < 40rem) {
+  .doc-link-card-cta {
+    display: none;
+  }
 }
 
 .prose strong {

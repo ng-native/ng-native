@@ -1,0 +1,270 @@
+/*
+ * The blog: its cards, the index's follow box, and a post's prose. In the main bundle, as the
+ * landing page's sheet is, so a prerendered post is styled on its first paint. Built on the
+ * landing page's tokens, so it follows the theme the same way.
+ */
+.blog-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem 0.875rem;
+  font-size: 0.875rem;
+  color: var(--color-graphite);
+}
+
+.blog-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 2rem;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-ink) 15%, transparent);
+  font-size: 0.875rem;
+}
+
+.blog-chip[aria-pressed='true'] {
+  background: var(--color-ink);
+  border-color: var(--color-ink);
+  color: var(--color-paper);
+}
+
+.blog-card:hover .blog-title {
+  text-decoration: underline;
+  text-decoration-color: var(--color-ng-red);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 4px;
+}
+
+/* Dark in both themes, like the stewardship band. */
+.blog-follow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem 2.5rem;
+  padding: 1.75rem 2rem;
+  border-radius: 0.875rem;
+  background: #171817;
+  color: #f4f4f5;
+}
+
+.dark .blog-follow {
+  background: #141416;
+  box-shadow: inset 0 0 0 1px rgb(244 244 245 / 0.08);
+}
+
+.blog-follow-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.5rem;
+  padding: 0 1rem;
+  border-radius: 0.55rem;
+  border: 1px solid rgb(244 244 245 / 0.22);
+  font-size: 0.875rem;
+  font-weight: 550;
+  transition: background-color 150ms;
+}
+
+.blog-follow-link:hover {
+  background: rgb(244 244 245 / 0.08);
+}
+
+.blog-toc a {
+  display: block;
+  padding: 0.375rem 0 0.375rem 0.875rem;
+  border-left: 1.5px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
+  font-size: 0.875rem;
+  color: var(--color-graphite);
+}
+
+.blog-toc a:hover {
+  color: var(--color-ink);
+}
+
+.blog-toc a[data-current='true'] {
+  border-left-color: var(--color-ng-red);
+  color: var(--color-ink);
+  font-weight: 550;
+}
+
+/* ---------------------------------------------------------------------------------- A post */
+
+.blog-prose {
+  font-size: 1.125rem;
+  line-height: 1.75;
+  color: color-mix(in srgb, var(--color-ink) 86%, transparent);
+}
+
+.blog-prose > p,
+.blog-prose > ul {
+  margin: 0 0 1.375rem;
+}
+
+.blog-prose > ul,
+.blog-summary ul {
+  padding-left: 1.375rem;
+  list-style: disc;
+}
+
+.blog-prose li {
+  margin: 0.375rem 0;
+}
+
+.blog-prose > h2 {
+  margin: 3rem 0 1rem;
+  scroll-margin-top: 6rem;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.75rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--color-ink);
+}
+
+.blog-prose strong {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.blog-prose > p a {
+  color: var(--color-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--color-ng-red);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.blog-summary {
+  margin: 0 0 2.25rem;
+  padding: 1.375rem 1.5rem;
+  border-radius: 0.75rem;
+  background: var(--color-paper-light);
+  border: 1px solid color-mix(in srgb, var(--color-ink) 10%, transparent);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.blog-quote {
+  margin: 2.5rem 0;
+  padding-left: 1.5rem;
+  border-left: 3px solid var(--color-ng-red);
+}
+
+.blog-quote blockquote {
+  font-size: clamp(1.5rem, 3vw, 1.875rem);
+  line-height: 1.25;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+/* The one product mention in the post, dark in both themes. */
+.blog-about {
+  margin: 2.25rem 0 0.5rem;
+  padding: 2rem;
+  border-radius: 0.875rem;
+  color: #f4f4f5;
+  border: 1px solid rgb(62 207 142 / 0.18);
+  background:
+    radial-gradient(90% 120% at 100% 0%, rgb(19 233 137 / 0.13), rgb(19 233 137 / 0) 60%), #111113;
+}
+
+.blog-about h3 {
+  margin-top: 1.375rem;
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+
+.blog-about > p {
+  margin-top: 0.625rem;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: rgb(244 244 245 / 0.75);
+}
+
+.blog-about ul {
+  margin-top: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11.5rem), 1fr));
+  gap: 0.75rem;
+}
+
+.blog-about li {
+  margin: 0;
+  padding: 1rem;
+  border-radius: 0.625rem;
+  background: rgb(244 244 245 / 0.04);
+  border: 1px solid rgb(244 244 245 / 0.08);
+  line-height: 1.3;
+}
+
+.blog-about li svg {
+  fill: none;
+  stroke: #3ecf8e;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.blog-about-title {
+  display: block;
+  margin-top: 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.blog-about-text {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: rgb(244 244 245 / 0.68);
+}
+
+.blog-about-link {
+  margin-top: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(62 207 142 / 0.45);
+  color: #3ecf8e;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  transition: background-color 150ms;
+}
+
+.blog-about-link:hover {
+  background: rgb(62 207 142 / 0.1);
+}
+
+.blog-about-link path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.blog-byline {
+  margin-top: 3.5rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-ink) 15%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.5rem;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.blog-byline img {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+}
+
+.blog-byline span {
+  flex: 1 1 16rem;
+}

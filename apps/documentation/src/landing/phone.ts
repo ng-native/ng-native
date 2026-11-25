@@ -31,18 +31,6 @@ const SCREEN_RATIO: Record<DevicePlatform, string> = { ios: '1206 / 2622', andro
           [attr.fetchpriority]="eager() ? 'high' : null"
           decoding="async"
         />
-        @if (swap(); as next) {
-          <!-- Laid over the first, for a section to crossfade to: see landing.css's .is-swap. -->
-          <img
-            class="device-shot is-swap"
-            [src]="path(next)"
-            alt=""
-            width="560"
-            [attr.height]="platform() === 'ios' ? 1217 : 1244"
-            loading="lazy"
-            decoding="async"
-          />
-        }
         @if (platform() === 'android') {
           <span class="phone-camera" aria-hidden="true"></span>
         }
@@ -153,15 +141,13 @@ export class LandingPhone {
   readonly src = input<string>();
   /** Which of the capture's themes: `settings` has both, `plans` is photographed dark. */
   readonly scheme = input<'light' | 'dark'>('light');
-  /** A second capture laid over the first, for a section to crossfade to. */
-  readonly swap = input<string>();
   readonly alt = input('');
   readonly eager = input(false);
 
   protected readonly ratio = computed(() => SCREEN_RATIO[this.platform()]);
   protected readonly source = computed(() => this.src() ?? this.path(this.shot()));
 
-  protected path(shot: string): string {
+  private path(shot: string): string {
     return `/showcase/${shot}-${this.platform()}-${this.scheme()}.webp`;
   }
 }

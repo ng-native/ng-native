@@ -23,7 +23,7 @@ export const SITE_URL = (fromImportMeta ?? fromProcess ?? 'https://ng-native.com
 export const SITE_NAME = 'Angular Native';
 
 export const DEFAULT_DESCRIPTION =
-  'Angular components rendering real native iOS and Android views, with React never in the render path.';
+  'Angular components rendering real native views on iOS, Android, macOS and Linux, with React never in the render path.';
 
 export const OG_IMAGE = '/og.png';
 
@@ -31,6 +31,13 @@ export const GITHUB_REPO = 'https://github.com/ng-native/ng-native';
 
 /** Where sponsorship goes: GitHub Sponsors, which is also the repository's Sponsor button. */
 export const GITHUB_SPONSORS = 'https://github.com/sponsors/ashley-hunter';
+
+/**
+ * Coralogix, which maintains the project, tagged so its analytics can tell a visit came from here.
+ * The home page for now: point the links at product pages once they exist.
+ */
+export const CORALOGIX_URL =
+  'https://coralogix.com/?utm_source=ng-native&utm_medium=referral&utm_campaign=ng-native';
 
 /** `/packages/testing/api` -> `https://ng-native.com/packages/testing/api`, `/` -> the bare origin plus one slash. */
 export function urlFor(path: string): string {

@@ -17,7 +17,9 @@ import { lucideChevronDown } from '@ng-icons/lucide';
 import type { DocBlock } from '../build/markdown.ts';
 import type { DocModule } from './content.ts';
 import { DocArt } from './doc-art.ts';
+import { DocMonitoringCard } from './doc-monitoring-card.ts';
 import { DocUsage } from './doc-usage.ts';
+import { LINKS } from './landing/content.ts';
 import { DocContent } from './doc-content.ts';
 import { breadcrumbsFor, READING_ORDER } from './navigation.ts';
 import { Seo } from './seo.ts';
@@ -30,7 +32,7 @@ function titleFor(title: string): string {
 
 @Component({
   selector: 'doc-page',
-  imports: [DocArt, DocContent, DocUsage, NgIcon, RouterLink],
+  imports: [DocArt, DocContent, DocMonitoringCard, DocUsage, NgIcon, RouterLink],
   providers: [provideIcons({ lucideChevronDown })],
   template: `
     @if (doc() === null) {
@@ -49,7 +51,7 @@ function titleFor(title: string): string {
           <div class="max-w-3xl">
             @if (page.headings.length > 1) {
               <!--
-                The sticky column below only shows from xl up (see the second <nav> in this
+                The sticky column below only shows from xl up (see the <aside> at the end of this
                 template), so a reader on a phone or a tablet gets this instead: closed by default,
                 because a list of headings above the prose it describes is a worse first screen than
                 the prose itself. It sits above the title, so it never crowds the lead.
@@ -139,31 +141,41 @@ function titleFor(title: string): string {
           </div>
         </article>
 
-        @if (page.headings.length > 1) {
-          <nav
-            class="scrollbar-hover sticky top-24 hidden h-fit max-h-[calc(100dvh-9rem)] w-56 shrink-0 overflow-auto xl:block"
-          >
-            <h2
-              class="mb-2 px-3 text-[11px] font-semibold tracking-[0.08em] text-fg-tertiary uppercase"
-            >
-              On this page
-            </h2>
-            <ul class="flex flex-col gap-y-0.5 text-sm">
-              @for (heading of page.headings; track heading.id) {
-                <li>
-                  <a
-                    [routerLink]="[]"
-                    [fragment]="heading.id"
-                    class="block rounded-md py-1 text-fg-tertiary transition-colors hover:text-fg"
-                    [class]="heading.level === 3 ? 'pl-6' : 'pl-3'"
-                  >
-                    {{ heading.text }}
-                  </a>
-                </li>
-              }
-            </ul>
-          </nav>
-        }
+        <!--
+          The contents column, from xl up: the page's headings, then the Monitoring card, which
+          stands in for the column on a page with no headings to list.
+        -->
+        <aside
+          class="scrollbar-hover sticky top-24 hidden h-fit max-h-[calc(100dvh-9rem)] w-56 shrink-0 overflow-auto pb-2 xl:block"
+          data-pagefind-ignore
+        >
+          @if (page.headings.length > 1) {
+            <nav aria-label="On this page">
+              <h2
+                class="mb-2 px-3 text-[11px] font-semibold tracking-[0.08em] text-fg-tertiary uppercase"
+              >
+                On this page
+              </h2>
+              <ul class="flex flex-col gap-y-0.5 text-sm">
+                @for (heading of page.headings; track heading.id) {
+                  <li>
+                    <a
+                      [routerLink]="[]"
+                      [fragment]="heading.id"
+                      class="block rounded-md py-1 text-fg-tertiary transition-colors hover:text-fg"
+                      [class]="heading.level === 3 ? 'pl-6' : 'pl-3'"
+                    >
+                      {{ heading.text }}
+                    </a>
+                  </li>
+                }
+              </ul>
+            </nav>
+          }
+          @if (path() !== monitoringPage) {
+            <doc-monitoring-card [page]="path()" [class.mt-8]="page.headings.length > 1" />
+          }
+        </aside>
       </div>
     }
   `,
@@ -189,6 +201,9 @@ export class DocPage {
    * being left stays on screen until the next one is ready. `null` when there is no such page.
    */
   readonly doc = input<DocModule | null>();
+
+  /** The Monitoring guide, which needs no card pointing to itself. */
+  protected readonly monitoringPage = LINKS.monitoring.slice(1);
 
   /** The compact "On this page" control below the xl breakpoint. Closed on every page it opens on. */
   protected readonly tocOpen = signal(false);

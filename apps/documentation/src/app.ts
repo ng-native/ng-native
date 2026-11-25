@@ -9,8 +9,9 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import {
-  ActivationStart,
+  type ActivatedRouteSnapshot,
   NavigationEnd,
+  ResolveEnd,
   Router,
   RouterLink,
   RouterLinkActive,
@@ -21,15 +22,17 @@ import { filter, map } from 'rxjs';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideMenu, lucideMoon, lucideSun, lucideX } from '@ng-icons/lucide';
 import { LINKS } from './landing/content.ts';
+import { CoralogixLogo } from './landing/coralogix-logo.ts';
 import { LandingMark } from './landing/mark.ts';
 import { SECTIONS, type NavItem } from './navigation.ts';
 import { DocsSearch } from './search.ts';
-import { GITHUB_REPO } from './site.ts';
+import { CORALOGIX_URL, GITHUB_REPO } from './site.ts';
 import { DocsTheme } from './theme.ts';
 
 @Component({
   selector: 'app-root',
   imports: [
+    CoralogixLogo,
     DocsSearch,
     LandingMark,
     NgIcon,
@@ -41,7 +44,7 @@ import { DocsTheme } from './theme.ts';
   providers: [provideIcons({ lucideMenu, lucideMoon, lucideSun, lucideX })],
   template: `
     @if (home()) {
-      <!-- The landing page brings its own header, main and footer: see landing/landing.ts. -->
+      <!-- The landing page and the blog bring their own header, main and footer: see landing/landing.ts. -->
       <router-outlet />
     } @else {
       <header
@@ -65,6 +68,15 @@ import { DocsTheme } from './theme.ts';
               >Angular Native</span
             >
           </a>
+          <a
+            class="hidden items-center gap-[7px] border-l border-border-subtle pl-3.5 text-[13px] text-fg-tertiary transition-colors hover:text-fg xl:flex"
+            [href]="coralogix"
+            target="_blank"
+            rel="noopener"
+            aria-label="Coralogix (opens in a new tab)"
+          >
+            by <cx-logo class="h-4" />
+          </a>
 
           <div class="ml-auto flex items-center gap-x-1">
             <!-- The landing page's links, in its order, without its call to action. -->
@@ -85,6 +97,12 @@ import { DocsTheme } from './theme.ts';
               routerLink="/examples"
               routerLinkActive="!text-fg"
               >Examples</a
+            >
+            <a
+              class="hidden h-8 items-center rounded-md px-3 text-sm text-fg-secondary transition-colors hover:bg-surface-raised hover:text-fg sm:inline-flex"
+              routerLink="/blog"
+              routerLinkActive="!text-fg"
+              >Blog</a
             >
             <a
               class="hidden h-8 items-center rounded-md px-3 text-sm text-fg-secondary transition-colors hover:bg-surface-raised hover:text-fg sm:inline-flex"
@@ -148,6 +166,7 @@ import { DocsTheme } from './theme.ts';
                       <li><a [routerLink]="docs" [class]="drawerLink">Docs</a></li>
                       <li><a routerLink="/learn" [class]="drawerLink">Learn</a></li>
                       <li><a routerLink="/examples" [class]="drawerLink">Examples</a></li>
+                      <li><a routerLink="/blog" [class]="drawerLink">Blog</a></li>
                       <li><a [href]="github" [class]="drawerLink">GitHub</a></li>
                       <li><a routerLink="/sponsor" [class]="drawerLink">Sponsor</a></li>
                     </ul>
@@ -163,7 +182,16 @@ import { DocsTheme } from './theme.ts';
           <footer
             class="mt-8 flex flex-col items-center gap-y-1 border-t border-border-subtle px-5 py-10 text-xs text-fg-tertiary"
           >
-            <p>Angular components as native iOS and Android views, built and shipped with Expo.</p>
+            <a
+              class="mb-2 flex items-center gap-2 transition-colors hover:text-fg"
+              [href]="coralogix"
+            >
+              An open-source project by <cx-logo class="h-4" />
+            </a>
+            <p>
+              Angular components as native views on iOS, Android, macOS and Linux, built and shipped
+              with Expo.
+            </p>
             <!--
           text-fg-tertiary, inherited from the footer rather than the lighter fg-quaternary this
           used: fg-quaternary's #a1a1aa is a 2.56:1 ratio against the page background, well under
@@ -172,13 +200,14 @@ import { DocsTheme } from './theme.ts';
         -->
             <p>
               An alpha. MIT licensed.
+              <a class="underline underline-offset-2 hover:text-fg" routerLink="/blog">Blog</a> ·
               <a class="underline underline-offset-2 hover:text-fg" routerLink="/sponsor"
                 >Sponsor its development</a
               >.
             </p>
             <p>
-              An independent project, not affiliated with or endorsed by Google, the Angular team or
-              Expo. Angular is a trademark of Google LLC.
+              Not affiliated with or endorsed by Google, the Angular team or Expo. Angular is a
+              trademark of Google LLC. © {{ year }} Coralogix.
             </p>
           </footer>
         </div>
@@ -273,6 +302,8 @@ export class App {
   protected readonly sections = SECTIONS;
   protected readonly github = GITHUB_REPO;
   protected readonly docs = LINKS.docs;
+  protected readonly coralogix = CORALOGIX_URL;
+  protected readonly year = new Date().getFullYear();
   protected readonly drawerLink =
     'flex h-9 items-center rounded-md px-3 text-[15px] font-medium text-fg transition-colors hover:bg-surface-raised';
   /** Every guide and package page is the docs, whichever one the Docs link happens to open. */
@@ -323,30 +354,32 @@ export class App {
   );
 
   /**
-   * Whether the landing page is showing, which renders without the documentation's chrome.
+   * Whether the landing page or the blog is showing, which render without the documentation's
+   * chrome.
    *
-   * Decided at `ActivationStart`, before the outlet activates the next page, so a page is never
-   * created inside the shell it is about to leave. The first value comes from the address bar:
+   * Decided at `ResolveEnd`: after the next page's resolver has loaded its document, so the page
+   * being left is never shown inside the next page's shell while that loads, and before the outlet
+   * activates the next page. The first value comes from the address bar:
    * before the initial navigation `router.url` is `/` whatever was asked for, and a docs page
    * would otherwise flash the landing page's empty shell.
    */
   protected readonly home = toSignal(
     this.router.events.pipe(
-      filter((event) => event instanceof ActivationStart),
-      map((event) => event.snapshot.routeConfig?.path === ''),
+      filter((event) => event instanceof ResolveEnd),
+      map((event) => ownChrome(leafPath(event.state.root))),
     ),
-    { initialValue: location.pathname === '/' },
+    { initialValue: ownChrome(location.pathname.replace(/^\/+|\/+$/g, '')) },
   );
 
   /**
    * Which shell a page sits in: the documentation's, with the sidebar; the course's, without it;
    * or a lesson's, which is a workspace filling the window under the header with no footer.
-   * Decided at `ActivationStart` for the same reason as `home`, and first from the address bar.
+   * Decided at `ResolveEnd` for the same reason as `home`, and first from the address bar.
    */
   protected readonly layout = toSignal(
     this.router.events.pipe(
-      filter((event) => event instanceof ActivationStart),
-      map((event) => layoutFor(event.snapshot.routeConfig?.path ?? '')),
+      filter((event) => event instanceof ResolveEnd),
+      map((event) => layoutFor(leafPath(event.state.root))),
     ),
     {
       initialValue: layoutFor(
@@ -372,6 +405,17 @@ export class App {
 }
 
 type Layout = 'docs' | 'course' | 'workspace';
+
+/** The route config path of the page a navigation ends on. */
+function leafPath(route: ActivatedRouteSnapshot): string {
+  while (route.firstChild) route = route.firstChild;
+  return route.routeConfig?.path ?? '';
+}
+
+/** The home page and the blog, which render the landing page's header and footer, not the docs'. */
+function ownChrome(routePath: string): boolean {
+  return routePath === '' || routePath === 'blog' || routePath.startsWith('blog/');
+}
 
 /** The course's index and the example apps are pages of their own, without the sidebar. */
 const WITHOUT_SIDEBAR = new Set(['learn', 'examples', 'examples/:slug']);

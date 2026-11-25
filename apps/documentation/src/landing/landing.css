@@ -410,16 +410,6 @@
 
 /* ------------------------------------------------------------------------------------ Devices */
 
-/* A second capture laid over a phone's first, for a section to crossfade to. */
-.device-shot {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: top;
-}
-
 /*
  * A device shown from the top only: the part of the screen that matters, at a size its text can
  * be read, fading out where the rest of the phone would be.
@@ -446,17 +436,47 @@
 
 /*
  * Fixed rather than sticky: iOS Safari runs its top bar into a fixed header's background, but
- * leaves a band and a hairline above a sticky one. The host keeps the header's height in the flow.
+ * leaves a band and a hairline above a sticky one. The host keeps the bar's and the header's
+ * height in the flow.
  */
 landing-header {
   display: block;
-  height: calc(4rem + 1px);
 }
 
-.landing-header {
+.landing-top {
   position: fixed;
   inset: 0 0 auto;
   z-index: 40;
+}
+
+/* The stewardship announcement: dark in both themes, folding away once the page scrolls. */
+.landing-announce {
+  background: #171817;
+  color: #f4f4f5;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.dark .landing-announce {
+  background: #1c1c1f;
+}
+
+.landing-announce-fold {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.landing-announce-fold > .landing-announce {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.landing-announce-fold[data-folded='true'] {
+  grid-template-rows: 0fr;
+}
+
+.landing-header {
   border-bottom: 1px solid transparent;
   transition:
     background-color 220ms,
@@ -552,6 +572,66 @@ landing-header {
   border-bottom: 1px dashed color-mix(in srgb, var(--ink) 25%, transparent);
 }
 
+/* The "New" tag beside a feature that has just arrived. */
+.contents-new {
+  margin-left: 0.5rem;
+  vertical-align: middle;
+  font-family: var(--font-code);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ng-red-ink);
+}
+
+/*
+ * The platforms section's desk: a Linux window behind, a macOS window in front of it, and an
+ * iPhone on the same baseline at the front, as shares of one 1168 x 580 stage.
+ */
+.desk {
+  position: relative;
+  width: 100%;
+  max-width: 73rem;
+  aspect-ratio: 1168 / 580;
+  margin-inline: auto;
+}
+
+.desk-glow {
+  position: absolute;
+  inset: 6% 10% -4%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(228 0 53 / 0.09), rgb(228 0 53 / 0));
+}
+
+.desk-window {
+  position: absolute;
+  display: block;
+  height: auto;
+}
+
+.desk-window[data-slot='linux'] {
+  left: 8.2%;
+  top: 0;
+  width: 54.8%;
+  filter: drop-shadow(0 30px 30px rgb(0 0 0 / 0.2));
+}
+
+.desk-window[data-slot='macos'] {
+  right: 0;
+  bottom: 0;
+  width: 58.2%;
+  z-index: 2;
+  filter: drop-shadow(0 40px 45px rgb(0 0 0 / 0.28));
+}
+
+.desk-phone {
+  position: absolute;
+  left: 2%;
+  bottom: 0;
+  width: 16.8%;
+  z-index: 3;
+}
+
 /* The Tailwind section's setup: three imports, the preset's own line marked. */
 .setup-body {
   margin: 0;
@@ -595,220 +675,6 @@ landing-header {
 }
 
 /*
- * The hot-reload section's edit, playing on a ten-second loop: the old word is deleted and the new
- * one typed, the file is saved, and the device crossfades from the capture before the edit to the
- * one after it, with the count unchanged. The three steps beside it light in time. It is a loop,
- * not a scroll effect; under reduced motion it rests on the finished edit.
- */
-.hot-demo {
-  --hot-loop: 10s;
-}
-
-.hot-code {
-  margin: 0;
-  padding: 1rem 1.1rem;
-  font-family: var(--font-code);
-  font-size: 0.8125rem;
-  line-height: 1.75;
-  overflow-x: auto;
-  color: var(--ink);
-}
-
-.hot-dim {
-  color: var(--graphite);
-}
-
-.hot-line {
-  border-radius: 3px;
-  animation: hot-line var(--hot-loop) infinite;
-}
-
-.hot-old,
-.hot-new {
-  display: inline-block;
-  overflow: hidden;
-  vertical-align: bottom;
-  white-space: nowrap;
-  color: var(--color-ng-red-ink);
-}
-
-.hot-old {
-  width: 6ch;
-  animation: hot-old var(--hot-loop) infinite;
-}
-
-.hot-new {
-  width: 0;
-  animation: hot-new var(--hot-loop) infinite;
-}
-
-.hot-caret {
-  display: inline-block;
-  width: 2px;
-  height: 1.1em;
-  margin-left: 1px;
-  vertical-align: -0.15em;
-  background: var(--ink);
-  animation: hot-caret 1s steps(1) infinite;
-}
-
-.hot-saved {
-  color: var(--color-go);
-  opacity: 0;
-  animation: hot-saved var(--hot-loop) infinite;
-}
-
-.hot-demo .device-shot.is-swap {
-  opacity: 0;
-  animation: hot-swap var(--hot-loop) infinite;
-}
-
-.hot-step {
-  color: var(--graphite);
-  animation: var(--hot-loop) infinite;
-}
-
-.hot-step-number {
-  border-color: currentColor;
-}
-
-.hot-step[data-step='1'] {
-  animation-name: hot-step-1;
-}
-
-.hot-step[data-step='2'] {
-  animation-name: hot-step-2;
-}
-
-.hot-step[data-step='3'] {
-  animation-name: hot-step-3;
-}
-
-@keyframes hot-old {
-  0%,
-  20% {
-    width: 6ch;
-    animation-timing-function: steps(6, end);
-  }
-  32%,
-  94% {
-    width: 0;
-  }
-  96%,
-  100% {
-    width: 6ch;
-  }
-}
-
-@keyframes hot-new {
-  0%,
-  34% {
-    width: 0;
-    animation-timing-function: steps(10, end);
-  }
-  46%,
-  94% {
-    width: 10ch;
-  }
-  96%,
-  100% {
-    width: 0;
-  }
-}
-
-@keyframes hot-line {
-  0%,
-  47% {
-    background: transparent;
-  }
-  50% {
-    background: rgb(17 112 79 / 0.14);
-  }
-  70%,
-  100% {
-    background: transparent;
-  }
-}
-
-@keyframes hot-saved {
-  0%,
-  47% {
-    opacity: 0;
-  }
-  50%,
-  88% {
-    opacity: 1;
-  }
-  94%,
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes hot-swap {
-  0%,
-  50% {
-    opacity: 0;
-  }
-  56%,
-  90% {
-    opacity: 1;
-  }
-  96%,
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes hot-caret {
-  50% {
-    opacity: 0;
-  }
-}
-
-/* A step reads as current, in ink, while its part of the loop plays; its number follows. */
-@keyframes hot-step-1 {
-  0%,
-  18% {
-    color: var(--ink);
-  }
-  22%,
-  100% {
-    color: var(--graphite);
-  }
-}
-
-@keyframes hot-step-2 {
-  0%,
-  18% {
-    color: var(--graphite);
-  }
-  22%,
-  48% {
-    color: var(--ink);
-  }
-  52%,
-  100% {
-    color: var(--graphite);
-  }
-}
-
-@keyframes hot-step-3 {
-  0%,
-  48% {
-    color: var(--graphite);
-  }
-  52%,
-  92% {
-    color: var(--ink);
-  }
-  96%,
-  100% {
-    color: var(--graphite);
-  }
-}
-
-/*
  * The reveal: a block rises into place the first time it scrolls into view, once, and is then
  * left alone - a trigger, not a scroll-linked animation. Only under `.reveal-armed`, which
  * `reveal.ts` puts on the root once the page has booted, so the prerendered page shows
@@ -833,27 +699,6 @@ landing-header {
  * short opacity changes that help a reader see what changed.
  */
 @media (prefers-reduced-motion: reduce) {
-  .hot-demo * {
-    animation: none !important;
-  }
-
-  .hot-demo .hot-old {
-    width: 0;
-  }
-
-  .hot-demo .hot-new {
-    width: 10ch;
-  }
-
-  .hot-demo .device-shot.is-swap,
-  .hot-demo .hot-saved {
-    opacity: 1;
-  }
-
-  .hot-demo .hot-step {
-    color: var(--ink);
-  }
-
   .landing *,
   .landing *::before,
   .landing *::after {
@@ -864,96 +709,115 @@ landing-header {
 }
 
 /*
- * The hero's three phones, fanned: the music player forward in the middle, the bank and the
- * fitness tracker turned away behind it. Everything is a share of the fan's width, so it keeps
- * its shape from a phone screen to a desktop one. The pointer tilts the whole fan (see
- * `hero.ts`); nothing moves on touch or under reduced motion.
+ * The hero's arc: Linux and macOS windows, then an iPhone and an Android phone, on one stage
+ * 1440 wide and 380 tall at its widest, with every offset a share of it. Below 40rem the stage
+ * stays 40rem wide and the screen crops it, keeping the macOS window and the iPhone in view. The
+ * devices sit past the stage's bottom edge, where the section cuts them off.
  */
-.hero-fan {
-  --tx: 0deg;
-  --ty: 0deg;
+.hero-stage {
   position: relative;
-  aspect-ratio: 1 / 1.1;
-  width: min(100%, 40rem);
-  margin-inline: auto;
-  perspective: 1800px;
+  width: min(90rem, max(100%, 40rem));
+  aspect-ratio: 1440 / 380;
+  margin: 3.25rem 0 0 50%;
+  translate: -50% 0;
 }
 
-.hero-fan-inner {
+.hero-device {
   position: absolute;
-  inset: 0;
-  transform: rotateY(var(--tx)) rotateX(var(--ty));
-  transform-style: preserve-3d;
-  transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+  display: block;
 }
 
-.hero-glow {
-  position: absolute;
-  inset: 4% 0 8%;
-  background:
-    radial-gradient(closest-side at 50% 48%, rgb(228 0 53 / 0.16), transparent),
-    radial-gradient(closest-side at 22% 40%, rgb(124 58 237 / 0.14), transparent),
-    radial-gradient(closest-side at 80% 60%, rgb(16 185 129 / 0.1), transparent);
-  filter: blur(8px);
+.hero-window {
+  height: auto;
+  filter: drop-shadow(0 24px 30px rgb(0 0 0 / 0.18));
 }
 
-.hero-phone {
-  position: absolute;
-  top: 50%;
-  width: 41%;
-  transform-origin: 50% 70%;
-}
-
-.hero-phone[data-slot='left'] {
-  left: 3%;
+.hero-device[data-slot='linux'] {
+  left: 5.8%;
+  bottom: -6.8%;
+  width: 36.9%;
   z-index: 1;
-  transform: translateY(-46%) rotate(-8deg);
+  transform: rotate(-4deg);
+  transform-origin: 100% 100%;
 }
 
-.hero-phone[data-slot='centre'] {
-  left: 28.5%;
-  width: 43%;
-  z-index: 3;
-  transform: translateY(-53%);
-}
-
-.hero-phone[data-slot='right'] {
-  right: 3%;
+.hero-device[data-slot='macos'] {
+  left: 28.1%;
+  bottom: -6.3%;
+  width: 42.4%;
   z-index: 2;
-  transform: translateY(-43%) rotate(8deg);
+  filter: drop-shadow(0 28px 36px rgb(0 0 0 / 0.16));
 }
 
-/* On load, the phones rise into place, the centre one first. */
-.hero-intro .hero-phone {
-  animation: hero-phone-in 1s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-.hero-intro .hero-phone[data-slot='centre'] {
-  animation-delay: 0.15s;
-}
-.hero-intro .hero-phone[data-slot='left'],
-.hero-intro .hero-phone[data-slot='right'] {
-  animation-delay: 0.35s;
+.hero-device[data-slot='ios'] {
+  left: 69.4%;
+  bottom: -14%;
+  width: 11.8%;
+  z-index: 3;
+  transform: rotate(3deg);
 }
 
-@keyframes hero-phone-in {
-  from {
-    opacity: 0;
-    translate: 0 2.5rem;
+.hero-device[data-slot='android'] {
+  left: 81.2%;
+  bottom: -22%;
+  width: 11.1%;
+  z-index: 2;
+  transform: rotate(8deg);
+}
+
+/*
+ * On a phone the wide arc would be cropped to the macOS window alone, so the same captures are
+ * restacked: the two phones in front, the desktop windows behind them.
+ */
+@media (width < 40rem) {
+  .hero-stage {
+    width: 100%;
+    aspect-ratio: 1 / 0.96;
+    margin-top: 2.5rem;
+  }
+  .hero-device[data-slot='linux'] {
+    left: -10%;
+    bottom: 42%;
+    width: 68%;
+    transform: rotate(-5deg);
+    transform-origin: 50% 50%;
+  }
+  .hero-device[data-slot='macos'] {
+    left: 40%;
+    bottom: 36%;
+    width: 72%;
+  }
+  .hero-device[data-slot='ios'] {
+    left: 13%;
+    bottom: -9%;
+    width: 36%;
+    transform: rotate(-4deg);
+  }
+  .hero-device[data-slot='android'] {
+    left: 51%;
+    bottom: -15%;
+    width: 34%;
+    z-index: 3;
+    transform: rotate(6deg);
   }
 }
 
-.hero-fan-caption {
-  margin-top: 0.5rem;
-  text-align: center;
-  font-family: var(--font-code);
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
-  color: var(--graphite);
+/* On load, the screens rise into place from the centre out. */
+.hero-intro .hero-device {
+  animation: hero-device-in 1s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: 0.3s;
+}
+.hero-intro .hero-device[data-slot='macos'] {
+  animation-delay: 0.15s;
+}
+.hero-intro .hero-device[data-slot='android'] {
+  animation-delay: 0.45s;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .hero-fan-inner {
-    transition: none;
+@keyframes hero-device-in {
+  from {
+    opacity: 0;
+    translate: 0 2.5rem;
   }
 }
 
@@ -961,26 +825,26 @@ landing-header {
  * Scrollbars on the page's code: thin, a translucent ink thumb on a clear track, so they follow
  * the theme. The standard properties for Chrome and Firefox, the prefixed ones for Safari.
  */
-.landing :is(.code-sheet-body, .setup-body, .hot-code, pre) {
+.landing :is(.code-sheet-body, .setup-body, pre) {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--ink) 22%, transparent) transparent;
 }
 
-.landing :is(.code-sheet-body, .setup-body, .hot-code, pre)::-webkit-scrollbar {
+.landing :is(.code-sheet-body, .setup-body, pre)::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
-.landing :is(.code-sheet-body, .setup-body, .hot-code, pre)::-webkit-scrollbar-track {
+.landing :is(.code-sheet-body, .setup-body, pre)::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.landing :is(.code-sheet-body, .setup-body, .hot-code, pre)::-webkit-scrollbar-thumb {
+.landing :is(.code-sheet-body, .setup-body, pre)::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
   border-radius: 999px;
   background: color-mix(in srgb, var(--ink) 22%, transparent) padding-box;
 }
 
-.landing :is(.code-sheet-body, .setup-body, .hot-code, pre)::-webkit-scrollbar-thumb:hover {
+.landing :is(.code-sheet-body, .setup-body, pre)::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--ink) 38%, transparent) padding-box;
 }

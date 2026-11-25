@@ -44,7 +44,7 @@
  * own copy or a document's front matter, the same code path a client navigation runs, and this file
  * only reads them back out of `document.head` once a route has settled - see `render()`.
  */
-import { chromium, type Page } from 'playwright';
+import { chromium, type Browser, type Page } from 'playwright';
 import { execFile } from 'node:child_process';
 import { createServer, type ServerResponse } from 'node:http';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -52,6 +52,7 @@ import path from 'node:path';
 import url from 'node:url';
 import { promisify } from 'node:util';
 import { READING_ORDER, SECTIONS, STANDALONE_PAGES, flattenItems } from '../src/navigation.ts';
+import { BLOG_POSTS, coverImage, type BlogPost } from '../src/blog/posts.ts';
 import { EXAMPLE_APPS } from '../src/example-apps/registry.ts';
 import { LESSONS } from '../src/learn/outline.ts';
 import { DEFAULT_DESCRIPTION, SITE_NAME, urlFor } from '../src/site.ts';
@@ -111,11 +112,20 @@ function routes(): readonly RouteEntry[] {
       source: path.join(root, '../..', app.sourceRoot),
     })),
   ];
+  // The blog: its index, and each post, whose prose is its own component.
+  const blog = [
+    { path: '/blog', source: path.join(root, 'src/blog/posts.ts') },
+    ...BLOG_POSTS.map((post) => ({
+      path: `/blog/${post.slug}`,
+      source: path.join(root, post.source),
+    })),
+  ];
   return [
     { path: '/', source: path.join(root, 'src/landing/landing.ts') },
     ...pages,
     ...course,
     ...examples,
+    ...blog,
   ];
 }
 
@@ -298,6 +308,69 @@ async function writeSitemap(routeList: readonly RouteEntry[]): Promise<void> {
   await writeFile(path.join(dist, 'sitemap.xml'), xml);
 }
 
+/** The blog as RSS 2.0, newest first, at the address the blog's index links to. */
+async function writeFeed(posts: readonly BlogPost[]): Promise<void> {
+  const items = posts
+    .map((post) => {
+      const link = escapeXml(urlFor(`/blog/${post.slug}`));
+      return (
+        `    <item>\n      <title>${escapeXml(post.title)}</title>\n      <link>${link}</link>\n` +
+        `      <guid>${link}</guid>\n      <pubDate>${new Date(`${post.date}T00:00:00Z`).toUTCString()}</pubDate>\n` +
+        `      <description>${escapeXml(post.summary)}</description>\n    </item>`
+      );
+    })
+    .join('\n');
+  const xml =
+    '<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n  <channel>\n' +
+    `    <title>${escapeXml(SITE_NAME)} blog</title>\n    <link>${escapeXml(urlFor('/blog'))}</link>\n` +
+    '    <description>Announcements, releases and notes from the people who build Angular Native.</description>\n' +
+    `${items}\n  </channel>\n</rss>\n`;
+  await mkdir(path.join(dist, 'blog'), { recursive: true });
+  await writeFile(path.join(dist, 'blog/rss.xml'), xml);
+}
+
+/**
+ * Each post's cover as its social preview, at the 1200 x 630 that Open Graph and X expect: the
+ * cover laid out at half that size and captured at twice the pixel density, so its lockup keeps
+ * the proportions it has on the page. Drawn from the page rather than kept as a file beside it,
+ * so the preview cannot fall out of step with the cover.
+ */
+async function writeCovers(
+  browser: Browser,
+  origin: string,
+  posts: readonly BlogPost[],
+): Promise<void> {
+  const page = await browser.newPage({
+    viewport: { width: 600, height: 315 },
+    deviceScaleFactor: 2,
+    colorScheme: 'light',
+    reducedMotion: 'reduce',
+  });
+  try {
+    for (const post of posts) {
+      await page.goto(`${origin}/blog/${post.slug}`, { waitUntil: 'networkidle' });
+      const cover = page.locator('blog-cover').first();
+      await cover.evaluate((element: HTMLElement) => {
+        Object.assign(element.style, {
+          position: 'fixed',
+          inset: '0',
+          zIndex: '2147483647',
+          width: '100vw',
+          height: '100vh',
+          maxWidth: 'none',
+          margin: '0',
+          aspectRatio: 'auto',
+          borderRadius: '0',
+        });
+        return document.fonts.ready;
+      });
+      await cover.screenshot({ path: path.join(dist, coverImage(post)), animations: 'disabled' });
+    }
+  } finally {
+    await page.close();
+  }
+}
+
 async function writeRobots(): Promise<void> {
   const body = `User-agent: *\nAllow: /\n\nSitemap: ${urlFor('/sitemap.xml')}\n`;
   await writeFile(path.join(dist, 'robots.txt'), body);
@@ -400,7 +473,10 @@ async function prerender(): Promise<void> {
 
     await writeSitemap(routeList);
     await writeRobots();
-    console.log('  wrote sitemap.xml and robots.txt');
+    await writeFeed(BLOG_POSTS);
+    console.log('  wrote sitemap.xml, robots.txt and blog/rss.xml');
+    await writeCovers(browser, server.origin, BLOG_POSTS);
+    console.log("  wrote each blog post's social preview image");
     await writeLlms();
     console.log('  wrote llms.txt, llms-full.txt, agents.md and a markdown copy of every page');
   } finally {

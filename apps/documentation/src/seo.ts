@@ -29,6 +29,8 @@ export interface PageSeo {
   /** Leading slash, no trailing one except for `/` itself - what `urlFor` expects. */
   readonly path: string;
   readonly type: 'website' | 'article';
+  /** The social preview image, as a path from the site root. The site's own when unset. */
+  readonly image?: string;
   readonly breadcrumbs?: readonly Breadcrumb[];
   /** Only the home page has one today: `SoftwareSourceCode`. */
   readonly structuredData?: object;
@@ -55,12 +57,13 @@ export class Seo {
     this.meta.updateTag({ property: 'og:url', content: url });
     this.meta.updateTag({ property: 'og:type', content: page.type });
     this.meta.updateTag({ property: 'og:site_name', content: SITE_NAME });
-    this.meta.updateTag({ property: 'og:image', content: urlFor(OG_IMAGE) });
+    const image = urlFor(page.image ?? OG_IMAGE);
+    this.meta.updateTag({ property: 'og:image', content: image });
 
     this.meta.updateTag({ name: 'twitter:card', content: 'summary_large_image' });
     this.meta.updateTag({ name: 'twitter:title', content: page.title });
     this.meta.updateTag({ name: 'twitter:description', content: page.description });
-    this.meta.updateTag({ name: 'twitter:image', content: urlFor(OG_IMAGE) });
+    this.meta.updateTag({ name: 'twitter:image', content: image });
 
     this.structuredData(
       page.structuredData ??
