@@ -153,18 +153,40 @@ describe('inherit, written for a border', () => {
     assert.deepEqual(sides(s.props('same')), [[2], [2], [2]]);
   });
 
+  it("is the side the parent's logical border lands on, in the parent's direction", () => {
+    const css =
+      '.ltr { border-inline-start: 4px solid rgb(1, 2, 3) } ' +
+      '.rtl { direction: rtl; border-inline-start: 4px solid rgb(1, 2, 3) } .same { border: inherit }';
+    for (const [parent, side, other] of [
+      ['ltr', 'Left', 'Right'],
+      ['rtl', 'Right', 'Left'],
+    ] as const) {
+      const s = scene(css);
+      s.element('same', s.element(parent));
+      assert.equal(s.props('same')[`border${side}Width`], 4, parent);
+      assert.equal(s.props('same')[`border${side}Color`], 'rgb(1, 2, 3)', parent);
+      assert.equal(s.props('same')[`border${other}Width`] ?? null, null, parent);
+    }
+  });
+
   it('compiles with no warning, and so do its longhands', () => {
     const said: string[] = [];
     const css =
       '.a { border: inherit } .b { border-width: inherit } .c { border-color: inherit } ' +
-      '.d { border-style: inherit } .e { border-top: inherit } .f { border-left-color: inherit }';
+      '.d { border-style: inherit } .e { border-top-width: inherit } .f { border-left-color: inherit }';
     compileCss(css, 'app.css', { onUnsupported: (m) => said.push(m) });
     assert.deepEqual(said, []);
   });
 
-  it("is refused for a side's style, and a logical side, which it cannot take whole", () => {
+  it("is refused for a side's style or shorthand, and a logical side, which it cannot take whole", () => {
     // Native has one style for every side, and a logical side's parent value is a physical one.
-    for (const css of ['.a { border-top-style: inherit }', '.a { border-inline-start: inherit }']) {
+    // A side's shorthand sets its style too, which it cannot take, and would be half inherited.
+    const refused = [
+      '.a { border-top-style: inherit }',
+      '.a { border-top: inherit }',
+      '.a { border-inline-start: inherit }',
+    ];
+    for (const css of refused) {
       const said: string[] = [];
       compileCss(css, 'app.css', { onUnsupported: (m) => said.push(m) });
       assert.match(said.join(), /CSS-wide keyword/, css);

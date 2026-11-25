@@ -5197,9 +5197,15 @@ export class StyleResolver {
     important: Record<string, unknown> | null,
   ): void {
     const inline = this.parentSet();
+    const read = (prop: string) =>
+      inline[prop] ?? parentInherited[prop] ?? this.parentOf?.style[prop];
+    // A physical side the parent set as a logical one, `border-inline-start`, is that side in the
+    // parent's direction, which is what CSS hands down: the parent's computed physical side.
+    const twin = TWIN[this.readsRightToLeft(this.parentOf?.style ?? EMPTY) ? 'rtl' : 'ltr'];
     for (const prop of declaration.props) {
       if (!declaration.important && important !== null && prop in important) continue;
-      const value = inline[prop] ?? parentInherited[prop] ?? this.parentOf?.style[prop];
+      const logical = twin[prop];
+      const value = read(prop) ?? (logical === undefined ? undefined : read(logical));
       if (value === undefined) delete own[prop];
       else own[prop] = value;
     }

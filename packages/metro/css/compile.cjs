@@ -2555,7 +2555,8 @@ const INHERITS = {
  * The border properties `inherit` is taken for, each with the props it is the parent's values of:
  * a side's width and colour, and the one style native has for every side. `border: inherit` is
  * all of them, as Chrome inherits all twelve longhands. A side's style has no prop of its own, so
- * `border-top-style: inherit` is refused as a side's style is.
+ * `border-top-style: inherit` is refused as a side's style is, and so is `border-top: inherit`,
+ * which would take the side's width and colour and leave its style.
  */
 function borderInherits() {
   // The physical sides: a logical one is an alias of one of them, resolved by the direction.
@@ -2572,7 +2573,6 @@ function borderInherits() {
     'border-style': ['borderStyle'],
   };
   for (const [side, prop] of Object.entries(sides)) {
-    table[`border-${side}`] = [`border${prop}Width`, `border${prop}Color`];
     table[`border-${side}-width`] = [`border${prop}Width`];
     table[`border-${side}-color`] = [`border${prop}Color`];
   }
