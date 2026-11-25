@@ -718,10 +718,7 @@ function deferVar(value, context) {
       `${context}: arithmetic on var() only makes sense for a length, and '${property}' is not`,
     );
   }
-  // A line height takes a number too, which multiplies the font size.
-  if (arithmetic && !fits(parts[0], declared === 'lineHeight' ? declared : kind)) {
-    throw mixedTypes(context);
-  }
+  if (arithmetic && !fits(parts[0], kind)) throw mixedTypes(context);
 
   return {
     props: propsFor(property),
