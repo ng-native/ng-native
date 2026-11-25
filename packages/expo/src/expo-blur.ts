@@ -9,9 +9,11 @@
  * ```
  *
  * On Android the view on its own draws its tint, not a blur: `expo-blur` blurs there only the
- * content of a `BlurTargetView` it is given, which this does not cover.
+ * content of an `<expo-blur-target>` given as `[blurTarget]`, with a `blurMethod` other than `none`.
  */
-import { Component, input } from '@angular/core';
+import { Component, Injector, afterNextRender, effect, inject, input, signal } from '@angular/core';
+import { Engine, type EngineNode } from '@ng-native/fabric';
+import type { ExpoBlurTarget } from './expo-blur-target.ts';
 import { optionalNumber } from './transforms.ts';
 
 /** The tints `expo-blur` takes. Each but `default` adds a translucent colour over the blur. */
@@ -49,6 +51,7 @@ export type BlurMethod = 'none' | 'dimezisBlurView' | 'dimezisBlurViewSdk31Plus'
     '[intensity]': 'intensity()',
     '[blurReductionFactor]': 'blurReductionFactor()',
     '[blurMethod]': 'blurMethod()',
+    '[blurTargetId]': 'targetTag()',
   },
 })
 export class ExpoBlur {
@@ -59,4 +62,28 @@ export class ExpoBlur {
   readonly blurReductionFactor = input<number>(undefined, { transform: optionalNumber });
   /** Android only. */
   readonly blurMethod = input<BlurMethod>();
+  /** The `<expo-blur-target>` whose content the blur samples. Android only, where it is needed. */
+  readonly blurTarget = input<ExpoBlurTarget | null>();
+
+  private readonly engine = inject(Engine);
+  private readonly injector = inject(Injector);
+  /** The target's view tag, committed as `blurTargetId` as `BlurView` does, or null with none. */
+  protected readonly targetTag = signal<number | null>(null);
+
+  constructor() {
+    effect(() => this.follow(this.blurTarget()?.node ?? null));
+  }
+
+  /** The target's tag. A view not yet committed has none, so it is read again once it has. */
+  private follow(node: EngineNode | null): void {
+    const tag = node && this.engine.tagOf(node);
+    this.targetTag.set(tag ?? null);
+    if (!node || tag !== null) return;
+    afterNextRender(
+      () => {
+        if (this.blurTarget()?.node === node) this.targetTag.set(this.engine.tagOf(node));
+      },
+      { injector: this.injector },
+    );
+  }
 }

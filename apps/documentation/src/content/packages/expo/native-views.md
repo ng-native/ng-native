@@ -71,6 +71,7 @@ have to look each one up:
 | -------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------- |
 | `expo-image`                           | `ExpoImage`                             | Takes `source` as a list; a single `{ uri }` is wrapped by the caller. |
 | `expo-blur`                            | `ExpoBlur` (`ExpoBlurView`)             | A blur of what is _behind_ a view - the one thing CSS cannot express.  |
+| `expo-blur-target`                     | `ExpoBlur` (`ExpoBlurTargetView`)       | What a blur samples on Android. A plain view on iOS.                   |
 | `expo-video`                           | `ExpoVideo` (`VideoView`)               | `SurfaceVideoView` on Android. Bind `player` to the player's `id`.     |
 | `expo-camera`                          | `ExpoCamera`                            | The module's default view. See [Camera](/packages/expo/camera).        |
 | `apple-sign-in-button`                 | `ExpoAppleAuthentication`               | See [Sign in with Apple](/packages/expo/apple-sign-in). iOS only.      |
@@ -83,9 +84,25 @@ have to look each one up:
 | `expo-maps-google` / `expo-maps-apple` | `ExpoGoogleMaps` / `ExpoAppleMaps`      | Two modules, one view each. Typed as one: [Maps](/packages/expo/maps). |
 
 On Android, `<expo-blur>` on its own draws its tint, not a blur. `expo-blur` blurs there only the
-content of a `BlurTargetView` it is given, through its `blurMethod` and `blurTargetId` props; see
-[`expo-blur`'s documentation](https://docs.expo.dev/versions/latest/sdk/blur-view/). This table
-registers the blur view only, not the target.
+content of a `BlurTargetView` it is given; see
+[`expo-blur`'s documentation](https://docs.expo.dev/versions/latest/sdk/blur-view/). Here that is
+`<expo-blur-target>`: put what is to be blurred in it, register it with
+`registerExpoViews('expo-blur-target')`, and give it to the blur's `[blurTarget]`, with a
+`blurMethod` other than `none`. The blur commits the target's view tag as `blurTargetId`, as
+`BlurView` does. Elsewhere the target is a plain view.
+
+```ts
+@Component({
+  imports: [ExpoBlur, ExpoBlurTarget, Image],
+  template: `
+    <expo-blur-target #behind class="absolute inset-0"><image [source]="photo" /></expo-blur-target>
+    <expo-blur class="absolute inset-0" [blurTarget]="behind" blurMethod="dimezisBlurView" />
+  `,
+})
+export class Frosted {
+  protected readonly photo = { uri: 'https://example.com/photo.jpg' };
+}
+```
 
 Registering one you have not installed does not error at registration time; it produces an element
 that commits as nothing (`UnimplementedNativeView`), which is why elements are named one at a time
@@ -103,7 +120,8 @@ Import it and keep registering the element. `Camera` is on `@ng-native/expo/came
 | Component            | Element                                | What it adds                                                                                                                                                                             |
 | -------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ExpoImage`          | `expo-image`                           | `source` and `contentFit` typed.                                                                                                                                                         |
-| `ExpoBlur`           | `expo-blur`                            | `tint`, `intensity`, and Android's `blurMethod` and `blurReductionFactor`.                                                                                                               |
+| `ExpoBlur`           | `expo-blur`                            | `tint`, `intensity`, and Android's `blurMethod`, `blurReductionFactor` and `blurTarget`.                                                                                                 |
+| `ExpoBlurTarget`     | `expo-blur-target`                     | Its content, which a blur's `blurTarget` samples on Android.                                                                                                                             |
 | `ExpoVideo`          | `expo-video`                           | `expo-video`'s view props. `player` takes a `videoPlayer()` or its id. See [Players](/packages/expo/player).                                                                             |
 | `Camera`             | `expo-camera`                          | `expo-camera`'s view props, `flash` and `autofocus` committed as the `flashMode` and `autoFocus` native reads, and the view's functions. See [Camera](/packages/expo/camera#view-props). |
 | `ExpoGL`             | `expo-gl`                              | `msaaSamples`, `enableExperimentalWorkletSupport`, and `surfaceCreate` typed.                                                                                                            |

@@ -109,6 +109,7 @@ export {
 } from './expo-ui-components.ts';
 export { ExpoImage, type ExpoImageContentFit, type ExpoImageSource } from './expo-image.ts';
 export { ExpoBlur, type BlurMethod, type BlurTint } from './expo-blur.ts';
+export { ExpoBlurTarget } from './expo-blur-target.ts';
 export { ExpoGL } from './expo-gl.ts';
 export { ExpoLivePhoto, type LivePhotoAsset } from './expo-live-photo.ts';
 export { ExpoMeshGradient } from './expo-mesh-gradient.ts';

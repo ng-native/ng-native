@@ -15,7 +15,7 @@
  * registers are ordinary elements in a template.
  */
 import { expoViewName } from '@ng-native/device';
-import { registerViewName, type PlatformViewName, type ViewNameOptions } from '@ng-native/fabric';
+import { registerViewName, type ViewNameOptions } from '@ng-native/fabric';
 import { currentPlatform, optional } from './native.ts';
 
 /**
@@ -30,7 +30,7 @@ export interface ExpoViewOptions {
    * view is named differently on each platform names both: `expo-video`'s is `VideoView` on iOS
    * and `SurfaceVideoView` on Android.
    */
-  readonly viewName?: string | PlatformViewName;
+  readonly viewName?: string | { readonly ios: string | null; readonly android: string | null };
   /**
    * Props the module's React component would have applied before native saw them. Expo's
    * wrappers do less of this than React Native's, but they do some: `expo-image` resolves a
@@ -64,10 +64,7 @@ export function registerExpoView(
   registerViewName(
     elementName,
     typeof viewName === 'object'
-      ? {
-          ios: expoViewName(moduleName, viewName.ios),
-          android: expoViewName(moduleName, viewName.android),
-        }
+      ? { ios: named(moduleName, viewName.ios), android: named(moduleName, viewName.android) }
       : expoViewName(moduleName, viewName),
     options?.defaultProps,
     {
@@ -76,19 +73,24 @@ export function registerExpoView(
       fontNames: options?.fontNames,
     },
   );
+  const view =
+    typeof viewName === 'object'
+      ? currentPlatform() === 'android'
+        ? viewName.android
+        : viewName.ios
+      : viewName;
+  // A platform without the module's view takes a plain one, which needs nothing required.
+  if (view === null) return;
   optional(() =>
     (
       require('expo') as { requireNativeView(module: string, view?: string): unknown }
-    ).requireNativeView(
-      moduleName,
-      typeof viewName === 'object'
-        ? currentPlatform() === 'android'
-          ? viewName.android
-          : viewName.ios
-        : viewName,
-    ),
+    ).requireNativeView(moduleName, view),
   );
 }
+
+/** A module's view, or a plain view for a platform the module has none on. */
+const named = (moduleName: string, view: string | null): string =>
+  view === null ? 'View' : expoViewName(moduleName, view);
 
 /**
  * The views worth knowing the names of, so an app does not have to look each one up.
@@ -115,6 +117,11 @@ export const EXPO_VIEWS: Readonly<Record<string, [string, ExpoViewOptions?]>> = 
     'ExpoBlur',
     { viewName: 'ExpoBlurView', defaultProps: { intensity: 50, tint: 'default' } },
   ],
+  /**
+   * What `expo-blur` blurs on Android: `ExpoBlurTargetView`, as `BlurTargetView` asks for it there.
+   * A plain view on iOS, where `BlurTargetView` is one.
+   */
+  'expo-blur-target': ['ExpoBlur', { viewName: { ios: null, android: 'ExpoBlurTargetView' } }],
   /**
    * `expo-video`. The player itself is a shared object the module hands out; this is its view,
    * which has another name on Android, as `expo-video`'s own `NativeVideoView` asks for it. Bind
