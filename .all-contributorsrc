@@ -171,6 +171,15 @@
       "contributions": [
         "doc"
       ]
+    },
+    {
+      "login": "phr4nky",
+      "name": "Frank Kuhn",
+      "avatar_url": "https://avatars.githubusercontent.com/u/174056391?v=4",
+      "profile": "https://www.p4ck3tz.com",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 7,
