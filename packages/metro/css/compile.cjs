@@ -699,8 +699,7 @@ function deferVar(value, context) {
 
   // Arithmetic on a length is a length, which a line height takes as it is: `leading-6` is
   // `calc(var(--spacing) * 6)`.
-  const declared = kindOf(property);
-  const kind = arithmetic && declared === 'lineHeight' ? 'length' : declared;
+  const kind = kindOf(property);
   // A property refused whatever its value is refused for that, a token in it included.
   if (kind === null && !translates(property)) throw unsupported(property, context);
   if (kind === null) {
@@ -714,7 +713,7 @@ function deferVar(value, context) {
   const reference = varPart.value?.name?.ident;
   if (!reference) throw new CssUnsupported(`${context}: could not read the var() reference`);
 
-  if (arithmetic && kind !== 'length') {
+  if (arithmetic && !ARITHMETIC_KINDS.has(kind)) {
     throw new CssUnsupported(
       `${context}: arithmetic on var() only makes sense for a length, and '${property}' is not`,
     );
@@ -734,6 +733,9 @@ function deferVar(value, context) {
     ...(property === 'background' ? backgroundLayers() : {}),
   };
 }
+
+/** The kinds a token with arithmetic around it is read as: a length, a number, a line height. */
+const ARITHMETIC_KINDS = new Set(['length', 'number', 'lineHeight']);
 
 /**
  * What only the `background` shorthand's token has: it may hold the images as well as the colour,

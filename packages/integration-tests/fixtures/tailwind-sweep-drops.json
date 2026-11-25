@@ -7665,10 +7665,6 @@
     "order-[rgb(10,20,30)]",
     "order-[rgb(10,20,30)]!"
   ],
-  "dropped 'order': arithmetic on var() only makes sense for a length, and '…' is not": [
-    "-order-(--x)",
-    "-order-(--x)!"
-  ],
   "dropped 'outline-color': '…' is not a value native can take": [
     "outline-[200ms]",
     "outline-[200ms]!",
@@ -10258,10 +10254,6 @@
     "z-[calc(1rem+2px)]!",
     "z-[rgb(10,20,30)]",
     "z-[rgb(10,20,30)]!"
-  ],
-  "dropped 'z-index': arithmetic on var() only makes sense for a length, and '…' is not": [
-    "-z-(--x)",
-    "-z-(--x)!"
   ],
   "dropped 'zoom': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
     "zoom-(--x)",
