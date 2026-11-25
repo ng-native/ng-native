@@ -1,0 +1,48 @@
+import { Component, signal } from '@angular/core';
+import { FormField, form } from '@angular/forms/signals';
+import {
+  UiDatePickerDialog,
+  UiHost,
+  UiTimePickerDialog,
+} from '../../expo/src/expo-ui-components.ts';
+
+/** The two ends of a time range, each a field picked through Compose's dialogs. */
+@Component({
+  selector: 'x-ui-picker-dialogs',
+  imports: [FormField, UiDatePickerDialog, UiHost, UiTimePickerDialog],
+  template: `
+    <ui-host>
+      @if (open() === 'date') {
+        <ui-date-picker-dialog
+          nativeID="date"
+          variant="input"
+          confirmButtonLabel="Set"
+          dismissButtonLabel="Back"
+          color="#ff0000"
+          [selectableDates]="range()"
+          [formField]="f.start"
+          (dateSelected)="open.set(null)"
+          (dismissRequest)="open.set(null)"
+        />
+      }
+      @if (open() === 'time') {
+        <ui-time-picker-dialog
+          nativeID="time"
+          [is24Hour]="false"
+          [formField]="f.end"
+          (dateSelected)="open.set(null)"
+          (dismissRequest)="open.set(null)"
+        />
+      }
+    </ui-host>
+  `,
+})
+export class UiPickerDialogs {
+  readonly range = signal<{ start: string } | undefined>({ start: '2026-01-01T00:00:00.000Z' });
+  readonly open = signal<'date' | 'time' | null>('date');
+  readonly data = signal<{ start: Date | null; end: Date | null }>({
+    start: new Date('2026-10-01T00:00:00.000Z'),
+    end: null,
+  });
+  readonly f = form(this.data);
+}

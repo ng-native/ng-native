@@ -30,6 +30,8 @@ import {
   ElementRef,
   InjectionToken,
   Injector,
+  type ModelSignal,
+  type OutputEmitterRef,
   type Signal,
   afterNextRender,
   booleanAttribute,
@@ -702,6 +704,109 @@ export class UiDatePicker {
 
 /** How long after a date picker appears its first report is taken to be about itself. */
 const APPEARING_MS = 1000;
+
+/** What a picker dialog sends when the user confirms: the moment, in milliseconds since the epoch. */
+export type UiDateSelectedEvent = NativeSyntheticEvent<{ readonly date: number }>;
+
+/**
+ * A Compose picker dialog's pick, as the `value` model a Signal Forms field binds. The dialog
+ * reports only a confirm, never the date it opens on, so every report is the user's.
+ */
+function reportDialogPicks(value: ModelSignal<Date | null>, touch: OutputEmitterRef<void>) {
+  listen('topDateSelected', ({ date }) => {
+    if (typeof date !== 'number') return;
+    value.set(new Date(date));
+    touch.emit();
+  });
+  reportClicksOn('topDateSelected');
+}
+
+/**
+ * Compose's `DatePickerDialog`, Android only: the system date dialog, shown while it is rendered.
+ * Render it behind an `@if` and remove it on `(dateSelected)` and `(dismissRequest)`, as the dialog
+ * does not close itself. Put it in a `ui-host`.
+ *
+ * A Signal Forms field as it stands - `<ui-date-picker-dialog [formField]="f.start" />` - through
+ * its `value` model, a `Date` (or null): the dialog opens on it and confirming writes the pick
+ * back. With no date it opens on this month and its confirm button waits for a pick. Compose
+ * reports the picked day at midnight UTC.
+ */
+@Component({
+  selector: 'ui-date-picker-dialog',
+  template: '',
+  host: {
+    '[initialDate]': 'initialDate()',
+    '[variant]': 'variant()',
+    '[selectableDates]': 'resolvedSelectableDates()',
+    '[confirmButtonLabel]': 'confirmButtonLabel()',
+    '[dismissButtonLabel]': 'dismissButtonLabel()',
+    '[color]': 'color()',
+  },
+})
+export class UiDatePickerDialog {
+  protected readonly nativeView = nativeView();
+  readonly variant = input<'picker' | 'input'>();
+  readonly selectableDates = input<{ readonly start?: UiDate; readonly end?: UiDate }>();
+  readonly confirmButtonLabel = input<string>();
+  readonly dismissButtonLabel = input<string>();
+  readonly color = input<string>();
+  /** The picked date: what `[formField]` binds. */
+  readonly value = model<Date | null>(null);
+  /** The user confirmed, which is when a form shows a field's errors. */
+  readonly touch = output<void>();
+  readonly dateSelected = output<UiDateSelectedEvent>();
+  /** Cancel, Back or a tap outside: the dialog should be removed. */
+  readonly dismissRequest = output<NativeSyntheticEvent<Record<string, never>>>();
+
+  protected readonly initialDate = computed(() => this.value()?.getTime() ?? null);
+  protected readonly resolvedSelectableDates = computed(() => {
+    const range = this.selectableDates();
+    return (
+      range && { start: milliseconds(range.start) ?? null, end: milliseconds(range.end) ?? null }
+    );
+  });
+
+  constructor() {
+    reportDialogPicks(this.value, this.touch);
+  }
+}
+
+/**
+ * Compose's `TimePickerDialog`, Android only: the system time dialog, shown while it is rendered,
+ * and removed as `ui-date-picker-dialog` is. It opens on `value`'s time, or now, and confirming
+ * writes back `value`'s day, or today, at the picked hour and minute. `is24Hour` defaults to true, as Compose's.
+ */
+@Component({
+  selector: 'ui-time-picker-dialog',
+  template: '',
+  host: {
+    '[initialDate]': 'initialDate()',
+    '[is24Hour]': 'is24Hour()',
+    '[confirmButtonLabel]': 'confirmButtonLabel()',
+    '[dismissButtonLabel]': 'dismissButtonLabel()',
+    '[color]': 'color()',
+  },
+})
+export class UiTimePickerDialog {
+  protected readonly nativeView = nativeView();
+  readonly is24Hour = input<boolean>(undefined, { transform: optionalBoolean });
+  readonly confirmButtonLabel = input<string>();
+  readonly dismissButtonLabel = input<string>();
+  readonly color = input<string>();
+  /** The picked time: what `[formField]` binds. */
+  readonly value = model<Date | null>(null);
+  /** The user confirmed, which is when a form shows a field's errors. */
+  readonly touch = output<void>();
+  readonly dateSelected = output<UiDateSelectedEvent>();
+  /** Cancel, Back or a tap outside: the dialog should be removed. */
+  readonly dismissRequest = output<NativeSyntheticEvent<Record<string, never>>>();
+
+  protected readonly initialDate = computed(() => this.value()?.getTime() ?? null);
+
+  constructor() {
+    reportDialogPicks(this.value, this.touch);
+  }
+}
 
 /**
  * Present in a `ui-picker`'s own view, whose segmented buttons and menu items on Android are the

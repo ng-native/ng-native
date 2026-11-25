@@ -157,6 +157,14 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   nothing. `range`, an optional `start` and an optional `end` as ISO text, limits the dates that
   can be picked on both: from `start` on, up to `end`, or between the two. `accessibilityLabel` is
   what VoiceOver reads for it, and TalkBack with `@expo/ui` 57.0.21 or later. `title` is iOS only.
+- **`UiDatePickerDialog`** and **`UiTimePickerDialog`** - Android only: Compose's date and time
+  picker dialogs, shown while they are rendered. Show one behind an `@if` inside a `<ui-host>`, and
+  remove it on `(dateSelected)` and `(dismissRequest)`, as the dialog does not close itself. Each is
+  a Signal Forms field like `UiDatePicker`: it opens on its `value` and a confirm writes the pick
+  back as a `Date` and emits `touch`; a dismissal writes nothing. The date dialog reports the
+  picked day at midnight UTC, and takes `variant` (`'picker'` or `'input'`) and `selectableDates`,
+  an optional `start` and `end`. The time dialog keeps `value`'s day, or today, and takes
+  `is24Hour`. Both take `confirmButtonLabel`, `dismissButtonLabel` and `color`.
 - **`UiPicker`** - a SwiftUI `Picker` on iOS, Compose's segmented buttons or dropdown menu on
   Android, and a Signal Forms field. `options` draws the choices;
   see [Choices: `UiPicker`](#choices-uipicker) below.
@@ -693,5 +701,7 @@ closes without waiting for a sheet to slide away.
 <!-- api: UiImage -->
 <!-- api: UiText -->
 <!-- api: UiDatePicker -->
+<!-- api: UiDatePickerDialog -->
+<!-- api: UiTimePickerDialog -->
 <!-- api: UiPicker -->
 <!-- api: UiBottomSheet -->
