@@ -250,13 +250,16 @@ final class DocumentScan: NSObject, VNDocumentCameraViewControllerDelegate {
   private func finish(_ answer: () throws -> [[String: Any]]) {
     guard let promise else { return }
     self.promise = nil
-    do {
-      promise.resolve(try answer())
-    } catch let failure as TextRecognitionModule.ReadFailure {
+    let outcome = Result { try answer() }
+    // Released before the promise settles, so a scan started from its answer finds none open.
+    DispatchQueue.main.async(execute: ended)
+    switch outcome {
+    case .success(let pages):
+      promise.resolve(pages)
+    case .failure(let failure as TextRecognitionModule.ReadFailure):
       promise.reject(failure.code, failure.message)
-    } catch {
+    case .failure(let error):
       promise.reject("ERR_DOCUMENT_SCAN", error.localizedDescription)
     }
-    DispatchQueue.main.async(execute: ended)
   }
 }
