@@ -146,7 +146,7 @@
     "@angular/compiler": "22.2.0",
     "@angular/core": "22.2.0",
     "@angular/forms": "22.2.0",
-    "@angular/router": "22.2.0",
+    "@angular/router": "22.2.1",
     "@ng-native/components": "workspace:*",
     "@ng-native/device": "workspace:*",
     "@ng-native/router": "workspace:*",

@@ -18,7 +18,7 @@
     "@angular/core": "22.2.0",
     "@angular/forms": "22.2.0",
     "@angular/platform-browser": "22.2.0",
-    "@angular/router": "22.2.0",
+    "@angular/router": "22.2.1",
     "@expo-google-fonts/manrope": "^0.4.3",
     "@maskito/angular": "^5.6.1",
     "@maskito/core": "^5.6.1",
