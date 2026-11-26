@@ -57,8 +57,14 @@ public final class TextRecognitionModule: Module {
         promise.reject("ERR_SCAN_IN_PROGRESS", "A document scan is already open")
         return
       }
+      // UIKit drops a presentation while another is still on its way in or out, and then no
+      // callback runs at all, so the scan would never end.
       guard let presenter = self.appContext?.utilities?.currentViewController() else {
         promise.reject("ERR_DOCUMENT_SCAN", "There is no screen to show the document camera on")
+        return
+      }
+      guard presenter.transitionCoordinator == nil else {
+        promise.reject("ERR_DOCUMENT_SCAN", "Another screen is still opening or closing")
         return
       }
       // The scan is let go when it ends, which is all that frees it.
@@ -68,6 +74,10 @@ public final class TextRecognitionModule: Module {
       let camera = VNDocumentCameraViewController()
       camera.delegate = scan
       presenter.present(camera, animated: true)
+      if camera.presentingViewController == nil {
+        self.scan = nil
+        promise.reject("ERR_DOCUMENT_SCAN", "The document camera could not be shown")
+      }
     }.runOnQueue(.main)
   }
 
