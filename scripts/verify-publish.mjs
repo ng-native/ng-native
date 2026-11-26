@@ -204,10 +204,10 @@ function checkDesktop(app, pm = 'pnpm') {
   console.log(`installing the desktop app from the registry with ${pm}`);
   install(pm, app);
   assertOneCopy(app, pm);
-  // As for the template (check): React Native is pinned, Expo is a range, and the prebuilt hosts
-  // are built for the pinned React Native.
-  console.log('expo install --check');
-  run('npx', ['expo', 'install', '--check'], app, false);
+  // As for the template (check), against the installed Expo: React Native is pinned, Expo is a
+  // range, and the prebuilt hosts are built for the pinned React Native.
+  console.log('expo install --check, against the installed Expo');
+  run('npx', ['expo', 'install', '--check'], app, false, { EXPO_OFFLINE: '1' });
   // `test` is the Node project alone: the other opens the app.
   console.log('testing');
   run(pm, ['test'], app);
