@@ -20,6 +20,7 @@ AppKitBackend::AppKitBackend()
       surfaces_([NSMutableDictionary dictionary]),
       toolbars_([NSMutableDictionary dictionary]),
       touched_([NSMutableSet set]),
+      windowSplits_([NSMutableDictionary dictionary]),
       sourceLists_([NSMutableDictionary dictionary]) {}
 
 void AppKitBackend::addSurface(NGNSurfaceView *surfaceView) {
@@ -29,6 +30,7 @@ void AppKitBackend::addSurface(NGNSurfaceView *surfaceView) {
 void AppKitBackend::removeSurface(SurfaceId surfaceId) {
   [surfaces_ removeObjectForKey:@(surfaceId)];
   [toolbars_ removeObjectForKey:@(surfaceId)];
+  [windowSplits_ removeObjectForKey:@(surfaceId)];
 }
 
 NGNSurfaceView *AppKitBackend::surface(SurfaceId surfaceId) const {
@@ -232,8 +234,20 @@ void AppKitBackend::setSplitView(SurfaceId surfaceId, Tag split, bool window) {
   }
   [view placeAsWindows:window];
   if (window) {
+    windowSplits_[@(surfaceId)] = @(split);
     toolbarFor(surfaceId).sidebar = view.ownWindow != nil;
   }
+}
+
+// The window's sidebar, created, updated, replaced or removed, decides it after each transaction.
+void AppKitBackend::refreshSidebarToggle(SurfaceId surfaceId) {
+  NGNHeaderToolbar *toolbar = toolbars_[@(surfaceId)];
+  NSNumber *split = windowSplits_[@(surfaceId)];
+  if (toolbar == nil || split == nil) {
+    return;
+  }
+  NGNSplitView *view = (NGNSplitView *)views_[split];
+  toolbar.sidebarToggle = ![view isKindOfClass:NGNSplitView.class] || view.sidebarToggle;
 }
 
 void AppKitBackend::setSvgDrawing(SurfaceId, Tag svg, std::shared_ptr<const SvgDocument> document) {
@@ -303,6 +317,7 @@ void AppKitBackend::didMount(SurfaceId surfaceId) {
     }
   }
   [touched_ removeAllObjects];
+  refreshSidebarToggle(surfaceId);
   if (onMount) {
     onMount(surfaceId);
   }

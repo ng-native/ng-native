@@ -48,6 +48,9 @@
 // The window's content is a split view controller: the sidebar button and the tracking separator
 // lead, and the toolbar shows even when no header does.
 @property (nonatomic) BOOL sidebar;
+// Whether the sidebar button leads while `sidebar` is set: yes unless the window's sidebar turns it
+// off. The tracking separator stays either way.
+@property (nonatomic) BOOL sidebarToggle;
 // The header in front, or nil for none. `screen` hears the back button.
 - (void)showConfig:(NGNHeaderConfigView *)config screen:(NGNView *)screen canGoBack:(BOOL)canGoBack;
 // A secondary click on a chevron shows its way's entries, in place of the toolbar's own menu that

@@ -196,6 +196,7 @@ export const WRITTEN_PROPS: readonly string[] = [
   'tintColor',
   'title',
   'titleColor',
+  'toggleButton',
   'trackColorForFalse',
   'trackColorForTrue',
   'trackTintColor',

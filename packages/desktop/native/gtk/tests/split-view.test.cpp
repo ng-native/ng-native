@@ -221,6 +221,33 @@ TEST_CASE("the sidebar button sits over the full-height sidebar beside the conte
   CHECK(gtk_widget_is_ancestor(headers.sidebarButton(MountedViews::kSurface), sidebarToolbar));
 }
 
+TEST_CASE("a sidebar with toggleButton off leaves the sidebar button out, and in again") {
+  REQUIRE(ngn::testing::gtkReady());
+  Split s;
+  auto &headers = s.views.backend->headers();
+  auto toggle = [](bool on) {
+    return parsedProps<ngn::SidebarComponentDescriptor>(dynamic::object("toggleButton", on));
+  };
+  REQUIRE(headers.sidebarButton(MountedViews::kSurface) != nullptr);
+  s.views.update(s.sidebar, toggle(false));
+  CHECK(headers.sidebarButton(MountedViews::kSurface) == nullptr);
+  // A compact window, where the button would be in the window's header bar.
+  s.splits().setCompact(2, true);
+  CHECK(headers.sidebarButton(MountedViews::kSurface) == nullptr);
+  s.splits().setCompact(2, false);
+  s.views.update(s.sidebar, toggle(true));
+  CHECK(headers.sidebarButton(MountedViews::kSurface) != nullptr);
+
+  // The sidebar taken away, the button stays with the window's split view.
+  s.views.update(s.sidebar, toggle(false));
+  s.views.mount({ShadowViewMutation::RemoveMutation(2, s.sidebar, 0), ShadowViewMutation::DeleteMutation(s.sidebar)});
+  CHECK(headers.sidebarButton(MountedViews::kSurface) != nullptr);
+  // Another put in its place, already without it.
+  auto next = view(8, "NgNativeSidebar", toggle(false), {{0, 0}, {240, 500}});
+  s.views.mount({ShadowViewMutation::CreateMutation(next), ShadowViewMutation::InsertMutation(2, next, 0)});
+  CHECK(headers.sidebarButton(MountedViews::kSurface) == nullptr);
+}
+
 TEST_CASE("a cover beside a full-height split view starts below both header bars, which stay the window's") {
   REQUIRE(ngn::testing::gtkReady());
   Split s;

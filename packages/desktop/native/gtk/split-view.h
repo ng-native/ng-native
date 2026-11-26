@@ -83,6 +83,8 @@ class SplitViews {
   // sidebar button goes, as macOS puts it over the sidebar; null otherwise, when the button stays
   // in the window's header bar.
   GtkWidget *sidebarHeaderShown(SurfaceId surfaceId) const;
+  // Whether the window split view's sidebar keeps the sidebar button: yes unless it turns it off.
+  bool sidebarToggle(SurfaceId surfaceId) const;
   // Show Sidebar (F9, the header bar's sidebar button) for the window's split view. Whether there
   // was one.
   bool toggle(SurfaceId surfaceId);
@@ -129,6 +131,8 @@ class SplitViews {
     std::optional<bool> collapsedProp;
     // Where the sidebar button was last laid out: over the sidebar, or in the window's header bar.
     bool buttonOverSidebar{false};
+    // Whether the sidebar keeps the header bar's sidebar button, as last applied.
+    bool toggleButton{true};
     FoldingSplit folding;
     SidebarWidths widths;
     // A tabs host: its screens, hosted in the content slot, and the scrolled window in the sidebar
@@ -159,6 +163,8 @@ class SplitViews {
   // A sidebar first hosted, by placing the split or inserting the sidebar: its widths, the app's
   // collapsed prop, then the saved preference over it.
   void applySidebar(Split &s);
+  // The sidebar's toggleButton, or its going: the window's header bar lays out again on a change.
+  void applyToggleButton(Split &s);
   // The content pane drawn inset or plain, as its props say: none is plain.
   void applyContentStyle(Split &s);
   // Moves the window's header bar over the content pane, or back over the whole window.

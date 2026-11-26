@@ -237,6 +237,7 @@ NSImage *picture(const std::string &name, const std::string &svgIcon, CGFloat si
     _toolbar.delegate = self;
     _toolbar.displayMode = NSToolbarDisplayModeIconOnly;
     _toolbar.allowsUserCustomization = NO;
+    _sidebarToggle = YES;
   }
   return self;
 }
@@ -244,6 +245,13 @@ NSImage *picture(const std::string &name, const std::string &svgIcon, CGFloat si
 - (void)setSidebar:(BOOL)sidebar {
   if (_sidebar != sidebar) {
     _sidebar = sidebar;
+    [self rebuild];
+  }
+}
+
+- (void)setSidebarToggle:(BOOL)sidebarToggle {
+  if (_sidebarToggle != sidebarToggle) {
+    _sidebarToggle = sidebarToggle;
     [self rebuild];
   }
 }
@@ -348,7 +356,9 @@ NSImage *picture(const std::string &name, const std::string &svgIcon, CGFloat si
 
   NSMutableArray<NSToolbarItemIdentifier> *ids = [NSMutableArray array];
   if (_sidebar) {
-    [ids addObject:NSToolbarToggleSidebarItemIdentifier];
+    if (_sidebarToggle) {
+      [ids addObject:NSToolbarToggleSidebarItemIdentifier];
+    }
     [ids addObject:NSToolbarSidebarTrackingSeparatorItemIdentifier];
   }
   if (!bar) {

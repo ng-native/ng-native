@@ -1,5 +1,6 @@
 import {
   Component,
+  booleanAttribute,
   computed,
   forwardRef,
   inject,
@@ -44,8 +45,10 @@ export interface SidebarRow {
  * `[(collapsed)]` follows the title bar's sidebar button, View > Show Sidebar and a drag that shuts
  * it, on macOS, and the sidebar button and swipe of a UISplitViewController on an iPad. `minWidth`
  * and `maxWidth` bound a drag of the divider on macOS and the sidebar column's width on an iPad,
- * and `autosave` names where macOS keeps the width and collapsed state across launches. Drawn, a collapsed sidebar is hidden,
- * the widths bound its style, and `autosave` is ignored.
+ * and `autosave` names where macOS keeps the width and collapsed state across launches.
+ * `[toggleButton]="false"` leaves the sidebar button out of the window's toolbar on macOS and its
+ * header bar on Linux, for a sidebar that draws its own. Drawn, a collapsed sidebar is hidden, the
+ * widths bound its style, and `autosave` and `toggleButton` are ignored.
  */
 @Component({
   selector: 'sidebar',
@@ -56,6 +59,7 @@ export interface SidebarRow {
     '[paneMinWidth]': 'native ? minWidth() : undefined',
     '[paneMaxWidth]': 'native ? maxWidth() : undefined',
     '[autosaveName]': 'native ? autosave() : undefined',
+    '[toggleButton]': 'native ? toggleButton() : undefined',
     '[style.display]': "hidden() ? 'none' : undefined",
     '[style.width]': 'drawnWidth()',
     '[style.minWidth]': 'native ? undefined : minWidth()',
@@ -76,6 +80,12 @@ export class Sidebar extends ViewBase implements OnInit, OnDestroy {
   readonly maxWidth = input(undefined, { transform: optionalNumber });
   /** macOS: the name the width and collapsed state are kept under across launches. */
   readonly autosave = input<string>();
+  /**
+   * macOS and Linux: whether the window's toolbar or header bar shows its sidebar button. Turn it
+   * off for a sidebar that draws a button of its own; View > Show Sidebar, its shortcut and
+   * `[(collapsed)]` still work.
+   */
+  readonly toggleButton = input(true, { transform: booleanAttribute });
 
   private readonly rows = new Set<SidebarRow>();
   private stopCollapsed: (() => void) | null = null;

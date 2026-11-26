@@ -37,6 +37,8 @@
 @property (class, nonatomic) std::function<bool(NSInteger rowTag, NSPoint point)> rowContentTakesClick;
 // The window this split view is the content of, once it is the window's.
 @property (nonatomic, readonly, weak) NSWindow *ownWindow;
+// Whether its sidebar keeps the toolbar's sidebar button: yes unless the sidebar turns it off.
+@property (nonatomic, readonly) BOOL sidebarToggle;
 // The core's decision (Sidebars::settle): the window's, or plain in the content.
 - (void)placeAsWindows:(BOOL)window;
 // The split view is leaving: the window gets its surface back.
