@@ -72,8 +72,9 @@ search field or a footer, is drawn and styled by CSS on every OS.
 </split-view>
 ```
 
-With `provideMainWindow({ titleBar: 'hidden' })`, a sidebar that draws its own button and no
-`<native-header>`, the card has no toolbar to clear:
+With `provideMainWindow({ titleBar: 'hidden' })`, a sidebar that draws its own button, no
+`<native-header>` and no back or forward history in the window, the card has no toolbar to clear.
+History brings the toolbar back for its chevrons, and the card sits below it:
 
 ```html
 <split-view contentStyle="inset">
