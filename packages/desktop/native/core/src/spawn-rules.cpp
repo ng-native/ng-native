@@ -309,13 +309,13 @@ std::string accountHome() {
   // The suggestion is a start, not a bound: a larger record answers ERANGE, so the buffer grows to
   // a limit no account's entry reaches.
   constexpr size_t kLimit = 1 << 20;
-  std::vector<char> buffer(suggested > 0 ? static_cast<size_t>(suggested) : 16384);
+  std::vector<char> buffer(std::min(suggested > 0 ? static_cast<size_t>(suggested) : size_t{16384}, kLimit));
   passwd entry{};
   passwd *found = nullptr;
   int error = 0;
   while ((error = getpwuid_r(getuid(), &entry, buffer.data(), buffer.size(), &found)) == ERANGE &&
          buffer.size() < kLimit) {
-    buffer.resize(buffer.size() * 2);
+    buffer.resize(std::min(buffer.size() * 2, kLimit));
   }
   if (error != 0 || found == nullptr || found->pw_dir == nullptr || found->pw_dir[0] != '/') {
     return {};
