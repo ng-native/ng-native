@@ -2,7 +2,7 @@
 
 #include <doctest/doctest.h>
 
-TEST_CASE("a host's reloads go where they are routed, and back to its own once the route is taken away") {
+TEST_CASE("a host's reloads go where they are routed, and nowhere once the route is taken away") {
   int host = 0, other = 0;
   int reloads = 0;
   CHECK_FALSE(ngn::reloadThroughRoute(&host));

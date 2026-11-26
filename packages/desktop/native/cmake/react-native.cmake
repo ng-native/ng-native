@@ -143,13 +143,14 @@ if(NGN_WITH_RUNTIME)
   endif()
   string(REPLACE "${_rh_from}" "ngn::makeScheduler(toolbox, schedulerDelegate.get());" _rh "${_rh}")
   # Its own reload rebuilds the instance with nothing holding off the UI thread's surface calls, so
-  # it goes to the core's Runtime::reload first (ngn/host-reload.h).
+  # it goes to the core's Runtime::reload instead (ngn/host-reload.h), and never runs: a host with no
+  # route is one the runtime is still making or already tearing down.
   set(_rh_reload "void ReactHost::reloadReactInstance() {")
   string(FIND "${_rh}" "${_rh_reload}" _rh_at)
   if(_rh_at EQUAL -1)
     message(FATAL_ERROR "ReactHost.cpp no longer reloads in reloadReactInstance as cmake/react-native.cmake expects")
   endif()
-  string(REPLACE "${_rh_reload}" "${_rh_reload}\n  if (ngn::reloadThroughRoute(this)) {\n    return;\n  }" _rh "${_rh}")
+  string(REPLACE "${_rh_reload}" "${_rh_reload}\n  ngn::reloadThroughRoute(this);\n  return;" _rh "${_rh}")
   string(REPLACE "#include \"ReactHost.h\"" "#include \"ReactHost.h\"\n#include \"ngn/host-reload.h\"\n#include \"ngn/layout-animations.h\"" _rh "${_rh}")
   file(WRITE ${CMAKE_BINARY_DIR}/generated/ReactHost.cpp.in "${_rh}")
   configure_file(${CMAKE_BINARY_DIR}/generated/ReactHost.cpp.in ${CMAKE_BINARY_DIR}/generated/ReactHost.cpp COPYONLY)
