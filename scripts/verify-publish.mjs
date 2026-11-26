@@ -252,8 +252,11 @@ function check(app, { pm = 'pnpm', latest = false } = {}) {
   // The template pins React Native and gives Expo a range, so a new Expo patch can expect a React
   // Native the template does not have. Nothing here builds natively to notice: expo-modules-core
   // 58.1.0 linked a class React Native 0.88.0 lacks, and every new app crashed at launch on iOS.
-  console.log('expo install --check');
-  run('npx', ['expo', 'install', '--check'], app, false);
+  // Offline, it checks against the Expo installed here, which is what an app runs. Online, it also
+  // asks for the newest Expo of the SDK, which a range may not reach and pnpm's release age holds
+  // back: expo 58.1.0 failed every pull request within the hour it was published.
+  console.log('expo install --check, against the installed Expo');
+  run('npx', ['expo', 'install', '--check'], app, false, { EXPO_OFFLINE: '1' });
 
   console.log('typechecking');
   run('npx', ['tsc', '-p', 'tsconfig.json', '--noEmit'], app);
