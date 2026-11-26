@@ -419,8 +419,10 @@ What it captures:
 The capture is the app's window as iOS, Android or the macOS host drew it, text included. The macOS
 host draws its window in process, so it asks for no screen recording permission. It is taken again
 until two captures in a row agree, so what is moving between captures has stopped; one that does not
-stop within `timeout` (5 seconds) fails the test. An animation that is paused, or waiting on its
-delay, looks still: wait for one to end before the screenshot when it matters.
+stop within `timeout` (5 seconds) fails the test. A node the test just rendered is captured once
+the platform has mounted its view, within the same `timeout`; on Android that can be after the frame
+`render` waits for. An animation that is paused, or waiting on its delay, looks still: wait for one
+to end before the screenshot when it matters.
 
 The reference for `card` in `card.device.ts` is `__screenshots__/card.device.ts/card-ios.png` (or
 `card-android.png`) beside the test file. Without a name, a screenshot is named after its test and
