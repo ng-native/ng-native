@@ -599,6 +599,29 @@ describe('the Metro preset', () => {
     );
   });
 
+  it("puts the project in Metro's cache key, so a second checkout of the app never reads the first's", () => {
+    // Metro keys a transform by the file's path relative to the project and its content, so two
+    // checkouts of one app would share every entry in the temp directory's cache, and a DOM
+    // component's reference, an absolute file URL, would point the second at the first's file.
+    const parent = mkdtempSync(path.join(tmpdir(), 'ng-native-checkouts-'));
+    try {
+      const key = (root: string) =>
+        (
+          withAngularNative({ ...base(), projectRoot: root }) as MetroConfig & {
+            transformer: { cacheVersion?: string };
+          }
+        ).transformer.cacheVersion!;
+      const first = path.join(parent, 'first');
+      const second = path.join(parent, 'second');
+      mkdirSync(first);
+      mkdirSync(second);
+      assert.notEqual(key(first), key(second));
+      assert.equal(key(first), key(first), 'the same checkout keeps its cache');
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
   it("puts the worklets Babel plugin's package in Metro's cache key, so installing it starts afresh", () => {
     // babel-preset-expo adds the plugin only when it resolves, and Metro's key knew nothing of
     // that, so files transformed before the install kept their worklets untransformed.
