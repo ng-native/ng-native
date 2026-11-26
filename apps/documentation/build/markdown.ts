@@ -35,11 +35,15 @@ import {
 } from '@ng-native/device/os-support';
 import { pageLinks, pageUrl } from './page-links.ts';
 
-/** One piece of a page: prose already rendered, a named example, or a generated API table. */
+/**
+ * One piece of a page: prose already rendered, a named example, a generated API table, or a blog
+ * post's island (`<!-- island: coralogix-about -->`), a component from `blog/blog-content.ts`.
+ */
 export type DocBlock =
   | { readonly kind: 'html'; readonly html: string }
   | { readonly kind: 'example'; readonly name: string }
-  | { readonly kind: 'api'; readonly reference: string };
+  | { readonly kind: 'api'; readonly reference: string }
+  | { readonly kind: 'island'; readonly name: string };
 
 /** An `## h2` or `### h3`, for the "on this page" column. */
 export interface DocHeading {
@@ -58,7 +62,7 @@ export interface DocHeading {
  * An API reference is a class name, optionally qualified by its package where two of them share a
  * name - `@ng-native/components#Switch`. See `build/api.ts`.
  */
-const BLOCK_MARKER = /^[ \t]*<!--\s*(example|api):\s*([@a-zA-Z0-9/#-]+)\s*-->[ \t]*$/gm;
+const BLOCK_MARKER = /^[ \t]*<!--\s*(example|api|island):\s*([@a-zA-Z0-9/#-]+)\s*-->[ \t]*$/gm;
 
 const LANGUAGES = [
   'ts',
@@ -144,11 +148,8 @@ function segments(body: string): DocBlock[] {
   for (const match of body.matchAll(BLOCK_MARKER)) {
     const before = body.slice(at, match.index);
     if (before.trim()) blocks.push({ kind: 'html', html: before });
-    blocks.push(
-      match[1] === 'api'
-        ? { kind: 'api', reference: match[2]! }
-        : { kind: 'example', name: match[2]! },
-    );
+    const kind = match[1] as 'example' | 'api' | 'island';
+    blocks.push(kind === 'api' ? { kind, reference: match[2]! } : { kind, name: match[2]! });
     at = match.index + match[0].length;
   }
   const rest = body.slice(at);
@@ -310,14 +311,23 @@ export function markdown(): Plugin {
     name: 'angular-native-docs-markdown',
     enforce: 'pre',
     async transform(code, id) {
-      if (!id.endsWith('.md')) return undefined;
+      // `?meta` is the front matter alone: the blog's index lists every post without its prose.
+      const meta = id.endsWith('.md?meta');
+      if (!id.endsWith('.md') && !meta) return undefined;
+      const { attributes, body } = fm<Record<string, unknown>>(code);
+      if (meta)
+        return { code: `export const attributes = ${JSON.stringify(attributes)};\n`, map: null };
       ready = await shiki();
 
-      const { attributes, body } = fm<Record<string, unknown>>(code);
       const url = pageUrl(id);
       const headings: DocHeading[] = [];
       const blocks: DocBlock[] = [];
       for (const block of segments(body)) {
+        if (block.kind === 'island' && !id.includes('/src/blog/posts/')) {
+          throw new Error(
+            `${id}: islands are for blog posts, and only blog-content.ts mounts them`,
+          );
+        }
         blocks.push(
           block.kind === 'html'
             ? { kind: 'html', html: pageLinks(render(block.html, headings), url) }

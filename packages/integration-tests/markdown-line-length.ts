@@ -34,9 +34,12 @@ function markdownFiles(dir: string): string[] {
   return out;
 }
 
-/** The repository root's `apps/documentation/src/content` pages, and every package's README. */
+/** The documentation's pages and blog posts, and every package's README. */
 export function markdownTargets(repoRoot: string): string[] {
-  const files = markdownFiles(path.join(repoRoot, 'apps/documentation/src/content'));
+  const files = [
+    ...markdownFiles(path.join(repoRoot, 'apps/documentation/src/content')),
+    ...markdownFiles(path.join(repoRoot, 'apps/documentation/src/blog/posts')),
+  ];
   const packagesDir = path.join(repoRoot, 'packages');
   for (const entry of readdirSync(packagesDir)) {
     const readme = path.join(packagesDir, entry, 'README.md');

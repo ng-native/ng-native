@@ -47,12 +47,13 @@
 import { chromium, type Browser, type Page } from 'playwright';
 import { execFile } from 'node:child_process';
 import { createServer, type ServerResponse } from 'node:http';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import url from 'node:url';
 import { promisify } from 'node:util';
 import { READING_ORDER, SECTIONS, STANDALONE_PAGES, flattenItems } from '../src/navigation.ts';
-import { BLOG_POSTS, coverImage, type BlogPost } from '../src/blog/posts.ts';
+import fm from 'front-matter';
+import { coverImage, newestFirst, toPost, type BlogPost } from '../src/blog/post.ts';
 import { EXAMPLE_APPS } from '../src/example-apps/registry.ts';
 import { LESSONS } from '../src/learn/outline.ts';
 import { DEFAULT_DESCRIPTION, SITE_NAME, urlFor } from '../src/site.ts';
@@ -61,6 +62,19 @@ const execFileAsync = promisify(execFile);
 const dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const dist = path.resolve(dirname, '../dist');
 const root = path.resolve(dirname, '..');
+const postsDir = path.join(root, 'src/blog/posts');
+
+/** Every post, from its file's front matter: what `blog/posts.ts` reads through Vite. */
+const BLOG_POSTS = newestFirst(
+  await Promise.all(
+    (await readdir(postsDir))
+      .filter((name) => name.endsWith('.md'))
+      .map(async (name) => {
+        const file = path.join(postsDir, name);
+        return toPost(file, fm<Record<string, unknown>>(await readFile(file, 'utf8')).attributes);
+      }),
+  ),
+);
 
 /** Enough of a content-type table for what `vite build` emits. */
 const TYPES: Record<string, string> = {
@@ -112,12 +126,12 @@ function routes(): readonly RouteEntry[] {
       source: path.join(root, '../..', app.sourceRoot),
     })),
   ];
-  // The blog: its index, and each post, whose prose is its own component.
+  // The blog: its index, and each post, whose prose is its markdown.
   const blog = [
     { path: '/blog', source: path.join(root, 'src/blog/posts.ts') },
     ...BLOG_POSTS.map((post) => ({
       path: `/blog/${post.slug}`,
-      source: path.join(root, post.source),
+      source: path.join(postsDir, `${post.slug}.md`),
     })),
   ];
   return [

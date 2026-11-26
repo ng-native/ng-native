@@ -1,6 +1,7 @@
 /**
- * A post's page around its prose: the title block and cover, the contents beside the text, and
- * the other posts after it. The prose is projected in by the post's own component (`posts/`).
+ * A post's page: the title block and cover, the contents beside the prose, the byline, and the
+ * other posts after it. Routed once per post by `routes.ts`, which binds `slug` and the `prose`
+ * it loaded from `posts/<slug>.md`.
  */
 import {
   afterNextRender,
@@ -12,16 +13,18 @@ import {
   signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import type { DocModule } from '../content.ts';
 import { avatar } from '../landing/content.ts';
 import { Seo } from '../seo.ts';
 import { SITE_NAME } from '../site.ts';
+import { BlogContent } from './blog-content.ts';
 import { BlogCover } from './blog-cover.ts';
 import { BlogFrame } from './blog-frame.ts';
 import { BLOG_POSTS, coverImage, postDate } from './posts.ts';
 
 @Component({
   selector: 'blog-article',
-  imports: [BlogCover, BlogFrame, RouterLink],
+  imports: [BlogContent, BlogCover, BlogFrame, RouterLink],
   template: `
     @let post = this.post();
     <blog-frame [announce]="false">
@@ -83,7 +86,13 @@ import { BLOG_POSTS, coverImage, postDate } from './posts.ts';
             </div>
           </aside>
           <div class="blog-prose mx-auto w-full max-w-[44rem] min-w-0 xl:max-w-none">
-            <ng-content />
+            <blog-content [blocks]="prose().blocks" />
+            <div class="blog-byline">
+              <img [src]="avatar(post.author.github)" alt="" width="56" height="56" />
+              <span
+                ><strong>{{ post.author.name }}</strong> {{ post.author.bio }}</span
+              >
+            </div>
           </div>
         </div>
       </article>
@@ -118,8 +127,7 @@ import { BLOG_POSTS, coverImage, postDate } from './posts.ts';
 })
 export class BlogArticle {
   readonly slug = input.required<string>();
-  /** The post's sections, for the contents beside it. */
-  readonly toc = input.required<readonly { id: string; text: string }[]>();
+  readonly prose = input.required<DocModule>();
 
   protected readonly avatar = avatar;
   protected readonly post = computed(() => {
@@ -128,6 +136,10 @@ export class BlogArticle {
     return post;
   });
   protected readonly date = computed(() => postDate(this.post().date));
+  /** The post's sections, for the contents beside it. */
+  protected readonly toc = computed(() =>
+    this.prose().headings.filter((heading) => heading.level === 2),
+  );
   protected readonly others = computed(() =>
     BLOG_POSTS.filter((entry) => entry.slug !== this.slug()),
   );

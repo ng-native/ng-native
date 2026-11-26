@@ -8,7 +8,7 @@
  * Lazy, so that a reader who opened one page has downloaded one page.
  */
 import type { ResolveFn, Route, Routes } from '@angular/router';
-import { BLOG_POSTS } from './blog/posts.ts';
+import { BLOG_POSTS, loadPost } from './blog/posts.ts';
 import { loadDoc, type DocModule } from './content.ts';
 
 /** The markdown page for the URL, or `null` when there is none: see `doc-page`'s `doc` input. */
@@ -39,9 +39,14 @@ const pages: Routes = [
     loadComponent: () => import('./example-apps/example-app-page.ts').then((m) => m.ExampleAppPage),
   },
   // The blog, which wears the landing page's header and footer rather than the docs' chrome; see
-  // `app.ts`. One route per post, from `blog/posts.ts`.
+  // `app.ts`. One route per post, from `blog/posts.ts`, with its prose loaded before it shows.
   { path: 'blog', loadComponent: () => import('./blog/blog-page.ts').then((m) => m.BlogPage) },
-  ...BLOG_POSTS.map((post) => ({ path: `blog/${post.slug}`, loadComponent: post.load })),
+  ...BLOG_POSTS.map((post) => ({
+    path: `blog/${post.slug}`,
+    loadComponent: () => import('./blog/blog-article.ts').then((m) => m.BlogArticle),
+    data: { slug: post.slug },
+    resolve: { prose: () => loadPost(post.slug) },
+  })),
   {
     path: '**',
     loadComponent: () => import('./doc-page.ts').then((m) => m.DocPage),
