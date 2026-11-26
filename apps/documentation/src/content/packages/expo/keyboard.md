@@ -34,21 +34,14 @@ export const appConfig = { providers: [provideNativeKeyboard() /* ... */] };
 
 On iOS it provides nothing of its own, and the keyboard is what React Native reports there; a dock
 follows it with `provideKeyboardController()` from `@ng-native/components`. Both can be in the same
-app. On Android in a build made before this package had the module, and in Expo Go, it provides
-nothing either, and React Native's own events are what there is.
+app. On Android in a build without the module, and in Expo Go, it provides nothing either, and React
+Native's own events are what there is.
 
 ## How it measures
 
-The native module watches the keyboard through Android's window insets animation, from a view of
-its own at the root of the window. It applies and consumes no inset, so the app is laid out exactly
-as it is without it, edge to edge, in landscape too.
+The app is laid out exactly as it is without the provider, edge to edge, in landscape too.
 
-A dock is moved by how far the keyboard covers the dock's own bottom edge on screen, measured at
-every frame. A dock that is not at the bottom of the window rises only as far as it must, and one in
-a form sheet that react-native-screens raises with the keyboard is not lifted twice. A dock in a
-`<modal>` is in a window of its own, and follows that window's keyboard.
-
-React Native's own keyboard events still arrive, and are what a modal's keyboard is reported by in
-`Keyboard.metrics`. Each one waits 100 ms for the native module, and is dropped when the module has
-already said the same, so a modal's keyboard reaches `Keyboard.metrics` 100 ms after React Native
-reports it.
+A dock rises only as far as the keyboard covers its bottom edge, so one that is not at the bottom of
+the window rises less, and one in a form sheet that react-native-screens raises with the keyboard
+is not lifted twice. A dock in a `<modal>` follows that window's keyboard. A modal's keyboard
+reaches `Keyboard.metrics` about 100 ms after React Native reports it.

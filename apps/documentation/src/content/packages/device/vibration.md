@@ -40,7 +40,7 @@ pattern designed on Android does not feel the same on iOS and nothing here can m
 
 ## Off a device
 
-Off a device every method does nothing, because there is no `Vibration` module underneath it.
+Off a device every method does nothing.
 
 ## Reference
 

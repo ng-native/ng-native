@@ -11,7 +11,7 @@ comes from instead.
 
 <!-- platforms: Crypto -->
 
-It is the one Expo service that is not inert without its module. An empty identifier is a key
+Unlike most Expo services, it is not inert without its module. An empty identifier is a key
 every record shares, and an empty hash matches every input, and neither looks wrong until the data
 is. So without `expo-crypto` installed, every call throws, and the error names the package.
 
@@ -72,11 +72,9 @@ that encrypts imports `expo-crypto` directly.
 
 ## Without the module
 
-On iOS and Android, a missing `expo-crypto` - never installed, or installed without the app being
-rebuilt since - leaves the service made, so injecting it does not throw. A call, or a read of a
-value only the module knows, throws a `MissingModuleError`. Its message names the module and the
-commands that fix it; see
-[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
+On iOS and Android, a missing `expo-crypto` throws a
+[`MissingModuleError`](/packages/expo/using-a-module#what-happens-without-the-module-installed) on
+the first call or read that needs it. Injecting the service does not throw.
 
 On the web, and in a test that provides no fake, every method throws, or rejects for the
 promise-returning ones, with an error naming `expo-crypto`.

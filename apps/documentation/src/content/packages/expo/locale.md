@@ -9,11 +9,8 @@ summary: The user's preferred locales and calendar settings, kept current as the
 
 <!-- platforms: Locale -->
 
-Both of `expo-localization`'s getters are synchronous, so unlike the rest of the device-state
-services there is no default to sit at while the platform answers. What makes this worth a service
-is that the answers _change_: a user can switch language in Settings and come back, and a date that
-was formatted correctly a moment ago is then wrong. `Locale` subscribes to that; nothing else in
-the package does.
+Both are known at once, with no default while the platform answers, and both update when the user
+changes language or region in Settings and comes back.
 
 ## Install
 
@@ -68,11 +65,9 @@ rather than a path into a build directory.
 
 ## Without the module
 
-On iOS and Android, a missing `expo-localization` - never installed, or installed without the app
-being rebuilt since - leaves the service made, so injecting it does not throw. A call, or a read of
-a value only the module knows, throws a `MissingModuleError`. Its message names the module and the
-commands that fix it; see
-[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
+On iOS and Android, a missing `expo-localization` throws a
+[`MissingModuleError`](/packages/expo/using-a-module#what-happens-without-the-module-installed) on
+the first call or read that needs it. Injecting the service does not throw.
 
 On the web, and in a test that provides no fake, `locales` and `calendars` are empty arrays,
 `locale` is null, `rtl` is `false`, `tag` is `undefined`.

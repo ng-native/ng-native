@@ -102,9 +102,7 @@ A few things to know:
 
 ## Off a device and on the web
 
-Off a device `current()` reports `light` and never changes, because there is no `Appearance` module
-underneath it to ask - a platform's absence of a preference is treated as light, which is the same
-rule React Native's own `null` result follows. On the web the engine answers
+Off a device `current()` reports `light` and never changes. On the web the engine answers
 `prefers-color-scheme` itself, so an app rarely needs to inject `ColorScheme` there at all.
 
 `set()` does nothing in either place: neither the off-device source nor the browser one can change

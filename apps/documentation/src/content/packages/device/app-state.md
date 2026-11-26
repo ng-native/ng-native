@@ -35,10 +35,8 @@ not in front of the user either.
 
 ## Off a device and on the web
 
-Off a device `current` reports `active` and never changes, because there is no `AppState` module
-underneath it to ask - the same as an app that is always in front of somebody. There is a rough web
-equivalent in the page visibility API, but `AppState` does not read it; a web build should use
-`document.visibilityState` directly for the same decision.
+Off a device `current` reports `active` and never changes. `AppState` does not read the page
+visibility API on the web.
 
 ## Reference
 

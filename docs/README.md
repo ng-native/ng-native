@@ -81,6 +81,42 @@ reference, with a package's overview at `packages/<name>.md` and its detail page
   share a class name), and `<!-- os-support -->` the per-OS support table drawn from `OS_SUPPORT`
   in `@ng-native/device`. Each marker sits alone on its line. See `apps/documentation/build/markdown.ts`.
 
+### Section names and order
+
+A section that recurs across pages has one name, and a page about a service, a component or a view
+runs in one order, so a reader finds the same thing in the same place on every page:
+
+1. `Install` (or `Setup` for a package that needs configuring), then `The smallest useful
+example`.
+2. The page's own topic sections.
+3. Platform sections, in this order: `On iOS`, `On Android`, `On macOS`, `On Linux`. A page with no
+   per-OS sections but some differences uses `Platform differences`; one that works on a single OS
+   says `Only on iOS` or `Only on Android`.
+4. What happens without the native part: `Without the module` on an Expo page, `Off a device and
+on the web` (or `Off a device`) on a device page.
+5. `In a test`: how a test fakes or drives it. Never `Testing`.
+6. `Reference`, last, holding the page's main `<!-- api: -->` table. A table for a second class can
+   stay in the section about that class.
+
+Shell commands are fenced `sh`, not `bash`. `apps/documentation/build/page-structure.test.ts`
+checks the names, the order on `packages/expo` and `packages/device` pages, and that `Reference`
+comes last; add a name there when a new recurring section settles.
+
+### What a page leaves out
+
+A page is for someone building an app. Leave out:
+
+- How the package is built inside: internal file names, native class names, how a cache or a
+  transform works. Say what the author sees and can do; put the mechanism in
+  [ARCHITECTURE.md](./ARCHITECTURE.md) or a code comment.
+- The project's own history and process: what something used to do, how a release is verified,
+  what CI runs. A version-specific behaviour is stated as `On SDK 57, ...`, not as a story.
+- Essays justifying a design. One sentence on why is enough.
+- A second copy of something another page explains. Link to it, with a `#section` anchor where
+  that helps.
+- Paragraphs every page in a family would repeat. Say it once on the family's overview page (such
+  as `packages/expo/using-a-module.md`) and link to it.
+
 Build the site with `pnpm nx build documentation`, or serve it with
 `pnpm --filter documentation dev`, to see a new page before opening a pull request.
 
@@ -88,5 +124,7 @@ Build the site with `pnpm nx build documentation`, or serve it with
 
 - [ ] The file is in the right place from the table above.
 - [ ] A site page has `title` and `summary`, and its `#` heading matches the `title`.
+- [ ] Its sections follow [Section names and order](#section-names-and-order), and nothing in it
+      is on the [leave out](#what-a-page-leaves-out) list.
 - [ ] Links to and from the file still resolve.
 - [ ] `pnpm format:check` passes.

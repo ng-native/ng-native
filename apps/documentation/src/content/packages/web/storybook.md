@@ -13,7 +13,7 @@ component's inputs.
 Storybook's Angular framework, `@storybook/angular`, builds with the Angular CLI's builders, which
 do not build `@ng-native/*` ([The Angular CLI](/packages/web#the-angular-cli) covers why).
 
-## Setting it up
+## Setup
 
 In a browser app set up as in [Setting up a browser app](/packages/web#setting-up-a-browser-app):
 

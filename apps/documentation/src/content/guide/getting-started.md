@@ -29,10 +29,6 @@ Scan the QR code with [Expo Go](https://expo.dev/go), or press `i` or `a` for a 
 Angular component renders native views: `<view>` becomes a `UIView` on iOS or an
 `android.view.View` on Android, with a press handler and no React in the render path.
 
-Before each release, checks publish every package to a registry, generate a template app with the
-command above, install dependencies by version, typecheck, test and bundle it. Any failure blocks
-the release.
-
 ## Edit `app.ts` and check the counter
 
 Import each element as an Angular component and use lowercase names. The template generates this
@@ -126,9 +122,8 @@ export class App {
 Edit the `title` text and save to see it update on the device. Press the button to increment
 `count`: its label reads "Tapped 1 times", "Tapped 2 times", and so on.
 
-Use lowercase names such as `<view>` and `<text>`. An uppercase name such as `<View>` matches no
-component's selector, and the Metro transform fails the build on it. An element used without its
-import renders a plain view and logs a development warning.
+An uppercase name such as `<View>` fails the build, and an element used without its import renders
+a plain view with a development warning; see [Components](/packages/components#one-name-two-layers).
 
 ## Run `app.test.ts`
 
@@ -194,11 +189,8 @@ browser.
 
 ## Update templates and styles
 
-Template and stylesheet edits preserve component state through Angular's `ɵɵreplaceMetadata`,
-which the Metro transform embeds in the module. No Angular dev server is involved. An edited method
-or function is patched onto the running app as well. An edit that cannot be, to a field, a
-constructor or a constant, reloads the app and returns to the page it left; the console logs why.
-[Limitations](/guide/limitations) lists each case.
+Template, style and method edits hot-swap on the device and keep component state; some edits reload
+the app instead, as [Limitations](/guide/limitations#hot-reload-has-a-few-full-reload-cases) lists.
 
 ## Expo Go or a development build
 

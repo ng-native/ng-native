@@ -27,17 +27,12 @@ import { SecureStorage } from '@ng-native/expo/secure-store';
 ```
 
 Each name is a type as well as a token, so `inject(Clipboard)` and `private clipboard: Clipboard`
-both work. Each service is one file: a `@Service()` class that reaches its module through an
-injected source token - an `InjectionToken` carrying its own factory - so there is nothing to
-provide and nothing to register. Injecting it is the whole setup, and a service nobody injects is
-never constructed.
+both work. There is nothing to provide or register: injecting a service is the whole setup, and a
+service nobody injects is never constructed.
 
 ## What happens without the module installed
 
-A service reaches for its module when it is first injected, with a `require()` inside a factory
-rather than a static import: a file with a static `import ... from 'expo-battery'` would be
-unloadable by Node at all - Expo's build output uses extensionless relative imports, and what it
-pulls in reaches `react-native`, which is Flow.
+A service loads its module when it is first injected, not when the file is imported.
 
 Where the module exists for the platform the app is on, a missing one is a mistake with a fix, so
 using the service throws a `MissingModuleError` rather than quietly doing nothing. Injecting it does
@@ -52,10 +47,6 @@ expo-haptics is not in this build of the app. Install it with "npx expo install 
 then rebuild the app ("npx expo run:ios", or a new EAS build): a development build, and Expo Go,
 contain only the native modules they were built with.
 ```
-
-On iOS and Android, a service asks Expo whether the module's native half is in the build before it
-evaluates the package's JavaScript. Most Expo packages throw while they are being evaluated when it
-is not, and Metro reports a throw there as a fatal error, in place of the `MissingModuleError`.
 
 `MissingModuleError` is exported from `@ng-native/expo`, with a `module` property naming the
 package, for an app that wants to catch it and show something of its own.
@@ -72,29 +63,19 @@ empty identifier or hash looks right and is not.
 
 ## Faking a module in a test
 
-A test runs in Node, where no native module can load, installed or not. Most services do nothing
-there, as off a device. One that has no answer to give without its module, `Crypto` and
-`FileSystem` among them, throws a `MissingModuleError` that says so. A service with
-a `SOURCE` token, `Crypto.SOURCE` or `FileSystem.SOURCE`, reads its module through it, so a test
-provides a stand-in with the methods the code under test calls:
-
-```ts
-providers: [{ provide: Crypto.SOURCE, useValue: { randomUUID: () => 'test-id' } }];
-```
-
-A database has no token: `openDatabasesWith()` points `database()` at a stand-in. See
-[Database](/packages/expo/database#in-a-test).
+A test runs in Node, where no native module loads. Most services do nothing there, as off a device;
+one with no answer to give without its module, such as `Crypto` or `FileSystem`, throws a
+`MissingModuleError`. A service with a `SOURCE` token reads its module through it, so a test
+provides a stand-in under that token with the methods the code under test calls, as
+[Crypto](/packages/expo/crypto#in-a-test) shows. A database has no token: `openDatabasesWith()`
+points `database()` at a stand-in. See [Database](/packages/expo/database#in-a-test).
 
 ## A module with no service
 
-An Expo module this package has no service for, `expo-contacts` or `expo-mail-composer`, has no
-React in it and works as it is. What does not work is its documented import in a file a test loads:
-`import * as Contacts from 'expo-contacts'` evaluates the package, the package imports
-`react-native`, and a test in Node fails while the module graph loads, with `Flow is not
-supported`, whether or not the test reads a contact.
-
-Load it where it is used instead, as this package's own services do: a token whose factory calls
-`expoModule()`, and a service that injects it.
+An Expo module this package has no service for, such as `expo-contacts`, works as it is in the app.
+A static `import * as Contacts from 'expo-contacts'` in a file a test loads fails in Node with
+`Flow is not supported`, whether or not the test reads a contact. Load it in a token's factory with
+`expoModule()` instead, and inject the token:
 
 ```ts
 import { InjectionToken, Service, inject } from '@angular/core';
@@ -123,13 +104,8 @@ export class People {
 }
 ```
 
-On SDK 57 and 58 these functions are in `expo-contacts/legacy`: the same names imported from
-`expo-contacts` itself throw when called, in favour of its class-based `Contact` API. Reading the
-contacts needs the user's permission, which `names()` asks for before it reads them.
-
-The `require` runs when the token is first injected rather than when the file loads. In a test
-`expoModule()` answers `null`, so the service is inert, and a test that wants an answer provides
-one under the token.
+In a test `expoModule()` answers `null`, so the service is inert. A test that wants an answer
+provides one under the token:
 
 ```ts
 providers: [
@@ -142,9 +118,6 @@ providers: [
   },
 ];
 ```
-
-The interface is the part of the module the app calls, written by hand or taken from the
-package's own types with `import type`, which a test does not evaluate.
 
 ## Whether a feature is available
 

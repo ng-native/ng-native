@@ -73,5 +73,8 @@ pnpm export                       # release bundles of every example, after CSS 
   stand-in every method its callers use. Gate anything newer than iOS 16.4 or Android API 24.
 - **Scripts fail closed.** A failed or truncated `gh` request, or a rate limit, never reads as
   "nothing to do".
+- **A documentation page follows the shared section order** in
+  [docs/README.md](docs/README.md#section-names-and-order) and leaves out internals, history and
+  second copies of other pages. `page-structure.test.ts` in `apps/documentation` checks the order.
 - **Review with the `review-change` skill** (`.claude/skills/review-change`) before opening a pull
   request.

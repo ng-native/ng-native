@@ -277,7 +277,7 @@ registerExpoView('expo-texture-video', 'ExpoVideo', {
 
 Audio has no view: `expo-audio` plays through the device's audio session, not a view on screen.
 
-## Without the module installed
+## Without the module
 
 `videoPlayer()`, `audioPlayer()` and `audioRecorder()` throw a `MissingModuleError` when
 `expo-video` (or `expo-audio`) is missing - never installed, or installed without the app being

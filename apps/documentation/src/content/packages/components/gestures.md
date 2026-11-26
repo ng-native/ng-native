@@ -43,7 +43,7 @@ export class Draggable {
 }
 ```
 
-## Installing
+## Install
 
 The gestures need three native libraries, installed at the versions this Expo SDK expects:
 
@@ -144,51 +144,21 @@ keeps going through a `z-index` change and passes. This one shows on a device.
 
 ## On macOS
 
-When the app has them installed, the host builds `react-native-worklets` and
-`react-native-reanimated` from their own shared C++ (`native/cmake/libraries/`), with the host's
-glue in place of their iOS modules: worklets run on a UI runtime on the main thread, and
-Reanimated's shared values, animations and worklet styles commit to the shadow tree from there, at
-the display's rate, from a display link that runs only while something animates. The worklets' UI
-runtime asks for a frame at the end of every frame; the host parks that loop while it has no work
-(`worklets-idle-frames.js`) and wakes it for a gesture's event or a job sent to the UI runtime, so
-a still app takes no frames.
+When the app has them installed, `react-native-worklets` and `react-native-reanimated` work on
+macOS: worklets run on a UI runtime on the main thread, and shared values, animations and worklet
+styles update at the display's rate, with no frames taken while nothing animates.
 
-`react-native-gesture-handler`'s recognisers are the core's (`gestures.h`): pan, tap, long press,
-pinch, rotation, hover, fling, manual and native view handlers, with the library's state machine
-and relations (simultaneous, `requireToFail`, `blocksHandlers`), ported from its shared
-implementation. A press and its drag are the primary mouse button's, unless a handler asks for
+`react-native-gesture-handler` works with pan, tap, long press, pinch, rotation, hover, fling,
+manual and native view handlers, and the library's relations (simultaneous, `requireToFail`,
+`blocksHandlers`). A press and its drag are the primary mouse button's, unless a handler asks for
 another with `mouseButton`. A pan with `enableTrackpadTwoFingerGesture` follows a trackpad's
 two-finger scroll, a pinch the trackpad's magnify and a rotation its rotate, and hover the pointer
-with no button down. A handler that activates cancels the touch React Native was told of, as the
-library's root recogniser does on iOS. A native handler on a scroll view activates as it scrolls by
-the wheel or trackpad, since a mouse drag does not scroll it. Worklet gestures' events reach
-Reanimated on the UI runtime; JavaScript ones arrive as `onGestureHandlerStateChange` device events.
-The version 3 detector's shadow node and descriptor compile in through `--library`, but the host
-gives it no view of its own. Not on macOS: `hitSlop`, the library's own components
-(`RNGestureHandlerButton`, the version 3 detector's view), the UI runtime's `_setGestureStateSync`
-(a worklet's state manager goes through Reanimated's `setGestureState`), and force touch.
-
-## Testing a component with gestures
-
-Under the documented Vitest setup, `ngNative()` resolves `@ng-native/components/gestures` and
-`react-native-gesture-handler` to stand-ins, because the real ones reach React Native source Node
-cannot load. A root component wrapped in `<gesture-root>`, and any screen with a `[gesture]`,
-render and take presses as they would without them: `<gesture-root>` renders a plain view and
-`[gesture]` keeps its view uncollapsed, with no recognizer attached. `Gesture.Pan()` and the other
-builders take any configuration call and keep the callbacks they were given on `callbacks`, so a
-test of what a gesture does calls one directly. `gestureOf` finds the gesture on a view, or the one
-of a kind inside a composed gesture such as `Gesture.Race(pan, tap)`, which is how a test reaches
-a gesture a row component built for itself:
-
-```ts
-import { gestureOf, render, screen } from '@ng-native/testing';
-
-await render(Draggable);
-gestureOf(screen.getByTestId('box'), 'Pan').callbacks['onUpdate']!({ translationX: 40 });
-```
-
-The worklets a gesture drives are stood in for too: see
-[the testing setup](/packages/testing/setup).
+with no button down. A handler that activates cancels the touch React Native was told of, as on
+iOS. A native handler on a scroll view activates as it scrolls by the wheel or trackpad, since a
+mouse drag does not scroll it. Worklet gestures' events reach Reanimated on the UI runtime. Not on
+macOS: `hitSlop`, the library's own components (`RNGestureHandlerButton`, the version 3
+detector's view), the UI runtime's `_setGestureStateSync` (use Reanimated's `setGestureState`), and
+force touch.
 
 ## Callbacks must not close over `this`
 
@@ -230,6 +200,30 @@ constructor() {
 It takes a `DestroyRef` as its second argument where it is called outside an injection context,
 for a service or a function of its own. The same goes for any other function a worklet calls back
 on the JavaScript thread, such as `runOnJS`'s.
+
+## In a test
+
+Under the documented Vitest setup, `ngNative()` resolves `@ng-native/components/gestures` and
+`react-native-gesture-handler` to stand-ins, because the real ones reach React Native source Node
+cannot load. A root component wrapped in `<gesture-root>`, and any screen with a `[gesture]`,
+render and take presses as they would without them: `<gesture-root>` renders a plain view and
+`[gesture]` keeps its view uncollapsed, with no recognizer attached. `Gesture.Pan()` and the other
+builders take any configuration call and keep the callbacks they were given on `callbacks`, so a
+test of what a gesture does calls one directly. `gestureOf` finds the gesture on a view, or the one
+of a kind inside a composed gesture such as `Gesture.Race(pan, tap)`, which is how a test reaches
+a gesture a row component built for itself:
+
+```ts
+import { gestureOf, render, screen } from '@ng-native/testing';
+
+await render(Draggable);
+gestureOf(screen.getByTestId('box'), 'Pan').callbacks['onUpdate']!({ translationX: 40 });
+```
+
+The worklets a gesture drives are stood in for too: see
+[the testing setup](/packages/testing/setup).
+
+## Reference
 
 <!-- api: NativeGesture -->
 

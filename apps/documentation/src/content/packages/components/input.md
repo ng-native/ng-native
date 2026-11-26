@@ -140,8 +140,6 @@ past the cap on Android.
 />
 ```
 
-<!-- api: TextInput -->
-
 ## Line height
 
 A single-line field's `line-height` sets its height, as it sets an `<input>`'s in a browser: line
@@ -182,3 +180,7 @@ dismisses the keyboard for that tap. On Android the element is a plain view in t
 a tap on it counts as any other.
 
 <!-- api: InputAccessoryView -->
+
+## Reference
+
+<!-- api: TextInput -->

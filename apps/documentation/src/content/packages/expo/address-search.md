@@ -22,7 +22,7 @@ cannot load it.
 import { AddressSearch } from '@ng-native/expo/address-search';
 ```
 
-## The smallest thing that works
+## The smallest useful example
 
 ```ts
 import { Component, inject, signal } from '@angular/core';
@@ -117,8 +117,12 @@ After the query changes, resolve one of the new suggestions.
   finds less than on iOS. It goes to the network for each lookup. On a device with no geocoder,
   the suggestions stay empty.
 
-## Without the native module
+## Without the module
 
 In Expo Go, on the web and in Node tests there is no native module: the suggestions stay empty,
 `resolve` answers null, and in development a warning says so once. A test provides a fake through
 `AddressSearch.SOURCE`.
+
+## Reference
+
+<!-- api: AddressSearch -->

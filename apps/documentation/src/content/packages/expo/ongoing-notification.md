@@ -10,6 +10,8 @@ change to the signal replaces what it shows, silently, until you end it. It is A
 counterpart to a [Live Activity](/packages/expo/live-activity), and it asks Android to show it as
 a Live Update, with a chip in the status bar, where Android has them.
 
+## Install
+
 It comes with `@ng-native/expo`, whose native half draws it, so it needs an app built since
 `@ng-native/expo` was installed: `npx expo run:android`, or a new EAS build. That native half adds
 the `POST_NOTIFICATIONS` and `POST_PROMOTED_NOTIFICATIONS` permissions to the app's manifest.
@@ -129,10 +131,9 @@ The notification is then an ordinary ongoing one, with the same timer, progress 
 ## Only on Android
 
 On iOS and the web there is no such notification, and `start()` answers false. The same is so in
-Expo Go and in a build made before `@ng-native/expo` was installed, which do not have its native
-half.
+Expo Go and in a build without `@ng-native/expo`'s native half.
 
-## Testing
+## In a test
 
 Provide `ONGOING_NOTIFICATIONS` from `@ng-native/expo/ongoing-notification` with a stand-in for the
 native module: an object with `show`, `cancel`, `isActive`, `takeTaps`, `openPromotionSettings`

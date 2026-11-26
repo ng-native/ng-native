@@ -78,9 +78,7 @@ instead.
 
 Off a device `tell()` and `confirm()` resolve immediately (`confirm()` to `false`), `ask()` and
 `choose()` resolve to `null` without showing anything, a `message` included, and `notify()` does
-nothing, because there is no platform dialog underneath any of them. There is no equivalent to a
-native action sheet or Android toast on the web; `tell()` and `confirm()` are the two most likely to
-want a web fallback of their own.
+nothing. They show nothing on the web either.
 
 ## Reference
 

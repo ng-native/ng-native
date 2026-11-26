@@ -67,76 +67,19 @@ locally to what a store submission runs.
 
 ### With EAS Build
 
+[EAS Build](https://docs.expo.dev/build/introduction/) builds on Expo's machines, or locally with
+`--local`, and manages signing credentials; nothing in it is specific to Angular Native:
+
 ```sh
 npm install -g eas-cli
-eas login
 eas build:configure
-```
-
-`eas build:configure` writes `eas.json`, with three profiles:
-
-```json
-{
-  "build": {
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal"
-    },
-    "preview": {
-      "distribution": "internal"
-    },
-    "production": {
-      "autoIncrement": true
-    }
-  }
-}
-```
-
-`distribution: "internal"` permits direct-link installation without a store or a paid Apple
-developer account for testing. `developmentClient: true` installs `expo-dev-client` and enables
-Metro. Omit it for `preview` and `production` release builds. `autoIncrement` increases the build
-number and version code per build to prevent duplicate submissions.
-
-```sh
 eas build --platform ios --profile development
-eas build --platform android --profile preview
 ```
 
-EAS Build uses Expo's machines by default. `--local` produces the same artifact locally and requires
-the native toolchain used by `expo run`. Use it when Expo's build servers are unreachable or policy
-prohibits sending source off the machine.
-
-### Signing
-
-On the first platform build, cloud builds create and store an Apple distribution certificate and
-provisioning profile or an Android upload keystore, then reuse them. Manage them with
-`eas credentials`. Local builds use the machine's Xcode or Android Studio signing configuration.
-
-## Installing on a device
-
-Install **internal** development or preview builds through their device link or
-[Expo Orbit](https://expo.dev/orbit), which also installs from the build page. iOS devices must be
-registered to the signing Apple developer account; add them with `eas device:create`. Android APKs
-install on any device that permits them.
-
-Submit **production** builds, then use TestFlight or the Play Console's internal testing track to
-install them before public release.
-
-## Submit to a store
-
-```sh
-eas submit --platform ios
-eas submit --platform android
-```
-
-These commands submit the profile's latest build by default; use `--path` for another binary.
-iOS requires an App Store Connect API key or Apple ID and uploads to App Store Connect, appearing
-in TestFlight in ten to fifteen minutes. Android requires a Google Play service account key and
-uploads to the track selected in `eas.json` or on the command line.
-
-For screenshots, review information and first submissions, see Expo's guides:
-[Submit to the Apple App Store](https://docs.expo.dev/submit/ios/) and
-[Submit to the Google Play Store](https://docs.expo.dev/submit/android/).
+Install internal builds through their link or [Expo Orbit](https://expo.dev/orbit), and submit a
+production build with `eas submit`; see Expo's guides to
+[submitting to the App Store](https://docs.expo.dev/submit/ios/) and
+[to Google Play](https://docs.expo.dev/submit/android/).
 
 ## macOS
 

@@ -42,18 +42,12 @@ export default defineConfig({
 });
 ```
 
-`ngNativeWeb()` is three things: `@oxc-angular/vite`'s Angular compiler for the app's own
-components, the same compiler for the decorated `@ng-native/*` source under `node_modules`, which
-`@oxc-angular/vite` leaves alone, and the resolution a browser build needs. `react-native` and
-`expo`, which the packages only `require` on a device, resolve to an empty module, in the bundle and
-in Vite's dependency pre-bundling alike, including in a workspace that has React Native installed
-for its native app. An Expo module that a package `require`s, such as `expo-battery` behind
-`@ng-native/expo/battery`, resolves to a module that throws when it is loaded, so the service is
-inert, as it is anywhere the module is missing, whether or not Expo is installed. An `import` of one
-in the app's own code still fails the build. It sets no `build.rolldownOptions.external`, so it
-combines with a tool that sets its own, such as [Storybook](/packages/web/storybook). It takes
-`@oxc-angular/vite`'s options and passes them on, over `zoneless: true` and `emitClassMetadata:
-false`.
+`ngNativeWeb()` compiles the app's components and the `@ng-native/*` source, resolves
+`react-native` and `expo` to an empty module and an Expo module a package `require`s to one that
+throws when loaded, so that service is inert; an `import` of one in the app's own code still fails
+the build. It sets no `build.rolldownOptions.external`, so it combines with a tool that sets its
+own, such as [Storybook](/packages/web/storybook). It takes `@oxc-angular/vite`'s options and passes
+them on, over `zoneless: true` and `emitClassMetadata: false`.
 
 `index.html`, which Vite serves as the page:
 
@@ -306,21 +300,15 @@ const root = document.getElementById('app-root')!;
 mount(root, App, { providers: [provideRouter(routes)] });
 ```
 
-`mount` is the browser counterpart to `@ng-native/platform`'s `mount()`, over the same
-`HostEngine` seam - `@ng-native/components` makes exactly these calls of a renderer and nothing
-else, so `BrowserEngine` satisfies the same interface Fabric's `Engine` does, with no cast. The
-differences are the whole of what a browser page does not need: a real `Element` instead of a
-numeric root tag, the real `document`, and no Fabric UI manager at all.
+`mount` is the browser counterpart to `@ng-native/platform`'s `mount()`, over the same `HostEngine`
+seam (see [Native and web](/guide/native-and-web#the-seam)): it takes a real `Element` instead of a
+numeric root tag, and needs no Fabric UI manager.
 
-`mount` also wires `Screen`, `ColorScheme` and `Direction` from `@ng-native/device` to real browser
-sources - window resize events, `matchMedia('(prefers-color-scheme: dark)')`, `document.dir` - so a
-component that reads `inject(Screen).compact()` or reacts to dark mode behaves the same whether it
-is running on a phone or in this browser tab. It also injects `reset.css` into `document.head` on
-first use, in Tailwind's `base` layer and first in the head, so that layer comes before any layer
-the page declares and every utility wins over it, which closes the gap between Yoga's flex defaults
-and a browser's: an unstyled native view starts at `display: flex; flex-direction: column;
-align-items: stretch; flex-shrink: 0`, and an unstyled DOM element does not, so a shared class
-string would otherwise disagree between the two hosts.
+`mount` also wires `Screen`, `ColorScheme` and `Direction` from `@ng-native/device` to the browser's
+window size, `prefers-color-scheme` and `document.dir`. It injects `reset.css` into `document.head`
+on first use, in Tailwind's `base` layer and first in the head, so every utility wins over it; it
+gives unstyled elements Yoga's flex defaults (see [The layout
+reset](/guide/native-and-web#the-layout-reset)).
 
 ## Inside an app you already have
 

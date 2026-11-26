@@ -5,93 +5,24 @@ summary: Tailwind and your own CSS on native views, through a real cascade, no c
 
 # Theming and Tailwind
 
-React Native has no CSS engine: NativeWind compiles Tailwind into style objects, attaches them
-through `cssInterop` and provides a variant runtime because native views do not understand
-`className`. Angular Native's cascade already supports selectors, specificity, inheritance, media
-queries and custom properties. `<view class="flex-1 bg-blue-500 p-4">` matches through `class`,
-without an interop layer or `className` prop.
-
-A build step converts web CSS to the native subset; a preset adds native-specific vocabulary.
+Angular Native's cascade supports selectors, specificity, inheritance, media queries and custom
+properties, so `<view class="flex-1 bg-blue-500 p-4">` matches through `class`, with no interop
+layer or `className` prop.
 
 ## The build step
 
-```css
-@import 'tailwindcss/theme.css';
-@import 'tailwindcss/utilities.css';
-@import '@ng-native/tailwind/native.css';
-```
-
-Import `theme.css` and `utilities.css` instead of `tailwindcss` to exclude preflight's browser
-reset (`html`, `::before`, `-webkit-*`). This documentation site imports preflight explicitly,
-since its own chrome is a real document even though the components in it are not.
-
-The compiler unwraps `@layer` and `@supports`, drops `@property`, substitutes static theme
-variables, and folds `calc()` through lightningcss. A theme variable the app sets itself stays a
-`var()` instead (see [Tokens cross component boundaries](#tokens-cross-component-boundaries)). For
-example, `calc(var(--spacing) * 4)` is constant but cannot resolve on a device. The compiler
-converts `oklch()` to sRGB as in component stylesheets.
-
-Then the utilities compile:
-
-```
-p-4              -> { paddingTop: 16, paddingRight: 16, paddingBottom: 16, paddingLeft: 16 }
-gap-2            -> { gap: 8 }
-h-16             -> { height: 64 }
-rounded-lg       -> { borderTopLeftRadius: 8, ... }
-bg-blue-500      -> { backgroundColor: 'rgb(43, 127, 255)' }
-```
-
-Unsupported styles produce diagnostics that name the rule's selector, which is what to search the
-app for:
-
-```
-[angular-native] .appearance-none (Tailwind): dropped 'appearance': 'appearance' has no React Native equivalent: no style prop of a native view does what it does.
-```
-
-Diagnostics prevent unsupported styles from silently doing nothing.
+[`@ng-native/tailwind`](/packages/tailwind#setup) compiles Tailwind's output to the subset native
+can express, and warns, naming the rule's selector, for what it drops; see [What the build step
+does](/packages/tailwind#what-the-build-step-does). A theme variable the app sets itself stays a
+`var()` (see [Tokens cross component boundaries](#tokens-cross-component-boundaries)).
 
 ## The preset
 
 `@ng-native/tailwind` contains three files: `shared.css` for platform-independent styles, plus
-`native.css` and `web.css`, which import it and define four platform-dependent variants.
-
-### `hover:` is the pressed state
-
-`:hover` is permanently unsupported by the native matcher and dropped with a build warning. The
-`hover:` variant instead matches `:active`, which the engine sets on touched views and their
-ancestors, letting hover classes express touch engagement.
-
-`data-hover` is for a trackpad, a mouse or a pencil, through React Native's W3C pointer events,
-which are off until an app [turns them on](/packages/platform/renderer#pointer-events). Components
-must listen for these events and set the attribute themselves. Without a pointer the variant
-remains a press state.
-
-```css
-/* native.css */
-@custom-variant hover (&:active, &[data-hover]);
-
-/* web.css */
-@custom-variant hover (&:hover, &:active, &[data-hover]);
-```
-
-The browser variant includes `:active` for touchscreen laptops and phone browsers, where `:hover`
-may never fire or may stick after a tap. Use `press:` and `hovered:` to distinguish the states.
-
-### `focus-visible:` is `focus:` on native
-
-The web distinguishes keyboard focus from clicks to avoid unnecessary rings. On phones, focus
-comes from keyboards, remotes or assistive technology, where rings are useful. Since
-`:focus-visible` is also dropped with a build warning, the native variant aliases it to focus.
-
-Both platforms also match `data-focus` so a wrapper can show its control's focus ring. The native
-text field receives focus, while its wrapper owns the border, radius and padding; the control's
-composed behavior informs the wrapper.
-
-### `ios:`, `android:`, `web:`, `native:`
-
-`mount` adds `platform-ios`, `platform-android` or `platform-web` to the root, enabling Tailwind's
-platform variants. Variants for absent classes compile but never match, so shared classes such as
-`ios:pt-2` are harmless on the web.
+`native.css` and `web.css`, which import it. They define the platform variants (`ios:`,
+`android:`, `macos:`, `linux:`, `desktop:`, `web:`, `native:`) and what `hover:`, `press:`,
+`focus-visible:` and `disabled:` match on each OS; [Variants](/packages/tailwind/variants) covers
+each one.
 
 ### `dark:` follows a class
 

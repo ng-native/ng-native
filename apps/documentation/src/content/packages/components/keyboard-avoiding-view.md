@@ -151,4 +151,6 @@ place as the keyboard starts to move. With `provideNativeKeyboard()` from
 instead: each frame is a commit from JavaScript, so it trails the keyboard by a frame or two, where
 a `<keyboard-dock>` is moved on the native side and does not.
 
+## Reference
+
 <!-- api: KeyboardAvoidingView -->

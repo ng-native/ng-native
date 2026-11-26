@@ -40,15 +40,10 @@ with the platform's own bar.
 `StatusBarState` takes `style` (`'default' | 'light' | 'dark' | 'auto'`, `'light'` meaning light
 _content_ for a dark bar, as CSS would), `hidden` and `animated`.
 
-It also takes `backgroundColor` and `translucent`, which are deprecated and do nothing. They were
-Android-only, and under [Android edge-to-edge](/guide/android-edge-to-edge) the app always draws
-under the bar, which has no background of its own: React Native's Android module ignores both. In
-development the first use of each logs a warning on Android, unless the app has opted out of
-edge-to-edge, where both still work up to React Native 0.86 (Expo SDK 57). React Native 0.88 (Expo
-SDK 58) draws every Android app edge-to-edge and has neither, so there both do nothing and warn
-whatever the theme. On iOS neither is sent, so React Native's "only available on Android" warning
-no longer shows. To color the area behind the bar,
-color the view under it.
+It also takes `backgroundColor` and `translucent`, which are deprecated and do nothing under
+[Android edge-to-edge](/guide/android-edge-to-edge), logging a warning in development on first use.
+On Expo SDK 57 an Android app that has opted out of edge-to-edge still gets both; on SDK 58 every
+Android app is edge-to-edge. To color the area behind the bar, color the view under it.
 
 ## Following the color scheme
 
@@ -98,9 +93,7 @@ changes while such a screen is in front shows at once, until the next screen app
 
 ## Off a device and on the web
 
-Off a device every setter is a no-op and `height` stays zero, because there is no `StatusBar` module
-underneath it. There is no status bar on the web, so `StatusBar` is a native-only concern; an app
-should guard status bar claims behind a platform check if it also targets the web.
+Off a device and on the web every setter is a no-op and `height` stays zero.
 
 ## Reference
 

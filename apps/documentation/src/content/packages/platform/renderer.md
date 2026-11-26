@@ -5,76 +5,31 @@ summary: What NativeRendererFactory and NativeRenderer do with a component once 
 
 # The renderer
 
-## From a component definition to a stylesheet
+`NativeRendererFactory` hands Angular a `Renderer2` per component type, bound to that component's
+compiled stylesheet, so a component's elements match only its own rules (a component with
+`ViewEncapsulation.None` adds its sheet as a global one). See [Fabric's CSS
+engine](/packages/fabric/css-engine) for how rules match.
 
-`NativeRendererFactory` implements `RendererFactory2`. Angular calls `createRenderer(host, type)`
-once per component type, and the factory looks up that component's compiled stylesheet
-(`styleSheetOf(type.type)`, reading the `ɵnativeStyles` the Metro transform attached to the class)
-and hands back a `Renderer2` bound to it. That binding is what makes emulated encapsulation work
-here: a component's elements are matched only against its own compiled rules, because the renderer
-that created them is the one holding that stylesheet. A component with
-`ViewEncapsulation.None` is the exception: its sheet is registered with the engine as a global one
-the first time it renders, and its elements get none. See [Fabric's CSS
-engine](/packages/fabric/css-engine) for what those rules are matched against.
+## Styles and events
 
-## What `Renderer2` calls become
+- **Style bindings work as on the web.** `[style.font-size]`, `[style.width.px]` and a static
+  `style="flex: 1"` attribute all reach the native view. A `flex` of several values, a keyword or a
+  basis (`flex: 1 1 auto`, `flex: none`, `flex: 30%`) is committed as `flexGrow`, `flexShrink` and
+  `flexBasis`; one number, `flex: 1`, stays React Native's own `flex`.
+- **Events map by name.** `(touchEnd)` binds Fabric's `topTouchEnd`. `(press)` is not a native
+  event: on a `<pressable>` it binds the `Pressable` directive's `output()`.
 
-`NativeRenderer` maps every `Renderer2` method onto the equivalent `Engine` call -
-`createElement`, `appendChild`, `setProp`, `addClass`, and so on - with two translations worth
-knowing about, because both fail silently if you write around them instead of through them:
+## Change detection
 
-- **Style values compiled for the DOM are converted back.** `[style.font-size]` arrives dash-cased
-  and `[style.width.px]` arrives as the string `'10px'`; the renderer camel-cases the first and
-  parses numeric strings back into numbers for the second, because Fabric wants `fontSize` and a
-  plain `10`. A _static_ `style="flex: 1"` attribute - not a binding - arrives as one whole string
-  through `setAttribute`, and gets the same treatment: without it, a static `style` attribute would
-  hand Fabric a string where it expects an object, and it drops the whole thing. A `flex` of
-  several values, a keyword or a basis (`flex: 1 1 auto`, `flex: none`, `flex: 30%`) is committed
-  as the `flexGrow`, `flexShrink` and `flexBasis` a stylesheet makes of it, since Fabric reads
-  none of them; one number, `flex: 1`, stays React Native's own `flex` in every form.
-- **Events map by name.** `(touchEnd)` becomes Fabric's `topTouchEnd`. There is no alias for
-  `(press)`: `onPress` is not a native event, React Native's own `Pressable` synthesizes it from the
-  touch responder system in JavaScript. `Pressable` in `@ng-native/components` does the same
-  and exposes it as a directive `output()`, so `(press)` on a `<pressable>` binds to that output
-  rather than an event on the renderer.
+Change detection is zoneless. The tree is committed to native once at the end of each render pass,
+and also for changes Angular's scheduler does not see: `:focus` and `:active`, a CSS transition
+frame (see [Animation](/packages/fabric/animation)), `animate.enter` / `animate.leave` classes and
+an `[animatedStyle]` frame.
 
-## Change detection is zoneless, and a commit has one point it happens at
-
-There is no zone.js patching timers or touch events to know when to check the tree; Angular's
-zoneless scheduler decides when to run change detection, and `NativeRendererFactory.end()` is the
-one point tied to that schedule where the engine's retained tree is diffed and sent to Fabric in one
-`completeRoot` call. `Engine` also commits on its own outside a render pass for state Angular's
-scheduler has no way to know about - `:focus` and `:active` changing from a native event, or a
-`[animatedStyle]`-bound element receiving a new JavaScript-driven animation frame from React
-Native's own `Animated` graph - because none of those start as a change in a signal or a binding
-that would make change detection run again on its own.
-
-Two more things exist to reach frames outside a render pass, because plenty of real work happens
-outside change detection on this platform:
-
-- **CSS transitions** are not a binding - nothing in Angular's own state changes while one runs -
-  so `end()` schedules a `requestAnimationFrame` loop (`pump`) for as long as the engine reports a
-  transition or a pending removal, and each frame is its own commit. See
-  [Animation](/packages/fabric/animation).
-- **`animate.enter` / `animate.leave`** add and remove classes from Angular's own animation queue,
-  which runs after a render pass. Without a commit scheduled for that, the class would sit on the
-  node and never reach native. The engine reports the moment it goes from clean to dirty
-  (`onDirty`), and the factory's `commitSoon` schedules a frame for exactly that case.
-
-### A view detached before its first check
-
-A component that calls `inject(ChangeDetectorRef).detach()` in its constructor, to drive its own
-change detection, has its template's elements created but no update pass run in it until it calls
-`detectChanges()`. A host primitive in it still works from creation, as a DOM element with a
-listener and static attributes does on the web: before the commit that first mounts the element,
-the host writes what its static inputs say, so `(press)` and the other press events fire, a text
-can be pressed, and `testID`, `nativeID`, the role, the label and the rest of the accessibility
-props, and a `<text>`'s own props such as `numberOfLines`, are all on the native view. A press
-handler can then call `detectChanges()` to render the view.
-
-What waits for that first `detectChanges()` is what any binding in the view waits for: bound
-values, interpolated text, and the props a primitive publishes through its host bindings, such as a
-`<text-input>`'s `placeholder` or a `<switch>`'s colors.
+A component that calls `inject(ChangeDetectorRef).detach()` in its constructor still gets working
+host primitives before its first `detectChanges()`: static inputs such as `(press)`, `testID`, the
+accessibility props and `numberOfLines` are on the native view. Bound values and interpolated text
+wait for the first `detectChanges()`.
 
 ## `@defer` triggers
 
@@ -125,52 +80,13 @@ do not set `hovered` or fire `on hover`.
 
 ## Extending the renderer
 
-Three functions let a package other than `@ng-native/platform` and `@ng-native/fabric` change how a
-template is rendered, for every app in the process. A compatibility layer for templates written for
-another host is built on them, and none of them puts that host's API in the engine or the renderer.
-
-**`extendRenderer(extension)`**, from `@ng-native/platform`, adds hooks the renderer calls. Each
-is optional, and the extensions are asked in the order they were added:
-
-- `named(name, namespace, engine)` answers the element a name stands for in a namespace: another
-  name, or its own to keep it. Angular creates what is written inside an `<svg>` in the `svg`
-  namespace, where a `<text>` is the drawing's text, not the app's. An element an extension
-  answers for is a drawing to the engine, whose react-native-svg shapes are painted by a
-  stylesheet as a browser paints them, and a type selector still matches it by the name it was
-  written as. Answering nothing leaves the element the app's own. The hook is asked for every app
-  in the process, with the engine the element is created in, so an extension that should draw
-  only for the apps that asked for it checks the engine and answers nothing for any other. An
-  icon's shapes are created by name alone, and render as they always have.
-- `listen(target, eventName, callback, engine, options)` takes a listener over: it answers what
-  removes the listener, or nothing to leave it to the renderer. The target is a node, or the name
-  Angular gives a global one: `'window'`, `'document'` or `'body'`. The options are the ones a
-  script passed `Renderer2.listen`, `capture`, `once` and `passive`, and are undefined for a
-  template's listener.
-- `created(node, engine)` is told of each element a template creates, before it has attributes
-  or children.
-- `inserted(node, parent, engine)` is told each time a node is put under a parent, and
-  `removed(node, engine)` each time the renderer takes one out.
-- `set(node, name, value, engine)` takes an attribute or a property over, `null` for one being
-  removed, and answers `true` once it has set the props the view reads.
-- `style(node, name, value, engine)` takes a bound style over and answers the declarations it is
-  set as, by the keys the view reads, each `null` to remove it.
-
-An app with no extension added pays one length check for each of these calls.
-
-**`extendNodes(members)`**, from `@ng-native/fabric`, gives every node the property descriptors
-it is passed, a getter or a method, on the prototype the nodes share. The engine reads none of
-them. A field the engine keeps on a node, such as `nodeKind` or `props`, is refused. A member a
-node already has on that prototype, such as `classList`, is replaced and put back when the
-extension is taken away, so what replaces it has to keep doing what Angular relied on. Two
-extensions of the same member can be taken away in either order.
-
-**`registerViewName()`** returns a function that takes the registration away again, so a package
-can register names only for as long as it is in use. Two registrations of one name can be taken
-away in either order: the newest still there names the element, and the original comes back after
-the last.
-
-Each returns a function that takes the extension away again, which is what a test calls when it
-is done.
+`extendRenderer(extension)` from `@ng-native/platform`, and `extendNodes(members)` and
+`registerViewName()` from `@ng-native/fabric`, let a package change how templates render for every
+app in the process. They exist for compatibility layers such as
+[`@ng-native/web-compat`](/packages/web-compat); an app does not need them. An extension can answer
+for an element name in a namespace (`named`), take over a listener (`listen`), an attribute
+(`set`) or a bound style (`style`), and hear of nodes created, inserted and removed. Each function
+returns a function that takes the extension away again.
 
 ## Reading commit stats
 

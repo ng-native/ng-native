@@ -5,13 +5,10 @@ summary: Connection type and a reachability estimate, as signals - not proof a r
 
 # Network
 
-`Network` exposes the platform's connection and internet-reachability estimates. Handle request
-failures separately to determine whether your server is reachable. `connected` is whether there is
-a connection of any kind; `reachable` forwards the platform's own `isInternetReachable` estimate,
-which on iOS is the same value as `connected` and is not the result of probing your server or
-anything else. Treat `reachable` as a signal worth branching an offline banner on, not as
-confirmation that a request will succeed - a `try`/`catch` around the request itself is what
-actually knows that.
+`Network` exposes the platform's connection and internet-reachability estimates. `connected` is
+whether there is a connection of any kind; `reachable` is the platform's `isInternetReachable`
+estimate, the same value as `connected` on iOS, and not a probe of your server. Branch an offline
+banner on it, and handle a failed request where it fails.
 
 <!-- platforms: Network -->
 
@@ -60,11 +57,9 @@ export class Banner {
 
 ## Without the module
 
-On iOS and Android, a missing `expo-network` - never installed, or installed without the app being
-rebuilt since - leaves the service made, so injecting it does not throw. A call, or a read of a
-value only the module knows, throws a `MissingModuleError`. Its message names the module and the
-commands that fix it; see
-[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
+On iOS and Android, a missing `expo-network` throws a
+[`MissingModuleError`](/packages/expo/using-a-module#what-happens-without-the-module-installed) on
+the first call or read that needs it. Injecting the service does not throw.
 
 On the web, and in a test that provides no fake, everything reads as offline and unknown:
 `connected` is `false`, `type` is `'unknown'`, `reachable` is `null`.

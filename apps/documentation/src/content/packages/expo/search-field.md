@@ -11,10 +11,14 @@ AndroidX's `SearchView` on Android and AppKit's `NSSearchField` on macOS.
 goes anywhere else, such as a bottom sheet, which has no navigation bar, a page, or the top of a
 list.
 
+## Install
+
 It comes with `@ng-native/expo`, whose native half draws it, so it needs an app built since
 `@ng-native/expo` was installed: `npx expo run:ios`, `npx expo run:android`, or a new EAS build.
 Expo Go cannot load it, so there it draws nothing and logs a warning in development. On macOS the
 desktop host draws it.
+
+## The smallest useful example
 
 ```ts
 import { Component, computed, signal } from '@angular/core';
@@ -117,6 +121,6 @@ export class SavedFilter {
 }
 ```
 
-## API
+## Reference
 
 <!-- api: SearchField -->

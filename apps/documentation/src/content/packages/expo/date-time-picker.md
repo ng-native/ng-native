@@ -10,11 +10,15 @@ iOS and macOS: UIKit's `UIDatePicker`, and AppKit's date picker on the desktop h
 installed. On Android the library has no view, only a module that opens a dialog, so the element
 commits as nothing there; open the library's `DateTimePickerAndroid.open()` from a press instead.
 
+## Install
+
 On iOS it needs `@react-native-community/datetimepicker`:
 
-```bash
+```sh
 npx expo install @react-native-community/datetimepicker
 ```
+
+## The smallest useful example
 
 ```ts
 import { Component, signal } from '@angular/core';
@@ -66,3 +70,7 @@ The inputs are the native view's, not the library's React component's: the momen
 - **`pickerDismiss`** - the compact picker's popover closed.
 
 The [native views](/packages/expo/native-views) page covers the other community views.
+
+## Reference
+
+<!-- api: DateTimePicker -->

@@ -15,12 +15,9 @@ hosts.
 ## The seam
 
 `HostEngine` and `HostNode` in `@ng-native/fabric` define only the renderer calls
-`@ng-native/components` uses. Direct dependencies on `inject(Engine)`, whose constructor requires
-a `FabricUIManager`, and Fabric's `EngineNode` would couple components to native rendering.
-Casting a browser object through `as unknown as Engine` would bypass type checking.
-
-Fabric's `Engine` implements `HostEngine`; `EngineNode` extends `HostNode`. `BrowserEngine`
-implements both over the DOM without casts, while the native path stays unchanged.
+`@ng-native/components` uses. Fabric's `Engine` implements `HostEngine` and `EngineNode` extends
+`HostNode`; `@ng-native/web`'s `BrowserEngine` implements both over the DOM. A component that
+injects `HostEngine` rather than `Engine` runs on both hosts.
 
 ## Mounting on the web
 
@@ -69,7 +66,7 @@ inert, invisible box; no native stack outlet exists. The browser host uses Angul
 `BrowserRenderer`.
 
 Reanimated worklets and react-native-gesture-handler are native-only. Their directives are inert on
-the web, and the libraries' own imports fail a browser build; see
+the web, and `ngNativeWeb()` resolves the libraries themselves to inert stand-ins; see
 [What does not carry over](/packages/web/limits).
 
 Other controls work through the host. A self-focusing `<text-input>` and an offset-scrolling

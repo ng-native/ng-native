@@ -100,11 +100,9 @@ development build is needed after installing it.
 
 ## Without the module
 
-On iOS and Android, a missing `expo-background-task` - never installed, or installed without the app
-being rebuilt since - leaves the service made, so injecting it does not throw. A call, or a read of
-a value only the module knows, throws a `MissingModuleError`. Its message names the module and the
-commands that fix it; see
-[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
+On iOS and Android, a missing `expo-background-task` throws a
+[`MissingModuleError`](/packages/expo/using-a-module#what-happens-without-the-module-installed) on
+the first call or read that needs it. Injecting the service does not throw.
 
 On the web, and in a test that provides no fake, `status()` resolves to
 `BackgroundTaskStatus.Restricted`, `register()` and `unregister()` resolve without doing anything,

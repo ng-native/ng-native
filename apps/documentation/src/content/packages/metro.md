@@ -9,11 +9,8 @@ summary: The Babel transformer that compiles Angular ahead of time and turns CSS
 a Babel transformer: the piece that compiles your Angular components ahead of time, turns each
 component's `styles` into the rule set [Fabric](/packages/fabric/css-engine) reads at runtime,
 links whatever Angular libraries you installed from npm, and wires up hot reload without an Angular
-dev server in the loop. None of it is optional - without it, Metro has no idea what to do with a
-`.ts` file that has `@Component` in it, and cannot bundle one at all.
-
-Reach for this package once, in `metro.config.js`, and otherwise leave it alone: it runs on every
-file in your app automatically once wired in.
+dev server in the loop. Without it Metro cannot bundle an Angular component. It is wired in once, in
+`metro.config.js`.
 
 ## The smallest setup
 
@@ -64,21 +61,11 @@ Expo's template writes, or already overrides the flag some other way, and says s
 plugin leaves the Android project as `expo prebuild` wrote it. A prebuild after the option is
 removed writes `MainApplication.kt` again without the override.
 
-One preset, no options in the common case, because every part of it is built to fail quietly on its
-own if you leave it out - which is exactly why it exists as a preset rather than a page of manual
-wiring.
+## What it does
 
-## What it does, roughly
-
-`withAngularNative` points Metro's transformer at a compiler that AOT-compiles every
-`@Component`/`@Directive`/`@Pipe`/`@Injectable`/`@NgModule`/`@Service` file it finds, compiles each
-component's CSS with lightningcss into the rule set Fabric matches at runtime, and installs three
-polyfills every app needs before `@angular/core` first runs. It also patches Metro's own cache key
-and dev-server watching so an edit to the compiler itself is never served stale, and embeds a
-hot-reload path that can patch a live component's template without a full bundle reload.
-
-A capitalized element name - `<Card>` instead of `<card>` - is a hard build failure here rather
-than an empty box, because it matches no component's selector and the compiler reports no error.
+[Configuration](/packages/metro/configuration) covers what `withAngularNative` sets up, its
+options (`workspaceRoot` for a monorepo among them), what happens to a component file, how
+component CSS is compiled and how hot reload works. Two more things it does:
 
 A `.md` file is a module too: `import post from './post.md'` is `{ attributes, content, tokens }`,
 its front matter parsed and its Markdown lexed by `marked` as the app is bundled, for
@@ -89,13 +76,4 @@ An app with `@nativescript/react-native` installed and no Babel config of its ow
 worklets plugin's `strictGlobal` set, which a worklet naming a native class needs; see
 [NativeScript](/packages/nativescript#the-babel-config).
 
-In a monorepo where the framework packages live outside your app's own `node_modules`, pass
-`{ workspaceRoot }` to `withAngularNative` - it adds the workspace root to `watchFolders` and both
-`node_modules` directories to `resolver.nodeModulesPaths`, which is what lets Metro see a workspace
-package's source at all.
-
-[Configuration](/packages/metro/configuration) covers `withAngularNative`'s options, what happens
-to a component file in detail, how component CSS is compiled and what the build warns about,
-and how the hot-reload path decides between patching a template and falling back to a
-full reload. Wiring in Tailwind on top of this preset is [its own
-setup](/packages/tailwind).
+Wiring in Tailwind on top of this preset is [its own setup](/packages/tailwind).

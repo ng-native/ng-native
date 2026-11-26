@@ -22,7 +22,7 @@ npx expo install expo-camera
 import { Camera, cameraPermission, microphonePermission } from '@ng-native/expo/camera';
 ```
 
-## The smallest thing that works
+## The smallest useful example
 
 ```ts
 import { Component, viewChild } from '@angular/core';

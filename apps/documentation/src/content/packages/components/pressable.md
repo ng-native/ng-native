@@ -118,6 +118,8 @@ A component that keeps `press` to itself can subscribe to the behavior instead, 
 nothing forwarded: `inject(PressBehavior).press.subscribe(() => this.toggle())` in the
 constructor.
 
+## Reference
+
 <!-- api: Pressable -->
 
 <!-- api: TouchableOpacity -->
