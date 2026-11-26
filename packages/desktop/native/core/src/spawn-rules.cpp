@@ -83,17 +83,18 @@ std::optional<std::string> programProblem(const std::string &program) {
   if (kRefusedPrograms.contains(baseName(program))) {
     return program + " runs its arguments as a command, so it cannot be declared";
   }
-  if (program[0] == '/') {
-    auto parts = segments(program.substr(1));
+  bool home = program.rfind("~/", 0) == 0;
+  if (program[0] == '/' || home) {
+    auto parts = segments(program.substr(home ? 2 : 1));
     for (const auto &part : parts) {
       if (part.empty() || part == "." || part == "..") {
-        return program + " is not a normalized absolute path";
+        return program + (home ? " is not a normalized home path" : " is not a normalized absolute path");
       }
     }
     return std::nullopt;
   }
   if (program.find_first_of("\\/") != std::string::npos) {
-    return program + " is a relative path: give an absolute path or a bare name";
+    return program + " is a relative path: give an absolute path, a ~/ path or a bare name";
   }
   if (program == "." || program == "..") {
     return program + " is not a program";
@@ -259,6 +260,15 @@ std::optional<std::string> resolveProgram(const std::string &program, const Prog
   std::vector<std::string> candidates;
   if (program[0] == '/') {
     candidates.push_back(program);
+  } else if (program.rfind("~/", 0) == 0) {
+    auto home = lookup.home;
+    while (home.size() > 1 && home.back() == '/') {
+      home.pop_back();
+    }
+    if (home.empty() || home[0] != '/') {
+      return std::nullopt;
+    }
+    candidates.push_back(home + program.substr(1));
   } else {
     for (const auto &dir : lookup.searchPath) {
       candidates.push_back(dir + "/" + program);

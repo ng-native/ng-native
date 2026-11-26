@@ -263,6 +263,7 @@ ProcessesSetup processesSetup(const HostOs &os, const std::string &capabilitiesJ
   setup.lookup = {
       .isExecutable = [](const std::string &path) { return access(path.c_str(), X_OK) == 0; },
       .searchPath = os.searchPath,
+      .home = g_get_home_dir(),
   };
   if (flatpak) {
     setup.lookup.searchPath.insert(setup.lookup.searchPath.begin(), "/app/bin");

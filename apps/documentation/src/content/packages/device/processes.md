@@ -58,7 +58,8 @@ the call again before it runs anything.
 ]
 ```
 
-- **`program`** is an absolute path, or a bare name looked for once, at startup, in `/usr/bin`,
+- **`program`** is an absolute path, a path in the user's home folder such as
+  `~/.local/bin/claude`, or a bare name looked for once, at startup, in `/usr/bin`,
   `/bin`, `/usr/sbin`, `/sbin`, `/opt/homebrew/bin` and `/usr/local/bin` on macOS, and in
   `/usr/local/bin`, `/usr/bin`, `/bin`, `/usr/local/sbin`, `/usr/sbin` and `/sbin` on Linux, never
   the inherited `PATH`. Inside a Flatpak, the app's own `/app/bin` is looked in first, and a
@@ -66,7 +67,9 @@ the call again before it runs anything.
   `xcrun` stub without the Command Line Tools, is absent. Shells, `env`, programs that run their
   arguments as a command (such as `xargs` and `sudo`), programs that leave a sandbox or the session
   on Linux (`flatpak-spawn`, `systemd-run`, `nsenter`, `chroot`, `pkexec` and `busybox`), and
-  `.bat` and `.cmd` files are refused.
+  `.bat` and `.cmd` files are refused. A `~/` path is pinned once, at startup, against the
+  account's home folder, for tools that install there rather than system-wide; it is absent when
+  nothing is there.
 - **`args`** are literal strings, matched exactly, and `{name:regex}` placeholders. A placeholder's
   pattern matches the whole argument, and it never takes an argument starting with `-` unless each
   alternative of the pattern starts with one (`-v|--verbose`, not `-v|.*`), so an option cannot be

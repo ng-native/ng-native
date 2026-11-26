@@ -19,15 +19,16 @@
  * - Shells, `env` and other programs that run their arguments as a command are refused as
  *   programs, and so are Windows `.bat` and `.cmd` files, which `cmd.exe` re-parses (the BatBadBut
  *   class of bug). `spawn` never goes through a shell.
- * - A program is an absolute path, or a bare name resolved once at startup on a fixed search path
- *   (`SEARCH_PATH`), never the inherited `PATH`, and pinned there.
+ * - A program is an absolute path, a path in the user's home folder (`~/.local/bin/claude`), or a
+ *   bare name resolved once at startup on a fixed search path (`SEARCH_PATH`), never the inherited
+ *   `PATH`, and pinned there. A home path is pinned against the account's home folder at startup.
  *
  * The boundary guards against bugs and injected content, not against a hostile app.
  */
 
 /** A spawn capability as `app.json` declares it. */
 export interface SpawnCapability {
-  /** An absolute path, or a bare name resolved on `SEARCH_PATH` at startup. */
+  /** An absolute path, a `~/` path in the home folder, or a bare name resolved on `SEARCH_PATH`. */
   readonly program: string;
   /** Literal arguments and `{name:regex}` placeholders, in order. */
   readonly args?: readonly string[];
@@ -135,17 +136,24 @@ export function programProblem(program: string): string | null {
   if (REFUSED_PROGRAMS.has(name)) {
     return `${program} runs its arguments as a command, so it cannot be declared`;
   }
-  if (program.startsWith('/')) {
-    const segments = program.split('/').slice(1);
-    if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
-      return `${program} is not a normalized absolute path`;
-    }
-    return null;
-  }
-  if (/[\\/]/.test(program)) {
-    return `${program} is a relative path: give an absolute path or a bare name`;
-  }
+  const path = pathProblem(program);
+  if (path !== undefined) return path;
   if (program === '.' || program === '..') return `${program} is not a program`;
+  return null;
+}
+
+/** Why a program given as a path cannot be declared, null when it can, undefined for a bare name. */
+function pathProblem(program: string): string | null | undefined {
+  const home = program.startsWith('~/');
+  if (!home && !program.startsWith('/')) {
+    return /[\\/]/.test(program)
+      ? `${program} is a relative path: give an absolute path, a ~/ path or a bare name`
+      : undefined;
+  }
+  const segments = program.split('/').slice(1);
+  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
+    return `${program} is not a normalized ${home ? 'home' : 'absolute'} path`;
+  }
   return null;
 }
 
@@ -333,18 +341,24 @@ export interface ProgramLookup {
    * installed to run. Such a tool reports absent.
    */
   isStub?(path: string): boolean;
+  /** The account's home folder, absolute, that a `~/` program is in. Without it one is absent. */
+  readonly home?: string;
 }
 
 /**
  * Where a declared program runs from, pinned once at startup, or null when it is absent: not
  * found, or an `xcrun` stub without the Command Line Tools. A bare name is looked for on
- * `SEARCH_PATH` alone.
+ * `SEARCH_PATH` alone, and a `~/` path in `lookup.home` alone.
  */
 export function resolveProgram(program: string, lookup: ProgramLookup): string | null {
   if (programProblem(program)) return null;
-  const candidates = program.startsWith('/')
-    ? [program]
-    : SEARCH_PATH.map((dir) => `${dir}/${program}`);
+  let candidates: string[];
+  if (program.startsWith('/')) candidates = [program];
+  else if (program.startsWith('~/')) {
+    const home = lookup.home?.replace(/\/+$/, '');
+    if (!home?.startsWith('/')) return null;
+    candidates = [home + program.slice(1)];
+  } else candidates = SEARCH_PATH.map((dir) => `${dir}/${program}`);
   for (const candidate of candidates) {
     if (!lookup.isExecutable(candidate)) continue;
     return lookup.isStub?.(candidate) ? null : candidate;
