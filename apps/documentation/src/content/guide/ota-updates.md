@@ -118,8 +118,10 @@ npx hotcodepush release create --platform ios --private-key-path hotcodepush-pri
 npx hotcodepush release create --platform android --private-key-path hotcodepush-private-key.pem
 ```
 
-In CI, put the key's text in `HOTCODEPUSH_SIGNING_KEY`, drop the flag and add `--yes`, since
-nothing can answer the confirmation there. An app without a registered key drops the flag.
+CI has no session from `init`, so set `HOTCODEPUSH_TOKEN` as a CI secret: a release build in CI
+fails without it, while a local one only warns and registers nothing. Put the key's text in
+`HOTCODEPUSH_SIGNING_KEY`, drop the flag and add `--yes`, since nothing can answer the confirmation
+there. An app without a registered key drops the flag.
 
 The [Expo SDK docs](https://hotcodepush.com/docs/sdks/expo) cover the configuration, the API and
 the events. The [demo app](https://github.com/hotcodepush-team/ng-native-ota-updates-demo) is the
