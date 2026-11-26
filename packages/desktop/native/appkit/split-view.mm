@@ -734,9 +734,18 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 }
 - (void)setFolded:(BOOL)folded {
   auto concrete = std::dynamic_pointer_cast<const ConcreteState<ngn::SidebarSectionState>>(self.state);
-  if (concrete && concrete->getData().collapsed != folded) {
-    concrete->updateState(ngn::SidebarSectionState{.collapsed = static_cast<bool>(folded)});
+  if (!concrete) {
+    return;
   }
+  // Compared with the state the update applies to, not the one mounted: a fold and an opening
+  // before the queue flushes leave the opening.
+  bool collapsed = folded;
+  concrete->updateState([collapsed](const ngn::SidebarSectionState &old) -> StateData::Shared {
+    if (old.collapsed == collapsed) {
+      return nullptr;
+    }
+    return std::make_shared<ngn::SidebarSectionState>(ngn::SidebarSectionState{.collapsed = collapsed});
+  });
 }
 - (void)applyToolkitSize:(facebook::react::Size)size {
 }

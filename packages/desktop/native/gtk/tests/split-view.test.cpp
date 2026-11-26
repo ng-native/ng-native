@@ -417,6 +417,48 @@ TEST_CASE("a collapsible section folds as the app says, and the app hears the us
   CHECK(rowCount() == 2);
 }
 
+TEST_CASE("a section the user opened stays open when another list in its sidebar changes") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views{true, 800, 500};
+  auto sectionAs = [](const char *title, bool collapsed) {
+    return parsedProps<ngn::SidebarSectionComponentDescriptor>(
+        dynamic::object("title", title)("collapsible", true)("collapsed", collapsed));
+  };
+  // Two lists in one sidebar: a section, a view of the app's own, then another section.
+  auto split = view(2, "NgNativeSplitView", nullptr, {{0, 0}, {800, 500}});
+  auto sidebar = view(3, "NgNativeSidebar", sidebarProps(false), {{0, 0}, {240, 500}});
+  auto content = view(4, "NgNativeSplitContent", nullptr, {{240, 0}, {560, 500}});
+  auto done = view(5, "NgNativeSidebarSection", sectionAs("Done", true), {{0, 0}, {240, 56}});
+  auto shipped = view(6, "NgNativeSidebarItem", item("Shipped", false), {{0, 28}, {240, 28}});
+  auto divider = view(10, "View", nullptr, {{0, 56}, {240, 10}});
+  auto tags = view(11, "NgNativeSidebarSection", sectionAs("Tags", false), {{0, 66}, {240, 56}});
+  auto work = view(12, "NgNativeSidebarItem", item("Work", false), {{0, 94}, {240, 28}});
+  ShadowViewMutationList mutations;
+  for (const auto *v : {&split, &sidebar, &content, &done, &shipped, &divider, &tags, &work}) {
+    mutations.push_back(ShadowViewMutation::CreateMutation(*v));
+  }
+  mutations.push_back(ShadowViewMutation::InsertMutation(MountedViews::kSurface, split, 0));
+  mutations.push_back(ShadowViewMutation::InsertMutation(2, sidebar, 0));
+  mutations.push_back(ShadowViewMutation::InsertMutation(2, content, 1));
+  mutations.push_back(ShadowViewMutation::InsertMutation(3, done, 0));
+  mutations.push_back(ShadowViewMutation::InsertMutation(3, divider, 1));
+  mutations.push_back(ShadowViewMutation::InsertMutation(3, tags, 2));
+  mutations.push_back(ShadowViewMutation::InsertMutation(5, shipped, 0));
+  mutations.push_back(ShadowViewMutation::InsertMutation(11, work, 0));
+  views.mount(std::move(mutations));
+  auto &splits = views.backend->splitViews();
+  auto first = [&] { return rowsOf(splits.lists(3)[0]).size(); };
+  REQUIRE(splits.lists(3).size() == 2);
+  CHECK(first() == 1);
+
+  // The user opens Done; then the other list changes, and both lists are laid out again.
+  splits.fold(3, 5, false);
+  ngn::testing::runUntil([&] { return first() == 2; });
+  views.update(tags, sectionAs("Tags (1)", false));
+  CHECK(first() == 2);
+  CHECK_FALSE(splits.folded(3, 5));
+}
+
 namespace {
 
 // A RNSTabsScreenIOS's props as the library's glue reads them (tabs-host.h tabScreen).

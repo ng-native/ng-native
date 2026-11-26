@@ -885,8 +885,14 @@ void SplitViews::rebuild(Tag parent, const std::vector<SourceList> &lists) {
   // A tabs host's list fills its sidebar instead, once it is placed.
   const ViewData *parentData = backend_.data(parent);
   bool tabs = parentData && parentData->component == kTabsHost;
+  // The parent's folds once, over every list it has: a list on its own would forget the sections of
+  // the others.
+  SourceList all;
+  for (const auto &list : lists) {
+    all.groups.insert(all.groups.end(), list.groups.begin(), list.groups.end());
+  }
+  l.folds.setList(all);
   for (size_t i = 0; i < lists.size(); i++) {
-    l.folds.setList(lists[i]);
     if (!tabs && parentWidget && gtk_widget_get_parent(l.boxes[i]) != parentWidget) {
       gtk_widget_set_parent(l.boxes[i], parentWidget);
     }
@@ -1108,12 +1114,19 @@ void SplitViews::fold(Tag parent, Tag section, bool folded) {
 
 // The section's layout follows its fold: a folded one is only its title row.
 void SplitViews::foldLayout(Tag section, bool folded) {
-  if (const ViewData *d = backend_.data(section)) {
-    if (auto state = std::dynamic_pointer_cast<const ConcreteState<SidebarSectionState>>(d->state);
-        state && state->getData().collapsed != folded) {
-      state->updateState(SidebarSectionState{.collapsed = folded});
-    }
+  const ViewData *d = backend_.data(section);
+  auto state = d ? std::dynamic_pointer_cast<const ConcreteState<SidebarSectionState>>(d->state) : nullptr;
+  if (!state) {
+    return;
   }
+  // Compared with the state the update applies to, not the one mounted: a fold and an opening
+  // before the queue flushes leave the opening.
+  state->updateState([folded](const SidebarSectionState &old) -> facebook::react::StateData::Shared {
+    if (old.collapsed == folded) {
+      return nullptr;
+    }
+    return std::make_shared<SidebarSectionState>(SidebarSectionState{.collapsed = folded});
+  });
 }
 
 void SplitViews::refill(Tag parent) {
