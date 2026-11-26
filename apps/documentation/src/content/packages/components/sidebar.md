@@ -73,7 +73,21 @@ The host places the content pane, so a margin, radius or background on what it h
 ## Sections and items
 
 `<sidebar-section>` takes an optional `title`, and `collapsible` to show and hide its items from
-the title. The selection survives a section collapsing.
+the title. The selection survives a section collapsing. `[(collapsed)]` folds a collapsible section
+away, from the start or from code, and follows the user folding or opening it, on macOS, Linux and
+where the sidebar is drawn. It is `false` by default, and a section that is not collapsible, or has
+no title, always shows its items.
+
+```html
+<sidebar-section title="Done" collapsible [(collapsed)]="doneFolded">
+  @for (task of done(); track task.id) {
+  <sidebar-item [label]="task.label" />
+  }
+</sidebar-section>
+```
+
+To keep the user's choice across launches, bind it to a stored signal, such as
+`inject(Storage).signal('doneFolded', true)` from [Storage](/packages/expo/storage).
 
 `<sidebar-item>` takes:
 
@@ -158,6 +172,8 @@ source list, laid out where Yoga put them, and each `<sidebar-item>` (`NgNativeS
 row of it with its label, badge and SF Symbol. A titled section's rows line up with its title and
 with the rows of an untitled section. A click selects a row and sends `topSidebarSelect` to its
 item, and a change to whether the row's selection is drawn emphasized sends `topSidebarEmphasis`
-with `{ emphasized }`. An item with content is a custom row: its views sit in a cell of their own,
-which they fill, and a click on a pressable in it reaches the pressable while other clicks select
-the row.
+with `{ emphasized }`. A collapsible section folds as its `collapsed` prop says when it comes and
+when the prop changes, and otherwise stays as the user left it; the user folding or opening it sends
+`topSidebarSectionCollapse` with `{ collapsed }` to the section. An item with content is a custom
+row: its views sit in a cell of their own, which they fill, and a click on a pressable in it reaches
+the pressable while other clicks select the row.

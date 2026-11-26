@@ -21,7 +21,12 @@ import { View } from '../../components/src/view.ts';
         [toggleButton]="toggleButton()"
       >
         <view testID="search" />
-        <sidebar-section testID="mail" [title]="mailTitle()" [collapsible]="mailCollapsible()">
+        <sidebar-section
+          testID="mail"
+          [title]="mailTitle()"
+          [collapsible]="mailCollapsible()"
+          [(collapsed)]="mailCollapsed"
+        >
           <sidebar-item
             testID="inbox"
             label="Inbox"
@@ -67,6 +72,7 @@ export class SidebarFixture {
   readonly toggleButton = signal(false);
   readonly mailTitle = signal<string | undefined>('Mailboxes');
   readonly mailCollapsible = signal(true);
+  readonly mailCollapsed = signal(false);
   readonly inbox = signal(true);
   readonly sent = signal(false);
   readonly unread = signal(3);

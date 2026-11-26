@@ -389,6 +389,34 @@ TEST_CASE("a sidebar's sections are a list box over their frames, its rows selec
   CHECK(s.splits().lists(3).empty());
 }
 
+TEST_CASE("a collapsible section folds as the app says, and the app hears the user open it") {
+  REQUIRE(ngn::testing::gtkReady());
+  Split s;
+  auto sectionAs = [](bool collapsed, const char *title) {
+    return parsedProps<ngn::SidebarSectionComponentDescriptor>(
+        dynamic::object("title", title)("collapsible", true)("collapsed", collapsed));
+  };
+  ngn::testing::SentEvents<ViewEventEmitter> sent(*ngn::gtk::viewData(s.views.view(5)));
+  auto rowCount = [&] { return rowsOf(s.splits().lists(3)[0]).size(); };
+
+  // The app folds it: only its title row, and no event back for the app's own change.
+  s.views.update(s.section, sectionAs(true, "Mailboxes"));
+  CHECK(rowCount() == 1);
+  CHECK(sent.count("topSidebarSectionCollapse") == 0);
+
+  // The user opens it from its title: the app hears it, and an unrelated update keeps it open.
+  s.splits().fold(3, 5, false);
+  ngn::testing::runUntil([&] { return rowCount() == 3; });
+  CHECK(sent.count("topSidebarSectionCollapse") == 1);
+  s.views.update(s.section, sectionAs(true, "Mail"));
+  CHECK(rowCount() == 3);
+
+  // Untitled, it has no title to open it again from: its rows show whatever the app says.
+  s.views.update(s.section, sectionAs(false, ""));
+  s.views.update(s.section, sectionAs(true, ""));
+  CHECK(rowCount() == 2);
+}
+
 namespace {
 
 // A RNSTabsScreenIOS's props as the library's glue reads them (tabs-host.h tabScreen).

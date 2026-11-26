@@ -909,7 +909,10 @@ void SplitViews::fill(Tag parent, Lists &l, size_t index) {
   GtkListBoxRow *selected = nullptr;
   auto selectedTag = selectedRow(list);
   for (const auto &group : list.groups) {
-    bool folded = group.collapsible && l.folds.folded(group.tag);
+    // Only a titled one folds: an untitled section has no title row to open it again from.
+    bool folded = group.collapsible && !group.title.empty() && l.folds.folded(group.tag);
+    // The app's fold too, as the user's sets it in fold().
+    foldLayout(group.tag, folded);
     if (!group.title.empty()) {
       GtkWidget *title = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
       GtkWidget *label = gtk_label_new(group.title.c_str());
@@ -1087,13 +1090,8 @@ void SplitViews::fold(Tag parent, Tag section, bool folded) {
   }
   auto &l = it->second;
   l.folds.fold(section, folded);
-  // The section's layout follows: a folded one is only its title row.
-  if (const ViewData *d = backend_.data(section)) {
-    if (auto state = std::dynamic_pointer_cast<const ConcreteState<SidebarSectionState>>(d->state);
-        state && state->getData().collapsed != folded) {
-      state->updateState(SidebarSectionState{.collapsed = folded});
-    }
-  }
+  foldLayout(section, folded);
+  send(backend_.data(section), "sidebarSectionCollapse", folly::dynamic::object("collapsed", folded));
   // Rebuilt on the next idle, at most once: the row activated is the list's own until its signal
   // returns.
   if (l.refill == 0) {
@@ -1105,6 +1103,16 @@ void SplitViews::fold(Tag parent, Tag section, bool folded) {
       t->splits->refill(t->parent);
       return G_SOURCE_REMOVE;
     }, new RowTarget{this, parent}, [](gpointer data) { delete static_cast<RowTarget *>(data); });
+  }
+}
+
+// The section's layout follows its fold: a folded one is only its title row.
+void SplitViews::foldLayout(Tag section, bool folded) {
+  if (const ViewData *d = backend_.data(section)) {
+    if (auto state = std::dynamic_pointer_cast<const ConcreteState<SidebarSectionState>>(d->state);
+        state && state->getData().collapsed != folded) {
+      state->updateState(SidebarSectionState{.collapsed = folded});
+    }
   }
 }
 

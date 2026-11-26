@@ -12,8 +12,9 @@
  *   (renamed, as Fabric's view props read `minWidth` as a style) and `autosaveName`. The host owns
  *   its width and sends `topSidebarCollapse` with `{ collapsed }` when the user collapses or opens
  *   it. The events are named so that no Angular output of the same name hears them as well.
- * - `<sidebar-section>` is `NgNativeSidebarSection`, with `title` and `collapsible`. Neighbouring
- *   sections in one parent are one source list.
+ * - `<sidebar-section>` is `NgNativeSidebarSection`, with `title`, `collapsible` and `collapsed`.
+ *   Neighbouring sections in one parent are one source list. The host sends
+ *   `topSidebarSectionCollapse` with `{ collapsed }` when the user folds or opens one.
  * - `<sidebar-item>` is `NgNativeSidebarItem`, with `label`, `badge` (a string), `sfSymbol`,
  *   `drawable` and `selected`. It has no children unless it is a custom row, whose views the host
  *   puts in a cell of its own. A click that selects the row sends `topSidebarSelect` to the item.
@@ -42,6 +43,7 @@ type Fixture = {
   toggleButton: Signalish<boolean>;
   mailTitle: Signalish<string | undefined>;
   mailCollapsible: Signalish<boolean>;
+  mailCollapsed: Signalish<boolean>;
   inbox: Signalish<boolean>;
   sent: Signalish<boolean>;
   unread: Signalish<number>;
@@ -216,6 +218,21 @@ describe('on macOS', () => {
     assert.equal(getByTestId('sidebar').props['collapsed'], false);
   });
 
+  it("sends a section's collapsed state, and follows the one the host reports", async () => {
+    const { instance, getByTestId, fabric, rerender } = await render(Fixture);
+    assert.equal(getByTestId('mail').props['collapsed'], false);
+    instance.mailCollapsed.set(true);
+    await rerender();
+    assert.equal(getByTestId('mail').props['collapsed'], true);
+    fabric.emit(getByTestId('mail'), 'topSidebarSectionCollapse', { collapsed: false });
+    await settle();
+    assert.equal(instance.mailCollapsed(), false);
+    // A fold reported from a node inside the section is not the section's.
+    fabric.emit(getByTestId('inbox'), 'topSidebarSectionCollapse', { collapsed: true });
+    await settle();
+    assert.equal(instance.mailCollapsed(), false);
+  });
+
   it("ignores a collapse reported for a sidebar inside this one's content", async () => {
     const { instance, getByTestId, fabric } = await render(Fixture);
     fabric.emit(getByTestId('search'), 'topSidebarCollapse', { collapsed: true });
@@ -336,6 +353,24 @@ describe('drawn, beside the content', () => {
     await touch(getByText('Mailboxes'));
     assert.ok(queryByTestId('inbox'));
     assert.equal(instance.inbox(), true, 'the selection survives the section collapsing');
+  });
+
+  it('folds a collapsible section as the app says, and tells the app of a press on its title', async () => {
+    const wide = [{ provide: Screen.SOURCE, useValue: screenOf(1024) }];
+    const { instance, getByText, queryByTestId, rerender } = await render(Fixture, {
+      providers: wide,
+    });
+    assert.equal(
+      queryByTestId('mail')!.props['collapsed'],
+      undefined,
+      'a drawn section has no prop',
+    );
+    instance.mailCollapsed.set(true);
+    await rerender();
+    assert.equal(queryByTestId('inbox'), null);
+    await touch(getByText('Mailboxes'));
+    assert.ok(queryByTestId('inbox'));
+    assert.equal(instance.mailCollapsed(), false);
   });
 
   for (const [what, take] of [

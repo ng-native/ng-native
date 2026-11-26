@@ -103,6 +103,7 @@ class SplitViews {
   // The size a pane's slot last reported.
   std::optional<facebook::react::Size> paneSize(Tag pane) const;
   bool folded(Tag parent, Tag section) const;
+  // The user folded or opened `section` from its title row: kept, and the app hears it.
   void fold(Tag parent, Tag section, bool folded);
 
   // A row chosen in `parent`'s source list.
@@ -177,6 +178,7 @@ class SplitViews {
   // Saves the collapsed state under the sidebar's autosaveName.
   void autosave(const Split &s);
   void fill(Tag parent, Lists &l, size_t index);
+  void foldLayout(Tag section, bool folded);
   // The content page's title, which its header bar shows: the label of `row`, selected in a list
   // `within` a sidebar, or none. A tabs host titles its own (showTabList).
   void titleContent(GtkWidget *within, GtkListBoxRow *row);
