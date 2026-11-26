@@ -483,20 +483,33 @@ describe('a Vitest run', () => {
     const { createVitest } = await import('vitest/node');
     const vitest = await createVitest(
       'test',
-      { root, config: false, watch: false, pool: 'forks', reporters: [] },
+      // Vitest 5.0.5 on caches modules in node_modules by default, and copies them to the temp
+      // directory only without that cache.
+      { root, config: false, watch: false, pool: 'forks', reporters: [], fsModuleCache: false },
       { plugins: [ngNative()] },
     );
-    const copies = (vitest as unknown as { _tmpDir: string })._tmpDir;
+    // Vitest 5.0.2 copies into the instance's directory with no `projects` in the config, and 5.0.3
+    // on into the project's own.
+    const dirs = [
+      (vitest as unknown as { _tmpDir: string })._tmpDir,
+      ...vitest.projects.map((project) => (project as unknown as { tmpDir: string }).tmpDir),
+    ];
     try {
       await vitest.start();
       assert.equal(vitest.state.getCountOfFailedTests(), 0);
-      // The run did copy modules there, so the check below is not of a directory never made.
-      assert.ok(existsSync(path.join(copies, 'ssr')), copies);
+      // The run did copy modules, so the check below is not of directories never made.
+      assert.ok(
+        dirs.some((dir) => existsSync(path.join(dir, 'ssr'))),
+        dirs.join(', '),
+      );
       await vitest.close();
-      assert.equal(existsSync(copies), false, copies);
+      assert.deepEqual(
+        dirs.filter((dir) => existsSync(dir)),
+        [],
+      );
     } finally {
       await vitest.close();
-      rmSync(copies, { recursive: true, force: true });
+      for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
     }
   });
 });
