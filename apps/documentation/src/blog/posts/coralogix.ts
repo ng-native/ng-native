@@ -104,7 +104,7 @@ import { BlogArticle } from '../blog-article.ts';
             </li>
           }
         </ul>
-        <a class="blog-about-link" [href]="links.coralogix">
+        <a class="blog-about-link" [href]="links.coralogixRum">
           Explore Coralogix for mobile
           <svg class="size-3.5" viewBox="0 0 16 16" aria-hidden="true">
             <path d="M5 11 11 5M6 5h5v5" />

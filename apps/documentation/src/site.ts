@@ -34,10 +34,14 @@ export const GITHUB_SPONSORS = 'https://github.com/sponsors/ashley-hunter';
 
 /**
  * Coralogix, which maintains the project, tagged so its analytics can tell a visit came from here.
- * The home page for now: point the links at product pages once they exist.
+ * The home page, for links that name the company.
  */
 export const CORALOGIX_URL =
   'https://coralogix.com/?utm_source=ng-native&utm_medium=referral&utm_campaign=ng-native';
+
+/** Coralogix's Real User Monitoring page, for links about monitoring an app. */
+export const CORALOGIX_RUM_URL =
+  'https://coralogix.com/platform/rum/?utm_source=ng-native&utm_medium=referral&utm_campaign=ng-native';
 
 /** `/packages/testing/api` -> `https://ng-native.com/packages/testing/api`, `/` -> the bare origin plus one slash. */
 export function urlFor(path: string): string {

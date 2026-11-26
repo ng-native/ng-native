@@ -137,7 +137,7 @@ import { LandingReveal } from './reveal.ts';
             See crashes, slow screens and real user sessions next to your backend's logs and traces,
             with Coralogix.
           </p>
-          <a class="steward-explore" [href]="links.coralogix">
+          <a class="steward-explore" [href]="links.coralogixRum">
             Explore Coralogix
             <svg class="size-3.5" viewBox="0 0 16 16" aria-hidden="true">
               <path [attr.d]="outArrow" fill="none" stroke="currentColor" stroke-width="1.6" />

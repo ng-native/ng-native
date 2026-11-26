@@ -6,7 +6,7 @@
  * project the way prose scattered through templates does. Each entry was checked against the
  * repository when it was written - see the comment beside anything that was not.
  */
-import { CORALOGIX_URL, GITHUB_REPO, GITHUB_SPONSORS } from '../site.ts';
+import { CORALOGIX_RUM_URL, CORALOGIX_URL, GITHUB_REPO, GITHUB_SPONSORS } from '../site.ts';
 
 export const LINKS = {
   getStarted: '/guide/getting-started',
@@ -38,6 +38,7 @@ export const LINKS = {
   discussions: `${GITHUB_REPO}/discussions`,
   contributors: `${GITHUB_REPO}/graphs/contributors`,
   coralogix: CORALOGIX_URL,
+  coralogixRum: CORALOGIX_RUM_URL,
 } as const;
 
 /** The whole setup, as `guide/getting-started.md` gives it. */

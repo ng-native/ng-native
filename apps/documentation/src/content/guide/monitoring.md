@@ -7,8 +7,8 @@ summary: Report crashes, slow screens and sessions to Coralogix, named after you
 
 See how your app behaves on real devices: the crashes, slow screens and failed requests your users
 hit, and the session around each one. Angular Native renders through React Native's core, so apps
-report to Coralogix through its React Native SDK, on iOS and Android:
-[coralogix.com](https://coralogix.com/?utm_source=ng-native&utm_medium=referral&utm_campaign=ng-native).
+report to Coralogix's Real User Monitoring through its React Native SDK, on iOS and Android:
+[coralogix.com/platform/rum](https://coralogix.com/platform/rum/?utm_source=ng-native&utm_medium=referral&utm_campaign=ng-native).
 
 - **Crashes and errors**, native and JavaScript, with the steps that led to them.
 - **Mobile vitals**: cold and warm starts, slow and frozen frames, memory and CPU.
