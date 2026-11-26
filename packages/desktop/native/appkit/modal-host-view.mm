@@ -217,7 +217,11 @@ constexpr CGFloat kPopoverMax = ngn::kPopoverMax;
 - (void)updateState:(const State::Shared &)state {
   [super updateState:state];
   _modalState = state;
-  _reportedSize = NSZeroSize;
+  // The size this state holds: the one the cover sent comes back in the state that send committed,
+  // and sending it again would commit another, without end.
+  auto concrete = std::dynamic_pointer_cast<const ConcreteState<ModalHostViewState>>(state);
+  auto held = concrete ? concrete->getData().screenSize : facebook::react::Size{};
+  _reportedSize = NSMakeSize(held.width, held.height);
   [self coverResized];
 }
 
@@ -400,10 +404,12 @@ constexpr CGFloat kPopoverMax = ngn::kPopoverMax;
     return;
   }
   NSRect content = [self contentFrameIn:_cover.bounds];
-  if (NSEqualSizes(content.size, _reportedSize)) {
+  // At the state's precision, a float, as the state that send commits will hold it.
+  NSSize size = NSMakeSize(static_cast<Float>(content.size.width), static_cast<Float>(content.size.height));
+  if (NSEqualSizes(size, _reportedSize)) {
     return;
   }
-  _reportedSize = content.size;
+  _reportedSize = size;
   self.frame = content;
   [self applyPresentedSize:content.size];
 }
