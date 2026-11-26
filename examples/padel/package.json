@@ -12,8 +12,8 @@
     "export": "expo export --platform ios --platform android --output-dir dist"
   },
   "dependencies": {
-    "@angular/common": "22.2.0",
-    "@angular/core": "22.2.0",
+    "@angular/common": "22.3.0",
+    "@angular/core": "22.3.0",
     "@bacons/apple-targets": "^5.0.0",
     "@expo/ui": "~58.0.21",
     "@ng-native/components": "workspace:*",

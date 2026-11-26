@@ -128,6 +128,7 @@ export const PAGE_FIELDS = {
   matcher: false,
   component: true,
   loadComponent: true,
+  errorComponent: true,
   redirectTo: false,
   outlet: false,
   canActivate: true,
@@ -151,8 +152,9 @@ export const PAGE_FIELDS = {
  * page is dismissed as when the tab's route is left, and `runGuardsAndResolvers` decides when the
  * route's guards and resolvers run again.
  *
- * Left out: `path`, `pathMatch` and `outlet`, which the copy sets itself; `component` and
- * `loadComponent`, as the tab bar and the tab's stack are not what is presented; `children` and
+ * Left out: `path`, `pathMatch` and `outlet`, which the copy sets itself; `component`,
+ * `loadComponent` and `errorComponent`, as the tab bar and the tab's stack are not what is
+ * presented; `children` and
  * `loadChildren`, which the copy replaces with the one route on the way to the page; `matcher`
  * and `redirectTo`, which `taken` never follows; `canMatch` and `canLoad`, which stop the search.
  */
@@ -163,6 +165,7 @@ export const ANCESTOR_FIELDS = {
   matcher: false,
   component: false,
   loadComponent: false,
+  errorComponent: false,
   redirectTo: false,
   outlet: false,
   canActivate: true,
