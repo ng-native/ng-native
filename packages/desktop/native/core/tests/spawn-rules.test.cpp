@@ -3,7 +3,10 @@
 #include "ngn/host-os.h"
 #include "ngn/spawn-rules.h"
 
+#include <cstdlib>
 #include <doctest/doctest.h>
+#include <optional>
+#include <string>
 
 using ngn::SpawnCapability;
 
@@ -196,8 +199,26 @@ TEST_CASE("a ~/ program is pinned in the account's home folder alone") {
   CHECK(ngn::resolveProgram("~/.local/bin/claude", lookup) == "/Users/me/.local/bin/claude");
   lookup.home = "Users/me";
   CHECK_FALSE(ngn::resolveProgram("~/.local/bin/claude", lookup));
+  auto root = at({"/tool"});
+  root.home = "/";
+  CHECK(ngn::resolveProgram("~/tool", root) == "/tool");
   std::map<std::string, std::optional<std::string>> pinned{{"~/.local/bin/claude", "/Users/me/.local/bin/claude"}};
   auto claude = ngn::compileCapability({"~/.local/bin/claude", {"-p"}});
   CHECK(ngn::matchSpawn({claude}, "~/.local/bin/claude", {"-p"}, pinned) == "/Users/me/.local/bin/claude");
   CHECK_FALSE(ngn::matchSpawn({claude}, "~/.local/bin/claude", {"-p"}, {}));
+}
+
+TEST_CASE("the account's home comes from the user database, not HOME") {
+  const char *was = std::getenv("HOME");
+  std::optional<std::string> previous = was ? std::optional<std::string>(was) : std::nullopt;
+  setenv("HOME", "/tmp/not-the-account", 1);
+  auto home = ngn::accountHome();
+  if (previous) {
+    setenv("HOME", previous->c_str(), 1);
+  } else {
+    unsetenv("HOME");
+  }
+  REQUIRE_FALSE(home.empty());
+  CHECK(home[0] == '/');
+  CHECK(home != "/tmp/not-the-account");
 }

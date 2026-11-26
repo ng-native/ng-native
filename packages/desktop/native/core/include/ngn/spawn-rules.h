@@ -71,6 +71,10 @@ struct ProgramLookup {
   std::string home;
 };
 
+// The account's home folder from the user database, by user id: never `HOME`, which whoever
+// starts the app sets. Empty when the account has none there.
+std::string accountHome();
+
 // Where a declared program runs from, pinned once at startup, or nothing when it is absent.
 std::optional<std::string> resolveProgram(const std::string &program, const ProgramLookup &lookup);
 

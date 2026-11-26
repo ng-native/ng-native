@@ -347,6 +347,7 @@ describe('resolving a bare name', () => {
       resolveProgram('~/bin/zsh', { ...at('/Users/me/bin/zsh'), home: '/Users/me' }),
       null,
     );
+    assert.equal(resolveProgram('~/tool', { ...at('/tool'), home: '/' }), '/tool');
     const pinned = { '~/.local/bin/claude': '/Users/me/.local/bin/claude' };
     const claude = compileCapability({ program: '~/.local/bin/claude', args: ['-p'] });
     assert.equal(

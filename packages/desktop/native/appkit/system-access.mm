@@ -112,7 +112,7 @@ ProcessesSetup processesSetup(const std::string &capabilitiesJson) {
       .isExecutable = [](const std::string &path) { return access(path.c_str(), X_OK) == 0; },
       .isStub = isDeveloperStub,
       .searchPath = macOS().searchPath,
-      .home = NSHomeDirectory().UTF8String,
+      .home = accountHome(),
   };
   NSDictionary *info = NSBundle.mainBundle.infoDictionary;
   if (auto packaged = packagedApp()) {

@@ -341,7 +341,10 @@ export interface ProgramLookup {
    * installed to run. Such a tool reports absent.
    */
   isStub?(path: string): boolean;
-  /** The account's home folder, absolute, that a `~/` program is in. Without it one is absent. */
+  /**
+   * The account's home folder, absolute, that a `~/` program is in: the user database's, never
+   * `HOME`. Without it one is absent.
+   */
   readonly home?: string;
 }
 
@@ -355,9 +358,9 @@ export function resolveProgram(program: string, lookup: ProgramLookup): string |
   let candidates: string[];
   if (program.startsWith('/')) candidates = [program];
   else if (program.startsWith('~/')) {
-    const home = lookup.home?.replace(/\/+$/, '');
-    if (!home?.startsWith('/')) return null;
-    candidates = [home + program.slice(1)];
+    if (!lookup.home?.startsWith('/')) return null;
+    // Trimmed after the check, so a home of `/` is the root: `~/tool` is `/tool`.
+    candidates = [lookup.home.replace(/\/+$/, '') + program.slice(1)];
   } else candidates = SEARCH_PATH.map((dir) => `${dir}/${program}`);
   for (const candidate of candidates) {
     if (!lookup.isExecutable(candidate)) continue;

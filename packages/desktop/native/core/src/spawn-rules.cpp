@@ -2,7 +2,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <pwd.h>
 #include <set>
+#include <unistd.h>
+#include <vector>
 
 namespace ngn {
 
@@ -262,11 +265,12 @@ std::optional<std::string> resolveProgram(const std::string &program, const Prog
     candidates.push_back(program);
   } else if (program.rfind("~/", 0) == 0) {
     auto home = lookup.home;
-    while (home.size() > 1 && home.back() == '/') {
-      home.pop_back();
-    }
     if (home.empty() || home[0] != '/') {
       return std::nullopt;
+    }
+    // Trimmed after the check, so a home of `/` is the root: `~/tool` is `/tool`.
+    while (!home.empty() && home.back() == '/') {
+      home.pop_back();
     }
     candidates.push_back(home + program.substr(1));
   } else {
@@ -297,6 +301,18 @@ std::map<std::string, std::string> filterEnvironment(
     }
   }
   return out;
+}
+
+std::string accountHome() {
+  long size = sysconf(_SC_GETPW_R_SIZE_MAX);
+  std::vector<char> buffer(size > 0 ? static_cast<size_t>(size) : 16384);
+  passwd entry{};
+  passwd *found = nullptr;
+  if (getpwuid_r(getuid(), &entry, buffer.data(), buffer.size(), &found) != 0 || found == nullptr ||
+      found->pw_dir == nullptr || found->pw_dir[0] != '/') {
+    return {};
+  }
+  return found->pw_dir;
 }
 
 } // namespace ngn
