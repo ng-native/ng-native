@@ -12,6 +12,7 @@
 #include "ngn/apple-authentication.h"
 #include "ngn/camera.h"
 #include "ngn/glass.h"
+#include "ngn/visual-effect.h"
 #include "ngn/maps.h"
 #include "ngn/video.h"
 #include "ngn/expo-image.h"
@@ -71,6 +72,7 @@ MountingManager::MountingManager(
       concreteComponentDescriptorProvider<AppleButtonComponentDescriptor>(),
       concreteComponentDescriptorProvider<GlassViewComponentDescriptor>(),
       concreteComponentDescriptorProvider<GlassContainerComponentDescriptor>(),
+      concreteComponentDescriptorProvider<VisualEffectComponentDescriptor>(),
       concreteComponentDescriptorProvider<DomWebViewComponentDescriptor>(),
       concreteComponentDescriptorProvider<UnimplementedNativeViewComponentDescriptor>(),
   };

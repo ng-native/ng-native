@@ -88,6 +88,7 @@ const NATIVE_ELEMENTS = new Set([
   'touchable-opacity',
   'tray-icon',
   'virtual-list',
+  'visual-effect',
 ]);
 
 /** Whether an element is a native view, whose events are the device's rather than a component's. */

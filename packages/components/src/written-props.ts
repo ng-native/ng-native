@@ -206,4 +206,9 @@ export const WRITTEN_PROPS: readonly string[] = [
   'visible',
   'zIndex',
   'zoomScale',
+  // <visual-effect>'s, on a desktop host.
+  'blendingMode',
+  'emphasized',
+  'material',
+  'state',
 ];

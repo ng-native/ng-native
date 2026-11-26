@@ -88,6 +88,12 @@ export {
 export { Sidebar, type SidebarRow } from './sidebar.ts';
 export { SidebarSection } from './sidebar-section.ts';
 export { SidebarItem, type SidebarItemIcon } from './sidebar-item.ts';
+export {
+  VisualEffect,
+  type VisualEffectBlendingMode,
+  type VisualEffectMaterial,
+  type VisualEffectState,
+} from './visual-effect.ts';
 export { NativeButton, type ButtonIcon, type ButtonKind } from './native-button.ts';
 export { NativeRef } from './native-ref.ts';
 export {

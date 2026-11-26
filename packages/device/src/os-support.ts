@@ -151,6 +151,11 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
       'two columns',
     ],
   ),
+  row(
+    '`<visual-effect>`',
+    ['VisualEffect'],
+    ['NSVisualEffectView', 'plain view', 'plain view', 'plain view', 'plain view', 'plain view'],
+  ),
   row('`Processes`, `Processes.env`', ['Processes'], DESKTOP_ONLY, {
     Processes: 'NgNativeProcesses',
   }),
