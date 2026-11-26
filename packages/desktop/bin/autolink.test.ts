@@ -207,6 +207,35 @@ describe('desktopLinks', () => {
     ]);
   });
 
+  it('leaves out the libraries whose native modules the core answers, on both OSes', () => {
+    // RNCAsyncStorage and RNAsyncStorage, and RNGestureHandlerModule, are core modules: the
+    // library's JavaScript runs against them unchanged. A library the host does not answer is
+    // still reported.
+    const root = app({
+      'package.json': {
+        dependencies: {
+          '@react-native-async-storage/async-storage': '2.2.0',
+          'react-native-gesture-handler': '3.3.0',
+          'react-native-keyboard-controller': '1.0.0',
+        },
+      },
+      ...pkg('@react-native-async-storage/async-storage', {
+        'ios/RNCAsyncStorage.mm': '',
+        'RNCAsyncStorage.podspec': '',
+      }),
+      ...pkg('react-native-gesture-handler', {
+        'android/build.gradle': '',
+        'RNGestureHandler.podspec': '',
+      }),
+      ...pkg('react-native-keyboard-controller', { 'ios/KeyboardController.mm': '' }),
+    });
+    for (const os of DESKTOP_OSES) {
+      const links = desktopLinks(root, { os });
+      assert.deepEqual(links.withoutDesktop, ['react-native-keyboard-controller'], os);
+      assert.deepEqual(links.libraries, [], os);
+    }
+  });
+
   it('keeps a denied package out of the build and out of the warning', () => {
     const root = app({
       'package.json': { dependencies: { 'rn-haptics': '1.0.0', 'with-ios': '1.0.0' } },

@@ -249,8 +249,9 @@ entry. A dependency with desktop code for one OS only is listed on the other.
 
 `npm run macos` and `npm run package` list the dependencies that have native code for iOS or
 Android and none for the desktop: their native modules are absent on macOS, so a service built on
-one reports itself unavailable. `expo`, the `expo-*` packages and `@ng-native/*` are not listed,
-since the desktop host answers their services itself. `react-native-screens`,
+one reports itself unavailable. `expo`, the `expo-*` packages, `@ng-native/*`,
+`@react-native-async-storage/async-storage` and `react-native-gesture-handler` are not listed,
+since the desktop host answers their native modules itself. `react-native-screens`,
 `react-native-safe-area-context`, `react-native-svg`, `react-native-webview`,
 `react-native-worklets` and `react-native-reanimated` are compiled into the host when the app has
 them.
