@@ -24,6 +24,7 @@ SplitPaneProps::SplitPaneProps(const PropsParserContext &context, const SplitPan
       paneMinWidth(convertRawProp(context, rawProps, "paneMinWidth", sourceProps.paneMinWidth, Float{0})),
       paneMaxWidth(convertRawProp(context, rawProps, "paneMaxWidth", sourceProps.paneMaxWidth, Float{0})),
       autosaveName(convertRawProp(context, rawProps, "autosaveName", sourceProps.autosaveName, std::string{})),
+      toggleButton(convertRawProp(context, rawProps, "toggleButton", sourceProps.toggleButton, true)),
       contentStyle(convertRawProp(context, rawProps, "contentStyle", sourceProps.contentStyle, std::string{})) {}
 
 bool insetContent(const SplitPaneProps *props) {

@@ -57,6 +57,8 @@ class SplitPaneProps final : public facebook::react::ViewProps {
   facebook::react::Float paneMinWidth{0};
   facebook::react::Float paneMaxWidth{0};
   std::string autosaveName;
+  // Whether the window's toolbar (macOS) or header bar (Linux) shows the sidebar button.
+  bool toggleButton{true};
   // The content pane's own: `plain` or `inset`.
   std::string contentStyle;
 };

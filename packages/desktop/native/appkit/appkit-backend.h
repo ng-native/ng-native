@@ -67,6 +67,10 @@ class AppKitBackend final : public MountingBackend, public DesktopPropsSink {
   NSMutableDictionary<NSNumber *, NGNSurfaceView *> *surfaces_;
   NSMutableDictionary<NSNumber *, NGNHeaderToolbar *> *toolbars_;
   NSMutableSet<NSView *> *touched_;
+  // The window's split view of each surface, by the split view's tag, whose sidebar says whether
+  // the toolbar shows the sidebar button.
+  NSMutableDictionary<NSNumber *, NSNumber *> *windowSplits_;
+  void refreshSidebarToggle(SurfaceId surfaceId);
   // The source lists of each parent that has some, by the parent's tag.
   NSMutableDictionary<NSNumber *, NGNSourceLists *> *sourceLists_;
 };

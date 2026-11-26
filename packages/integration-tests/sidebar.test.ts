@@ -39,6 +39,7 @@ type Signalish<T> = { (): T; set(value: T): void };
 type Fixture = {
   contentStyle: Signalish<'plain' | 'inset'>;
   collapsed: Signalish<boolean>;
+  toggleButton: Signalish<boolean>;
   mailTitle: Signalish<string | undefined>;
   mailCollapsible: Signalish<boolean>;
   inbox: Signalish<boolean>;
@@ -99,6 +100,17 @@ describe('on macOS', () => {
     assert.equal(sidebar.props['autosaveName'], 'main');
     assert.equal(sidebar.props['minWidth'], undefined, 'not a style the host would lay out by');
     assert.equal(sidebar.props['width'], undefined, 'the host owns the width');
+  });
+
+  it("commits the sidebar's toggleButton, on by default", async () => {
+    const { instance, getByTestId, rerender } = await render(Fixture);
+    assert.equal(getByTestId('sidebar').props['toggleButton'], false);
+    instance.toggleButton.set(true);
+    await rerender();
+    assert.equal(getByTestId('sidebar').props['toggleButton'], true);
+    cleanup();
+    const plain = await render(DefaultSplit);
+    assert.equal(plain.getByTestId('split').children[0]!.props['toggleButton'], true);
   });
 
   it("commits the split view's contentStyle on the content pane, plain by default", async () => {
@@ -283,6 +295,7 @@ describe('drawn, beside the content', () => {
         assert.equal(sidebar.props['minWidth'], 180);
         assert.equal(sidebar.props['maxWidth'], 400);
         assert.equal(sidebar.props['paneMinWidth'], undefined);
+        assert.equal(sidebar.props['toggleButton'], undefined, 'a drawn sidebar ignores it');
         const content = split.children[1]!;
         assert.equal(content.props['contentStyle'], undefined, 'a drawn split view ignores it');
         assert.ok(getByText('Mailboxes'));

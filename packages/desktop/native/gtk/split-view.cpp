@@ -445,6 +445,7 @@ void SplitViews::place(SurfaceId surfaceId, Tag split, bool window) {
 
 void SplitViews::applySidebar(Split &s) {
   applyWidths(s);
+  applyToggleButton(s);
   const auto *p = paneProps(backend_.data(s.sidebar));
   if (!p) {
     return;
@@ -462,6 +463,22 @@ void SplitViews::applySidebar(Split &s) {
     }
     s.folding.setCollapsed(*saved);
   }
+}
+
+void SplitViews::applyToggleButton(Split &s) {
+  const auto *p = paneProps(backend_.data(s.sidebar));
+  bool shown = p == nullptr || p->toggleButton;
+  if (shown != s.toggleButton) {
+    s.toggleButton = shown;
+    if (s.window) {
+      backend_.headers().refreshChrome(s.surfaceId);
+    }
+  }
+}
+
+bool SplitViews::sidebarToggle(SurfaceId surfaceId) const {
+  auto split = windowSplit(surfaceId);
+  return !split || splits_.at(*split).toggleButton;
 }
 
 void SplitViews::host(Split &s, Tag pane) {
@@ -580,6 +597,7 @@ void SplitViews::removed(Tag parent, Tag child) {
     backend_.hooks.containerRoot(child, false);
     s.sidebar = -1;
     NGN_PANE_SLOT(s.sidebarSlot)->pane = -1;
+    applyToggleButton(s);
   }
   // And a split whose sidebar holds this one, nested: its rows may have titled that content too.
   retitleSidebarsHolding(parent);
@@ -660,6 +678,7 @@ void SplitViews::propsChanged(Tag tag) {
     return;
   }
   applyWidths(s);
+  applyToggleButton(s);
   // Only a change of the collapsed input reaches the toolkit: an unrelated update (a width) leaves
   // the state the user or a saved preference set.
   if (const auto *p = paneProps(backend_.data(tag)); p && s.collapsedProp != p->collapsed) {

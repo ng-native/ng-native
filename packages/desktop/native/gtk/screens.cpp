@@ -818,7 +818,7 @@ void Headers::layOutBar(SurfaceId surfaceId, Shown &shown) {
     shown.packed.push_back(GTK_WIDGET(g_object_ref(widget)));
     return widget;
   };
-  if (sidebar) {
+  if (sidebar && backend_.splitViews().sidebarToggle(surfaceId)) {
     GtkWidget *toggle = keep(gtk_button_new_from_icon_name("sidebar-show-symbolic"));
     gtk_widget_set_tooltip_text(toggle, "Show Sidebar");
     gtk_accessible_update_property(GTK_ACCESSIBLE(toggle), GTK_ACCESSIBLE_PROPERTY_LABEL, "Show Sidebar", -1);

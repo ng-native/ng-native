@@ -18,6 +18,7 @@ import { View } from '../../components/src/view.ts';
         minWidth="180"
         maxWidth="400"
         autosave="main"
+        [toggleButton]="toggleButton()"
       >
         <view testID="search" />
         <sidebar-section testID="mail" [title]="mailTitle()" [collapsible]="mailCollapsible()">
@@ -63,6 +64,7 @@ import { View } from '../../components/src/view.ts';
 export class SidebarFixture {
   readonly contentStyle = signal<'plain' | 'inset'>('inset');
   readonly collapsed = signal(false);
+  readonly toggleButton = signal(false);
   readonly mailTitle = signal<string | undefined>('Mailboxes');
   readonly mailCollapsible = signal(true);
   readonly inbox = signal(true);

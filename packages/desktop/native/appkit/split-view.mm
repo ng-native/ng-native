@@ -464,6 +464,11 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
   [self paneChanged:_sidebar];
 }
 
+- (BOOL)sidebarToggle {
+  const auto *p = [_sidebar paneProps];
+  return p == nullptr || p->toggleButton;
+}
+
 - (CGFloat)minimumWidth {
   return ngn::sidebarWidths([_sidebar paneProps]).minimum;
 }

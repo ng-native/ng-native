@@ -44,6 +44,10 @@ and `SidebarItemPath` from `@ng-native/router` for items with a `path`.
   points. Drawn, they bound the sidebar's width, which starts at 240.
 - **`autosave`** - the name the sidebar is kept under across launches: its width and collapsed
   state on macOS, and its collapsed state on Linux, where the sidebar has no width to drag.
+- **`toggleButton`** - whether the window's toolbar on macOS, or its header bar on Linux, shows
+  the sidebar button. On by default. Turn it off for a sidebar that draws a button of its own:
+  View > Show Sidebar, its shortcut and `[(collapsed)]` still work. iOS, Android and the web host
+  ignore it.
 
 Sections and items become a native source list on macOS. Anything else in the sidebar, such as a
 search field or a footer, is drawn and styled by CSS on every OS.
@@ -142,9 +146,11 @@ separator, View > Show Sidebar and an autosaved width; one inside another split 
 the tabs is a plain NSSplitView in the content. Each pane is sized by AppKit, and the size goes
 back into layout, at most once a display frame. The sidebar's collapsed state follows the app's
 `collapsed`, and the title bar button, the View menu and a restored autosave report theirs with
-`topSidebarCollapse`. The content pane's `contentStyle` prop is `inset` for a card: its container
-sits in a backdrop of the sidebar's material, which runs under the toolbar, and the content's split
-item draws no title bar separator. On Linux the content page takes the sidebar's colour, the header
+`topSidebarCollapse`. The sidebar pane's `toggleButton` prop, when `false`, leaves the sidebar
+button out of the toolbar, which keeps the tracking separator, and out of the header bar on Linux.
+The content pane's `contentStyle` prop is `inset` for a card: its container sits in a backdrop of
+the sidebar's material, which runs under the toolbar, and the content's split item draws no title
+bar separator. On Linux the content page takes the sidebar's colour, the header
 bar over it draws none of its own, and the pane's slot is the card.
 
 Neighbouring `<sidebar-section>`s (`NgNativeSidebarSection`) in one parent are one NSOutlineView
