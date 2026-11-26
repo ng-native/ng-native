@@ -36,10 +36,24 @@ keeps it, and launching it again opens the main window. The main window's root c
 when that window opens, so `mount`'s `componentRef` throws until then.
 
 The options every window takes are `title`, `width`, `height`, `minWidth`, `minHeight`, `maxWidth`,
-`maxHeight`, `resizable`, `titleBar` (`'default'`, `'transparent'` or `'hidden'`), `fullScreen` and
-`autosave`. A window's frame is saved and restored on the next launch, under `main`, its route
-outlet or its `restoreKey`; `autosave: false` turns that off. On Linux only the size comes back,
-maximised or full screen when the window was, and never a place: the desktop places each window.
+`maxHeight`, `resizable`, `titleBar` (`'default'`, `'transparent'` or `'hidden'`),
+`trafficLightPosition`, `fullScreen` and `autosave`. A window's frame is saved and restored on the
+next launch, under `main`, its route outlet or its `restoreKey`; `autosave: false` turns that off.
+On Linux only the size comes back, maximised or full screen when the window was, and never a place:
+the desktop places each window.
+
+On macOS, `trafficLightPosition` places the window controls, as Electron's option of the same name
+does: `{ x, y }` is the close button's top-left in points from the window's top-left, with the
+minimise and zoom buttons beside it at the system's spacing. The title bar grows to hold them, and
+they stay there as the window resizes, becomes key and leaves full screen. A header row taller than
+the system's title bar can then have the controls centred in it:
+
+```ts
+provideMainWindow({ titleBar: 'hidden', trafficLightPosition: { x: 18, y: 28 } });
+```
+
+`--safe-area-inset-titlebar-leading` follows the buttons. Linux and iPadOS ignore it: libadwaita
+and iPadOS draw the window controls themselves.
 
 On macOS and Linux, a resizable main window opens at its saved size when there is one. Use a new
 `restoreKey` when changing the defaults should give the window a fresh frame, for example

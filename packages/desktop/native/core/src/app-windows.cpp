@@ -1,6 +1,7 @@
 #include "ngn/app-windows.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace ngn {
 
@@ -78,6 +79,13 @@ WindowRequest windowRequest(const folly::dynamic &request) {
   }
   if (auto full = request.find("fullScreen"); full != request.items().end() && full->second.isBool()) {
     out.fullScreen = full->second.asBool();
+  }
+  if (auto at = request.find("trafficLightPosition"); at != request.items().end() && at->second.isObject()) {
+    auto x = number(at->second, "x");
+    auto y = number(at->second, "y");
+    if (x && y && std::isfinite(*x) && std::isfinite(*y) && *x >= 0 && *y >= 0) {
+      out.trafficLightPosition = WindowButtonsPosition{.x = *x, .y = *y};
+    }
   }
   return out;
 }

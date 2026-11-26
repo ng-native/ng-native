@@ -95,6 +95,11 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
     ],
   ),
   row(
+    '`trafficLightPosition`',
+    ['trafficLightPosition'],
+    ['yes', 'ignored', 'ignored', 'ignored', 'ignored', 'ignored'],
+  ),
+  row(
     '`<menu-bar>`',
     ['MenuBar', 'MenuGroup', 'MenuItem', 'MenuSeparator', 'Menus'],
     [

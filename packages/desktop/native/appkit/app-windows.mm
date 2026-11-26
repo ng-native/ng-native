@@ -4,26 +4,45 @@
 #import "screen-capture.h"
 
 #import "surface-view.h"
+#import "window-buttons.h"
 
 using ngn::appkit::AppKitWindows;
 
 @interface NGNWindowDelegate : NSObject <NSWindowDelegate>
-- (instancetype)initWithSurface:(facebook::react::SurfaceId)surface windows:(AppKitWindows *)windows;
+- (instancetype)initWithSurface:(facebook::react::SurfaceId)surface
+                        windows:(AppKitWindows *)windows
+                        buttons:(std::optional<ngn::WindowButtonsPosition>)buttons;
+// Puts the window controls where the window asked, again: AppKit lays them out afresh as the
+// window resizes, becomes key and leaves full screen.
+- (void)placeButtons:(NSWindow *)window;
 @end
 
 @implementation NGNWindowDelegate {
   facebook::react::SurfaceId _surface;
   AppKitWindows *_windows;
+  std::optional<ngn::WindowButtonsPosition> _buttons;
+}
+
+- (void)placeButtons:(NSWindow *)window {
+  if (!_buttons || window == nil) {
+    return;
+  }
+  ngn::appkit::placeWindowButtons(window, *_buttons);
+  // `--safe-area-inset-titlebar-leading` follows the zoom button.
+  [NGNSurfaceView safeAreaChangedIn:window];
 }
 
 - (NSUndoManager *)windowWillReturnUndoManager:(NSWindow *)window {
   return ngn::appkit::undoManagerFor(window);
 }
 
-- (instancetype)initWithSurface:(facebook::react::SurfaceId)surface windows:(AppKitWindows *)windows {
+- (instancetype)initWithSurface:(facebook::react::SurfaceId)surface
+                        windows:(AppKitWindows *)windows
+                        buttons:(std::optional<ngn::WindowButtonsPosition>)buttons {
   if ((self = [super init])) {
     _surface = surface;
     _windows = windows;
+    _buttons = buttons;
   }
   return self;
 }
@@ -37,7 +56,12 @@ using ngn::appkit::AppKitWindows;
 }
 
 - (void)windowDidResize:(NSNotification *)note {
+  [self placeButtons:note.object];
   _windows->frameChanged(_surface, true);
+}
+
+- (void)windowDidExitFullScreen:(NSNotification *)note {
+  [self placeButtons:note.object];
 }
 
 - (void)windowDidChangeBackingProperties:(NSNotification *)note {
@@ -49,6 +73,7 @@ using ngn::appkit::AppKitWindows;
 }
 
 - (void)windowDidBecomeKey:(NSNotification *)note {
+  [self placeButtons:note.object];
   _windows->keyChanged(_surface, true);
 }
 
@@ -174,13 +199,16 @@ void AppKitWindows::openWindow(
       }
       [window setFrameTopLeftPoint:at];
     }
-    NGNWindowDelegate *delegate = [[NGNWindowDelegate alloc] initWithSurface:surface windows:this];
+    NGNWindowDelegate *delegate = [[NGNWindowDelegate alloc] initWithSurface:surface
+                                                                     windows:this
+                                                                     buttons:request.trafficLightPosition];
     delegates_[@(surface)] = delegate;
     window.delegate = delegate;
     NSRect bounds = NSMakeRect(0, 0, NSWidth(content), NSHeight(content));
     // A split view controller a reloaded app's window had gives way to the new surface.
     window.contentViewController = nil;
     window.contentView = hooks_.makeSurface(surface, bounds);
+    [delegate placeButtons:window];
     windows_[@(surface)] = window;
     unshown_[@(surface)] = @(request.fullScreen);
     hooks_.startSurface(surface, window);
@@ -212,6 +240,8 @@ void AppKitWindows::show(SurfaceId surface) {
   }
   [unshown_ removeObjectForKey:@(surface)];
   showWindow(window);
+  // Showing lays the title bar out again.
+  [(NGNWindowDelegate *)delegates_[@(surface)] placeButtons:window];
   // The app learns the size the window opened at, which a restored frame decides.
   if (host_) {
     host_->resized(surface, frameOf(window), window.backingScaleFactor);
