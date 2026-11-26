@@ -887,6 +887,17 @@ function recordCompilation(config, options, projectRoot) {
     .join('-');
 }
 
+/**
+ * The project's own path, for Metro's cache key. Metro keys a transform by the file's path relative
+ * to the project and its content, and keeps it in the temp directory every project shares, so
+ * without this a second checkout of the app reads the first's transforms, and one that records an
+ * absolute path, a DOM component's reference, points at the other checkout's file.
+ */
+function projectKey(projectRoot) {
+  const root = path.resolve(projectRoot ?? process.cwd());
+  return `project-${createHash('sha1').update(root).digest('hex').slice(0, 12)}`;
+}
+
 function conditionsOf(config, options) {
   const ngp =
     options.compilation === 'ngp' &&
@@ -933,10 +944,16 @@ function withAngularNative(config, options = {}) {
   config.transformer.cacheVersion = [
     config.transformer.cacheVersion,
     fingerprint,
+    projectKey(config.projectRoot),
     angularVersion(projectRoot),
     ...babelPluginVersions(projectRoot, config.projectRoot),
     iconSetVersions(projectRoot),
   ]
+    .filter(Boolean)
+    .join('-');
+  // And in Metro's own cacheVersion: the transformer's reaches the key only through the worker's
+  // getCacheKey, which a transform worker of the app's own may not have.
+  config.cacheVersion = [config.cacheVersion, projectKey(config.projectRoot)]
     .filter(Boolean)
     .join('-');
 
