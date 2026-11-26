@@ -1,6 +1,7 @@
 #include "ngn/app-windows.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace ngn {
 
@@ -82,7 +83,7 @@ WindowRequest windowRequest(const folly::dynamic &request) {
   if (auto at = request.find("trafficLightPosition"); at != request.items().end() && at->second.isObject()) {
     auto x = number(at->second, "x");
     auto y = number(at->second, "y");
-    if (x && y && *x >= 0 && *y >= 0) {
+    if (x && y && std::isfinite(*x) && std::isfinite(*y) && *x >= 0 && *y >= 0) {
       out.trafficLightPosition = WindowButtonsPosition{.x = *x, .y = *y};
     }
   }

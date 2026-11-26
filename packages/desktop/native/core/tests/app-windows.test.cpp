@@ -3,6 +3,8 @@
 #include "ngn/app-windows.h"
 
 #include <doctest/doctest.h>
+#include <limits>
+#include <cmath>
 #include <folly/json.h>
 
 using folly::dynamic;
@@ -426,4 +428,15 @@ TEST_CASE("a window request places the window controls where trafficLightPositio
   CHECK_FALSE(windowRequest(dynamic::object("trafficLightPosition", dynamic::object("x", -4)("y", 10)))
                   .trafficLightPosition);
   CHECK_FALSE(windowRequest(dynamic::object("trafficLightPosition", "top-left")).trafficLightPosition);
+  // Nor does one that is not finite, which would lay the buttons out at an infinite frame.
+  CHECK_FALSE(windowRequest(dynamic::object(
+                                "trafficLightPosition",
+                                dynamic::object("x", std::numeric_limits<double>::infinity())("y", 10)))
+                  .trafficLightPosition);
+  CHECK_FALSE(
+      windowRequest(dynamic::object("trafficLightPosition", dynamic::object("x", 18)("y", std::nan(""))))
+          .trafficLightPosition);
+  // Zero is a place, at the window's very corner.
+  CHECK(windowRequest(dynamic::object("trafficLightPosition", dynamic::object("x", 0)("y", 0))).trafficLightPosition ==
+        ngn::WindowButtonsPosition{.x = 0, .y = 0});
 }
