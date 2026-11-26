@@ -343,14 +343,14 @@ describe('in an integrated workspace', () => {
     const tree = integrated();
     await generate(tree, { directory: 'apps/mobile' });
     const root = readJson(tree, 'package.json');
-    assert.equal(root.dependencies['react-native'], '0.88.0');
+    assert.equal(root.dependencies['react-native'], '0.88.1');
     assert.equal(root.dependencies['@angular/core'], '~22.2.0');
     assert.equal(root.devDependencies['@nx/expo'], '23.2.0');
     // Every dependency, because Expo links only the native modules the app's own package.json
     // names: without react-native-safe-area-context there, Android crashed on RNCSafeAreaView.
     const app = readJson(tree, 'apps/mobile/package.json');
     assert.equal(app.main, 'src/main.ts');
-    assert.equal(app.dependencies['react-native'], '0.88.0');
+    assert.equal(app.dependencies['react-native'], '0.88.1');
     assert.equal(app.dependencies['react-native-safe-area-context'], '~5.11.1');
     assert.equal(app.dependencies['@angular/core'], '~22.2.0');
   });
@@ -440,7 +440,7 @@ describe('in an integrated workspace', () => {
     const settings = 'autoInstallPeers: true\nallowBuilds:\n  nx: true\n';
     tree.write('pnpm-workspace.yaml', settings);
     await generate(tree, { directory: 'apps/mobile' });
-    assert.equal(readJson(tree, 'package.json').dependencies['react-native'], '0.88.0');
+    assert.equal(readJson(tree, 'package.json').dependencies['react-native'], '0.88.1');
     assert.equal(readJson(tree, 'apps/mobile/package.json').name, 'mobile');
     // Only the builds @nx/expo brings are added, which pnpm 11 refuses to install without.
     assert.equal(

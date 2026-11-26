@@ -96,7 +96,7 @@ describe('init', () => {
     assert.equal(devDependencies.expo, '~58.0.16');
     assert.equal(devDependencies.react, '19.3.0');
     assert.equal(devDependencies['react-dom'], '19.3.0');
-    assert.equal(devDependencies['react-native'], '0.88.0');
+    assert.equal(devDependencies['react-native'], '0.88.1');
   });
 
   it('keeps a React the root of a package-manager workspace already has', async () => {

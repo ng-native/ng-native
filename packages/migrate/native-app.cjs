@@ -35,7 +35,7 @@ const dependencies = {
   'expo-status-bar': '~58.0.3',
   'expo-system-ui': '~58.0.6',
   react: '19.3.0',
-  'react-native': '0.88.0',
+  'react-native': '0.88.1',
   'react-native-safe-area-context': '~5.11.1',
 };
 
@@ -180,7 +180,8 @@ const desktopOnlyDependencies = Object.fromEntries(
     ...dependencies,
     ...desktopDependencies,
     '@ng-native/expo': version,
-    // Exactly the version the prebuilt desktop host is built with, so the app runs on it.
+    // Exactly the versions the prebuilt desktop host is built with, so the app runs on it.
+    'react-native': '0.88.0',
     'react-native-safe-area-context': '5.11.1',
   })
     .filter(([name]) => name !== 'expo-status-bar' && name !== 'expo-system-ui')
@@ -349,9 +350,14 @@ function prebuildPins(root, wanted = dependencies) {
  * Where what a workspace already has can be older than what a new app is given: `@ng-native/testing`
  * installs Vitest 5 but its plugin runs on 4, which `ng new` 22.1 and the Nx preset still start on,
  * and `@ng-native/eslint-plugin` runs on the ESLint 9 the Nx preset still starts on. Each range here
- * is that package's peer, and a test holds the two together.
+ * is that package's peer, and a test holds the two together. React Native takes any patch of the
+ * minor a new app is given: a workspace made before that patch keeps the one it has.
  */
-const accepted = { vitest: '^4.0.8 || ^5.0.0', eslint: '^9.0.0 || ^10.0.0' };
+const accepted = {
+  vitest: '^4.0.8 || ^5.0.0',
+  eslint: '^9.0.0 || ^10.0.0',
+  'react-native': '~0.88.0',
+};
 
 /**
  * Why an existing dependency would stop this app installing or running, as a sentence each.

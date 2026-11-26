@@ -146,6 +146,13 @@ describe('conflicts', () => {
     );
   });
 
+  it('accepts an earlier React Native patch a workspace already has, and names another minor', () => {
+    // The generator keeps the workspace's own version, and a patch apart is no reason to refuse.
+    assert.deepEqual(native.conflicts({ dependencies: { 'react-native': '0.88.0' } }), []);
+    const [problem] = native.conflicts({ dependencies: { 'react-native': '0.86.3' } });
+    assert.match(problem, /react-native is 0\.86\.3 here, and Angular Native needs ~0\.88\.0/);
+  });
+
   it('ignores a range it cannot read, such as a workspace or file link', () => {
     assert.deepEqual(native.conflicts({ dependencies: { react: 'workspace:*' } }), []);
   });

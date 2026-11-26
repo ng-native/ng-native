@@ -249,6 +249,12 @@ function check(app, { pm = 'pnpm', latest = false } = {}) {
   }
   assertOneCopy(app, pm);
 
+  // The template pins React Native and gives Expo a range, so a new Expo patch can expect a React
+  // Native the template does not have. Nothing here builds natively to notice: expo-modules-core
+  // 58.1.0 linked a class React Native 0.88.0 lacks, and every new app crashed at launch on iOS.
+  console.log('expo install --check');
+  run('npx', ['expo', 'install', '--check'], app, false);
+
   console.log('typechecking');
   run('npx', ['tsc', '-p', 'tsconfig.json', '--noEmit'], app);
 
