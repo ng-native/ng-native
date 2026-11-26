@@ -49,6 +49,13 @@ struct WindowFrame {
 constexpr double kDefaultWindowWidth = 1040;
 constexpr double kDefaultWindowHeight = 720;
 
+// Where the window controls go: the close button's top-left, in points from the window's top-left.
+struct WindowButtonsPosition {
+  double x{0};
+  double y{0};
+  bool operator==(const WindowButtonsPosition &) const = default;
+};
+
 // What the app asked to open (`NativeWindowRequest`). Sizes are content sizes in points.
 struct WindowRequest {
   std::optional<std::string> key;
@@ -62,6 +69,8 @@ struct WindowRequest {
   bool resizable{true};
   TitleBar titleBar{TitleBar::Default};
   bool fullScreen{false};
+  // `trafficLightPosition`: unset leaves the controls where the system puts them.
+  std::optional<WindowButtonsPosition> trafficLightPosition;
 };
 
 WindowRequest windowRequest(const folly::dynamic &request);

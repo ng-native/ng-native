@@ -46,6 +46,12 @@ export interface WindowOptions {
   readonly resizable?: boolean;
   /** `transparent` draws content under the title bar; `hidden` also hides the title. */
   readonly titleBar?: TitleBar;
+  /**
+   * macOS: where the window controls (close, minimise and zoom) go, as the close button's top-left
+   * in points from the window's top-left, with the others beside it, as Electron's option of the
+   * same name places them. The title bar grows to hold them. Ignored on Linux and iPadOS.
+   */
+  readonly trafficLightPosition?: { readonly x: number; readonly y: number };
   readonly fullScreen?: boolean;
   /**
    * Whether the window's frame is saved and restored on the next launch. On by default for the

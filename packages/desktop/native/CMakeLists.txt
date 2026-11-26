@@ -268,6 +268,7 @@ if(NGN_TESTS)
         appkit/presentation-label.mm appkit/tests/presentation-label.test.mm
         appkit/glass-effect.mm appkit/tests/glass.test.mm
         appkit/visual-effect.mm appkit/tests/visual-effect.test.mm
+        appkit/window-buttons.mm appkit/tests/window-buttons.test.mm
         appkit/menu-bar.mm appkit/svg-icon.mm appkit/tests/menu-bar.test.mm
         appkit/system.mm appkit/tests/system.test.mm
         appkit/image-request.mm appkit/tests/image-request.test.mm

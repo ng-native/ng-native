@@ -57,6 +57,7 @@ add_library(ngn_appkit OBJECT
     glass-view.mm
     visual-effect.mm
     visual-effect-view.mm
+    window-buttons.mm
     modal-focus.mm
     modal-host-view.mm
     native-controls.mm
