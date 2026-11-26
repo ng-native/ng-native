@@ -17,11 +17,11 @@
     "e2e:ios:record": "xcrun simctl status_bar booted override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 && node .maestro/ios/record-baselines.mjs"
   },
   "dependencies": {
-    "@angular/common": "22.2.0",
-    "@angular/core": "22.2.0",
-    "@angular/forms": "22.2.0",
-    "@angular/platform-browser": "22.2.0",
-    "@angular/router": "22.2.0",
+    "@angular/common": "22.3.0",
+    "@angular/core": "22.3.0",
+    "@angular/forms": "22.3.0",
+    "@angular/platform-browser": "22.3.0",
+    "@angular/router": "22.3.0",
     "@expo/ui": "~58.0.21",
     "@ng-icons/core": "^36.0.0",
     "@ng-icons/heroicons": "^36.0.0",

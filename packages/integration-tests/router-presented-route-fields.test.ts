@@ -16,6 +16,7 @@ const KEPT: Record<string, unknown> = {
   title: 'Album',
   component: Page,
   loadComponent: () => Page,
+  errorComponent: Page,
   canActivate: [guard],
   canActivateChild: [guard],
   canDeactivate: [guard],
@@ -120,9 +121,10 @@ describe('the presented copy of a route above the page', () => {
     });
   }
 
-  it('carries no field outside the public ones, nor its component', async () => {
+  it('carries no field outside the public ones, nor its component or error component', async () => {
     const { tab } = await copiesOf({ path: 'album', component: Page }, {
       component: Page,
+      errorComponent: Page,
       _made: 'by Angular',
     } as Partial<Route>);
     assert.deepEqual(Object.keys(tab).sort(), ['children', 'outlet', 'path', 'pathMatch']);

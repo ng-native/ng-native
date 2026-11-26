@@ -12,7 +12,7 @@
     "export": "expo export --platform ios --platform android --output-dir dist"
   },
   "dependencies": {
-    "@angular/core": "22.2.0",
+    "@angular/core": "22.3.0",
     "@nativescript/react-native": "9.1.2",
     "@ng-native/components": "workspace:*",
     "@ng-native/device": "workspace:*",

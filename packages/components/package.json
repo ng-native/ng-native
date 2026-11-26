@@ -152,7 +152,7 @@
     "expo-module.config.json"
   ],
   "devDependencies": {
-    "@angular/core": "22.2.0",
+    "@angular/core": "22.3.0",
     "@babel/core": "^7.29.7",
     "marked": "^18.0.14"
   }
