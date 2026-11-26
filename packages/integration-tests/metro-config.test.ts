@@ -622,6 +622,33 @@ describe('the Metro preset', () => {
     }
   });
 
+  it("puts the project in Metro's own cacheVersion too, which a worker of the app's own cannot leave out", () => {
+    // The transformer's cacheVersion reaches Metro's key only through the worker's getCacheKey,
+    // which a custom transform worker may not have. Metro's own cacheVersion is always in the key.
+    const parent = mkdtempSync(path.join(tmpdir(), 'ng-native-checkouts-'));
+    try {
+      const key = (root: string) =>
+        (
+          withAngularNative({
+            ...base(),
+            projectRoot: root,
+            cacheVersion: 'app-1',
+          }) as MetroConfig & {
+            cacheVersion?: string;
+          }
+        ).cacheVersion!;
+      const first = path.join(parent, 'first');
+      const second = path.join(parent, 'second');
+      mkdirSync(first);
+      mkdirSync(second);
+      assert.notEqual(key(first), key(second));
+      assert.equal(key(first), key(first), 'the same checkout keeps its cache');
+      assert.match(key(first), /^app-1-/, "the app's own cacheVersion stays in it");
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
   it("puts the worklets Babel plugin's package in Metro's cache key, so installing it starts afresh", () => {
     // babel-preset-expo adds the plugin only when it resolves, and Metro's key knew nothing of
     // that, so files transformed before the install kept their worklets untransformed.

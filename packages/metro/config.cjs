@@ -951,6 +951,11 @@ function withAngularNative(config, options = {}) {
   ]
     .filter(Boolean)
     .join('-');
+  // And in Metro's own cacheVersion: the transformer's reaches the key only through the worker's
+  // getCacheKey, which a transform worker of the app's own may not have.
+  config.cacheVersion = [config.cacheVersion, projectKey(config.projectRoot)]
+    .filter(Boolean)
+    .join('-');
 
   /*
    * And say so when it changes while the server is up, because the cache is only half of it.
