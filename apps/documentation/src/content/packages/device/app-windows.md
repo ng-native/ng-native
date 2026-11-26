@@ -45,8 +45,8 @@ the desktop places each window.
 On macOS, `trafficLightPosition` places the window controls, as Electron's option of the same name
 does: `{ x, y }` is the close button's top-left in points from the window's top-left, with the
 minimise and zoom buttons beside it at the system's spacing. The title bar grows to hold them, and
-they stay there as the window resizes and leaves full screen. A header row taller than the system's
-title bar can then have the controls centred in it:
+they stay there as the window resizes, becomes key and leaves full screen. A header row taller than
+the system's title bar can then have the controls centred in it:
 
 ```ts
 provideMainWindow({ titleBar: 'hidden', trafficLightPosition: { x: 18, y: 28 } });

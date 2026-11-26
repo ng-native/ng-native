@@ -13,7 +13,7 @@ using ngn::appkit::AppKitWindows;
                         windows:(AppKitWindows *)windows
                         buttons:(std::optional<ngn::WindowButtonsPosition>)buttons;
 // Puts the window controls where the window asked, again: AppKit lays them out afresh as the
-// window resizes and leaves full screen.
+// window resizes, becomes key and leaves full screen.
 - (void)placeButtons:(NSWindow *)window;
 @end
 
@@ -73,6 +73,7 @@ using ngn::appkit::AppKitWindows;
 }
 
 - (void)windowDidBecomeKey:(NSNotification *)note {
+  [self placeButtons:note.object];
   _windows->keyChanged(_surface, true);
 }
 
