@@ -2,7 +2,7 @@
 
 The build-time half of Angular Native: a Metro config preset and Babel transformer that compiles
 Angular components ahead of time, turns each component's `styles` into the rule set
-[`@ng-native/fabric`](https://github.com/ng-native/ng-native/blob/main/packages/fabric)
+[`@ng-native/fabric`](https://github.com/coralogix/ng-native/blob/main/packages/fabric)
 reads at runtime, links partially-compiled Angular libraries, and wires up hot reload with no
 Angular dev server.
 
@@ -61,8 +61,8 @@ compiled. See
 
 - [Metro](https://ng-native.com/packages/metro)
 - [Configuration](https://ng-native.com/packages/metro/configuration)
-- [Root README](https://github.com/ng-native/ng-native/blob/main/README.md) and
-  [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/docs/ARCHITECTURE.md)
+- [Root README](https://github.com/coralogix/ng-native/blob/main/README.md) and
+  [ARCHITECTURE.md](https://github.com/coralogix/ng-native/blob/main/docs/ARCHITECTURE.md)
 
 ## License
 

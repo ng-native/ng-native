@@ -27,7 +27,7 @@ export const DEFAULT_DESCRIPTION =
 
 export const OG_IMAGE = '/og.png';
 
-export const GITHUB_REPO = 'https://github.com/ng-native/ng-native';
+export const GITHUB_REPO = 'https://github.com/coralogix/ng-native';
 
 /** Where sponsorship goes: GitHub Sponsors, which is also the repository's Sponsor button. */
 export const GITHUB_SPONSORS = 'https://github.com/sponsors/ashley-hunter';

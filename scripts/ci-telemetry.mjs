@@ -44,7 +44,7 @@
  */
 import { createHash } from 'node:crypto';
 
-const REPO = process.env.GITHUB_REPOSITORY || 'ng-native/ng-native';
+const REPO = process.env.GITHUB_REPOSITORY || 'coralogix/ng-native';
 const REPO_URL = `https://github.com/${REPO}`;
 const INGRESS = process.env.CORALOGIX_INGRESS || 'https://ingress.eu2.coralogix.com';
 const APP = 'ng-native';

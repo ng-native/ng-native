@@ -2,7 +2,7 @@
 
 A Tailwind CSS preset for Angular Native, for Tailwind 4 and Tailwind 3, on native and on the
 web: `<view class="flex-1 bg-blue-500 p-4">` works because
-[`@ng-native/fabric`](https://github.com/ng-native/ng-native/blob/main/packages/fabric) already has
+[`@ng-native/fabric`](https://github.com/coralogix/ng-native/blob/main/packages/fabric) already has
 a real cascade, and `class` already matches against it.
 
 Alpha: APIs may change before 1.0.
@@ -98,8 +98,8 @@ On the web, a Tailwind 3 build uses `web-preset.cjs` in place of `preset.cjs`. S
   [Tailwind 3](https://ng-native.com/packages/tailwind#tailwind-3)
 - [Variants](https://ng-native.com/packages/tailwind/variants) and
   [safe area and hairlines](https://ng-native.com/packages/tailwind/utilities)
-- [Root README](https://github.com/ng-native/ng-native/blob/main/README.md) and
-  [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/docs/ARCHITECTURE.md)
+- [Root README](https://github.com/coralogix/ng-native/blob/main/README.md) and
+  [ARCHITECTURE.md](https://github.com/coralogix/ng-native/blob/main/docs/ARCHITECTURE.md)
 
 ## License
 

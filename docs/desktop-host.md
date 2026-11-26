@@ -262,7 +262,7 @@ release finds those caches warm.
     {
       "reactNative": "0.88.0",
       "flavour": "debug",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v<release>/ng-native-desktop-host-<release>-rn-0.88.0-macos-universal-debug.tar.gz",
+      "url": "https://github.com/coralogix/ng-native/releases/download/v<release>/ng-native-desktop-host-<release>-rn-0.88.0-macos-universal-debug.tar.gz",
       "sha256": "<64 hex digits>",
       "libraries": { "react-native-screens": "<version>" },
       "inputs": "<64 hex digits>"
@@ -270,7 +270,7 @@ release finds those caches warm.
     {
       "reactNative": "0.88.0",
       "flavour": "release",
-      "url": "https://github.com/ng-native/ng-native/releases/download/v<release>/ng-native-desktop-host-<release>-rn-0.88.0-macos-universal.tar.gz",
+      "url": "https://github.com/coralogix/ng-native/releases/download/v<release>/ng-native-desktop-host-<release>-rn-0.88.0-macos-universal.tar.gz",
       "sha256": "<64 hex digits>",
       "libraries": { "react-native-screens": "<version>" }
     }

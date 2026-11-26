@@ -7,7 +7,7 @@
 #
 # REST except for one thread count, so it keeps working while the GraphQL rate limit is spent. A PR that fails CI or conflicts
 # drops out of the queue; one still waiting for review or CI stays in it.
-R=repos/ng-native/ng-native
+R=repos/coralogix/ng-native
 queue=($@)
 # The PR's own added and removed lines against the main it branched from, per file. Hunk positions are
 # left out because a rebase shifts them without changing the PR. Prints nothing, so the PR waits, when the

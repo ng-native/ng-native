@@ -4,7 +4,7 @@
  * outlet shows in turn: a page kept by the reuse strategy takes its children's outlets with it and
  * gets them back as it is attached. A stack in a sheet over the tab bar, dropped as the page under
  * the sheet is attached again, cleared the tab bar's registration, and every tab chosen after that
- * went into the first tab's stack. ng-native/ng-native#886
+ * went into the first tab's stack. coralogix/ng-native#886
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';

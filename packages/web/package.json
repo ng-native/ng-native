@@ -103,7 +103,7 @@
   "license": "MIT",
   "homepage": "https://ng-native.com/packages/web",
   "bugs": {
-    "url": "https://github.com/ng-native/ng-native/issues"
+    "url": "https://github.com/coralogix/ng-native/issues"
   },
   "files": [
     "dist",
@@ -112,7 +112,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ng-native/ng-native.git",
+    "url": "git+https://github.com/coralogix/ng-native.git",
     "directory": "packages/web"
   }
 }

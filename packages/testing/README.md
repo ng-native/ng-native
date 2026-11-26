@@ -61,8 +61,8 @@ have been sent.
 - [Setup](https://ng-native.com/packages/testing/setup),
   [writing a test](https://ng-native.com/packages/testing/writing-a-test) and the
   [API reference](https://ng-native.com/packages/testing/api)
-- [Root README](https://github.com/ng-native/ng-native/blob/main/README.md) and
-  [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/docs/ARCHITECTURE.md)
+- [Root README](https://github.com/coralogix/ng-native/blob/main/README.md) and
+  [ARCHITECTURE.md](https://github.com/coralogix/ng-native/blob/main/docs/ARCHITECTURE.md)
 
 ## License
 

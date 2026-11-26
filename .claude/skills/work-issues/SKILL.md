@@ -11,7 +11,7 @@ triages, relays, merges and cleans up.
 
 ## 1. Triage
 
-List what is open through REST (`gh api "repos/ng-native/ng-native/issues?state=open&per_page=100"` and
+List what is open through REST (`gh api "repos/coralogix/ng-native/issues?state=open&per_page=100"` and
 `.../pulls?state=open`). GraphQL shares one limit of 5,000 requests an hour across every agent and tool,
 and a busy batch spends it.
 

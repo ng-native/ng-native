@@ -29,7 +29,7 @@ harness, and a test that needs a server or input automation from `testdriver`.
 ## The recorded pass rates
 
 `wpt/expectations.json` holds how many subtests each file passes, with a digest of which, and
-[`wpt/summary.txt`](https://github.com/ng-native/ng-native/blob/main/packages/web-compat/wpt/summary.txt)
+[`wpt/summary.txt`](https://github.com/coralogix/ng-native/blob/main/packages/web-compat/wpt/summary.txt)
 the pass rate of each suite, how each file ended (OK, ERROR, TIMEOUT or CRASH) and what was
 skipped and why. The summary is the measure of where the package stands against each specification.
 
@@ -60,5 +60,5 @@ suites when `packages/web-compat`, the engine's CSS, the layout the tests are la
 minutes, one process at a time, so a change to the other suites (events, geometry, the observers,
 canvas, HTML parsing) runs `node wpt/run.mjs --check` locally before its pull request opens, and
 records with `--update` from a full run so `summary.txt` stays whole.
-[CONTRIBUTING.md](https://github.com/ng-native/ng-native/blob/main/CONTRIBUTING.md#web-platform-tests)
+[CONTRIBUTING.md](https://github.com/coralogix/ng-native/blob/main/CONTRIBUTING.md#web-platform-tests)
 has the same steps.

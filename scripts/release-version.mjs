@@ -144,7 +144,7 @@ export function checkPublishing(packages) {
     }
     if (trusted === false) {
       return [
-        `npm doesn't trust this workflow to publish ${name}. Configure its trusted publisher (repository ng-native/ng-native, workflow release.yml): see "Adding a package" in docs/RELEASING.md.`,
+        `npm doesn't trust this workflow to publish ${name}. Configure its trusted publisher (repository coralogix/ng-native, workflow release.yml): see "Adding a package" in docs/RELEASING.md.`,
       ];
     }
     return [];

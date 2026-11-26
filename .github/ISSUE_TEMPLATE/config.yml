@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Questions and ideas
-    url: https://github.com/ng-native/ng-native/discussions
+    url: https://github.com/coralogix/ng-native/discussions
     about: Ask how to do something, or float an idea before it becomes a feature request.
   - name: Security vulnerabilities
-    url: https://github.com/ng-native/ng-native/security/advisories/new
-    about: Report privately, as SECURITY.md describes - not as a public issue.
+    url: https://github.com/coralogix/ng-native/security/policy
+    about: Email security@coralogix.com, as SECURITY.md describes - not as a public issue.

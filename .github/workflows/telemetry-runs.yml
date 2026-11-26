@@ -34,7 +34,7 @@ concurrency:
 
 jobs:
   send:
-    if: github.repository == 'ng-native/ng-native'
+    if: github.repository == 'coralogix/ng-native'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

@@ -47,7 +47,7 @@ toolchain first and names what to install.
 - [Expo modules on macOS](https://ng-native.com/packages/desktop/expo-modules)
 - [Debugging and launch settings](https://ng-native.com/packages/desktop/development)
 - [Inside a package](https://ng-native.com/packages/desktop/packaging)
-- [The desktop host](https://github.com/ng-native/ng-native/blob/main/docs/desktop-host.md): the
+- [The desktop host](https://github.com/coralogix/ng-native/blob/main/docs/desktop-host.md): the
   source layout and publishing a prebuilt host, for contributors
 
 ## License

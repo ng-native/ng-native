@@ -135,7 +135,7 @@ describe('the packages a release publishes', () => {
         checkPublishing([{ name: '@ng-native/nativescript', versions: ['0.0.0'], trusted: false }]),
       {
         message:
-          'npm doesn\'t trust this workflow to publish @ng-native/nativescript. Configure its trusted publisher (repository ng-native/ng-native, workflow release.yml): see "Adding a package" in docs/RELEASING.md.',
+          'npm doesn\'t trust this workflow to publish @ng-native/nativescript. Configure its trusted publisher (repository coralogix/ng-native, workflow release.yml): see "Adding a package" in docs/RELEASING.md.',
       },
     );
   });

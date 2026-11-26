@@ -15,7 +15,7 @@ mutation results and the device artifacts. The PR body in step 11 is built from 
 ## 0. Check nobody has it, and branch
 
 `git fetch origin`, then look for work already under way:
-`gh pr list -R ng-native/ng-native --state all --search "<n>"` and `git branch -r --list '*<slug>*'`. An open PR
+`gh pr list -R coralogix/ng-native --state all --search "<n>"` and `git branch -r --list '*<slug>*'`. An open PR
 or a recent closed one for the same issue goes back to whoever owns the batch before you start.
 
 Then branch from the latest main: `git switch -c fix/<slug> origin/main`. A PR that needs another merged
@@ -25,7 +25,7 @@ you are on the branch.
 
 ## 1. Verify the report
 
-Read it with `gh issue view <n> -R ng-native/ng-native --comments`, then check every claim against the code on
+Read it with `gh issue view <n> -R coralogix/ng-native --comments`, then check every claim against the code on
 the latest `origin/main`. Reports are often partly wrong: the symptom is real but the cause, the scope, the repro
 or the suggested fix is not. Record what is right, what is wrong, and the evidence for each.
 
@@ -203,10 +203,10 @@ In this step `<base>` is `origin/main`, or for a stacked PR the remote branch it
 - Before pushing, check that no release of main is running. A merge while one runs breaks its push,
   and a push starts CI that competes with it for macOS runners. A dry run on another branch doesn't
   count.
-  `gh api --paginate 'repos/ng-native/ng-native/actions/workflows/release.yml/runs?branch=main&per_page=100' --jq '.workflow_runs[]|select(.status!="completed")|.id'`
+  `gh api --paginate 'repos/coralogix/ng-native/actions/workflows/release.yml/runs?branch=main&per_page=100' --jq '.workflow_runs[]|select(.status!="completed")|.id'`
   must succeed and print nothing; a failed request means wait and check again.
 - Push, then open the PR. `gh pr create` uses GraphQL. When that limit is spent, use REST:
-  `gh api repos/ng-native/ng-native/pulls -f title=... -f head=... -f base=<main, or the branch a stacked PR depends on> -f body=...`.
+  `gh api repos/coralogix/ng-native/pulls -f title=... -f head=... -f base=<main, or the branch a stacked PR depends on> -f body=...`.
 - The body has these sections, and says `Closes #<n>`. No AI attribution anywhere.
   - **Cause:** what was wrong in the report and what was right, with the evidence.
   - **Fix:** what changed and why in that layer.
