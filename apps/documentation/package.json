@@ -60,7 +60,7 @@
     "pagefind": "^1.5.2",
     "playwright": "^1.63.0",
     "vite": "^8.3.3",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.5"
   },
   "nx": {
     "tags": [
