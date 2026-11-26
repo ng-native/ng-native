@@ -463,6 +463,17 @@ An in-memory SQLite database with the part of `expo-sqlite`'s interface a servic
 `node:sqlite`. Give it to `openDatabasesWith` from `@ng-native/expo/database` to test a service
 built on `database()`: see [Database](/packages/expo/database#in-a-test).
 
+## `fakeLanguageModel()`
+
+```ts
+function fakeLanguageModel(): FakeLanguageModel;
+```
+
+A scripted on-device model, provided as `LanguageModel.SOURCE` from
+`@ng-native/expo/language-model`. Each turn takes the next reply given with `reply()`, waiting for
+one when none is queued; `requests` lists the turns asked and `setAvailability()` changes what the
+platform reports. See [On-device AI](/packages/expo/language-model#in-a-test).
+
 ## `createFakeFabric()`
 
 ```ts
@@ -506,7 +517,7 @@ Every library's own component stylesheets are compiled, so a test draws a librar
 their styles. `libraryStyles` narrows that as the Metro preset's option of the same name does: a
 list of the only npm packages, or `false` for none. The `@ng-native/*` packages' are compiled
 whatever it says.
-[Setup](/packages/testing/setup#under-the-hood) says why each is needed.
+[Setup](/packages/testing/setup#under-the-hood) describes what each does.
 
 ## `@ng-native/testing/register`
 

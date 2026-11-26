@@ -1,6 +1,7 @@
 name: Make a prebuilt desktop host
 description: >-
-  The universal prebuilt desktop host for one flavour, packed by make-prebuilt.mjs into `out`.
+  The universal prebuilt desktop host for one React Native version and flavour, packed by
+  make-prebuilt.mjs into `out`.
   Shared by the release and by the Desktop host workflow's warm-up on main, so both read and write
   the same caches. In order: the last release's archive when it was built from the same inputs
   (byte for byte, no build), then a host built from the same inputs kept in the Actions cache or,
@@ -9,6 +10,9 @@ description: >-
   checked falls through to the next, and the last builds from scratch.
 
 inputs:
+  react-native:
+    description: The React Native version the host is built against (HOST_REACT_NATIVE).
+    required: true
   flavour:
     description: debug or release
     required: true
@@ -46,8 +50,9 @@ runs:
       shell: bash
       env:
         FLAVOUR: ${{ inputs.flavour }}
+        REACT_NATIVE: ${{ inputs.react-native }}
       run: |
-        key=$(node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary --print-key --flavour "$FLAVOUR") || key=''
+        key=$(node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary --print-key --flavour "$FLAVOUR" --react-native "$REACT_NATIVE") || key=''
         echo "Host inputs key: ${key:-none}"
         echo "key=$key" >> "$GITHUB_OUTPUT"
 
@@ -60,11 +65,12 @@ runs:
       env:
         VERSION: ${{ inputs.version }}
         FLAVOUR: ${{ inputs.flavour }}
+        REACT_NATIVE: ${{ inputs.react-native }}
         BASE_URL: ${{ inputs.base-url }}
         OUT: ${{ inputs.out }}
       run: |
         if node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary "$OUT" \
-          --flavour "$FLAVOUR" --version "$VERSION" --base-url "$BASE_URL" \
+          --flavour "$FLAVOUR" --react-native "$REACT_NATIVE" --version "$VERSION" --base-url "$BASE_URL" \
           --reuse packages/desktop/prebuilt.json --reuse-only; then
           echo "done=true" >> "$GITHUB_OUTPUT"
           ls -l "$OUT"
@@ -140,13 +146,17 @@ runs:
       run: echo "macos=$(packages/desktop/native/scripts/macos-target.sh)" >> "$GITHUB_OUTPUT"
 
     # ccache handles a universal compile (`-arch arm64 -arch x86_64`) as one, so a hit covers both
-    # architectures. One set per flavour, keyed by the pins; a near miss restores the latest set.
+    # architectures. One set per React Native version and flavour, keyed by the pins; a near miss
+    # restores the latest set of that version, then of any.
     - if: steps.build.outputs.needed == 'true'
       id: ccache
       uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
       with:
-        key: desktop-prebuilt-${{ inputs.flavour }}-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/fetch-hermes.sh', 'pnpm-lock.yaml') }}
-        restore-keys: desktop-prebuilt-${{ inputs.flavour }}-${{ runner.os }}-
+        key: desktop-prebuilt-${{ inputs.flavour }}-${{ runner.os }}-rn-${{ inputs.react-native }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/fetch-hermes.sh', 'pnpm-lock.yaml') }}
+        # The action adds the `-` after each prefix itself.
+        restore-keys: |
+          desktop-prebuilt-${{ inputs.flavour }}-${{ runner.os }}-rn-${{ inputs.react-native }}
+          desktop-prebuilt-${{ inputs.flavour }}-${{ runner.os }}
         max-size: 1500M
         # Only what this build compiled is saved, so the set does not grow with every change.
         evict-old-files: job
@@ -156,7 +166,7 @@ runs:
       uses: actions/cache@v6
       with:
         path: ${{ github.workspace }}/.desktop-cache/*/src
-        key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
+        key: desktop-src-${{ runner.os }}-rn-${{ inputs.react-native }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
 
     # Whether or not a host was restored, since a cached host that fails its check builds after all.
     - if: steps.reuse.outputs.done != 'true'
@@ -172,6 +182,7 @@ runs:
         NGN_DESKTOP_CACHE: ${{ github.workspace }}/.desktop-cache
         VERSION: ${{ inputs.version }}
         FLAVOUR: ${{ inputs.flavour }}
+        REACT_NATIVE: ${{ inputs.react-native }}
         BASE_URL: ${{ inputs.base-url }}
         OUT: ${{ inputs.out }}
         KEY: ${{ steps.key.outputs.key }}
@@ -184,7 +195,7 @@ runs:
         CCACHE_SLOPPINESS: include_file_mtime,include_file_ctime,time_macros
       run: |
         start=$(date +%s)
-        args=(--flavour "$FLAVOUR" --version "$VERSION" --base-url "$BASE_URL")
+        args=(--flavour "$FLAVOUR" --react-native "$REACT_NATIVE" --version "$VERSION" --base-url "$BASE_URL")
         # A fixed build folder, so ccache's keys match from one run to the next.
         args+=(--build-dir "$RUNNER_TEMP/ngn-prebuilt-$FLAVOUR")
         if [ -n "$KEY" ]; then

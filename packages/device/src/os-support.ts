@@ -95,6 +95,11 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
     ],
   ),
   row(
+    '`trafficLightPosition`',
+    ['trafficLightPosition'],
+    ['yes', 'ignored', 'ignored', 'ignored', 'ignored', 'ignored'],
+  ),
+  row(
     '`<menu-bar>`',
     ['MenuBar', 'MenuGroup', 'MenuItem', 'MenuSeparator', 'Menus'],
     [
@@ -150,6 +155,11 @@ export const OS_SUPPORT: readonly OsSupportRow[] = [
       'list pane from 840dp, a stack below',
       'two columns',
     ],
+  ),
+  row(
+    '`<visual-effect>`',
+    ['VisualEffect'],
+    ['NSVisualEffectView', 'plain view', 'plain view', 'plain view', 'plain view', 'plain view'],
   ),
   row('`Processes`, `Processes.env`', ['Processes'], DESKTOP_ONLY, {
     Processes: 'NgNativeProcesses',

@@ -12,7 +12,8 @@
 FROM almalinux:9
 
 # CRB has ninja, the GTK and libadwaita headers and nghttp2's; EPEL has ccache and Weston. python3
-# builds ICU's filtered data and serves the libcurl client's tests. OpenSSL, nghttp2 and zlib are
+# builds ICU's filtered data and serves the libcurl client's tests. npm installs another React
+# Native version for a prebuilt host (make-prebuilt.mjs --react-native). OpenSSL, nghttp2 and zlib are
 # what the static libcurl links dynamically (cmake/curl.cmake). Xvfb, Weston, Mesa's software
 # drivers, D-Bus and the fonts are for launching the GTK host headless, under X11 and Wayland, and
 # pyatspi reads its accessibility tree over AT-SPI as a screen reader would (atspi-check.py).
@@ -25,7 +26,7 @@ RUN dnf -y install dnf-plugins-core epel-release \
  && dnf -y module enable nodejs:24 \
  && dnf -y install \
       llvm-toolset clang lld cmake ninja-build ccache \
-      git python3 perl perl-Digest-SHA nodejs \
+      git python3 perl perl-Digest-SHA nodejs npm \
       binutils diffutils file findutils procps-ng which \
       bzip2 tar unzip xz \
       libatomic sqlite-devel openssl-devel libnghttp2-devel zlib-devel \

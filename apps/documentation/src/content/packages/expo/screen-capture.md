@@ -77,11 +77,9 @@ export class CardDetails {
 
 ## Without the module
 
-On iOS and Android, a missing `expo-screen-capture` - never installed, or installed without the app
-being rebuilt since - leaves the service made, so injecting it does not throw. A call, or a read of
-a value only the module knows, throws a `MissingModuleError`. Its message names the module and the
-commands that fix it; see
-[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
+On iOS and Android, a missing `expo-screen-capture` throws a
+[`MissingModuleError`](/packages/expo/using-a-module#what-happens-without-the-module-installed) on
+the first call or read that needs it. Injecting the service does not throw.
 
 On the web, and in a test that provides no fake, `screenshots` stays at `0`, `available()` resolves
 to `false`, the permission is refused, and every other method resolves without doing anything.

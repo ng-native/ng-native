@@ -200,17 +200,10 @@ the web view.
 
 ## How it ships
 
-- **In development**, the page is served by Expo's dev server, from the same route Expo uses for
-  its DOM components (`/_expo/@dom/...`), and built by the app's own Metro for the web platform.
-- **In a release build**, the native build's bundling step (`expo export:embed`) finds every web
-  component the app imports and writes each page into the app: `www.bundle` in the iOS app, the
-  assets folder on Android, and `www.bundle` in the app's `Resources` on macOS, which
-  `ng-native-desktop package` bundles the same way. The web view loads it from there, with no
-  server.
-- **With `eas update`**, the pages go wherever Expo puts DOM components' pages, and the web view
-  looks for them where Expo would. This path has not been tested yet. On macOS, an app running an
-  update from its updates server looks for the pages beside the update's bundle, where the
-  desktop host's update client does not write them.
+- **In development**, the page is served by Expo's dev server, built by the app's own Metro.
+- **In a release build**, each page is written into the app and loaded from there, with no server.
+- **With `eas update`**, the pages ship with the update, as Expo's own DOM components do. On macOS,
+  an app running an update from its updates server does not find the pages.
 
 A font or an image a page's stylesheet names in a `url()`, relative to the sheet, ships with the
 page: `@font-face { src: url('./files/inter.woff2') }` from a package's stylesheet, or a
@@ -221,11 +214,6 @@ project too, such as a package in a pnpm store at the workspace root. It has to
 be a kind of file Metro takes as an asset (`config.resolver.assetExts`, to which `withAngularNative`
 adds `woff` and `woff2`); a `url()` to any other file, or to one that is not there, is left as
 written, with Expo's warning that it is not supported.
-
-Two pieces make this work, both in `@ng-native/metro`'s transformer. Imported from native code, a
-`'use dom'` file becomes the reference to its page and carries the same marker Expo's `'use dom'`
-plugin records, which is how the export finds it. Built for the web, the page's entry loads the
-file directly instead of mounting a React component, and the file mounts itself.
 
 ## Limits
 
@@ -241,9 +229,8 @@ file directly instead of mounting a React component, and the file mounts itself.
   `length`, and not named properties such as `localStorage.theme`. What a page stores is gone when
   the page is. On iOS and macOS both are the web view's own, and on iOS `localStorage` is kept
   between launches.
-- **Checked on iOS and macOS.** Android uses the same Expo web view and the same pages, and has
-  been run in a development build only. On macOS the desktop host draws the view itself, in
-  WebKit, with the same props, messages and page as Expo's iOS view.
+- **On macOS** the desktop host draws the view in WebKit, with the same props, messages and page as
+  on iOS.
 - **Not in Expo Go on Android.** Expo Go there does not include `@expo/dom-webview`, so a
   `<dom-component>` needs a development build.
 

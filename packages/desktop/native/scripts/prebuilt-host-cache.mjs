@@ -42,6 +42,23 @@ const SCHEMA = 1;
 const sha256 = (data) => createHash('sha256').update(data).digest('hex');
 
 /**
+ * Where a host build installs React Native and its host libraries when the app has another React
+ * Native (make-prebuilt.mjs --react-native): a folder in that version's build cache named for the
+ * versions, so builds of different versions never share an install, and builds of the same ones
+ * keep one path, which a compiler cache keys on.
+ *
+ * @param {string} cacheDir the version's build cache (cache-dir.sh)
+ * @param {Record<string, string>} versions each package's version
+ */
+export function hostAppDir(cacheDir, versions) {
+  const sorted = Object.keys(versions)
+    .sort()
+    .map((name) => `${name}@${versions[name]}`);
+  const hash = createHash('sha256').update(sorted.join('\n')).digest('hex').slice(0, 16);
+  return path.join(cacheDir, `app-${hash}`);
+}
+
+/**
  * Each file under `root` (a file or a directory), by its path relative to `base`, with the SHA-256
  * of its contents, or `link:<target>` for a symbolic link, which is never followed. Sorted.
  *

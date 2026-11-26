@@ -266,49 +266,23 @@ Each part has a reason:
 
 ## Use it in a component
 
-Inject the service and read it like any other signal. This is the template's `App` with thermal
-state added:
+Inject the service and read it like any other signal. In the template's `src/app/app.ts`, add the
+import, three lines to the template under the button, and two fields:
 
 ```ts
-import { Component, inject, resource, signal } from '@angular/core';
-import { Pressable, SafeAreaProvider, SafeAreaView, Text, View } from '@ng-native/components';
-import { StatusBar } from '@ng-native/device';
+import { resource } from '@angular/core';
 import { Thermal } from '../thermal/thermal.ts';
+```
 
-@Component({
-  imports: [Pressable, SafeAreaProvider, SafeAreaView, Text, View],
-  selector: 'app-root',
-  template: `
-    <safe-area-provider>
-      <safe-area-view class="screen">
-        <view class="body">
-          <text class="title">Angular, natively</text>
-          <text class="hint">Real native views. React is never in the render path.</text>
+```html
+<text class="hint">Thermal state: {{ thermal.state() }}</text>
+<text class="hint">Supported: {{ thermal.supported }}</text>
+<text class="hint">Headroom: {{ headroom.value() ?? 'unknown' }}</text>
+```
 
-          <pressable accessibilityRole="button" class="button" (press)="count.set(count() + 1)">
-            <text class="label">Tapped {{ count() }} times</text>
-          </pressable>
-
-          <text class="hint">Thermal state: {{ thermal.state() }}</text>
-          <text class="hint">Supported: {{ thermal.supported }}</text>
-          <text class="hint">Headroom: {{ headroom.value() ?? 'unknown' }}</text>
-        </view>
-      </safe-area-view>
-    </safe-area-provider>
-  `,
-  styles: `
-    /* unchanged from the template */
-  `,
-})
-export class App {
-  protected readonly count = signal(0);
-  protected readonly thermal = inject(Thermal);
-  protected readonly headroom = resource({ loader: () => this.thermal.headroom() });
-
-  constructor() {
-    inject(StatusBar).set({ style: 'auto' });
-  }
-}
+```ts
+protected readonly thermal = inject(Thermal);
+protected readonly headroom = resource({ loader: () => this.thermal.headroom() });
 ```
 
 ## Test it
@@ -386,21 +360,10 @@ adb shell cmd thermalservice reset
 
 ## On macOS
 
-A Mac app runs in the [desktop host](/packages/desktop), which compiles in native code with CMake
-rather than with Xcode or Gradle, and has no Expo modules runtime, so the Swift and Kotlin above do
-not reach it. A module's macOS code lives in `modules/<name>/macos/`, beside `ios/` and `android/`,
-and its `expo-module.config.json` can name the CMake target it builds. A library opts in the same
-way, with `macos` among its `platforms` and a `macos` entry naming its CMake target. A library with
-a `codegenConfig` gets its specs' codegen, so its C++ TurboModule and its Fabric components build
-for the Mac as they do for Android. See [Native code](/packages/desktop#native-code).
-
-On Linux a module's code lives in `modules/<name>/linux/`, and a library lists `linux` among its
-`platforms` with a `linux` entry, in the same way.
-
-`npm run macos` and `npm run package` list the dependencies with native code for iOS or Android
-and none for the Mac, leaving out `expo-*`, `@expo/*`, `@react-native/*` and `@ng-native/*`
-packages, which the host answers another way, and those the plugin's `deny` option lists. The
-listed modules are absent on macOS, so a service built on one reports itself unavailable.
+The [desktop host](/packages/desktop) has no Expo modules runtime, so the Swift and Kotlin above do
+not reach a Mac or Linux app. A module's desktop code lives in `modules/<name>/macos/` or
+`modules/<name>/linux/` and builds with CMake; without it the module is absent there and the
+service reports itself unavailable. See [Native code](/packages/desktop#native-code).
 
 ## Going further
 

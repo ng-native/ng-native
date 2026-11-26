@@ -4,9 +4,11 @@
  * release.
  *
  *   make-prebuilt.mjs <app> <out> [--os macos|linux] [--flavour debug|release] [--version <v>]
- *                     [--base-url <url>] [--manifest <prebuilt.json>] [--host-cache <dir>]
- *                     [--reuse <prebuilt.json>] [--reuse-only] [--build-dir <dir>]
+ *                     [--react-native <version>] [--base-url <url>] [--manifest <prebuilt.json>]
+ *                     [--host-cache <dir>] [--reuse <prebuilt.json>] [--reuse-only]
+ *                     [--build-dir <dir>]
  *   make-prebuilt.mjs <app> --print-key [--os macos|linux] [--flavour debug|release]
+ *                     [--react-native <version>]
  *
  * - <app>: the app whose react-native and host libraries (react-native-screens,
  *   react-native-safe-area-context) the host is built against: the desktop template.
@@ -19,6 +21,11 @@
  * - --flavour: `release` (the default), the universal Release build a packaged app ships
  *   (`build.sh --universal --release`), or `debug`, the universal dev build `run` uses
  *   (`build.sh --universal --no-tests`), which carries React Native's debugger.
+ * - --react-native: the React Native version to build against, when it is not the app's: it is
+ *   installed with npm, beside the host libraries at the versions the app has, into a folder in
+ *   that version's build cache named for those versions (hostAppDir), so the sources the host
+ *   compiles keep one path from run to run, which a compiler cache keys on. Only a build installs it: the key and a reused
+ *   archive need only the version. fetch.sh pins the versions a host builds against.
  * - --version: the release the archive is named for (default: this package's version), for a
  *   release whose version is not yet in package.json.
  * - --base-url: where the release serves the archive, an absolute http or https URL with no query
@@ -81,6 +88,7 @@ import {
   signPrebuiltFiles,
 } from '../../bin/prebuilt.mjs';
 import {
+  hostAppDir,
   hostInputsKey,
   LINUX_HOST,
   MACOS_HOST,
@@ -120,6 +128,7 @@ const { values, positionals } = parseArgs({
     os: { type: 'string', default: 'macos' },
     flavour: { type: 'string', default: 'release' },
     version: { type: 'string' },
+    'react-native': { type: 'string' },
     'base-url': { type: 'string' },
     manifest: { type: 'string' },
     'host-cache': { type: 'string' },
@@ -133,12 +142,18 @@ const [appArg, outArg] = positionals;
 const printKey = values['print-key'];
 if (!appArg || (!outArg && !printKey)) {
   console.error(
-    'Usage: make-prebuilt.mjs <app> <out> [--os macos|linux] [--flavour debug|release] [--version <v>] [--base-url <url>] [--manifest <prebuilt.json>] [--host-cache <dir>] [--reuse <prebuilt.json> [--reuse-only]] [--build-dir <dir>]\n       make-prebuilt.mjs <app> --print-key [--os macos|linux] [--flavour debug|release]',
+    'Usage: make-prebuilt.mjs <app> <out> [--os macos|linux] [--flavour debug|release] [--version <v>] [--react-native <version>] [--base-url <url>] [--manifest <prebuilt.json>] [--host-cache <dir>] [--reuse <prebuilt.json> [--reuse-only]] [--build-dir <dir>]\n       make-prebuilt.mjs <app> --print-key [--os macos|linux] [--flavour debug|release] [--react-native <version>]',
   );
   process.exit(2);
 }
 if (values['reuse-only'] && !values.reuse) {
   console.error('--reuse-only needs --reuse, the prebuilt.json whose archive to reuse.');
+  process.exit(2);
+}
+const wantedReactNative = values['react-native'];
+// It names a folder and goes to npm as an exact version.
+if (wantedReactNative !== undefined && !/^\d+\.\d+\.\d+$/.test(wantedReactNative)) {
+  console.error(`--react-native takes a version such as 0.88.1, not "${wantedReactNative}".`);
   process.exit(2);
 }
 const flavour = /** @type {import('../../bin/prebuilt.mjs').Flavour} */ (values.flavour);
@@ -200,9 +215,9 @@ const installed = (name) => {
 const versionOf = (dir) =>
   String(JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')).version);
 
-const reactNativeDir = installed('react-native');
-if (!reactNativeDir) throw new Error(`react-native is not installed in ${app}.`);
-const reactNative = versionOf(reactNativeDir);
+const appReactNativeDir = installed('react-native');
+if (!appReactNativeDir) throw new Error(`react-native is not installed in ${app}.`);
+const reactNative = wantedReactNative ?? versionOf(appReactNativeDir);
 const libraries = Object.fromEntries(
   HOST_LIBRARIES.flatMap((name) => {
     const dir = installed(name);
@@ -217,6 +232,47 @@ const libraryVersions = Object.fromEntries(
 /** @param {string} command @param {string[]} args */
 const capture = (command, args) =>
   run(command, args, { stdio: ['ignore', 'pipe', 'inherit'] }).stdout.trim();
+
+/**
+ * Where the build finds React Native and each host library: the app's own, or for another React
+ * Native version (--react-native), that version installed beside the app's library versions.
+ *
+ * @returns {{ reactNativeDir: string, libraryDirs: string[] }}
+ */
+function buildSources() {
+  if (reactNative === versionOf(appReactNativeDir)) {
+    return { reactNativeDir: appReactNativeDir, libraryDirs: Object.values(libraries) };
+  }
+  const dependencies = { 'react-native': reactNative, ...libraryVersions };
+  const dir = hostAppDir(capture(path.join(here, 'cache-dir.sh'), [reactNative]), dependencies);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    path.join(dir, 'package.json'),
+    `${JSON.stringify({ name: 'ngn-prebuilt-host', private: true, dependencies }, null, 2)}\n`,
+  );
+  // The peers are the app's business: only these packages' sources go into the host. stdout is
+  // this script's result, so npm writes to stderr.
+  run(
+    'npm',
+    [
+      'install',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--no-package-lock',
+      '--legacy-peer-deps',
+    ],
+    { cwd: dir, stdio: ['ignore', 2, 'inherit'] },
+  );
+  const from = createRequire(path.join(dir, 'package.json'));
+  /** @param {string} name */
+  const at = (name) => path.dirname(from.resolve(`${name}/package.json`));
+  const reactNativeDir = at('react-native');
+  if (versionOf(reactNativeDir) !== reactNative) {
+    throw new Error(`npm installed react-native ${versionOf(reactNativeDir)}, not ${reactNative}.`);
+  }
+  return { reactNativeDir, libraryDirs: Object.keys(libraries).map(at) };
+}
 
 /**
  * The version of each library the GTK host builds against, as pkg-config has it in the image, or
@@ -379,6 +435,7 @@ try {
     }
     if (source === null) {
       const buildRoot = buildDirArg ?? path.join(staging, 'build');
+      const { reactNativeDir, libraryDirs } = buildSources();
       const build = run(
         path.join(here, 'build.sh'),
         [
@@ -389,7 +446,7 @@ try {
           flavour === 'release' ? '--release' : '--no-tests',
           // Stripped before it is packed, so debug info would only slow the build.
           ...(flavour === 'release' ? [] : ['--no-debug-info']),
-          ...Object.values(libraries).flatMap((dir) => ['--library', dir]),
+          ...libraryDirs.flatMap((dir) => ['--library', dir]),
           '--build-dir',
           buildRoot,
         ],

@@ -10,12 +10,12 @@ the app the component is mounted in, so replacing a service with a stand-in is o
 injection:
 
 ```ts
-import { Component, Injectable, inject, resource } from '@angular/core';
+import { Component, Service, inject, resource } from '@angular/core';
 import { Text } from '@ng-native/components';
 import { render, screen } from '@ng-native/testing';
 import { expect, it } from 'vitest';
 
-@Injectable({ providedIn: 'root' })
+@Service()
 class Weather {
   today(): Promise<string> {
     return fetch('https://example.com/weather').then((response) => response.text());
@@ -40,9 +40,6 @@ it('replaces a service with a stand-in', async () => {
   expect(await screen.findByText('Sunny')).toBeTruthy();
 });
 ```
-
-`Weather` is written with `@Injectable({ providedIn: 'root' })` rather than `@Service()` on purpose:
-both forms declare a root-scoped service, and a test resolves either the same way.
 
 A service that is a token rather than a class is faked the same way. `Storage` holds a `Store`,
 and [its page](/packages/expo/storage#in-a-test) has the fake a test gives it.

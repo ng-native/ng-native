@@ -5,17 +5,12 @@ summary: A Tailwind v4 preset for native, plus the variants a touch device needs
 
 # Tailwind
 
-`@ng-native/tailwind` lets you write `<view class="flex-1 bg-blue-500 p-4">` and have it work,
-because [Fabric](/packages/fabric/css-engine) already has a real cascade - selectors, specificity,
-inheritance, media queries, custom properties - and `class` already matches against it. Nothing
-here is an interop layer translating `className` into style objects the way it would have to be on
-plain React Native: Tailwind's generated CSS goes through the same build-time CSS compiler your own
-component styles do, and the utility classes it produces are cascade rules like any other.
-
-What this package adds is a build step that turns Tailwind's browser-flavored output into the
-subset native can express, and a preset supplying the vocabulary Tailwind has no reason to ship on
-its own: platform variants, safe-area and hairline utilities, and touch-appropriate meanings for
-`hover:` and `focus-visible:`.
+`@ng-native/tailwind` lets you write `<view class="flex-1 bg-blue-500 p-4">` and have it work:
+[Fabric](/packages/fabric/css-engine) has a real cascade, and Tailwind's generated CSS goes through
+the same build-time compiler as your own component styles, with no `className` interop layer. The
+package adds a build step that turns Tailwind's browser-flavored output into what native can
+express, and a preset with platform variants, safe-area and hairline utilities, and touch meanings
+for `hover:` and `focus-visible:`.
 
 ## Setup
 
@@ -109,9 +104,8 @@ order, the first one named first and anything in no layer last, so a class of yo
 `@layer components` gives way to a utility written beside it wherever the rule sits in your
 stylesheet, as it does in a browser.
 
-That is deliberate, not a rough edge - see [what CSS reaches a
-device](/packages/fabric/supported-css) for the full shape of what this compiles to and what it
-drops.
+See [what CSS reaches a device](/packages/fabric/supported-css) for what this compiles to and what
+it drops.
 
 Tailwind's `truncate`, `line-clamp-*`, `line-clamp-none`, `whitespace-nowrap` and `text-ellipsis`
 become a text's `numberOfLines` and `ellipsizeMode`, which is how native truncates, so put them on
@@ -223,9 +217,8 @@ Listed after the design system, this preset's `darkMode` and preflight setting w
 system's. Used alone, as in the setup above, it needs no change: it has no `presets` key, so it
 brings Tailwind's defaults itself.
 
-Every Tailwind 3 utility is held to the same sweep as Tailwind 4's, and what it draws is compared
-with Chrome. Each one takes effect or is refused with a build warning, except a few that only set a
-value another utility reads, where that utility is the one refused: `snap-mandatory` and
+Every Tailwind 3 utility takes effect or is refused with a build warning, except a few that only set
+a value another utility reads, where that utility is the one refused: `snap-mandatory` and
 `snap-proximity`, read by `snap-x` and `snap-y`. Those do nothing, as the utility they feed does
 nothing.
 

@@ -70,30 +70,17 @@ right to left, like every CSS engine: a rule is filed under the most selective t
 its rightmost compound (its key selector), so a node only ever tries the rules that could possibly
 match it, and the leftward compounds are checked only once the key selector already did.
 
-A node is matched against up to three sheets merged together: the application's global stylesheet
-(if you passed one to `mount()` as `globalStyles`), the sheet of the component it is the host
-element of, and the sheet of the component that created it. A component's own rules count for one
-extra class of specificity over the global sheet's - the same bump Angular's own emulated
-encapsulation already grants a rule by rewriting it to carry an `[_ngcontent-x]` attribute, kept
-here so the precedence people already have in their fingers just works.
+A node is matched against the application's global stylesheet (`mount()`'s `globalStyles`), the
+sheet of the component it is the host of and the sheet of the component that created it. A
+component's own rules count one extra class of specificity over the global sheet's, as Angular's
+emulated encapsulation grants them in a browser.
 
-A component with `encapsulation: ViewEncapsulation.None` has no sheet of its own. Angular adds such
-a component's CSS to a browser's document as written when the component first renders, so here its
-sheet becomes a global one at that moment, matched against every node after the application's.
-Its rules reach any element, its own host by class among them and the app's own elements, and
-`:host` in it matches nothing, as in a browser. It counts no extra class, so it loses to a
-component's rule of the same selector and wins a tie with one, having arrived later. It stays
-registered once its last instance is gone, as in a browser with Angular's
-`REMOVE_STYLES_ON_COMPONENT_DESTROY` off, so a component shown and hidden does not restyle every
-node each time. Shadow DOM's sheet stays the component's own, scoped as a shadow root scopes it.
-Angular Material writes every component this way.
+A component with `encapsulation: ViewEncapsulation.None`, as Angular Material writes every one, has
+its CSS added as a global sheet when it first renders, as in a browser: its rules reach any element,
+`:host` in it matches nothing, and it counts no extra class. It stays in place after its last
+instance is gone.
 
-An attribute selector reads the node's prop of that name, `[disabled]` its `disabled` prop. A
-package that keeps an element's attributes apart from its props, because the native view reads
-them under other names, hands each one to `engine.keepAttribute(node, name, value)`:
-`@ng-native/web-compat` does this for a drawing's `width` and `fill`. The selector then reads the
-kept attribute over a prop of the same name, nothing about it is committed, and a change to it
-restyles what a prop's change would, a `:has()` above it included. `null` takes it away again.
+An attribute selector reads the node's prop of that name: `[disabled]` reads its `disabled` prop.
 
 ## Inheritance is emulated, not real
 
@@ -149,11 +136,7 @@ order ahead of the blocks, a layer opened again keeps its first place, `@layer a
 important declaration in a layer beats one in a later layer, and both beat one outside any layer.
 
 So a library can ship its defaults in a layer and the app's plain rules win without matching the
-library's specificity.
-
-Layers have one order across every stylesheet, as they do in a document: a name keeps the place
-it had when it was first seen, in the app's global sheet and then in each component's sheet as the
-component first renders. So a library's layer and the app's layer of the same name are one layer.
-`@keyframes` of one name resolve by layer within a stylesheet. `revert-layer` is dropped with a
-warning, `@import ... layer()` is not read, and `!important` on a custom property is not tracked,
-in a layer or out of one.
+library's specificity. Layers have one order across every stylesheet, so a library's layer and the
+app's layer of the same name are one layer. `@keyframes` of one name resolve by layer within a
+stylesheet. `revert-layer` is dropped with a warning,
+`@import ... layer()` is not read, and `!important` on a custom property is not tracked.

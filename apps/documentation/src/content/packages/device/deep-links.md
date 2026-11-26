@@ -77,9 +77,7 @@ most apps never call `DeepLinks` directly.
 ## Off a device and on the web
 
 Off a device `initialUrl()` stays `null`, `subscribe()` never fires, and `open()` and
-`openSettings()` do nothing, because there is no `Linking` module underneath them. On the web, urls
-and paths are already the same idea, so `DeepLinks` is a native-only concern - a web build reads the
-address bar instead.
+`openSettings()` do nothing. `DeepLinks` is native-only; a web build reads the address bar.
 
 ## Reference
 

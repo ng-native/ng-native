@@ -16,6 +16,7 @@ Linux works the same way, and the rows below say where it differs. Windows is pl
 | Electron                                       | Angular Native                                                                                                                  |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `new BrowserWindow()`                          | `AppWindows.open(Component, options)` or `AppWindows.open({ outlet, path })`                                                    |
+| `trafficLightPosition`                         | `trafficLightPosition` in `WindowOptions` (macOS)                                                                               |
 | The first window                               | The root component, in the main window; `provideMainWindow` sizes it                                                            |
 | `ipcMain`, `ipcRenderer`, `contextBridge`      | None: inject a root service in each window                                                                                      |
 | `win.on('close')` with `preventDefault()`      | `window.canClose(guard)`, on the handle or on `CURRENT_WINDOW`                                                                  |

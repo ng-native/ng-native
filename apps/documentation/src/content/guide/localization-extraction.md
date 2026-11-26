@@ -48,7 +48,7 @@ Extraction includes template messages and `$localize` strings from app code only
 }
 ```
 
-`ng extract-i18n` requires a browser build, which fails for the template app with 164 errors across
+`ng extract-i18n` requires a browser build, which fails for a native app, on
 native properties (`Can't bind to 'zoomScale' since it isn't a known property of
 'scroll-view'`), DOM/native event types and React Native's Flow syntax.
 

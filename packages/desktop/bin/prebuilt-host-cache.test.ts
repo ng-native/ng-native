@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { plist } from './plist.mjs';
 
 import {
+  hostAppDir,
   hostInputsKey,
   LINUX_HOST,
   readHostCache,
@@ -73,6 +74,31 @@ const inputs = {
   toolchain: 'Apple clang 17\n26.0',
   signing: '-',
 };
+
+describe('hostAppDir', () => {
+  it('gives each set of versions a folder of its own, so one install never rewrites another', () => {
+    const versions = { 'react-native': '0.88.1', 'react-native-screens': '4.30.1' };
+    const dir = hostAppDir('/cache/rn-0.88.1', versions);
+    assert.equal(path.dirname(dir), '/cache/rn-0.88.1');
+    // The same versions, in any order, share one, so a compiler cache keeps its paths.
+    assert.equal(
+      hostAppDir('/cache/rn-0.88.1', {
+        'react-native-screens': '4.30.1',
+        'react-native': '0.88.1',
+      }),
+      dir,
+    );
+    // A library at another version, or one more library, is another install.
+    assert.notEqual(
+      hostAppDir('/cache/rn-0.88.1', { ...versions, 'react-native-screens': '4.31.0' }),
+      dir,
+    );
+    assert.notEqual(
+      hostAppDir('/cache/rn-0.88.1', { ...versions, 'react-native-svg': '15.16.0' }),
+      dir,
+    );
+  });
+});
 
 describe('hostInputsKey', () => {
   it('changes with every input, and not with the order of the libraries', () => {
@@ -245,7 +271,9 @@ describe('make-prebuilt.mjs --host-cache', { skip: process.platform !== 'darwin'
       const hit = makePrebuilt([...args, '--base-url', 'https://e.com/v9.9.9']);
       assert.equal(hit.status, 0, hit.stderr);
       assert.match(hit.stderr, /packing the host built from these inputs/);
-      const entry = JSON.parse(readFileSync(path.join(out, 'prebuilt-host-release.json'), 'utf8'));
+      const entry = JSON.parse(
+        readFileSync(path.join(out, 'prebuilt-host-rn-0.88.0-release.json'), 'utf8'),
+      );
       assert.equal(
         entry.url,
         'https://e.com/v9.9.9/ng-native-desktop-host-9.9.9-rn-0.88.0-macos-universal.tar.gz',
@@ -318,7 +346,7 @@ describe('make-prebuilt.mjs --host-cache', { skip: process.platform !== 'darwin'
       ]);
       assert.equal(first.status, 0, first.stderr);
       const entry = JSON.parse(
-        readFileSync(path.join(earlier, 'prebuilt-host-release.json'), 'utf8'),
+        readFileSync(path.join(earlier, 'prebuilt-host-rn-0.88.0-release.json'), 'utf8'),
       );
       assert.equal(entry.inputs, key, 'the entry records the inputs key');
       const archive = readFileSync(path.join(earlier, path.basename(entry.url)));
@@ -341,7 +369,9 @@ describe('make-prebuilt.mjs --host-cache', { skip: process.platform !== 'darwin'
       ]);
       assert.equal(reused.status, 0, reused.stderr);
       assert.match(reused.stderr, /reusing the host/);
-      const next = JSON.parse(readFileSync(path.join(out, 'prebuilt-host-release.json'), 'utf8'));
+      const next = JSON.parse(
+        readFileSync(path.join(out, 'prebuilt-host-rn-0.88.0-release.json'), 'utf8'),
+      );
       assert.equal(next.sha256, entry.sha256);
       assert.equal(next.inputs, key);
       assert.match(next.url, /host-1\.0\.1-rn/);
@@ -370,7 +400,10 @@ describe('make-prebuilt.mjs --host-cache', { skip: process.platform !== 'darwin'
         assert.notEqual(miss.status, 0, String(why));
         assert.match(miss.stderr, why);
         assert.match(miss.stderr, /not reusing it/);
-        assert.ok(!existsSync(path.join(missOut, 'prebuilt-host-release.json')), String(why));
+        assert.ok(
+          !existsSync(path.join(missOut, 'prebuilt-host-rn-0.88.0-release.json')),
+          String(why),
+        );
       }
 
       // With --reuse-only, each of those is a miss that builds nothing and says so.
@@ -396,7 +429,7 @@ describe('make-prebuilt.mjs --host-cache', { skip: process.platform !== 'darwin'
         assert.equal(miss.status, 3, miss.stderr);
         assert.match(miss.stderr, /--reuse-only: nothing to reuse, so nothing is built/);
         assert.doesNotMatch(miss.stderr, /build\.sh/);
-        assert.ok(!existsSync(path.join(missOut, 'prebuilt-host-release.json')));
+        assert.ok(!existsSync(path.join(missOut, 'prebuilt-host-rn-0.88.0-release.json')));
       }
       writeManifest(entry);
       served = archive;
@@ -474,7 +507,7 @@ describe(
     const env = { ...process.env, NODE_PATH: '' };
     const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
     /** The manifest entry's file for this machine's Linux release host. */
-    const ENTRY = `prebuilt-host-linux-${arch}-release.json`;
+    const ENTRY = `prebuilt-host-rn-0.88.0-linux-${arch}-release.json`;
     const printKey = (appDir: string, ...args: string[]) => {
       const result = spawnSync(
         process.execPath,

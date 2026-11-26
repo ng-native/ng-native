@@ -85,8 +85,6 @@ text-size setting is allowed to grow it. `adjustsFontSizeToFit` and
 (iOS) follows a Dynamic Type style rather than a fixed size, and `dataDetectorType` (Android) turns
 phone numbers, links, addresses and emails into tappable text.
 
-<!-- api: Text -->
-
 ## Gradient text
 
 `<gradient-text>` draws a background through its letters: a gradient, or any background the
@@ -125,3 +123,7 @@ npx expo install @react-native-masked-view/masked-view
 ```
 
 <!-- api: GradientText -->
+
+## Reference
+
+<!-- api: Text -->

@@ -16,8 +16,6 @@ gives it. It has no props beyond the shared ones on every element - all of its b
 </view>
 ```
 
-<!-- api: View -->
-
 ## Yoga, not CSS
 
 Every element lays out with Yoga, React Native's flexbox implementation. The engine adds block
@@ -142,3 +140,7 @@ to reach past the component's own API - issuing a native command directly, say. 
 on a template reference gives access to `.node`.
 
 <!-- api: NativeRef -->
+
+## Reference
+
+<!-- api: View -->

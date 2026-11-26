@@ -6,8 +6,7 @@ summary: A persisted value as a two-way signal, backed by AsyncStorage or the ke
 # Storage
 
 `Storage` and `SecureStorage` bind a key to a value that reads back once and writes through
-whenever it is set. Both wrap APIs that are already plain promises with no React in them, so what
-is worth having is not a wrapper but a binding.
+whenever it is set.
 
 ## Install
 

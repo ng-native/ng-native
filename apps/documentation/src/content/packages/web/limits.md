@@ -52,26 +52,18 @@ the real host, not a stand-in built for the occasion.
 
 ## Sharing a route config between native and web
 
-If a route config is shared between a native app and a web build of the same components, keep
-every route lazy (`loadComponent: () => import(...)`), and expect one extra failure mode a bundler
-surfaces that Metro does not: a story or screen that statically imports something native-only
-(`@ng-native/router`, `react-native-svg`, an `expo-*` module) will fail that route's whole
-chunk to build under Rollup/Vite, because a bundler cannot build a module graph with an
-unresolvable edge in it, dynamic import or not. That is a build-time failure, and a runtime
-`.catch()` on the lazy loader cannot fix it - by the time anything could catch, the build has
-already failed and there is no chunk to load. Use browser-compatible dependencies behind that
-import, or split native and web into separate route configurations, to fix the build. A `.catch()`
-on the lazy loader is still worth adding, but only to handle a chunk that built fine and failed to
-load at runtime - a flaky connection, not an unresolved import.
+A route shared between a native app and a web build fails the web build when its component
+statically imports something native-only (`@ng-native/router`, `react-native-svg`, an `expo-*`
+module), lazy or not; use browser-compatible dependencies behind it, or separate route
+configurations.
 
 ## The build
 
 A browser build is Vite with `ngNativeWeb()` from `@ng-native/web/vite`, as
 [Setting up a browser app](/packages/web#setting-up-a-browser-app) describes. Within that:
 
-- **The Angular CLI's builders are not supported.** Their compiler checks the components' host
-  bindings against the browser's DOM schema and rejects React Native's props on elements that are
-  not HTML. An Angular web app that hosts islands builds with Vite and `ngNativeWeb()` instead.
+- **The Angular CLI's builders are not supported.** See [The Angular
+  CLI](/packages/web#the-angular-cli).
 - **A library that ships decorated TypeScript source is not compiled.** Angular libraries published
   the usual way, as partial-compiled JavaScript, the `@ng-native/*` packages among them, go through
   `@oxc-angular/vite`'s linker as they would in any Vite app. One that ships decorated TypeScript
@@ -80,5 +72,5 @@ A browser build is Vite with `ngNativeWeb()` from `@ng-native/web/vite`, as
 - **`react-native` and `expo` are left out of the bundle, and nothing else native is.** The
   packages `require` those two only on a device. Importing anything else native-only, such as
   `react-native-svg` or an `expo-*` module, fails the build, as the section above describes.
-- **Vite does not type-check.** Run `tsc` with a `tsconfig.json` like the one on
-  [the setup page](/packages/web#setting-up-a-browser-app) for that.
+- **Vite does not type-check.** See [Setting up a browser
+  app](/packages/web#setting-up-a-browser-app) for a `tsconfig.json`.

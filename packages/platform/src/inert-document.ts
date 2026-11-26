@@ -6,7 +6,9 @@
  * case as its `innerHTML`, and then a walk over what the parser made of it. There is no DOM here,
  * so this is the parser and the nodes, and nothing more of either than that walk reads:
  * `firstChild`, `nextSibling`, `nodeType`, `textContent`, `tagName`, `attributes` and
- * `namespaceURI`. Nothing made here is ever rendered or reaches the engine.
+ * `namespaceURI`, and the `parentNode` and `previousSibling` Angular checks each step against
+ * before taking it (from 22.3, which throws on a node that does not link back). Nothing made here
+ * is ever rendered or reaches the engine.
  *
  * ponytail: text, comments, elements with attributes, and numeric character references with the
  * six named ones below; any other name stays as written. `@ng-native/components` has HTML's full
@@ -55,6 +57,8 @@ class InertNode {
   readonly textContent: string;
   firstChild: InertNode | null = null;
   nextSibling: InertNode | null = null;
+  parentNode: InertNode | null = null;
+  previousSibling: InertNode | null = null;
   private lastChild: InertNode | null = null;
   private readonly attributeList: readonly InertAttribute[];
 
@@ -85,6 +89,8 @@ class InertNode {
   }
 
   append(child: InertNode): void {
+    child.parentNode = this;
+    child.previousSibling = this.lastChild;
     if (this.lastChild) this.lastChild.nextSibling = child;
     else this.firstChild = child;
     this.lastChild = child;

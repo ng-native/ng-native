@@ -4,7 +4,7 @@ Source: Angular's official AI best-practices file
 (https://angular.dev/assets/context/best-practices.md) and the Angular style guide
 (https://angular.dev/style-guide). Trimmed to what applies to this
 project: Angular components rendering native iOS/Android views on React Native's Fabric
-renderer, no DOM and no browser. This repo is on `@angular/core` 22.2.0, so the v20+/v22+
+renderer, no DOM and no browser. This repo is on `@angular/core` 22.3.0, so the v20+/v22+
 defaults below are already in effect.
 
 ## Components and directives

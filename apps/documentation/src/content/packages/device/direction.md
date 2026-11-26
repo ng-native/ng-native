@@ -43,13 +43,8 @@ injects `Direction` gets whichever of the two is closest without needing to know
 
 ## Off a device and on the web
 
-On a device, `current` reads `I18nManager.isRTL` once and never changes: React Native settles
-direction from the device's own locale while the native side starts up, and `I18nManager.forceRTL`
-only takes effect after a restart, so `isRTL` cannot change under a running app - which is why
-there is nothing to subscribe to on native. Off a device, where `react-native` cannot be required,
-`current` is always `'ltr'`. The browser source is the exception:
-`document.dir` is a mutable attribute, so a consumer should not have to know which platform it is on
-to read the signal.
+On a device, `current` is read once at startup and does not change while the app runs. Off a
+device it is always `'ltr'`. On the web it follows `document.dir`, including changes to it.
 
 ## Reference
 

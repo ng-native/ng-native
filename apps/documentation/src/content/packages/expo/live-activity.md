@@ -363,8 +363,7 @@ Call it in an injection context, such as a field of a component or service.
 - **`staleDate`**, in the options, answers when what the activity shows is out of date unless it
   is written again first, or null for never. It is asked at the start and at each update, so
   `() => new Date(Date.now() + 5 * 60_000)` is five minutes after the last write. iOS then draws
-  the layout with [`environment().isStale`](#where-it-is-drawn) true. It marks activities stale on
-  its own schedule, which can be a minute or two after the date.
+  the layout with [`environment().isStale`](#where-it-is-drawn) true.
 - **`onTaps`**, in the options, is called with the `target` of each
   [button](#buttons) tapped on a running activity of this kind. A handler that throws, or rejects,
   goes to the `ErrorHandler`.
@@ -451,7 +450,7 @@ Live Activities need iOS 16.4 or newer, the oldest version `expo-widgets` and Ex
 Android and the web, `expo-widgets` answers with a stand-in, and `start()` answers false.
 Android's counterpart is an [ongoing notification](/packages/expo/ongoing-notification).
 
-## Testing
+## In a test
 
 A layout file imports in a Vitest test as it is: with no `expo-widgets` to hand the layout to,
 `createLiveActivity` answers an activity that never starts. To check what the app sends, pass

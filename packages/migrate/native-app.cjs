@@ -180,8 +180,7 @@ const desktopOnlyDependencies = Object.fromEntries(
     ...dependencies,
     ...desktopDependencies,
     '@ng-native/expo': version,
-    // Exactly the versions the prebuilt desktop host is built with, so the app runs on it.
-    'react-native': '0.88.0',
+    // Exactly the version the prebuilt desktop host is built with, so the app runs on it.
     'react-native-safe-area-context': '5.11.1',
   })
     .filter(([name]) => name !== 'expo-status-bar' && name !== 'expo-system-ui')

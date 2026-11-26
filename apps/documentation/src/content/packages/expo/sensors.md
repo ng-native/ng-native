@@ -10,11 +10,7 @@ Six motion and environment sensors, bound to `expo-sensors`: `Accelerometer`, `G
 
 <!-- platforms: Accelerometer, Gyroscope, Magnetometer, DeviceMotion, Barometer, LightSensor -->
 
-Every one of them is the same object underneath - `addListener`, `setUpdateInterval`,
-`isAvailableAsync` - so this is one `Sensor` class parameterized by the reading, not one per
-sensor. That is also why these are injection tokens rather than six `@Service()` classes: a
-`@Service()` class cannot be generic in the thing it reports, so each sensor is a distinct
-`InjectionToken<Sensor<T>>` that shares the one implementation.
+Each is an injection token for a `Sensor` typed by its reading, so all six share one API.
 
 ## Install
 
@@ -91,11 +87,9 @@ Each is read the same way regardless of the shape:
 
 ## Without the module
 
-On iOS and Android, a missing `expo-sensors` - never installed, or installed without the app being
-rebuilt since - leaves the service made, so injecting it does not throw. A call, or a read of a
-value only the module knows, throws a `MissingModuleError`. Its message names the module and the
-commands that fix it; see
-[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
+On iOS and Android, a missing `expo-sensors` throws a
+[`MissingModuleError`](/packages/expo/using-a-module#what-happens-without-the-module-installed) on
+the first call or read that needs it. Injecting the service does not throw.
 
 On the web, and in a test that provides no fake, `available` resolves to `false`. `reading` stays at
 the stated zero (all axes `0`, or the equivalent rest state for `DeviceMotion`). `start()` returns a

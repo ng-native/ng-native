@@ -181,6 +181,17 @@ describe('the main window', () => {
     assert.equal(windows.windows()[0]!.key, 'main');
   });
 
+  it('asks for the window controls where trafficLightPosition puts them', async () => {
+    const host = fakeHost();
+    start('MainWindowApp', host, [
+      provideMainWindow({ titleBar: 'hidden', trafficLightPosition: { x: 18, y: 28 } }),
+    ]);
+    await settle();
+    assert.deepEqual(host.opened, [
+      { key: 'main', title: '', titleBar: 'hidden', trafficLightPosition: { x: 18, y: 28 } },
+    ]);
+  });
+
   it('starts with no window under autoOpen: false, and opens one when asked', async () => {
     const host = fakeHost();
     const { fabric, windows, app } = start('MainWindowApp', host, [

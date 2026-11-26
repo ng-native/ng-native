@@ -9,11 +9,15 @@ summary: The platform's segmented control as a typed component, with the segment
 `UISegmentedControl` on iOS, and AppKit's on the desktop host with no library installed. It is iOS
 and macOS only.
 
+## Install
+
 On iOS it needs `@react-native-segmented-control/segmented-control`:
 
-```bash
+```sh
 npx expo install @react-native-segmented-control/segmented-control
 ```
+
+## The smallest useful example
 
 ```ts
 import { Component, signal } from '@angular/core';
@@ -57,3 +61,7 @@ native handler when the event is bound.
   `selectedSegmentIndex`.
 
 The [native views](/packages/expo/native-views) page covers the other community views.
+
+## Reference
+
+<!-- api: SegmentedControl -->

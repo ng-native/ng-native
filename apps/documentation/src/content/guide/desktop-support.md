@@ -5,9 +5,7 @@ summary: Each desktop API and macOS input, and what it does on every OS.
 
 # What each OS has
 
-The APIs and inputs that macOS brought, and what each does on every OS. A test holds this table to
-the code: it names every desktop API and every macOS-only input, and each service's `available()`
-follows its row.
+The desktop APIs and macOS inputs, and what each does on every OS.
 
 - **yes** - it works as on macOS.
 - **absent** - the service's `available()` is `false`, and every call does nothing and answers its

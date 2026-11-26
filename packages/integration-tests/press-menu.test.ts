@@ -204,9 +204,13 @@ describe('a press menu with no host to draw it', () => {
   });
 });
 
-/** iOS's module: menus by `nativeID`, and the choice as an `ngNativeMenus` event. */
-function iosHost() {
+/**
+ * iOS's module: menus by `nativeID`, and the choice as an `ngNativeMenus` event. From iOS 17.4 it
+ * opens one from code too (`opens`).
+ */
+function iosHost(opens = false) {
   const pressMenus: { nativeID: string; entries: NativeMenuEntry[] | null }[] = [];
+  const opened: string[] = [];
   let hear: (event: NativeMenuEvent) => void = () => {};
   const native: NativeMenus = {
     menuBar: false,
@@ -217,16 +221,17 @@ function iosHost() {
     setTakesLongPress: () => {},
     setPressMenu: (nativeID, entries) =>
       void pressMenus.push({ nativeID, entries: entries && [...entries] }),
+    ...(opens && { openPressMenu: (nativeID: string) => void opened.push(nativeID) }),
     subscribe: (listener) => {
       hear = listener;
       return () => {};
     },
   };
-  return { native, pressMenus, say: (event: NativeMenuEvent) => hear(event) };
+  return { native, pressMenus, opened, say: (event: NativeMenuEvent) => hear(event) };
 }
 
-async function openOnIos() {
-  const host = iosHost();
+async function openOnIos(opens = false) {
+  const host = iosHost(opens);
   const said: string[] = [];
   const sort = signal('name');
   const shown = signal(true);
@@ -380,6 +385,59 @@ describe('a press menu on ios', () => {
   });
 });
 
+describe('a press menu on ios 17.4 and later', () => {
+  it('opens the menu by its nativeID on a press, instead of firing (press)', async () => {
+    const { host, said, node, nativeID } = await openOnIos(true);
+    await fireEvent.press(node);
+    await settle();
+    assert.deepEqual(host.opened, [nativeID]);
+    assert.deepEqual(said, []);
+    assert.equal(host.pressMenus.at(-1)!.entries?.length, 2, 'the menu is still sent');
+  });
+
+  it('opens from code, and says it did', async () => {
+    const { host, said, nativeID } = await openOnIos(true);
+    await fireEvent.press(screen.getByTestId('opener'));
+    assert.deepEqual(said, ['opened true']);
+    assert.deepEqual(host.opened, [nativeID]);
+  });
+
+  it('opens nothing while the pressable is disabled, or with no menu', async () => {
+    const { host, said, disabled, shown } = await openOnIos(true);
+    disabled.set(true);
+    await settle();
+    await fireEvent.press(screen.getByTestId('opener'));
+    disabled.set(false);
+    shown.set(false);
+    await settle();
+    await fireEvent.press(screen.getByTestId('opener'));
+    assert.deepEqual(said, ['opened false', 'opened false']);
+    assert.deepEqual(host.opened, []);
+  });
+
+  it('opens the menu by the nativeID the app gives the element later', async () => {
+    const host = iosHost(true);
+    const id = signal<string | undefined>(undefined);
+    await render(
+      `<pressable testID="sort" [nativeID]="id()" [menu]="menu"></pressable>
+      <ng-template #menu><menu-item label="Name" /></ng-template>`,
+      {
+        imports: [MenuItem, PressMenu, Pressable],
+        providers: [
+          { provide: Menus.SOURCE, useValue: host.native },
+          { provide: OS, useValue: 'ios' },
+        ],
+        componentProperties: { id },
+      },
+    );
+    await settle();
+    id.set('sort-button');
+    await settle();
+    await fireEvent.press(screen.getByTestId('sort'));
+    assert.deepEqual(host.opened, ['sort-button']);
+  });
+});
+
 describe('a long press on an element with a press menu', () => {
   it('fires (longPress), and opens nothing', async () => {
     const host = fakeHost(true);
@@ -451,6 +509,32 @@ describe('PressMenu.open()', () => {
 });
 
 describe("the menus' platform source", () => {
+  it('passes openPressMenu through only from a module whose constants say it opens one', () => {
+    const opened: string[] = [];
+    const host = globalThis as Record<string, unknown>;
+    let opens: boolean | undefined = true;
+    const module = {
+      getConstants: () => ({ opensPressMenus: opens }),
+      setPressMenu: () => {},
+      openPressMenu: (nativeID: string) => void opened.push(nativeID),
+    };
+    host['require'] = (id: string) =>
+      id === 'react-native' ? { TurboModuleRegistry: { get: () => module } } : undefined;
+    host['nativeFabricUIManager'] = {};
+    try {
+      menusSource()!.openPressMenu?.('sort');
+      assert.deepEqual(opened, ['sort']);
+      // Before iOS 17.4, which has no way to open a menu from code.
+      opens = false;
+      assert.equal(menusSource()!.openPressMenu, undefined);
+      opens = undefined;
+      assert.equal(menusSource()!.openPressMenu, undefined);
+    } finally {
+      delete host['require'];
+      delete host['nativeFabricUIManager'];
+    }
+  });
+
   it('passes popUpMenu through from a module that has it, and none from one without', () => {
     const calls: unknown[] = [];
     const host = globalThis as Record<string, unknown>;

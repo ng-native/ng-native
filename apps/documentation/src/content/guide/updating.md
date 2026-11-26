@@ -68,7 +68,7 @@ the migrations the update crosses. What is left to do is printed as a warning. T
 migrations again for an update already installed, name the versions:
 
 ```sh
-ng update @ng-native/schematics --migrate-only --from 0.2.0 --to 0.3.0
+ng update @ng-native/schematics --migrate-only --from 0.23.0 --to 0.24.0
 ```
 
 See [Angular CLI](/packages/schematics) for the workspace setup.

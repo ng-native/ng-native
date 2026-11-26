@@ -61,10 +61,10 @@
     }
   },
   "devDependencies": {
-    "@angular/common": "22.2.0",
-    "@angular/compiler": "22.2.0",
-    "@angular/localize": "22.2.0",
-    "@angular/platform-browser": "22.2.0",
+    "@angular/common": "22.3.0",
+    "@angular/compiler": "22.3.0",
+    "@angular/localize": "22.3.0",
+    "@angular/platform-browser": "22.3.0",
     "@ng-icons/core": "^36.0.0",
     "@ng-native/components": "workspace:*",
     "@ng-native/icons": "workspace:*",
@@ -73,9 +73,9 @@
     "@ng-native/testing": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@types/jsdom": "^27.0.0",
-    "@vitest/browser": "^5.0.2",
-    "@vitest/browser-playwright": "^5.0.2",
-    "@vitest/coverage-v8": "^5.0.2",
+    "@vitest/browser": "^5.0.5",
+    "@vitest/browser-playwright": "^5.0.5",
+    "@vitest/coverage-v8": "^5.0.5",
     "chokidar": "^5.0.0",
     "jiti": "^2.7.0",
     "jsdom": "^27.0.0",
@@ -85,8 +85,8 @@
     "tailwindcss": "^4.3.3",
     "tailwindcss-v3": "npm:tailwindcss@^3.4.19",
     "typescript": "~6.0.3",
-    "vite": "^8.3.1",
-    "vitest": "^5.0.2"
+    "vite": "^8.3.3",
+    "vitest": "^5.0.5"
   },
   "nx": {
     "tags": [

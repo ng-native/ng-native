@@ -73,16 +73,9 @@ system frameworks the metadata should cover:
 ["@ng-native/nativescript", { "metadata": { "includePods": ["SomeObjCSDK"] } }]
 ```
 
-On Android it sets two lines in `gradle.properties` that a release build needs on Expo SDK 58,
-where `@nativescript/react-native` cannot otherwise build or run one:
-
-- `android.enableMinifyInReleaseBuilds=false`, in place of the `true` SDK 58's prebuild writes.
-  With R8 on, NativeScript's Gradle script fails the build with `UnsupportedOperationException`,
-  and NativeScript has no keep rules for its own runtime, so R8 renames classes it needs and the app
-  stops at launch. A release APK is larger without R8.
-- `nsSkipStaticBindings=true`. NativeScript's release task that pre-generates Java for named
-  subclasses runs React Native's CLI, which an Expo app does not have. Skipped, those classes are
-  generated on the device as the app starts, as in a debug build.
+On Android the plugin sets `android.enableMinifyInReleaseBuilds=false` and
+`nsSkipStaticBindings=true` in `gradle.properties`, which a release build with
+`@nativescript/react-native` needs, so a release APK is larger, built without R8.
 
 Add the SDKs' types in a declaration file, such as `src/nativescript.d.ts`:
 
@@ -147,9 +140,7 @@ export const routes: Routes = [
 ];
 ```
 
-Installing takes about 0.4 seconds on iOS in a release build, and 0.7 in a debug build, most of it
-NativeScript reading its metadata; on Android about a tenth of a second. Installing again, from a
-second provider, does nothing.
+Installing again, from a second provider, does nothing.
 
 `frameworks` loads iOS system frameworks whose classes the metadata describes but the app does not
 link, such as SceneKit or MapKit. One that fails to load is reported to Angular's `ErrorHandler`.

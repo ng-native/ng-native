@@ -24,7 +24,7 @@ build; Expo Go cannot load it. The example below picks its photo with the
 import { TextRecognition } from '@ng-native/expo/text-recognition';
 ```
 
-## The smallest thing that works
+## The smallest useful example
 
 ```ts
 import { Component, inject, signal } from '@angular/core';
@@ -115,7 +115,7 @@ if (this.model.available()) {
 - **macOS:** the same Vision request in the desktop host, with the same answers.
 - **Android:** not yet available. `available()` is false and `recognize` rejects.
 
-## Without the native module
+## Without the module
 
 In Expo Go, on Android, on the web and in Node tests there is no native module: `available()` is
 false and `recognize` rejects with a `MissingModuleError` that says why. A test provides a stand-in
@@ -136,3 +136,7 @@ const ocr = injectService(TextRecognition, {
   ],
 });
 ```
+
+## Reference
+
+<!-- api: TextRecognition -->

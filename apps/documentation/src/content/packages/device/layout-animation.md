@@ -104,8 +104,7 @@ iOS animates with no setup, in Expo Go as well.
 
 ## Off a device
 
-Off a device `animate()` still runs the change and resolves, it just never asks anything to animate,
-because there is no `LayoutAnimation` module underneath it.
+Off a device `animate()` still runs the change and resolves, without animating it.
 
 ## Reference
 

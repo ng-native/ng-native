@@ -3,6 +3,8 @@
 #include "ngn/app-windows.h"
 
 #include <doctest/doctest.h>
+#include <limits>
+#include <cmath>
 #include <folly/json.h>
 
 using folly::dynamic;
@@ -413,4 +415,28 @@ TEST_CASE("dropping a window listener waits for a call to it already running on 
   Fixture f;
   CHECK(ngn::testing::dropWaitsForRunningCall(
       [&](auto listener) { return f.host->attach(listener); }, [&] { f.host->reopen(false); }));
+}
+
+TEST_CASE("a window request places the window controls where trafficLightPosition says, or leaves them") {
+  using ngn::windowRequest;
+  CHECK_FALSE(windowRequest(dynamic::object("title", "Notes")).trafficLightPosition.has_value());
+  auto placed = windowRequest(dynamic::object("trafficLightPosition", dynamic::object("x", 18)("y", 28.5)));
+  REQUIRE(placed.trafficLightPosition.has_value());
+  CHECK(*placed.trafficLightPosition == ngn::WindowButtonsPosition{.x = 18, .y = 28.5});
+  // Half a position, a negative one, or one that is not an object leaves the system's place.
+  CHECK_FALSE(windowRequest(dynamic::object("trafficLightPosition", dynamic::object("x", 18))).trafficLightPosition);
+  CHECK_FALSE(windowRequest(dynamic::object("trafficLightPosition", dynamic::object("x", -4)("y", 10)))
+                  .trafficLightPosition);
+  CHECK_FALSE(windowRequest(dynamic::object("trafficLightPosition", "top-left")).trafficLightPosition);
+  // Nor does one that is not finite, which would lay the buttons out at an infinite frame.
+  CHECK_FALSE(windowRequest(dynamic::object(
+                                "trafficLightPosition",
+                                dynamic::object("x", std::numeric_limits<double>::infinity())("y", 10)))
+                  .trafficLightPosition);
+  CHECK_FALSE(
+      windowRequest(dynamic::object("trafficLightPosition", dynamic::object("x", 18)("y", std::nan(""))))
+          .trafficLightPosition);
+  // Zero is a place, at the window's very corner.
+  CHECK(windowRequest(dynamic::object("trafficLightPosition", dynamic::object("x", 0)("y", 0))).trafficLightPosition ==
+        ngn::WindowButtonsPosition{.x = 0, .y = 0});
 }

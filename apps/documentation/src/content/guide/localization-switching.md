@@ -9,7 +9,7 @@ After [Loading a language](/guide/localization-loading), calling `loadTranslatio
 no existing templates, even after unmounting and remounting. Template messages are evaluated on the
 component's first render anywhere in the app and cached for the JavaScript runtime's lifetime.
 `$localize` class fields in newly created components use the new language, producing mixed-language
-screens. Tests verify both behaviors.
+screens.
 
 Restart JavaScript to switch languages. Expo can reload in place:
 

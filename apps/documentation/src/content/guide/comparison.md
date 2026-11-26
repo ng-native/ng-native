@@ -37,10 +37,10 @@ Android API is callable from TypeScript, and a native view built in TypeScript, 
 Android `View`, can be placed in a template.
 
 `@nativescript/angular` is actively maintained: the [NativeScript/angular
-monorepo](https://github.com/NativeScript/angular) tracks current Angular releases, including
-22.0.0 (August 2026) for Angular 22. Its CSS engine emulates text-property inheritance, solving the
-same problem as [CSS on native](/packages/fabric/css-engine). NativeScript targets iOS, Android
-and visionOS, with no browser counterpart to [`@ng-native/web`](/packages/web).
+monorepo](https://github.com/NativeScript/angular) tracks current Angular releases. Its CSS engine
+emulates text-property inheritance, solving the same problem as [CSS on
+native](/packages/fabric/css-engine). NativeScript targets iOS, Android and visionOS, with no
+browser counterpart to [`@ng-native/web`](/packages/web).
 
 ## Ionic and Capacitor
 
@@ -86,8 +86,7 @@ Forms, CSS, Expo and React Native facades, and Reanimated worklet animations. Re
 release`) run on the iOS simulator and Android emulator, producing Hermes bytecode with no Angular
 compiler and `ngDevMode` false.
 
-Many platform facades have unit tests and typechecks but no hardware verification. Simulator checks
-also cover CSS behavior beyond unit tests; see the canary's verify screen and
+Many platform facades have unit tests and typechecks but no hardware verification. For CSS, see
 [CSS on native](/packages/fabric/css-engine). Treat this as a working prototype. See
 [Known limitations](/guide/limitations) for specific gaps.
 

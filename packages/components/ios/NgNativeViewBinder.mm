@@ -143,6 +143,36 @@ static void collect(UIView *view, NSSet<NSString *> *wanted, NSMutableDictionary
   return isValid(binding, nativeID) ? ((NgNativeBinding *)binding).token : nil;
 }
 
+- (id)tokenFindingNow:(NSString *)nativeID
+{
+  id binding = _bindings[nativeID];
+  if (binding == nil) {
+    return nil;
+  }
+  if (isValid(binding, nativeID)) {
+    return ((NgNativeBinding *)binding).token;
+  }
+  [self detach:nativeID];
+  _searches++;
+  NSMutableDictionary<NSString *, UIView *> *found = [NSMutableDictionary dictionary];
+  NSSet<NSString *> *wanted = [NSSet setWithObject:nativeID];
+  for (UIView *root in self.roots()) {
+    collect(root, wanted, found);
+  }
+  UIView *view = found[nativeID];
+  return view == nil ? nil : [self attach:view as:nativeID];
+}
+
+/** Attach `view` as the one with `nativeID`, and answer what attaching it answered. */
+- (id)attach:(UIView *)view as:(NSString *)nativeID
+{
+  NgNativeBinding *binding = [NgNativeBinding new];
+  binding.view = view;
+  binding.token = _attach(view, nativeID);
+  _bindings[nativeID] = binding;
+  return binding.token;
+}
+
 - (void)unbindAll
 {
   for (NSString *nativeID in _bindings.allKeys) {
@@ -215,10 +245,7 @@ static void collect(UIView *view, NSSet<NSString *> *wanted, NSMutableDictionary
   }
   _searchInterval = found.count == 0 ? MIN(_searchInterval * 2, LongestSearchInterval) : FirstSearchInterval;
   [found enumerateKeysAndObjectsUsingBlock:^(NSString *nativeID, UIView *view, BOOL *stop) {
-    NgNativeBinding *binding = [NgNativeBinding new];
-    binding.view = view;
-    binding.token = self->_attach(view, nativeID);
-    self->_bindings[nativeID] = binding;
+    [self attach:view as:nativeID];
   }];
 }
 

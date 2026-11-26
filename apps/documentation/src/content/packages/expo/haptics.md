@@ -9,10 +9,7 @@ summary: Impact, notification and selection feedback, fired and forgotten.
 
 <!-- platforms: Haptics -->
 
-It talks to Expo's native module directly rather than through `expo-haptics`'s own JavaScript,
-which adds exactly one thing on top: a throw when the module is missing. Asking for it optionally
-answers the same question without the throw, and sidesteps the enum its functions take. The
-`expo-haptics` package still has to be installed - that is what links the native side.
+The `expo-haptics` package must still be installed: it is what links the native side.
 
 ## Install
 
@@ -64,11 +61,9 @@ throws, as below.
 
 ## Without the module
 
-On iOS and Android, a missing `expo-haptics` - never installed, or installed without the app being
-rebuilt since - leaves the service made, so injecting it does not throw. A call, or a read of a
-value only the module knows, throws a `MissingModuleError`. Its message names the module and the
-commands that fix it; see
-[Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
+On iOS and Android, a missing `expo-haptics` throws a
+[`MissingModuleError`](/packages/expo/using-a-module#what-happens-without-the-module-installed) on
+the first call or read that needs it. Injecting the service does not throw.
 `available()` is `false`.
 
 On the web, and in a test that provides no fake, every method does nothing, and `available()` is

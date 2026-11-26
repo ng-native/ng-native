@@ -99,7 +99,8 @@ jobs:
       - uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
         with:
           key: desktop-core-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
-          restore-keys: desktop-core-${{ runner.os }}-${{ runner.arch }}-
+          # The action adds the `-` after the prefix itself.
+          restore-keys: desktop-core-${{ runner.os }}-${{ runner.arch }}
           max-size: 500M
           save: ${{ github.event_name != 'pull_request' }}
 
@@ -365,7 +366,8 @@ jobs:
       - uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
         with:
           key: desktop-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/fetch-hermes.sh', 'pnpm-lock.yaml') }}
-          restore-keys: desktop-host-${{ runner.os }}-${{ runner.arch }}-
+          # The action adds the `-` after the prefix itself.
+          restore-keys: desktop-host-${{ runner.os }}-${{ runner.arch }}
           max-size: 1G
           save: ${{ github.event_name != 'pull_request' }}
 
@@ -423,7 +425,7 @@ jobs:
   # hand on any branch. Each archive and its entry are kept as an artifact, so a branch's host can
   # be run (NGN_DESKTOP_FROM_SOURCE unset, a prebuilt.json naming it). Nothing is published.
   prebuilt-host-linux:
-    name: prebuilt-host-linux (${{ matrix.arch }}, ${{ matrix.flavour }})
+    name: prebuilt-host-linux (${{ matrix.react-native }}, ${{ matrix.arch }}, ${{ matrix.flavour }})
     needs: changes
     if: >-
       !cancelled() && (github.event_name == 'workflow_dispatch' ||
@@ -432,6 +434,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # The release's versions (HOST_REACT_NATIVE in packages/desktop/bin/prebuilt.mjs).
+        react-native: ['0.88.1']
         arch: [x64, arm64]
         flavour: [debug, release]
         include:
@@ -448,6 +452,7 @@ jobs:
       - uses: ./.github/actions/setup
       - uses: ./.github/actions/desktop-prebuilt-linux
         with:
+          react-native: ${{ matrix.react-native }}
           flavour: ${{ matrix.flavour }}
           version: 0.0.0-main
           base-url: https://github.com/${{ github.repository }}/releases/download/main
@@ -455,7 +460,7 @@ jobs:
           save-cache: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/upload-artifact@v7
         with:
-          name: prebuilt-host-linux-${{ matrix.arch }}-${{ matrix.flavour }}
+          name: prebuilt-host-linux-${{ matrix.react-native }}-${{ matrix.arch }}-${{ matrix.flavour }}
           path: .prebuilt
           include-hidden-files: true
           if-no-files-found: error
@@ -463,7 +468,7 @@ jobs:
   # Warm both universal macOS hosts overnight or on demand. Release can restore the finished
   # host by its inputs key and still builds it itself when the inputs have changed.
   prebuilt-host:
-    name: prebuilt-host (${{ matrix.flavour }})
+    name: prebuilt-host (${{ matrix.react-native }}, ${{ matrix.flavour }})
     if: >-
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
@@ -473,6 +478,8 @@ jobs:
       actions: read
     strategy:
       matrix:
+        # The release's versions (HOST_REACT_NATIVE in packages/desktop/bin/prebuilt.mjs).
+        react-native: ['0.88.1']
         flavour: [debug, release]
     # As the release's desktop-host: room for a build from scratch.
     timeout-minutes: 75
@@ -486,6 +493,7 @@ jobs:
       - id: prebuilt
         uses: ./.github/actions/desktop-prebuilt
         with:
+          react-native: ${{ matrix.react-native }}
           flavour: ${{ matrix.flavour }}
           version: 0.0.0-main
           base-url: https://github.com/${{ github.repository }}/releases/download/main

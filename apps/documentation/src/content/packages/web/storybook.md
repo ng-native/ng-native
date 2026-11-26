@@ -13,15 +13,15 @@ component's inputs.
 Storybook's Angular framework, `@storybook/angular`, builds with the Angular CLI's builders, which
 do not build `@ng-native/*` ([The Angular CLI](/packages/web#the-angular-cli) covers why).
 
-## Setting it up
+## Setup
 
 In a browser app set up as in [Setting up a browser app](/packages/web#setting-up-a-browser-app):
 
 ```sh
-npm install --save-dev storybook@10.6.1 @storybook/html-vite@10.6.1 @storybook/addon-docs@10.6.1
+npm install --save-dev storybook@10.6.2 @storybook/html-vite@10.6.2 @storybook/addon-docs@10.6.2
 ```
 
-Every release of these packages is checked on Storybook 10.6.1 and Vite 8.3.2.
+Every release of these packages is checked on Storybook 10.6.2 and Vite 8.3.2.
 
 `.storybook/main.ts`:
 

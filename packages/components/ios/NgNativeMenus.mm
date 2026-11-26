@@ -193,12 +193,22 @@ RCT_EXPORT_MODULE()
   });
 }
 
+/** Whether a press menu opens from code, by `openPressMenu`: iOS 17.4 and later. */
+static BOOL opensPressMenus(void)
+{
+  if (@available(iOS 17.4, *)) {
+    return YES;
+  }
+  return NO;
+}
+
 - (NSDictionary *)constantsToExport
 {
   NSDictionary *info = NSBundle.mainBundle.infoDictionary;
   return @{
     @"menuBar" : @(UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad),
     @"appName" : info[@"CFBundleDisplayName"] ?: info[@"CFBundleName"] ?: @"",
+    @"opensPressMenus" : @(opensPressMenus()),
   };
 }
 
@@ -261,6 +271,16 @@ RCT_EXPORT_METHOD(setPressMenu : (NSString *)nativeID entries : (nullable NSArra
     [_pressMenus removeObjectForKey:nativeID];
     [_pressMenuViews unbind:nativeID];
   }
+}
+
+RCT_EXPORT_METHOD(openPressMenu : (NSString *)nativeID)
+{
+  if (![nativeID isKindOfClass:[NSString class]] || _pressMenus[nativeID] == nil) {
+    return;
+  }
+  // The view was pressed or is on screen, so it is mounted and in a window, even where the binder
+  // has not looked for it again yet. A menu the button's own touch opened is showing, and stays.
+  NgNativeOpenPressMenu([_pressMenuViews tokenFindingNow:nativeID]);
 }
 
 RCT_EXPORT_METHOD(setTakesLongPress : (NSString *)nativeID takes : (BOOL)takes)

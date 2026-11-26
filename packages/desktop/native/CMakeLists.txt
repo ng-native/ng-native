@@ -147,6 +147,7 @@ add_library(ngn_core STATIC
     core/src/expo-image.cpp
     core/src/expo-ui.cpp
     core/src/view-tree.cpp
+    core/src/visual-effect.cpp
     core/src/web-view.cpp
     core/src/worklet-host.cpp
     core/src/modules/accessibility-manager.cpp
@@ -266,6 +267,8 @@ if(NGN_TESTS)
         appkit/modal-focus.mm appkit/tests/modal-focus.test.mm
         appkit/presentation-label.mm appkit/tests/presentation-label.test.mm
         appkit/glass-effect.mm appkit/tests/glass.test.mm
+        appkit/visual-effect.mm appkit/tests/visual-effect.test.mm
+        appkit/window-buttons.mm appkit/tests/window-buttons.test.mm
         appkit/menu-bar.mm appkit/svg-icon.mm appkit/tests/menu-bar.test.mm
         appkit/system.mm appkit/tests/system.test.mm
         appkit/image-request.mm appkit/tests/image-request.test.mm
