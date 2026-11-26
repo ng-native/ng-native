@@ -73,8 +73,7 @@ search field or a footer, is drawn and styled by CSS on every OS.
 ```
 
 With `provideMainWindow({ titleBar: 'hidden' })`, a sidebar that draws its own button, no
-`<native-header>` and no back or forward history in the window, the card has no toolbar to clear.
-History brings the toolbar back for its chevrons, and the card sits below it:
+`<native-header>` and no back or forward history in the window, the card has no toolbar to clear:
 
 ```html
 <split-view contentStyle="inset">
@@ -82,6 +81,8 @@ History brings the toolbar back for its chevrons, and the card sits below it:
   <view class="page">...</view>
 </split-view>
 ```
+
+Back or forward history brings the toolbar back for its chevrons, and the card sits below it.
 
 The host places the content pane, so a margin, radius or background on what it holds (a
 `<native-stack-outlet>`, say) styles the content inside the card, not the pane.
