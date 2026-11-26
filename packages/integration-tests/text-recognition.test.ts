@@ -172,3 +172,86 @@ describe('TextRecognition without its native module', () => {
     });
   }
 });
+
+describe('TextRecognition.scanDocument()', () => {
+  const PAGE = { ...RECEIPT, imageUri: 'file:///caches/ng-native-scan-1.jpg' };
+
+  function scanner(supported = true) {
+    const asked: TextRecognitionOptions[] = [];
+    const native: NativeTextRecognition = {
+      ...fakeNative().native,
+      scannerAvailable: () => supported,
+      scanDocument: async (options) => {
+        asked.push(options);
+        return [PAGE];
+      },
+    };
+    return { native, asked };
+  }
+
+  it('answers the pages the document camera scanned, read with the options given', async () => {
+    const fake = scanner();
+    const ocr = withSource(fake.native);
+    assert.equal(ocr.scannerAvailable(), true);
+    assert.deepEqual(await ocr.scanDocument({ languages: ['zh-TW'], level: 'fast' }), [PAGE]);
+    assert.deepEqual(fake.asked, [{ languages: ['zh-Hant'], level: 'fast' }]);
+  });
+
+  it('passes no options when none are given', async () => {
+    const fake = scanner();
+    await withSource(fake.native).scanDocument();
+    assert.deepEqual(fake.asked, [{}]);
+  });
+
+  it('scans nothing where the device has no document camera, as in the simulator', async () => {
+    const fake = scanner(false);
+    const ocr = withSource(fake.native);
+    assert.equal(ocr.scannerAvailable(), false);
+    assert.equal(ocr.available(), true, 'recognize() still works there');
+    assert.deepEqual(await ocr.scanDocument(), []);
+    assert.deepEqual(fake.asked, [], 'the camera is never asked to open');
+  });
+
+  it('scans nothing where the module has no scanner, as on macOS', async () => {
+    const ocr = withSource(fakeNative().native);
+    assert.equal(ocr.scannerAvailable(), false);
+    assert.deepEqual(await ocr.scanDocument(), []);
+  });
+
+  for (const platform of ['android', 'web']) {
+    it(`scans nothing on ${platform}, where there is no document camera`, async () => {
+      (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+        if (id === 'react-native') return { Platform: { OS: platform } };
+        throw new Error(`Cannot find module '${id}'`);
+      };
+      const ocr = injectService(TextRecognition);
+      assert.equal(ocr.scannerAvailable(), false);
+      assert.deepEqual(await ocr.scanDocument(), []);
+    });
+  }
+
+  it('rejects in Node and in a build without the module, saying what is missing', async () => {
+    const ocr = injectService(TextRecognition);
+    assert.equal(ocr.scannerAvailable(), false);
+    await assert.rejects(
+      ocr.scanDocument(),
+      (error: Error) =>
+        error instanceof MissingModuleError && /TextRecognition\.SOURCE/.test(error.message),
+    );
+    (globalThis as Record<string, unknown>)['require'] = (id: string) => {
+      if (id === 'react-native') return { Platform: { OS: 'ios' } };
+      throw new Error(`Cannot find module '${id}'`);
+    };
+    await assert.rejects(
+      injectService(TextRecognition).scanDocument(),
+      (error: Error) =>
+        error instanceof MissingModuleError && /development build/.test(error.message),
+    );
+  });
+
+  it('passes a native rejection through', async () => {
+    const failure = Object.assign(new Error('The camera failed'), { code: 'ERR_DOCUMENT_SCAN' });
+    const ocr = withSource({ ...scanner().native, scanDocument: () => Promise.reject(failure) });
+    await assert.rejects(ocr.scanDocument(), failure);
+  });
+});
