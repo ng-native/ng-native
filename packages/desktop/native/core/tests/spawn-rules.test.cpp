@@ -209,6 +209,7 @@ TEST_CASE("a ~/ program is pinned in the account's home folder alone") {
 }
 
 TEST_CASE("the account's home comes from the user database, not HOME") {
+  auto before = ngn::accountHome();
   const char *was = std::getenv("HOME");
   std::optional<std::string> previous = was ? std::optional<std::string>(was) : std::nullopt;
   setenv("HOME", "/tmp/not-the-account", 1);
@@ -218,7 +219,9 @@ TEST_CASE("the account's home comes from the user database, not HOME") {
   } else {
     unsetenv("HOME");
   }
-  REQUIRE_FALSE(home.empty());
-  CHECK(home[0] == '/');
-  CHECK(home != "/tmp/not-the-account");
+  CHECK(home == before);
+  // Empty for an account with no entry in the user database; absolute otherwise.
+  if (!home.empty()) {
+    CHECK(home[0] == '/');
+  }
 }

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
 #include <pwd.h>
 #include <set>
 #include <unistd.h>
@@ -304,12 +305,19 @@ std::map<std::string, std::string> filterEnvironment(
 }
 
 std::string accountHome() {
-  long size = sysconf(_SC_GETPW_R_SIZE_MAX);
-  std::vector<char> buffer(size > 0 ? static_cast<size_t>(size) : 16384);
+  long suggested = sysconf(_SC_GETPW_R_SIZE_MAX);
+  // The suggestion is a start, not a bound: a larger record answers ERANGE, so the buffer grows to
+  // a limit no account's entry reaches.
+  constexpr size_t kLimit = 1 << 20;
+  std::vector<char> buffer(suggested > 0 ? static_cast<size_t>(suggested) : 16384);
   passwd entry{};
   passwd *found = nullptr;
-  if (getpwuid_r(getuid(), &entry, buffer.data(), buffer.size(), &found) != 0 || found == nullptr ||
-      found->pw_dir == nullptr || found->pw_dir[0] != '/') {
+  int error = 0;
+  while ((error = getpwuid_r(getuid(), &entry, buffer.data(), buffer.size(), &found)) == ERANGE &&
+         buffer.size() < kLimit) {
+    buffer.resize(buffer.size() * 2);
+  }
+  if (error != 0 || found == nullptr || found->pw_dir == nullptr || found->pw_dir[0] != '/') {
     return {};
   }
   return found->pw_dir;
