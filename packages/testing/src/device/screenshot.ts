@@ -13,6 +13,7 @@ import type { FakeFabricNode } from '../test-utils.ts';
 import { harness } from './harness.ts';
 import { screen, type Frame } from './index.ts';
 import type { ScreenshotComparatorOptions, ScreenshotResult } from './screenshot-baselines.ts';
+import { settledCapture } from './settled-capture.ts';
 import { testingModuleFrom, type TestingModule } from './testing-module.ts';
 
 export type { ScreenshotComparatorOptions } from './screenshot-baselines.ts';
@@ -26,7 +27,8 @@ export type ScreenshotTarget = FakeFabricNode | Frame | typeof screen;
 export interface ScreenshotCaptureOptions {
   /**
    * How long to wait for two captures in a row to agree, in milliseconds, so a capture is never
-   * taken part way through an animation. Default 5000.
+   * taken part way through an animation, and for native to mount a node the test just rendered.
+   * Default 5000.
    */
   timeout?: number;
 }
@@ -72,23 +74,15 @@ function captureOnce(module: TestingModule, target: ScreenshotTarget | undefined
 
 /**
  * A PNG, in base64, of a node, a region of the window in points, or the whole window (`screen`, or
- * no target): taken again until two captures in a row agree, so what is moving has settled.
+ * no target): taken again until two captures in a row agree, so what is moving has settled, and
+ * once native has mounted a node the test just rendered (`settledCapture`).
  */
 export async function screenshot(
   target?: ScreenshotTarget,
   { timeout = 5000 }: ScreenshotCaptureOptions = {},
 ): Promise<string> {
   const module = nativeModule();
-  const deadline = Date.now() + timeout;
-  let last = await captureOnce(module, target);
-  for (;;) {
-    const next = await captureOnce(module, target);
-    if (next === last) return next;
-    if (Date.now() > deadline) {
-      throw new Error(`The screenshot did not settle within ${timeout}ms: something kept moving.`);
-    }
-    last = next;
-  }
+  return settledCapture(() => captureOnce(module, target), timeout);
 }
 
 /** Screenshots each test took without a name, for the next default name. */
