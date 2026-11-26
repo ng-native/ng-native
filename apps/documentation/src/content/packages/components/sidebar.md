@@ -46,8 +46,9 @@ and `SidebarItemPath` from `@ng-native/router` for items with a `path`.
   state on macOS, and its collapsed state on Linux, where the sidebar has no width to drag.
 - **`toggleButton`** - whether the window's toolbar on macOS, or its header bar on Linux, shows
   the sidebar button. On by default. Turn it off for a sidebar that draws a button of its own:
-  View > Show Sidebar, its shortcut and `[(collapsed)]` still work. iOS, Android and the web host
-  ignore it.
+  View > Show Sidebar, its shortcut and `[(collapsed)]` still work. On macOS a window with no
+  sidebar button, no `<native-header>` and no history to go back through has no toolbar. iOS,
+  Android and the web host ignore it.
 
 Sections and items become a native source list on macOS. Anything else in the sidebar, such as a
 search field or a footer, is drawn and styled by CSS on every OS.
@@ -58,12 +59,26 @@ search field or a footer, is drawn and styled by CSS on every OS.
   pane is a card with rounded corners, inset 8 points from the edges of the space beside the
   sidebar and from the bottom of the toolbar or header bar, on the sidebar's backdrop, which
   runs under the toolbar or header bar. The pane is laid out at the card's size, so a page in it
-  starts below the toolbar with no top inset of its own. iOS, Android and the web host ignore it.
+  starts below the toolbar with no top inset of its own. On macOS, in a window made with
+  `titleBar: 'hidden'` that has no toolbar, the card runs up to 8 points from the window's top,
+  beside the window controls over the sidebar. The title bar's height left over the card is its
+  content's safe area, so a `<safe-area-view>` in it stays clear of the controls when the sidebar
+  is collapsed. iOS, Android and the web host ignore it.
 
 ```html
 <split-view contentStyle="inset">
   <sidebar>...</sidebar>
   <native-stack-outlet />
+</split-view>
+```
+
+With `provideMainWindow({ titleBar: 'hidden' })`, a sidebar that draws its own button and no
+`<native-header>`, the card has no toolbar to clear:
+
+```html
+<split-view contentStyle="inset">
+  <sidebar [toggleButton]="false">...</sidebar>
+  <view class="page">...</view>
 </split-view>
 ```
 
@@ -147,7 +162,8 @@ the tabs is a plain NSSplitView in the content. Each pane is sized by AppKit, an
 back into layout, at most once a display frame. The sidebar's collapsed state follows the app's
 `collapsed`, and the title bar button, the View menu and a restored autosave report theirs with
 `topSidebarCollapse`. The sidebar pane's `toggleButton` prop, when `false`, leaves the sidebar
-button out of the toolbar, which keeps the tracking separator, and out of the header bar on Linux.
+button out of the toolbar, and out of the header bar on Linux. The toolbar then keeps the tracking
+separator while a header or the history chevrons fill it, and the window has none without them.
 The content pane's `contentStyle` prop is `inset` for a card: its container sits in a backdrop of
 the sidebar's material, which runs under the toolbar, and the content's split item draws no title
 bar separator. On Linux the content page takes the sidebar's colour, the header

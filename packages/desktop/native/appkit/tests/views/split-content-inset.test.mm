@@ -176,3 +176,65 @@ TEST_CASE("A plain split view in the content draws its content pane inset in its
   REQUIRE(NSWidth(host.frame) == doctest::Approx(width - 40));
   checkInset();
 }
+
+TEST_CASE("An inset card runs to the window's top when the title is hidden and nothing fills a toolbar") {
+  MountedViews mounted;
+  Restore restore;
+  NGNSplitView.input = &mounted.input;
+  auto sidebarProps = [](bool toggle) {
+    return parsedProps<ngn::SidebarComponentDescriptor>(folly::dynamic::object("toggleButton", toggle));
+  };
+  // As provideMainWindow({ titleBar: 'hidden' }) makes it.
+  mounted.window.styleMask |= NSWindowStyleMaskFullSizeContentView;
+  mounted.window.titlebarAppearsTransparent = YES;
+  mounted.window.titleVisibility = NSWindowTitleHidden;
+  mounted.add(MountedViews::shadow(5, ngn::SplitViewComponentName, viewProps(folly::dynamic::object())));
+  auto sidebar = MountedViews::shadow(6, ngn::SidebarComponentName, sidebarProps(false));
+  mounted.add(sidebar, 5);
+  mounted.add(MountedViews::shadow(7, ngn::SplitContentComponentName, contentProps("inset")), 5);
+  auto *split = (NGNSplitView *)mounted.view(5);
+  mounted.backend->setSplitView(MountedViews::kSurface, 5, true);
+  layOut(mounted.window);
+
+  // No sidebar button, no header and no history: the window has no toolbar to clear.
+  CHECK((mounted.window.toolbar == nil));
+  NSView *container = mounted.view(7).superview;
+  NSView *host = contentHost(mounted.window, nil);
+  REQUIRE((container != nil));
+  REQUIRE((host != nil));
+  CHECK(insetOf(container, host).top == doctest::Approx(ngn::kInsetContentMargin));
+  CHECK(insetOf(container, host).left == doctest::Approx(ngn::kInsetContentMargin));
+  // Its content has what is left of the title bar as its safe area, clear of the window controls.
+  CHECK(host.safeAreaInsets.top > ngn::kInsetContentMargin);
+  CHECK(container.safeAreaInsets.top == doctest::Approx(host.safeAreaInsets.top - ngn::kInsetContentMargin));
+
+  // The sidebar button back: a toolbar again, and the card below it.
+  mounted.update(sidebar, sidebarProps(true));
+  layOut(mounted.window);
+  REQUIRE((mounted.window.toolbar != nil));
+  CHECK(host.safeAreaInsets.top > 0);
+  CHECK(insetOf(container, host).top == doctest::Approx(host.safeAreaInsets.top + ngn::kInsetContentMargin));
+  [split uninstall];
+}
+
+TEST_CASE("An inset card stays below a title bar that shows its title, with no toolbar") {
+  MountedViews mounted;
+  Restore restore;
+  NGNSplitView.input = &mounted.input;
+  mounted.window.styleMask |= NSWindowStyleMaskFullSizeContentView;
+  mounted.add(MountedViews::shadow(5, ngn::SplitViewComponentName, viewProps(folly::dynamic::object())));
+  mounted.add(MountedViews::shadow(6, ngn::SidebarComponentName,
+                                   parsedProps<ngn::SidebarComponentDescriptor>(folly::dynamic::object("toggleButton", false))),
+              5);
+  mounted.add(MountedViews::shadow(7, ngn::SplitContentComponentName, contentProps("inset")), 5);
+  auto *split = (NGNSplitView *)mounted.view(5);
+  mounted.backend->setSplitView(MountedViews::kSurface, 5, true);
+  layOut(mounted.window);
+  CHECK((mounted.window.toolbar == nil));
+  NSView *container = mounted.view(7).superview;
+  NSView *host = contentHost(mounted.window, nil);
+  REQUIRE((host != nil));
+  CHECK(host.safeAreaInsets.top > 0);
+  CHECK(insetOf(container, host).top == doctest::Approx(host.safeAreaInsets.top + ngn::kInsetContentMargin));
+  [split uninstall];
+}

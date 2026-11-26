@@ -46,7 +46,8 @@
 
 - (instancetype)initWithWindow:(NSWindow *)window;
 // The window's content is a split view controller: the sidebar button and the tracking separator
-// lead, and the toolbar shows even when no header does.
+// lead, and the toolbar shows even when no header does, while it has the sidebar button or the
+// history chevrons to show.
 @property (nonatomic) BOOL sidebar;
 // Whether the sidebar button leads while `sidebar` is set: yes unless the window's sidebar turns it
 // off. The tracking separator stays either way.
