@@ -163,8 +163,9 @@ package name, the slug, takes 64 characters at most.
 ## Prebuilt hosts
 
 An app with no native desktop code of its own compiles nothing when `prebuilt.json` has a host for
-its React Native version. Each version has two, both universal and packed with their `hermesc`,
-`hermesvm.framework` and Sparkle: `run` downloads the debug host, the dev build with React Native's
+its React Native version, which each release has for React Native 0.88.1. Each version has two,
+both universal and packed with their `hermesc`, `hermesvm.framework` and Sparkle: `run` downloads
+the debug host, the dev build with React Native's
 debugger, and `package` the release host, the Release build without it. Each unpacks into the
 per-user cache under its hash. Each archive's SHA-256 is in `prebuilt.json`, inside the npm package,
 and a download that does not match it is deleted and stops the command. The host is built from

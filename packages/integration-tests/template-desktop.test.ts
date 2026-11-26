@@ -138,12 +138,6 @@ describe('the desktop template', () => {
     for (const field of ['dependencies', 'devDependencies']) {
       for (const [name, range] of Object.entries(ours[field])) {
         if (!(name in theirs[field])) continue;
-        // The prebuilt desktop hosts are built for React Native 0.88.0, which the desktop template
-        // keeps while the mobile template is on 0.88.1.
-        if (name === 'react-native') {
-          assert.equal(range, '0.88.0');
-          continue;
-        }
         // A host library is pinned to the exact version the prebuilt desktop host is built with,
         // inside the mobile template's range.
         const pinned = name === 'react-native-safe-area-context';

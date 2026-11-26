@@ -12,7 +12,7 @@
  * per-user cache under its own hash, so a new archive never reuses an old one's files. An entry
  * with `os: 'linux'` is a Linux host for the one `arch` it names, whose archive holds
  * `gtk/ngn-linux` and `gtk/hermesc`. Each release publishes both flavours for macOS and for Linux on
- * x64 and arm64 (`RELEASE_HOSTS`).
+ * x64 and arm64, for each React Native version in `HOST_REACT_NATIVE` (`RELEASE_HOSTS`).
  *
  * `native/scripts/make-prebuilt.mjs` builds and packs one. A macOS host is signed ad hoc unless
  * `NGN_SIGN_IDENTITY` names an identity: an app re-signs it when it packages, and the download is
@@ -55,16 +55,32 @@ export const FLAVOURS = /** @type {const} */ (['debug', 'release']);
  */
 
 /**
- * The prebuilt hosts each release publishes: both flavours, for macOS (universal) and for Linux on
- * x64 and arm64.
- *
- * @type {readonly (HostPlatform & { flavour: Flavour })[]}
+ * The React Native versions each release builds prebuilt hosts for, since the CLI takes a host
+ * only for the exact version an app has (`choosePrebuilt`): the templates'. One, as each costs a
+ * full set of host builds per release. The release workflow's host jobs build one per version, and
+ * `native/scripts/fetch.sh` pins each one's sources.
  */
-export const RELEASE_HOSTS = /** @type {const} */ ([
-  { os: 'macos' },
-  { os: 'linux', arch: 'x64' },
-  { os: 'linux', arch: 'arm64' },
-]).flatMap((platform) => FLAVOURS.map((flavour) => ({ ...platform, flavour })));
+export const HOST_REACT_NATIVE = ['0.88.1'];
+
+/**
+ * A prebuilt host a release publishes: its React Native version, flavour and platform.
+ *
+ * @typedef {HostPlatform & { reactNative: string, flavour: Flavour }} HostSlot
+ */
+
+/**
+ * The prebuilt hosts each release publishes: both flavours, for macOS (universal) and for Linux on
+ * x64 and arm64, for each React Native version.
+ *
+ * @type {readonly HostSlot[]}
+ */
+export const RELEASE_HOSTS = HOST_REACT_NATIVE.flatMap((reactNative) =>
+  /** @type {const} */ ([
+    { os: 'macos' },
+    { os: 'linux', arch: 'x64' },
+    { os: 'linux', arch: 'arm64' },
+  ]).flatMap((platform) => FLAVOURS.map((flavour) => ({ ...platform, reactNative, flavour }))),
+);
 
 /**
  * The archive's file name for a release of this package, a React Native version, a flavour and a
@@ -82,17 +98,17 @@ export function prebuiltName(desktopVersion, reactNative, flavour = 'release', p
 
 /**
  * The file `make-prebuilt.mjs` writes a host's manifest entry to, beside its archive: one per
- * flavour and platform, so every build of a release can share a folder. A macOS entry's name has
- * no platform in it.
+ * React Native version, flavour and platform, so every build of a release can share a folder. A
+ * macOS entry's name has no platform in it.
  *
- * @param {Flavour} flavour
- * @param {HostPlatform} [platform]
+ * @param {HostSlot} slot
  */
-export function entryName(flavour, platform = {}) {
+export function entryName({ reactNative, flavour, ...platform }) {
   const os = platform.os ?? 'macos';
+  const rn = `prebuilt-host-rn-${reactNative}`;
   return os === 'macos'
-    ? `prebuilt-host-${flavour}.json`
-    : `prebuilt-host-${platformName(platform)}-${flavour}.json`;
+    ? `${rn}-${flavour}.json`
+    : `${rn}-${platformName(platform)}-${flavour}.json`;
 }
 
 /**
@@ -120,11 +136,18 @@ function platformName({ os = 'macos', arch }) {
 export function withReleaseHosts(manifest, readEntry) {
   let updated = manifest;
   for (const slot of RELEASE_HOSTS) {
-    const name = entryName(slot.flavour, slot);
+    const name = entryName(slot);
     /** @type {PrebuiltHost} */
     const host = JSON.parse(readEntry(name));
-    if (flavourOf(host) !== slot.flavour || osOf(host) !== slot.os || host.arch !== slot.arch) {
-      throw new Error(`${name} is not the ${platformName(slot)} ${slot.flavour} host.`);
+    if (
+      host.reactNative !== slot.reactNative ||
+      flavourOf(host) !== slot.flavour ||
+      osOf(host) !== slot.os ||
+      host.arch !== slot.arch
+    ) {
+      throw new Error(
+        `${name} is not the React Native ${slot.reactNative} ${platformName(slot)} ${slot.flavour} host.`,
+      );
     }
     updated = withHost(updated, host);
   }
@@ -245,7 +268,10 @@ export function publishPrebuilt({ out, archive, name, host, manifest }, { wait =
       throw new Error(`${target} is already published. Remove it first to publish another build.`);
     }
     renameSync(archive, target);
-    replace(path.join(out, entryName(flavourOf(host), host)), `${JSON.stringify(host, null, 2)}\n`);
+    replace(
+      path.join(out, entryName({ ...host, flavour: flavourOf(host) })),
+      `${JSON.stringify(host, null, 2)}\n`,
+    );
     if (manifest) {
       const updated = withHost(readManifest(readFileSync(manifest, 'utf8')), host);
       replace(manifest, `${JSON.stringify(updated, null, 2)}\n`);

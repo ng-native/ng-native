@@ -79,7 +79,8 @@ jobs:
         run: pnpm --filter @ng-native/web exec playwright install chromium
       - run: pnpm coverage
 
-  # The prebuilt desktop hosts for the React Native version the packages support, both universal
+  # The prebuilt desktop hosts for each React Native version the packages support (HOST_REACT_NATIVE
+  # in packages/desktop/bin/prebuilt.mjs, which this matrix and the Linux one list), both universal
   # and packed with their hermesc and Sparkle, so an app with no native desktop code of its own
   # compiles nothing (packages/desktop/bin/prebuilt.mjs): the debug host, the dev build `run` uses,
   # with React Native's debugger, and the release host, the Release build `package` ships. One job
@@ -89,12 +90,13 @@ jobs:
   # release; their SHA-256s go into packages/desktop/prebuilt.json, inside the npm package, before
   # it is packed.
   desktop-host:
-    name: desktop-host (${{ matrix.flavour }})
+    name: desktop-host (${{ matrix.react-native }}, ${{ matrix.flavour }})
     needs: validate
     if: github.ref == 'refs/heads/main' || inputs.dry_run
     runs-on: macos-latest
     strategy:
       matrix:
+        react-native: ['0.88.1']
         flavour: [debug, release]
     # It builds fetched third-party sources, so it gets no write access, and its read-only token
     # goes only to the step that fetches main's host, before anything is built.
@@ -127,6 +129,7 @@ jobs:
       # build with the same inputs, else a build through ccache: see the action.
       - uses: ./.github/actions/desktop-prebuilt
         with:
+          react-native: ${{ matrix.react-native }}
           flavour: ${{ matrix.flavour }}
           version: ${{ needs.validate.outputs.version }}
           base-url: https://github.com/${{ github.repository }}/releases/download/v${{ needs.validate.outputs.version }}
@@ -136,21 +139,22 @@ jobs:
       # .prebuilt is a dot folder, which upload-artifact leaves out unless told otherwise.
       - uses: actions/upload-artifact@v7
         with:
-          name: desktop-host-${{ matrix.flavour }}
+          name: desktop-host-${{ matrix.react-native }}-${{ matrix.flavour }}
           path: .prebuilt
           include-hidden-files: true
           if-no-files-found: error
 
-  # The prebuilt Linux hosts for the same React Native version, both flavours, for x64 and arm64,
+  # The prebuilt Linux hosts for the same React Native versions, both flavours, for x64 and arm64,
   # each built natively on its own runner in the AlmaLinux 9 image, so it needs glibc 2.34 at most.
   # Not signed: the download is checked by its SHA-256, which goes into prebuilt.json beside the
   # macOS hosts'.
   desktop-host-linux:
-    name: desktop-host-linux (${{ matrix.arch }}, ${{ matrix.flavour }})
+    name: desktop-host-linux (${{ matrix.react-native }}, ${{ matrix.arch }}, ${{ matrix.flavour }})
     needs: validate
     if: github.ref == 'refs/heads/main' || inputs.dry_run
     strategy:
       matrix:
+        react-native: ['0.88.1']
         arch: [x64, arm64]
         flavour: [debug, release]
         include:
@@ -177,13 +181,14 @@ jobs:
           git show FETCH_HEAD:packages/desktop/prebuilt.json > packages/desktop/prebuilt.json
       - uses: ./.github/actions/desktop-prebuilt-linux
         with:
+          react-native: ${{ matrix.react-native }}
           flavour: ${{ matrix.flavour }}
           version: ${{ needs.validate.outputs.version }}
           base-url: https://github.com/${{ github.repository }}/releases/download/v${{ needs.validate.outputs.version }}
           out: .prebuilt
       - uses: actions/upload-artifact@v7
         with:
-          name: desktop-host-linux-${{ matrix.arch }}-${{ matrix.flavour }}
+          name: desktop-host-linux-${{ matrix.react-native }}-${{ matrix.arch }}-${{ matrix.flavour }}
           path: .prebuilt
           include-hidden-files: true
           if-no-files-found: error
@@ -320,7 +325,8 @@ jobs:
           done
           # Each prebuilt desktop host's entry, with its SHA-256, into the manifest
           # @ng-native/desktop ships, so the package names the archives the GitHub release below
-          # serves: both flavours for macOS and for Linux on x64 and arm64 (RELEASE_HOSTS). An entry
+          # serves: both flavours for macOS and for Linux on x64 and arm64, for each React Native
+          # version (RELEASE_HOSTS). An entry
           # missing or for another host fails the step, so no release ships without one.
           node --input-type=module -e "
             import { readFileSync, writeFileSync } from 'node:fs';
