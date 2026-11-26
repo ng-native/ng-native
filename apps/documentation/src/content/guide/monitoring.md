@@ -107,13 +107,16 @@ import { CoralogixRum } from '@coralogix/react-native-plugin';
 export class CoralogixErrorHandler implements ErrorHandler {
   handleError(error: unknown) {
     CoralogixRum.reportError(error instanceof Error ? error : new Error(String(error)), false);
-    console.error(error);
   }
 }
 
 // In the app's providers
 { provide: ErrorHandler, useClass: CoralogixErrorHandler }
 ```
+
+The handler does not also log the error with `console.error`: the SDK reports every
+`console.error` call as an error of its own, so each error would arrive twice. To keep seeing them
+in the console while developing, log with `console.warn` instead, which the SDK does not report.
 
 ## Identify users
 
