@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 import type { system } from './host.mjs';
@@ -7,6 +8,7 @@ import {
   entryName,
   findHost,
   fetchPrebuilt,
+  HOST_REACT_NATIVE,
   prebuiltName,
   readManifest,
   RELEASE_HOSTS,
@@ -55,9 +57,50 @@ describe('the prebuilt manifest', () => {
     );
   });
 
-  it("names each flavour's entry file apart, so both builds can share a folder", () => {
-    assert.equal(entryName('debug'), 'prebuilt-host-debug.json');
-    assert.equal(entryName('release'), 'prebuilt-host-release.json');
+  it("names each version and flavour's entry file apart, so every build can share a folder", () => {
+    assert.equal(
+      entryName({ reactNative: '0.88.0', flavour: 'debug' }),
+      'prebuilt-host-rn-0.88.0-debug.json',
+    );
+    assert.equal(
+      entryName({ reactNative: '0.88.0', flavour: 'release' }),
+      'prebuilt-host-rn-0.88.0-release.json',
+    );
+    assert.equal(
+      entryName({ reactNative: '0.88.1', flavour: 'debug' }),
+      'prebuilt-host-rn-0.88.1-debug.json',
+    );
+  });
+
+  it('builds hosts for every React Native version a new app or desktop app is given', () => {
+    // An app on a version with no prebuilt host builds its own from source, and a Linux host only
+    // on Linux, so each template's version needs one.
+    for (const template of ['template', 'template-desktop']) {
+      const manifest = JSON.parse(
+        readFileSync(new URL(`../../../${template}/package.json`, import.meta.url), 'utf8'),
+      );
+      assert.ok(
+        HOST_REACT_NATIVE.includes(manifest.dependencies['react-native']),
+        `${template} is on react-native ${manifest.dependencies['react-native']}`,
+      );
+    }
+    // Each workflow that builds hosts builds one for each version, and the release no other.
+    for (const workflow of ['release', 'desktop']) {
+      const text = readFileSync(
+        new URL(`../../../.github/workflows/${workflow}.yml`, import.meta.url),
+        'utf8',
+      );
+      const matrices = [...text.matchAll(/^ +react-native: (\[.*\])$/gm)];
+      assert.equal(matrices.length, 2, `${workflow}.yml's host matrices`);
+      for (const [, list] of matrices) {
+        assert.deepEqual(JSON.parse(list.replaceAll("'", '"')), HOST_REACT_NATIVE, workflow);
+      }
+    }
+    // And fetch.sh pins each one's sources, or its build stops there.
+    const fetch = readFileSync(new URL('../native/scripts/fetch.sh', import.meta.url), 'utf8');
+    for (const version of HOST_REACT_NATIVE) {
+      assert.match(fetch, new RegExp(`^  ${version.replaceAll('.', '\\.')}\\)$`, 'm'), version);
+    }
   });
 
   it('names a Linux archive and entry by its architecture, apart from the macOS ones', () => {
@@ -70,25 +113,37 @@ describe('the prebuilt manifest', () => {
       'ng-native-desktop-host-0.23.0-rn-0.88.0-linux-x64-debug.tar.gz',
     );
     assert.equal(
-      entryName('debug', { os: 'linux', arch: 'x64' }),
-      'prebuilt-host-linux-x64-debug.json',
+      entryName({ reactNative: '0.88.0', flavour: 'debug', os: 'linux', arch: 'x64' }),
+      'prebuilt-host-rn-0.88.0-linux-x64-debug.json',
     );
-    assert.equal(entryName('release', { os: 'macos' }), 'prebuilt-host-release.json');
-    assert.throws(() => entryName('debug', { os: 'linux' }), /x64 or arm64/);
-    // Every host a release publishes has an entry file of its own.
-    const names = RELEASE_HOSTS.map((slot) => entryName(slot.flavour, slot));
-    assert.equal(new Set(names).size, 6);
+    assert.equal(
+      entryName({ reactNative: '0.88.0', flavour: 'release', os: 'macos' }),
+      'prebuilt-host-rn-0.88.0-release.json',
+    );
+    assert.throws(
+      () => entryName({ reactNative: '0.88.0', flavour: 'debug', os: 'linux' }),
+      /x64 or arm64/,
+    );
+    // Every host a release publishes has an entry file of its own: both flavours for macOS and
+    // Linux on two architectures, for each React Native version.
+    const names = RELEASE_HOSTS.map(entryName);
+    assert.equal(new Set(names).size, 6 * HOST_REACT_NATIVE.length);
+    assert.deepEqual(
+      [...new Set(RELEASE_HOSTS.map((slot) => slot.reactNative))],
+      HOST_REACT_NATIVE,
+    );
   });
 
   it('puts every release host’s entry in the manifest, and stops on one missing or mislabelled', () => {
     const entries: Record<string, object> = Object.fromEntries(
       RELEASE_HOSTS.map((slot) => [
-        entryName(slot.flavour, slot),
+        entryName(slot),
         {
           ...HOST,
+          reactNative: slot.reactNative,
           flavour: slot.flavour,
-          ...(slot.os === 'linux' && slot),
-          url: entryName(slot.flavour, slot),
+          ...(slot.os === 'linux' && { os: slot.os, arch: slot.arch }),
+          url: entryName(slot),
         },
       ]),
     );
@@ -97,26 +152,35 @@ describe('the prebuilt manifest', () => {
       return JSON.stringify(entries[name]);
     };
     const manifest = withReleaseHosts({ version: 1, hosts: [] }, read);
-    assert.equal(manifest.hosts.length, 6);
-    assert.equal(
-      findHost(manifest, { reactNative: '0.88.0', flavour: 'debug', os: 'linux', arch: 'arm64' })
-        ?.url,
-      'prebuilt-host-linux-arm64-debug.json',
-    );
-    // A Linux host never answers for the macOS one.
-    assert.equal(
-      findHost(manifest, { reactNative: '0.88.0', flavour: 'debug' })?.url,
-      'prebuilt-host-debug.json',
-    );
-    delete entries['prebuilt-host-linux-arm64-release.json'];
+    assert.equal(manifest.hosts.length, 6 * HOST_REACT_NATIVE.length);
+    for (const reactNative of HOST_REACT_NATIVE) {
+      assert.equal(
+        findHost(manifest, { reactNative, flavour: 'debug', os: 'linux', arch: 'arm64' })?.url,
+        `prebuilt-host-rn-${reactNative}-linux-arm64-debug.json`,
+      );
+      // A Linux host never answers for the macOS one.
+      assert.equal(
+        findHost(manifest, { reactNative, flavour: 'debug' })?.url,
+        `prebuilt-host-rn-${reactNative}-debug.json`,
+      );
+    }
+    const name = 'prebuilt-host-rn-0.88.1-linux-arm64-release.json';
+    const entry = entries[name];
+    delete entries[name];
     assert.throws(
       () => withReleaseHosts({ version: 1, hosts: [] }, read),
-      /ENOENT prebuilt-host-linux-arm64-release/,
+      /ENOENT prebuilt-host-rn-0.88.1-linux-arm64-release/,
     );
-    entries['prebuilt-host-linux-arm64-release.json'] = { ...HOST, os: 'linux', arch: 'x64' };
+    entries[name] = { ...entry, arch: 'x64' };
     assert.throws(
       () => withReleaseHosts({ version: 1, hosts: [] }, read),
-      /prebuilt-host-linux-arm64-release.json is not the linux-arm64 release host/,
+      /prebuilt-host-rn-0.88.1-linux-arm64-release.json is not the React Native 0.88.1 linux-arm64 release host/,
+    );
+    // A host built against another React Native is not this slot's either.
+    entries[name] = { ...entry, reactNative: '0.88.0' };
+    assert.throws(
+      () => withReleaseHosts({ version: 1, hosts: [] }, read),
+      /is not the React Native 0.88.1 linux-arm64 release host/,
     );
   });
 

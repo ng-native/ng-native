@@ -1,6 +1,6 @@
 name: Make a prebuilt Linux desktop host
 description: >-
-  The prebuilt GTK host for one flavour and this runner's architecture, packed by
+  The prebuilt GTK host for one React Native version, flavour and this runner's architecture, packed by
   make-prebuilt.mjs --os linux into `out`. Built in the AlmaLinux 9 image (native/docker), so it
   needs glibc 2.34 at most, which is checked on the packed host. Shared by the release and by the
   Desktop host workflow, so both read and write the same caches. In order, as for macOS: the last
@@ -10,6 +10,9 @@ description: >-
   checked falls through to the next.
 
 inputs:
+  react-native:
+    description: The React Native version the host is built against (HOST_REACT_NATIVE).
+    required: true
   flavour:
     description: debug or release
     required: true
@@ -43,11 +46,12 @@ runs:
       shell: bash
       env:
         FLAVOUR: ${{ inputs.flavour }}
+        REACT_NATIVE: ${{ inputs.react-native }}
       run: |
-        key=$(docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e FLAVOUR \
+        key=$(docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e FLAVOUR -e REACT_NATIVE \
           -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ngn-el9 \
           node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary --print-key \
-            --os linux --flavour "$FLAVOUR") || key=''
+            --os linux --flavour "$FLAVOUR" --react-native "$REACT_NATIVE") || key=''
         echo "Host inputs key: ${key:-none}"
         echo "key=$key" >> "$GITHUB_OUTPUT"
 
@@ -60,14 +64,15 @@ runs:
       env:
         VERSION: ${{ inputs.version }}
         FLAVOUR: ${{ inputs.flavour }}
+        REACT_NATIVE: ${{ inputs.react-native }}
         BASE_URL: ${{ inputs.base-url }}
         OUT: ${{ github.workspace }}/${{ inputs.out }}
       run: |
         mkdir -p "$OUT"
-        if docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e VERSION -e FLAVOUR -e BASE_URL -e OUT \
+        if docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e VERSION -e FLAVOUR -e REACT_NATIVE -e BASE_URL -e OUT \
           -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ngn-el9 \
           node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary "$OUT" --os linux \
-            --flavour "$FLAVOUR" --version "$VERSION" --base-url "$BASE_URL" \
+            --flavour "$FLAVOUR" --react-native "$REACT_NATIVE" --version "$VERSION" --base-url "$BASE_URL" \
             --reuse packages/desktop/prebuilt.json --reuse-only; then
           echo "done=true" >> "$GITHUB_OUTPUT"
           ls -l "$OUT"
@@ -88,9 +93,10 @@ runs:
       shell: bash
       env:
         FLAVOUR: ${{ inputs.flavour }}
+        REACT_NATIVE: ${{ inputs.react-native }}
       run: |
         echo "arch=$(uname -m)" >> "$GITHUB_OUTPUT"
-        echo "key=desktop-linux-prebuilt-$(uname -m)-$FLAVOUR-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'packages/desktop/native/scripts/build-icu.sh', 'packages/desktop/native/docker/Dockerfile', 'pnpm-lock.yaml') }}" >> "$GITHUB_OUTPUT"
+        echo "key=desktop-linux-prebuilt-$(uname -m)-$FLAVOUR-rn-$REACT_NATIVE-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'packages/desktop/native/scripts/build-hermes.sh', 'packages/desktop/native/scripts/build-icu.sh', 'packages/desktop/native/docker/Dockerfile', 'pnpm-lock.yaml') }}" >> "$GITHUB_OUTPUT"
 
     - if: steps.reuse.outputs.done != 'true' && steps.host.outputs.cache-hit != 'true'
       uses: actions/cache/restore@v6
@@ -99,6 +105,7 @@ runs:
         key: ${{ steps.ccache.outputs.key }}-${{ github.run_id }}
         restore-keys: |
           ${{ steps.ccache.outputs.key }}-
+          desktop-linux-prebuilt-${{ steps.ccache.outputs.arch }}-${{ inputs.flavour }}-rn-${{ inputs.react-native }}-
           desktop-linux-prebuilt-${{ steps.ccache.outputs.arch }}-${{ inputs.flavour }}-
           desktop-linux-${{ steps.ccache.outputs.arch }}-
 
@@ -106,7 +113,7 @@ runs:
       uses: actions/cache@v6
       with:
         path: ${{ github.workspace }}/.desktop-cache/*/src
-        key: desktop-src-${{ runner.os }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
+        key: desktop-src-${{ runner.os }}-rn-${{ inputs.react-native }}-${{ hashFiles('packages/desktop/native/scripts/fetch.sh', 'pnpm-lock.yaml') }}
 
     # As the runner's user, so what it writes to the workspace is the runner's. Against the canary,
     # which has every host library but react-native-webview, as the macOS hosts are. A cached host
@@ -124,6 +131,7 @@ runs:
         CCACHE_MAXSIZE: 1500M
         VERSION: ${{ inputs.version }}
         FLAVOUR: ${{ inputs.flavour }}
+        REACT_NATIVE: ${{ inputs.react-native }}
         BASE_URL: ${{ inputs.base-url }}
         OUT: ${{ github.workspace }}/${{ inputs.out }}
         HOST_CACHE: ${{ steps.key.outputs.key != '' && format('{0}/.desktop-cache/prebuilt-host-linux-{1}', github.workspace, inputs.flavour) || '' }}
@@ -133,11 +141,11 @@ runs:
         docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e NGN_JOBS=4 \
           -e NGN_DESKTOP_CACHE -e NGN_COMPILER_LAUNCHER -e CCACHE_DIR -e CCACHE_BASEDIR \
           -e CCACHE_NOHASHDIR -e CCACHE_SLOPPINESS -e CCACHE_MAXSIZE \
-          -e VERSION -e FLAVOUR -e BASE_URL -e OUT -e HOST_CACHE \
+          -e VERSION -e FLAVOUR -e REACT_NATIVE -e BASE_URL -e OUT -e HOST_CACHE \
           -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" ngn-el9 \
           bash -euo pipefail -c '
             ccache --zero-stats > /dev/null
-            args=(--flavour "$FLAVOUR" --version "$VERSION" --base-url "$BASE_URL" --build-dir /tmp/ngn-prebuilt)
+            args=(--flavour "$FLAVOUR" --react-native "$REACT_NATIVE" --version "$VERSION" --base-url "$BASE_URL" --build-dir /tmp/ngn-prebuilt)
             if [ -n "$HOST_CACHE" ]; then args+=(--host-cache "$HOST_CACHE"); fi
             node packages/desktop/native/scripts/make-prebuilt.mjs examples/canary "$OUT" --os linux "${args[@]}"
             ccache --show-stats

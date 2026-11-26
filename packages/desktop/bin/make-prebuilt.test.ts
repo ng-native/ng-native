@@ -76,6 +76,23 @@ describe('make-prebuilt.mjs', () => {
     }
   });
 
+  it('takes an exact version for --react-native, before it builds', () => {
+    // It names a cache folder and goes to npm as it is.
+    for (const version of ['', 'latest', '0.88', '^0.88.1', '0.88.1/..']) {
+      const result = makePrebuilt(['--react-native', version]);
+      assert.equal(result.status, 2, `${version}: ${result.stderr}`);
+      assert.match(result.stderr, /--react-native takes a version such as 0\.88\.1/);
+      assert.ok(!result.wroteOut, 'nothing built or written');
+    }
+    assert.match(
+      makePrebuilt(['--react-native', '0.88.1']).stderr,
+      /react-native is not installed/,
+    );
+    // Installed into the folder for these exact versions, which no build of other versions shares.
+    const source = readFileSync(path.join(scripts, 'make-prebuilt.mjs'), 'utf8');
+    assert.match(source, /const dir = hostAppDir\([^;]*\[reactNative\]\), dependencies\);/);
+  });
+
   it('builds the release host as a packaged app ships it and the debug host as a dev run builds it', () => {
     const source = readFileSync(path.join(scripts, 'make-prebuilt.mjs'), 'utf8');
     assert.match(source, /flavour: \{ type: 'string', default: 'release' \}/);
@@ -146,13 +163,13 @@ describe('publishPrebuilt', () => {
       publishPrebuilt({ out, archive, name: 'h.tar.gz', host, manifest });
       assert.equal(readFileSync(path.join(out, 'h.tar.gz'), 'utf8'), 'archive');
       assert.deepEqual(
-        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-release.json'), 'utf8')),
+        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-rn-0.88.0-release.json'), 'utf8')),
         host,
       );
       assert.deepEqual(JSON.parse(readFileSync(manifest, 'utf8')).hosts, [host]);
       assert.deepEqual(readdirSync(out).sort(), [
         'h.tar.gz',
-        'prebuilt-host-release.json',
+        'prebuilt-host-rn-0.88.0-release.json',
         'prebuilt.json',
       ]);
     } finally {
@@ -176,19 +193,19 @@ describe('publishPrebuilt', () => {
       writeFileSync(second, 'debug build');
       publishPrebuilt({ out, archive: second, name: 'd.tar.gz', host: debug, manifest });
       assert.deepEqual(
-        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-release.json'), 'utf8')),
+        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-rn-0.88.0-release.json'), 'utf8')),
         host,
       );
       assert.deepEqual(
-        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-debug.json'), 'utf8')),
+        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-rn-0.88.0-debug.json'), 'utf8')),
         debug,
       );
       assert.deepEqual(JSON.parse(readFileSync(manifest, 'utf8')).hosts, [host, debug]);
       assert.deepEqual(readdirSync(out).sort(), [
         'd.tar.gz',
         'h.tar.gz',
-        'prebuilt-host-debug.json',
-        'prebuilt-host-release.json',
+        'prebuilt-host-rn-0.88.0-debug.json',
+        'prebuilt-host-rn-0.88.0-release.json',
         'prebuilt.json',
       ]);
     } finally {
@@ -205,13 +222,36 @@ describe('publishPrebuilt', () => {
       writeFileSync(second, 'linux build');
       publishPrebuilt({ out, archive: second, name: 'l.tar.gz', host: linux });
       assert.deepEqual(
-        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-release.json'), 'utf8')),
+        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-rn-0.88.0-release.json'), 'utf8')),
         host,
       );
       assert.deepEqual(
-        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-linux-arm64-release.json'), 'utf8')),
+        JSON.parse(
+          readFileSync(path.join(out, 'prebuilt-host-rn-0.88.0-linux-arm64-release.json'), 'utf8'),
+        ),
         linux,
       );
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
+  });
+
+  it('publishes a host for another React Native version beside this one, each with its own entry', () => {
+    const { out, archive } = packed();
+    try {
+      const manifest = path.join(out, 'prebuilt.json');
+      writeFileSync(manifest, JSON.stringify({ version: 1, hosts: [] }));
+      const next = { ...host, reactNative: '0.88.1', sha256: 'n' };
+      publishPrebuilt({ out, archive, name: 'h.tar.gz', host, manifest });
+      const second = path.join(out, '.next.partial');
+      writeFileSync(second, 'next build');
+      publishPrebuilt({ out, archive: second, name: 'n.tar.gz', host: next, manifest });
+      assert.deepEqual(
+        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-rn-0.88.1-release.json'), 'utf8')),
+        next,
+      );
+      // Neither replaces the other in the manifest.
+      assert.deepEqual(JSON.parse(readFileSync(manifest, 'utf8')).hosts, [host, next]);
     } finally {
       rmSync(out, { recursive: true, force: true });
     }
@@ -259,7 +299,8 @@ describe('publishPrebuilt', () => {
       );
       assert.equal(readFileSync(path.join(out, 'h.tar.gz'), 'utf8'), 'archive');
       assert.equal(
-        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-release.json'), 'utf8')).sha256,
+        JSON.parse(readFileSync(path.join(out, 'prebuilt-host-rn-0.88.0-release.json'), 'utf8'))
+          .sha256,
         'a',
       );
       assert.deepEqual(JSON.parse(readFileSync(manifest, 'utf8')).hosts, [host]);
@@ -300,7 +341,7 @@ describe('publishPrebuilt', () => {
         /\.make-prebuilt\.lock/,
       );
       assert.ok(!existsSync(path.join(out, 'h.tar.gz')));
-      assert.ok(!existsSync(path.join(out, 'prebuilt-host-release.json')));
+      assert.ok(!existsSync(path.join(out, 'prebuilt-host-rn-0.88.0-release.json')));
     } finally {
       rmSync(out, { recursive: true, force: true });
     }

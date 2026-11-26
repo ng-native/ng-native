@@ -78,7 +78,8 @@ jobs:
         uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
         with:
           key: device-tests-ios-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: device-tests-ios-
+          # The action adds the `-` after the prefix itself.
+          restore-keys: device-tests-ios
           max-size: 2G
 
       # React Native's ccache wrapper runs plain clang, silently, without CCACHE_BINARY.

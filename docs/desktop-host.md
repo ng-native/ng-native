@@ -202,29 +202,35 @@ this repository build them.
 
 ## Publishing a prebuilt host
 
-The release workflow (`.github/workflows/release.yml`) publishes two with each release, for the
-React Native version the packages support: the `debug` host, the dev build (`build.sh --universal
---no-tests`) with React Native's debugger, which `run` downloads, and the `release` host, the
-Release build (`build.sh --universal --release`), which `package` downloads.
+The release workflow (`.github/workflows/release.yml`) publishes two with each release for each
+React Native version in `HOST_REACT_NATIVE` (`bin/prebuilt.mjs`), since the CLI takes a host only
+for the exact version an app has: the templates'. One version, since each adds a full set of host
+builds to every release. A test holds the workflows' matrices and `fetch.sh`'s pins to that list,
+and the templates' versions to it. The two are the `debug` host, the dev build (`build.sh
+--universal --no-tests`) with React Native's debugger, which `run` downloads, and the `release`
+host, the Release build (`build.sh --universal --release`), which `package` downloads.
 
-1. Its `desktop-host` job, once per flavour, builds the universal host against `examples/canary`,
-   which has every host library but `react-native-webview` (an app with it builds the host from
-   source), signs it ad hoc and packs it with
-   `native/scripts/make-prebuilt.mjs examples/canary .prebuilt --flavour <flavour> --version <release> --base-url <url>`,
-   where `<url>` is the release's downloads URL. The entry goes into
-   `.prebuilt/prebuilt-host-<flavour>.json`.
-2. The release job writes both entries, each with its flavour and SHA-256, into
-   `packages/desktop/prebuilt.json` before the packages are packed, so the npm package names both
-   archives. It stops when either is missing.
-3. Both archives go up with the GitHub release.
+1. Its `desktop-host` job, once per React Native version and flavour, builds the universal host
+   against `examples/canary`, which has every host library but `react-native-webview` (an app with
+   it builds the host from source), signs it ad hoc and packs it with
+   `native/scripts/make-prebuilt.mjs examples/canary .prebuilt --react-native <version> --flavour <flavour> --version <release> --base-url <url>`,
+   where `<url>` is the release's downloads URL. For a version other than the canary's,
+   `--react-native` installs it with npm, beside the canary's host library versions, into a folder
+   in that version's build cache named for those versions. The entry goes into
+   `.prebuilt/prebuilt-host-rn-<version>-<flavour>.json`.
+2. The release job writes every entry, each with its version, flavour and SHA-256, into
+   `packages/desktop/prebuilt.json` before the packages are packed, so the npm package names every
+   archive. It stops when one is missing.
+3. Every archive goes up with the GitHub release.
 
-It publishes the Linux hosts too, both flavours for x64 and arm64. Its `desktop-host-linux` job,
-once per architecture and flavour on a runner of that architecture, runs
+It publishes the Linux hosts too, both flavours for x64 and arm64, for each version. Its
+`desktop-host-linux` job, once per React Native version, architecture and flavour on a runner of
+that architecture, runs
 `.github/actions/desktop-prebuilt-linux`: it builds the AlmaLinux 9 image (`native/docker`), runs
-`make-prebuilt.mjs examples/canary .prebuilt --os linux --flavour <flavour> ...` in it, which builds
+`make-prebuilt.mjs examples/canary .prebuilt --os linux --react-native <version> --flavour <flavour> ...` in it, which builds
 `build.sh --backend gtk`, strips `gtk/ngn-linux` and `gtk/hermesc` and packs them as
-`...-linux-<arch>[-debug].tar.gz` with the entry `prebuilt-host-linux-<arch>-<flavour>.json`, and
-checks the packed host needs glibc 2.34 at most. The release job writes all six entries
+`...-linux-<arch>[-debug].tar.gz` with the entry `prebuilt-host-rn-<version>-linux-<arch>-<flavour>.json`,
+and checks the packed host needs glibc 2.34 at most. The release job writes every entry
 (`RELEASE_HOSTS` in `bin/prebuilt.mjs`) and stops when one is missing. A Linux host is reused or
 packed from the Actions cache as a macOS one is (below), with `--print-key`, `--reuse` and
 `--host-cache` run in the image. Its key adds the OS and architecture, and takes in place of the
@@ -260,17 +266,17 @@ release finds those caches warm.
   "version": 1,
   "hosts": [
     {
-      "reactNative": "0.88.0",
+      "reactNative": "0.88.1",
       "flavour": "debug",
-      "url": "https://github.com/coralogix/ng-native/releases/download/v<release>/ng-native-desktop-host-<release>-rn-0.88.0-macos-universal-debug.tar.gz",
+      "url": "https://github.com/coralogix/ng-native/releases/download/v<release>/ng-native-desktop-host-<release>-rn-0.88.1-macos-universal-debug.tar.gz",
       "sha256": "<64 hex digits>",
       "libraries": { "react-native-screens": "<version>" },
       "inputs": "<64 hex digits>"
     },
     {
-      "reactNative": "0.88.0",
+      "reactNative": "0.88.1",
       "flavour": "release",
-      "url": "https://github.com/coralogix/ng-native/releases/download/v<release>/ng-native-desktop-host-<release>-rn-0.88.0-macos-universal.tar.gz",
+      "url": "https://github.com/coralogix/ng-native/releases/download/v<release>/ng-native-desktop-host-<release>-rn-0.88.1-macos-universal.tar.gz",
       "sha256": "<64 hex digits>",
       "libraries": { "react-native-screens": "<version>" }
     }
@@ -282,5 +288,6 @@ An entry with no `flavour` is a release host. A command with no entry of its fla
 host from source.
 
 To publish a host by hand, for another React Native version or another app, run `make-prebuilt.mjs`
-with `--flavour`, and `--manifest prebuilt.json` to write its entry, for each flavour, commit
+with `--flavour`, `--react-native` for a version the app does not have, and `--manifest
+prebuilt.json` to write its entry, for each flavour, commit
 `prebuilt.json`, and attach both archives to the GitHub release at `<url>`.

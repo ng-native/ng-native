@@ -28,15 +28,22 @@ fi
 RN_VERSION="$(node -p 'require(process.argv[1] + "/package.json").version' "$RN_PKG")"
 
 # --- Pins, per supported React Native version ----------------------------------------------------
-# One React Native minor per release (the template's Expo SDK). Add a block to support another.
+# The React Native minor of the template's Expo SDK, at each patch an app can build its host for:
+# the one releases build prebuilt hosts for (HOST_REACT_NATIVE in bin/prebuilt.mjs), and the
+# earlier ones apps made before it are on. Add a block to support another.
 case "$RN_VERSION" in
   0.88.0)
     RN_SHA=5c35c82cf7dd322bf94d47501508c3de975c077b
     HERMES_TAG=hermes-v260318099.0.2
     HERMES_SHA=4188b63f24026ca62b79dc81d95db122a59c6089
     ;;
+  0.88.1)
+    RN_SHA=c30b7f86850d47422637a64c70508e7411dbd8ea
+    HERMES_TAG=hermes-v260318099.0.5
+    HERMES_SHA=9a115f15785851f4ff2747ebb090ddd066fc8ad2
+    ;;
   *)
-    echo "fetch.sh: react-native $RN_VERSION is not supported; this release builds against 0.88.0." >&2
+    echo "fetch.sh: react-native $RN_VERSION is not supported; this release builds against 0.88.0 and 0.88.1." >&2
     exit 1
     ;;
 esac
