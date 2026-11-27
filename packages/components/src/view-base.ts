@@ -13,15 +13,7 @@
  * Events are element events, typed in `events.ts`: `(layout)`, `(touchStart)`,
  * `(accessibilityAction)` and so on. They are deliberately not outputs; see that file.
  */
-import {
-  Directive,
-  ElementRef,
-  Injector,
-  type SimpleChanges,
-  afterNextRender,
-  inject,
-  input,
-} from '@angular/core';
+import { Directive, ElementRef, type SimpleChanges, inject, input } from '@angular/core';
 import { KEYBOARD_FOCUS, hostInputNames, ownHost } from '@ng-native/device';
 import { HostEngine, declareNativeProps, nativePlatform, type HostNode } from '@ng-native/fabric';
 import type { Insets } from './events.ts';
@@ -316,9 +308,8 @@ export abstract class ViewBase {
 
   /** iOS: what the components pod was last told of this view's keyboard focus. */
   private keyboardFocusable = false;
-  /** iOS only, where a focusable view is reported once it has a react tag. */
-  private readonly keyboardInjector = nativePlatform() === 'ios' ? inject(Injector) : null;
-  private readonly keyboardFocus = this.keyboardInjector && inject(KEYBOARD_FOCUS);
+  /** iOS only: where a focusable view is reported, by react tag. */
+  private readonly keyboardFocus = nativePlatform() === 'ios' ? inject(KEYBOARD_FOCUS) : null;
 
   constructor() {
     ownHost(this.node, this.constructor);
@@ -328,21 +319,19 @@ export abstract class ViewBase {
 
   /**
    * iOS: tell the components pod whether this view takes an iPad hardware keyboard's focus, which
-   * React Native's iOS props cannot carry (`reportKeyboardFocusable`). By react tag, so after the
-   * render that first commits the view. The pod forgets a view as React Native recycles it.
+   * React Native's iOS props cannot carry (`reportKeyboardFocusable`). By react tag: the one it has,
+   * and each one the engine gives it later (`tagged`), on its first commit and when it is made
+   * again. The pod forgets a view as React Native recycles it.
    */
   private reportKeyboardFocus(focusable: boolean): void {
-    const injector = this.keyboardInjector;
     const tell = this.keyboardFocus;
-    if (!injector || !tell || this.keyboardFocusable === focusable) return;
+    if (!tell || this.keyboardFocusable === focusable) return;
     this.keyboardFocusable = focusable;
-    const engine = this.engine as { tagOf?(node: HostNode): number | null };
-    const report = () => {
-      const tag = engine.tagOf?.(this.node) ?? null;
-      if (tag !== null && this.keyboardFocusable === focusable) tell(tag, focusable);
-    };
-    if ((engine.tagOf?.(this.node) ?? null) !== null) report();
-    else afterNextRender(report, { injector });
+    (this.node as { tagged?: (tag: number) => void }).tagged = focusable
+      ? (tag) => tell(tag, true)
+      : undefined;
+    const tag = (this.engine as { tagOf?(node: HostNode): number | null }).tagOf?.(this.node);
+    if (tag !== null && tag !== undefined) tell(tag, focusable);
   }
 
   /** Whether `ngOnInit` has run, which is what writes the props every element starts with. */

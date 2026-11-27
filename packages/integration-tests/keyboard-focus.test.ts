@@ -13,14 +13,18 @@ import { registerPlatformComponents } from '@ng-native/fabric';
 import { cleanup, render } from '@ng-native/testing';
 import { compileSource } from './compile.ts';
 
-type Fixture = { focusable: { set(value: boolean): void } };
+type Fixture = {
+  focusable: { set(value: boolean): void };
+  engine: { wrapChildren(node: unknown, wrapper: { viewName: string; props: object }): void };
+};
 let Focus: Type<Fixture>;
 
 before(async () => {
   const file = path.join(import.meta.dirname, 'keyboard-focus.fixture.ts');
   const mod = await compileSource(
     `
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
+import { HostEngine } from '@ng-native/fabric';
 import { Pressable } from '../components/src/pressable.ts';
 import { View } from '../components/src/view.ts';
 @Component({
@@ -37,6 +41,7 @@ import { View } from '../components/src/view.ts';
 })
 export class Focus {
   readonly focusable = signal(true);
+  readonly engine = inject(HostEngine);
 }
 `,
     file,
@@ -91,6 +96,23 @@ describe('on iOS', () => {
       [tag('own'), false],
       [tag('own'), true],
     ]);
+  });
+});
+
+describe('a view the engine makes again', () => {
+  it('reports the new react tag it is made with', async () => {
+    const { reports, child, getByTestId, instance, rerender } = await heard();
+    const before = child('bare');
+    reports.length = 0;
+    // Wrapping its children makes the bare pressable's native view again, under the wrapper.
+    instance.engine.wrapChildren(getByTestId('bare').instanceHandle, {
+      viewName: 'View',
+      props: { flex: 1 },
+    });
+    await rerender();
+    const after = getByTestId('bare').children[0]!.children[0]!.reactTag;
+    assert.notEqual(after, before);
+    assert.deepEqual(reports, [[after, true]]);
   });
 });
 

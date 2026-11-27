@@ -25,8 +25,9 @@ using namespace facebook::react;
 // The touch a keyboard press stands for, told apart from a finger's.
 static const int kKeyboardTouch = 0x4b4559;
 
-// The view a held Space or Return is pressing, until it is let go.
+// The view a held Space or Return is pressing, and the key that started it, until that key is let go.
 static __weak RCTViewComponentView *pressing;
+static UIKeyboardHIDUsage pressingKey;
 
 @interface RCTViewComponentView (NgNativeKeyboardFocus)
 - (BOOL)ngn_takesKeyboardFocus;
@@ -78,11 +79,22 @@ static __weak RCTViewComponentView *pressing;
 
 @end
 
-// Whether one of `presses` is a key that presses the focused view.
-static BOOL pressesView(NSSet<UIPress *> *presses)
+// The key among `presses` that presses the focused view, or 0 for none.
+static UIKeyboardHIDUsage keyPressingView(NSSet<UIPress *> *presses)
 {
   for (UIPress *press in presses) {
     if (press.key != nil && NgNativeKeyPresses(press.key.keyCode, press.key.modifierFlags)) {
+      return press.key.keyCode;
+    }
+  }
+  return (UIKeyboardHIDUsage)0;
+}
+
+// Whether `presses` let go of `key`, whatever is held with it now.
+static BOOL releases(NSSet<UIPress *> *presses, UIKeyboardHIDUsage key)
+{
+  for (UIPress *press in presses) {
+    if (press.key != nil && press.key.keyCode == key) {
       return YES;
     }
   }
@@ -112,8 +124,10 @@ static void installHooks(void)
   });
   NgNativeHook(view, @selector(pressesBegan:withEvent:), "v@:@@", ^id(IMP previous) {
     return ^(RCTViewComponentView *self, NSSet<UIPress *> *presses, UIPressesEvent *event) {
-      if (pressing == nil && self.isFocused && [self ngn_takesKeyboardFocus] && pressesView(presses)) {
+      UIKeyboardHIDUsage key = keyPressingView(presses);
+      if (pressing == nil && key != (UIKeyboardHIDUsage)0 && self.isFocused && [self ngn_takesKeyboardFocus]) {
         pressing = self;
+        pressingKey = key;
         [self ngn_sendKeyboardTouch:0];
         return;
       }
@@ -124,7 +138,8 @@ static void installHooks(void)
   });
   NgNativeHook(view, @selector(pressesEnded:withEvent:), "v@:@@", ^id(IMP previous) {
     return ^(RCTViewComponentView *self, NSSet<UIPress *> *presses, UIPressesEvent *event) {
-      if (pressing == self && pressesView(presses)) {
+      // Only the key that started the press ends it: another one let go while it is held does not.
+      if (pressing == self && releases(presses, pressingKey)) {
         pressing = nil;
         [self ngn_sendKeyboardTouch:1];
         return;
@@ -136,7 +151,7 @@ static void installHooks(void)
   });
   NgNativeHook(view, @selector(pressesCancelled:withEvent:), "v@:@@", ^id(IMP previous) {
     return ^(RCTViewComponentView *self, NSSet<UIPress *> *presses, UIPressesEvent *event) {
-      if (pressing == self) {
+      if (pressing == self && releases(presses, pressingKey)) {
         pressing = nil;
         [self ngn_sendKeyboardTouch:2];
         return;

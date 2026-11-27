@@ -63,7 +63,8 @@ never assumes a setting is on that has not actually been confirmed.
 
 A view that is focusable takes the keyboard's focus: a `<pressable>`, a `<touchable-opacity>`, and
 any view with `[focusable]="true"`. UIKit draws its focus halo around the focused view, and Space
-or Return presses it as a tap would, so `(press)` fires and a press menu opens. Tab moves the focus
+or Return presses it as a tap would: `(press)` fires, or on a view with a `[menu]`, from iOS 17.4,
+the menu opens instead, as it does for a tap. Tab moves the focus
 between focus groups and the arrow keys move it within one, as in other iPad apps. A disabled view
 is not focused.
 

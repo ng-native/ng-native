@@ -724,6 +724,12 @@ export interface EngineNode extends HostNode {
    * and have none, and commit as they always have.
    */
   namespace?: string;
+  /**
+   * Called with the react tag of each native view the engine makes for the node: on its first
+   * commit, and whenever it makes it again (moved under another parent, or a new view name). For a
+   * host that addresses views by tag, as iOS's keyboard focus does.
+   */
+  tagged?: (tag: number) => void;
   props: Record<string, unknown>;
   nodeText: string;
   childList: EngineNode[];
@@ -6844,6 +6850,7 @@ const ENGINE_NODE_FIELDS = {
   tagName: true,
   typeName: true,
   namespace: true,
+  tagged: true,
   props: true,
   nodeText: true,
   childList: true,
@@ -17060,6 +17067,7 @@ export class Engine implements HostEngine {
     node.committed = { handle, tag, props, childHandles, viewName };
     node.bornIn = this.stats.commits;
     this.clearFlags(node);
+    node.tagged?.(tag);
     return handle;
   }
 
