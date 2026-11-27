@@ -29,6 +29,11 @@ describe('a declared program', () => {
     assert.equal(programProblem('/usr/bin/git'), null);
     assert.equal(programProblem('git'), null);
     assert.equal(programProblem('/opt/homebrew/bin/ffmpeg'), null);
+    assert.equal(programProblem('~/.local/bin/claude'), null);
+    assert.match(programProblem('~/.local/../bin/claude')!, /normalized home/);
+    assert.match(programProblem('~/')!, /normalized home/);
+    assert.match(programProblem('~me/bin/tool')!, /relative/);
+    assert.match(programProblem('~/bin/bash')!, /runs its arguments/);
   });
 
   it('is never a relative path, which would depend on the working directory', () => {
@@ -331,6 +336,25 @@ describe('resolving a bare name', () => {
 
   it('never resolves a refused program', () => {
     assert.equal(resolveProgram('sh', at('/bin/sh')), null);
+  });
+
+  it('pins a ~/ program in the home folder alone', () => {
+    const home = { ...at('/Users/me/.local/bin/claude'), home: '/Users/me/' };
+    assert.equal(resolveProgram('~/.local/bin/claude', home), '/Users/me/.local/bin/claude');
+    assert.equal(resolveProgram('~/.local/bin/claude', at('/Users/me/.local/bin/claude')), null);
+    assert.equal(resolveProgram('~/.local/bin/claude', { ...home, home: 'Users/me' }), null);
+    assert.equal(
+      resolveProgram('~/bin/zsh', { ...at('/Users/me/bin/zsh'), home: '/Users/me' }),
+      null,
+    );
+    assert.equal(resolveProgram('~/tool', { ...at('/tool'), home: '/' }), '/tool');
+    const pinned = { '~/.local/bin/claude': '/Users/me/.local/bin/claude' };
+    const claude = compileCapability({ program: '~/.local/bin/claude', args: ['-p'] });
+    assert.equal(
+      matchSpawn([claude], '~/.local/bin/claude', ['-p'], pinned)?.path,
+      pinned['~/.local/bin/claude'],
+    );
+    assert.equal(matchSpawn([claude], '~/.local/bin/claude', ['-p'], {}), null);
   });
 });
 

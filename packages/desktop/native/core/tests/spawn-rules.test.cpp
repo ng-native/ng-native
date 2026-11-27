@@ -3,7 +3,10 @@
 #include "ngn/host-os.h"
 #include "ngn/spawn-rules.h"
 
+#include <cstdlib>
 #include <doctest/doctest.h>
+#include <optional>
+#include <string>
 
 using ngn::SpawnCapability;
 
@@ -43,6 +46,11 @@ TEST_CASE("a declared program is an absolute normalized path or a bare name, nev
   CHECK(ngn::programProblem("/usr/./bin/git"));
   CHECK(ngn::programProblem("/usr//bin/git"));
   CHECK(ngn::programProblem("/usr/bin/"));
+  CHECK_FALSE(ngn::programProblem("~/.local/bin/claude"));
+  CHECK(ngn::programProblem("~/.local/../bin/claude")->find("normalized home") != std::string::npos);
+  CHECK(ngn::programProblem("~/"));
+  CHECK(ngn::programProblem("~me/bin/tool")->find("relative") != std::string::npos);
+  CHECK(ngn::programProblem("~/bin/bash"));
   for (const char *shell : {"sh", "/bin/bash", "/bin/zsh", "env", "/usr/bin/env", "xargs", "sudo", "osascript", "BASH",
                             "pwsh.exe", "/usr/local/bin/fish", "nice", "/usr/bin/nice", "nohup",
                             "/usr/bin/nohup", "pkexec", "/usr/bin/busybox", "flatpak-spawn", "/usr/bin/systemd-run",
@@ -182,4 +190,38 @@ TEST_CASE("a spawned program's environment holds only the declared variables") {
   std::map<std::string, std::string> env{{"HOME", "/Users/me"}, {"LANG", "en"}, {"SECRET", "x"}, {"A", std::string("x\0y", 3)}};
   CHECK(ngn::filterEnvironment(env, {"HOME", "LANG", "MISSING", "A"}) ==
         std::map<std::string, std::string>{{"HOME", "/Users/me"}, {"LANG", "en"}});
+}
+
+TEST_CASE("a ~/ program is pinned in the account's home folder alone") {
+  auto lookup = at({"/Users/me/.local/bin/claude"});
+  CHECK_FALSE(ngn::resolveProgram("~/.local/bin/claude", lookup));
+  lookup.home = "/Users/me/";
+  CHECK(ngn::resolveProgram("~/.local/bin/claude", lookup) == "/Users/me/.local/bin/claude");
+  lookup.home = "Users/me";
+  CHECK_FALSE(ngn::resolveProgram("~/.local/bin/claude", lookup));
+  auto root = at({"/tool"});
+  root.home = "/";
+  CHECK(ngn::resolveProgram("~/tool", root) == "/tool");
+  std::map<std::string, std::optional<std::string>> pinned{{"~/.local/bin/claude", "/Users/me/.local/bin/claude"}};
+  auto claude = ngn::compileCapability({"~/.local/bin/claude", {"-p"}});
+  CHECK(ngn::matchSpawn({claude}, "~/.local/bin/claude", {"-p"}, pinned) == "/Users/me/.local/bin/claude");
+  CHECK_FALSE(ngn::matchSpawn({claude}, "~/.local/bin/claude", {"-p"}, {}));
+}
+
+TEST_CASE("the account's home comes from the user database, not HOME") {
+  auto before = ngn::accountHome();
+  const char *was = std::getenv("HOME");
+  std::optional<std::string> previous = was ? std::optional<std::string>(was) : std::nullopt;
+  setenv("HOME", "/tmp/not-the-account", 1);
+  auto home = ngn::accountHome();
+  if (previous) {
+    setenv("HOME", previous->c_str(), 1);
+  } else {
+    unsetenv("HOME");
+  }
+  CHECK(home == before);
+  // Empty for an account with no entry in the user database; absolute otherwise.
+  if (!home.empty()) {
+    CHECK(home[0] == '/');
+  }
 }

@@ -3,8 +3,9 @@
 // the JavaScript checked first. Each argument is a literal or a `{name:regex}` placeholder,
 // anchored as a whole and never taking an option unless its pattern starts with `-`; a placeholder
 // followed by `...` takes zero or more arguments. Shells and programs that run their arguments as
-// a command are refused, a bare name runs only where it was pinned at startup on SEARCH_PATH, and
-// no program or argument may hold a NUL.
+// a command are refused, a bare name runs only where it was pinned at startup on SEARCH_PATH, a
+// `~/` path only where it was pinned in the account's home folder, and no program or argument may
+// hold a NUL.
 #pragma once
 
 #include <functional>
@@ -66,7 +67,13 @@ struct ProgramLookup {
   // Where a bare name is looked for, in order: the host OS's searchPath (HostOs), never the
   // inherited PATH.
   std::vector<std::string> searchPath;
+  // The account's home folder, absolute, that a `~/` program is in. Empty, one is absent.
+  std::string home;
 };
+
+// The account's home folder from the user database, by user id: never `HOME`, which whoever
+// starts the app sets. Empty when the account has none there.
+std::string accountHome();
 
 // Where a declared program runs from, pinned once at startup, or nothing when it is absent.
 std::optional<std::string> resolveProgram(const std::string &program, const ProgramLookup &lookup);

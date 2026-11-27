@@ -2,7 +2,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
+#include <pwd.h>
 #include <set>
+#include <unistd.h>
+#include <vector>
 
 namespace ngn {
 
@@ -83,17 +87,18 @@ std::optional<std::string> programProblem(const std::string &program) {
   if (kRefusedPrograms.contains(baseName(program))) {
     return program + " runs its arguments as a command, so it cannot be declared";
   }
-  if (program[0] == '/') {
-    auto parts = segments(program.substr(1));
+  bool home = program.rfind("~/", 0) == 0;
+  if (program[0] == '/' || home) {
+    auto parts = segments(program.substr(home ? 2 : 1));
     for (const auto &part : parts) {
       if (part.empty() || part == "." || part == "..") {
-        return program + " is not a normalized absolute path";
+        return program + (home ? " is not a normalized home path" : " is not a normalized absolute path");
       }
     }
     return std::nullopt;
   }
   if (program.find_first_of("\\/") != std::string::npos) {
-    return program + " is a relative path: give an absolute path or a bare name";
+    return program + " is a relative path: give an absolute path, a ~/ path or a bare name";
   }
   if (program == "." || program == "..") {
     return program + " is not a program";
@@ -259,6 +264,16 @@ std::optional<std::string> resolveProgram(const std::string &program, const Prog
   std::vector<std::string> candidates;
   if (program[0] == '/') {
     candidates.push_back(program);
+  } else if (program.rfind("~/", 0) == 0) {
+    auto home = lookup.home;
+    if (home.empty() || home[0] != '/') {
+      return std::nullopt;
+    }
+    // Trimmed after the check, so a home of `/` is the root: `~/tool` is `/tool`.
+    while (!home.empty() && home.back() == '/') {
+      home.pop_back();
+    }
+    candidates.push_back(home + program.substr(1));
   } else {
     for (const auto &dir : lookup.searchPath) {
       candidates.push_back(dir + "/" + program);
@@ -287,6 +302,25 @@ std::map<std::string, std::string> filterEnvironment(
     }
   }
   return out;
+}
+
+std::string accountHome() {
+  long suggested = sysconf(_SC_GETPW_R_SIZE_MAX);
+  // The suggestion is a start, not a bound: a larger record answers ERANGE, so the buffer grows to
+  // a limit no account's entry reaches.
+  constexpr size_t kLimit = 1 << 20;
+  std::vector<char> buffer(std::min(suggested > 0 ? static_cast<size_t>(suggested) : size_t{16384}, kLimit));
+  passwd entry{};
+  passwd *found = nullptr;
+  int error = 0;
+  while ((error = getpwuid_r(getuid(), &entry, buffer.data(), buffer.size(), &found)) == ERANGE &&
+         buffer.size() < kLimit) {
+    buffer.resize(std::min(buffer.size() * 2, kLimit));
+  }
+  if (error != 0 || found == nullptr || found->pw_dir == nullptr || found->pw_dir[0] != '/') {
+    return {};
+  }
+  return found->pw_dir;
 }
 
 } // namespace ngn
