@@ -5,12 +5,12 @@ native views through `@ng-native/web-compat`. Taiga's components reach for the D
 render, and for the window and document around it, and web-compat gives the engine's nodes and the
 runtime those members, so the library runs unchanged.
 
-| Part                                               | What it shows                                                                                                                        |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Profile (`src/app/account/profile-form.ts`)        | Text fields, a checkbox and a switch bound with Signal Forms, an inline notification, and a button that shows an alert when it saves |
-| Subscription (`src/app/account/plan-picker.ts`)    | A badge naming the plan, and a dropdown holding a data list that changes it                                                          |
-| Help (`src/app/account/help-section.ts`)           | Tabs over an accordion of questions, and a dialog opened from `TuiDialogService`                                                     |
-| Theme (`src/theme/taiga-theme.css`, `manrope.css`) | Taiga's theme tokens, compiled from its LESS, and its Manrope font                                                                   |
+| Part                                            | What it shows                                                                                                                        |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Profile (`src/app/account/profile-form.ts`)     | Text fields, a checkbox and a switch bound with Signal Forms, an inline notification, and a button that shows an alert when it saves |
+| Subscription (`src/app/account/plan-picker.ts`) | A badge naming the plan, and a dropdown holding a data list that changes it                                                          |
+| Help (`src/app/account/help-section.ts`)        | Tabs over an accordion of questions, and a dialog opened from `TuiDialogService`                                                     |
+| Theme (`src/styles.css`)                        | Taiga's published theme CSS and its Manrope font                                                                                     |
 
 ## What it takes
 
@@ -26,9 +26,7 @@ runtime those members, so the library runs unchanged.
   kit component, and the OXC linker silently leaves `TuiRating` unlinked: its template has a `<`
   inside an `@let`.
 - An alert is `TuiNotificationService`: in Taiga 5, `TuiAlertService` is the base it extends.
-- Taiga's theme ships as LESS, so `src/theme/taiga-theme.css` is it compiled, from the
-  `@taiga-ui/styles` version `package.json` pins. After changing that version, run `pnpm theme`
-  (`scripts/build-theme.mjs`), which fails if the installed copy is another version.
+- The app's global sheet imports `@taiga-ui/styles/taiga-ui-theme.css`.
 - Manrope from `@expo-google-fonts/manrope`, declared in `src/theme/manrope.css` and registered by
   `loadFonts()` before mounting. Taiga sets its type with `font` shorthands of its tokens, which
   the engine cannot split on a device, so the screen sets the face and size its text inherits.
