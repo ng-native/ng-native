@@ -35,6 +35,39 @@ export interface ScreenshotComparatorOptions {
 export interface ScreenshotOptions {
   /** The comparison every `toMatchScreenshot()` in the project uses, unless a call says otherwise. */
   comparatorOptions?: ScreenshotComparatorOptions;
+  /**
+   * Where a screenshot's reference is kept, as Vitest browser mode's option of the same name: a
+   * path, absolute or from the project's root. The capture and difference of a failure go beside
+   * it. Default `<root>/<testFileDirectory>/__screenshots__/<testFileName>/<name>-<platform>.png`.
+   */
+  resolveScreenshotPath?: (data: ScreenshotPathData) => string;
+}
+
+/** What `resolveScreenshotPath` is given. */
+export interface ScreenshotPathData {
+  /** The screenshot's name, as a file name. */
+  name: string;
+  /** The reference's extension, `.png`. */
+  ext: string;
+  /** The OS the app runs on: `ios`, `android` or `macos`. */
+  platform: string;
+  /** The OS of the machine running Vitest, `process.platform`, which Vitest names `platform`. */
+  host: NodeJS.Platform;
+  /** The project's root, absolute. */
+  root: string;
+  /** The test file's directory, from the project's root. */
+  testFileDirectory: string;
+  /** The test file's name. */
+  testFileName: string;
+  /** `__screenshots__`. */
+  screenshotDirectory: string;
+}
+
+/** Where references go: the project's root and its `resolveScreenshotPath`, if it has one. */
+export interface ScreenshotLocation {
+  /** Default: the test file's directory. */
+  root?: string;
+  resolveScreenshotPath?: ScreenshotOptions['resolveScreenshotPath'];
 }
 
 export interface ScreenshotRequest {
@@ -57,14 +90,39 @@ export interface ScreenshotResult {
   reference: string;
 }
 
-/** `__screenshots__/<test file>/<name>-<platform>.png`, beside the test file. */
-export function screenshotPath(file: string, name: string, platform: string): string {
+/**
+ * `__screenshots__/<test file>/<name>-<platform>.png`, beside the test file, or where the project's
+ * `resolveScreenshotPath` puts it.
+ */
+export function screenshotPath(
+  file: string,
+  name: string,
+  platform: string,
+  { root = path.dirname(file), resolveScreenshotPath }: ScreenshotLocation = {},
+): string {
+  const data: ScreenshotPathData = {
+    name: safeName(name),
+    ext: '.png',
+    platform,
+    host: process.platform,
+    root,
+    testFileDirectory: path.relative(root, path.dirname(file)),
+    testFileName: path.basename(file),
+    screenshotDirectory: '__screenshots__',
+  };
+  if (resolveScreenshotPath) return path.resolve(root, resolveScreenshotPath(data));
   return path.join(
     path.dirname(file),
-    '__screenshots__',
-    path.basename(file),
-    `${safeName(name)}-${platform}.png`,
+    data.screenshotDirectory,
+    data.testFileName,
+    `${data.name}-${data.platform}${data.ext}`,
   );
+}
+
+/** A file beside `reference`, named for it with `suffix`: `card-ios-actual.png`. */
+function besideReference(reference: string, suffix: string): string {
+  const { dir, name, ext } = path.parse(reference);
+  return path.join(dir, `${name}-${suffix}${ext}`);
 }
 
 /** A name as a file name: no directories, nothing hidden. */
@@ -80,10 +138,11 @@ function safeName(name: string): string {
 export function matchScreenshot(
   request: ScreenshotRequest,
   defaults: ScreenshotComparatorOptions = {},
+  location?: ScreenshotLocation,
 ): ScreenshotResult {
-  const reference = screenshotPath(request.file, request.name, request.platform);
-  const actualPath = reference.replace(/\.png$/, '-actual.png');
-  const diffPath = reference.replace(/\.png$/, '-diff.png');
+  const reference = screenshotPath(request.file, request.name, request.platform, location);
+  const actualPath = besideReference(reference, 'actual');
+  const diffPath = besideReference(reference, 'diff');
   const actual = Buffer.from(request.png, 'base64');
   // What an earlier failure left goes once the screenshot matches again, or is recorded anew.
   const clear = () => {
