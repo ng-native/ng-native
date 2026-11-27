@@ -235,7 +235,9 @@ TEST_CASE("the registry reports refresh controls, keyboard views and the communi
   CHECK(*ngn::absentReason("PullToRefreshView") == "a Mac has no pull to refresh: a scroll view stops at its top");
   CHECK(ngn::absentReason("KeyboardControllerView")->find("no software keyboard") != std::string_view::npos);
   CHECK(ngn::absentReason("RNCSlider")->find("ui-slider") != std::string_view::npos);
-  CHECK(ngn::absentReason("RNCMaskedView")->find("unmasked") != std::string_view::npos);
+  // The masked view is the host's own (masked-view.h).
+  CHECK_FALSE(ngn::absentReason("RNCMaskedView"));
+  CHECK(mounting->hasComponent("RNCMaskedView"));
   CHECK_FALSE(ngn::absentReason("View"));
   // Every absent view is out of the registry, whoever offers it.
   for (const auto &view : ngn::absentViews()) {

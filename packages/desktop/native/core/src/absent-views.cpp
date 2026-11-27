@@ -24,7 +24,6 @@ const std::vector<AbsentView> &absentViews() {
       {"RNCSlider", "@react-native-community/slider has no macOS view: ui-slider (@expo/ui) is a SwiftUI slider"},
       {"RNCPicker", "@react-native-picker/picker has no macOS view: ui-picker (@expo/ui) is a SwiftUI picker"},
       {"RNCPickerItem", "@react-native-picker/picker has no macOS view: ui-picker (@expo/ui) is a SwiftUI picker"},
-      {"RNCMaskedView", "@react-native-masked-view/masked-view has no macOS view: the content shows unmasked"},
   };
   return views;
 }

@@ -213,11 +213,11 @@ one is made, so an app that imports it needs no `registerNativeViews` call; `Dat
 the same for its own. On iOS the library still has to be installed. On macOS the desktop host draws
 both as AppKit controls, with no library installed.
 
-On macOS `slider`, `picker` and `masked-view` are absent: their libraries have no macOS view, so
-the element is a plain view and the desktop host's view registry reports it missing. Use
-`ui-slider` and `ui-picker` from `@expo/ui`, which are SwiftUI's slider and picker there, or for
-a picker a `<pressable>` whose [`[menu]`](/packages/components/menus#menus-on-a-press) lists the
-choices; a masked view's content shows unmasked.
+On macOS `slider` and `picker` are absent: their libraries have no macOS view, so the element is
+a plain view and the desktop host's view registry reports it missing. Use `ui-slider` and
+`ui-picker` from `@expo/ui`, which are SwiftUI's slider and picker there, or for a picker a
+`<pressable>` whose [`[menu]`](/packages/components/menus#menus-on-a-press) lists the choices.
+`masked-view` is drawn by the desktop host itself, on macOS and Linux.
 
 `date-time-picker` is the library's native view, not its React component, so it takes what the
 view does and not what the library's README lists: the date is `date`, in milliseconds, where the

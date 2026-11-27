@@ -57,6 +57,7 @@ add_library(ngn_appkit OBJECT
     glass-view.mm
     visual-effect.mm
     visual-effect-view.mm
+    masked-view.mm
     window-buttons.mm
     modal-focus.mm
     modal-host-view.mm
@@ -141,7 +142,7 @@ if(NGN_TESTS)
     tests/views/split-under-pushed-screen.test.mm tests/views/view-effects.test.mm
     tests/views/native-button.test.mm tests/views/sidebar-rows.test.mm tests/views/split-toolbar-insets.test.mm
     tests/views/split-content-inset.test.mm tests/views/sidebar-toggle-button.test.mm
-    tests/views/window-first-show.test.mm
+    tests/views/window-first-show.test.mm tests/views/masked-view.test.mm
     tests/views/modal-state-size.test.mm
     tests/views/tags-after-reload.test.mm tests/views/surface-resize.test.mm
     tests/views/text-input-key-press.test.mm tests/views/window-subtitle.test.mm tests/views/header-svg-icons.test.mm)

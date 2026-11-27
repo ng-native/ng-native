@@ -208,14 +208,15 @@ describe('desktopLinks', () => {
   });
 
   it('leaves out the libraries whose native modules the core answers, on both OSes', () => {
-    // RNCAsyncStorage and RNAsyncStorage, and RNGestureHandlerModule, are core modules: the
-    // library's JavaScript runs against them unchanged. A library the host does not answer is
-    // still reported.
+    // RNCAsyncStorage and RNAsyncStorage, and RNGestureHandlerModule, are core modules, and
+    // RNCMaskedView a core view: the library's JavaScript runs against them unchanged. A library
+    // the host does not answer is still reported.
     const root = app({
       'package.json': {
         dependencies: {
           '@react-native-async-storage/async-storage': '2.2.0',
           'react-native-gesture-handler': '3.3.0',
+          '@react-native-masked-view/masked-view': '0.3.2',
           'react-native-keyboard-controller': '1.0.0',
         },
       },
@@ -226,6 +227,10 @@ describe('desktopLinks', () => {
       ...pkg('react-native-gesture-handler', {
         'android/build.gradle': '',
         'RNGestureHandler.podspec': '',
+      }),
+      ...pkg('@react-native-masked-view/masked-view', {
+        'android/build.gradle': '',
+        'react-native-masked-view.podspec': '',
       }),
       ...pkg('react-native-keyboard-controller', { 'ios/KeyboardController.mm': '' }),
     });

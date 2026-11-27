@@ -122,6 +122,9 @@ view comes from, and which Expo Go includes:
 npx expo install @react-native-masked-view/masked-view
 ```
 
+On macOS and Linux the desktop host draws the view itself, so the package needs no desktop code
+there: the letters mask the background as they do on iOS and Android.
+
 <!-- api: GradientText -->
 
 ## Reference

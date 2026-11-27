@@ -27,7 +27,7 @@
  *
  * The app must have `@react-native-masked-view/masked-view` installed, which is where the native
  * view comes from (`npx expo install @react-native-masked-view/masked-view`); none of its
- * JavaScript is imported. The view masks what is inside it by its first child, so the letters are
+ * JavaScript is imported. On macOS and Linux the desktop host draws the view itself. The view masks what is inside it by its first child, so the letters are
  * that child and the background is painted on a view behind them.
  */
 import {

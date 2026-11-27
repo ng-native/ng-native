@@ -148,6 +148,7 @@ add_library(ngn_core STATIC
     core/src/expo-ui.cpp
     core/src/view-tree.cpp
     core/src/visual-effect.cpp
+    core/src/masked-view.cpp
     core/src/web-view.cpp
     core/src/worklet-host.cpp
     core/src/modules/accessibility-manager.cpp

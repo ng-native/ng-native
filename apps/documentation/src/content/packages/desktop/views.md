@@ -253,6 +253,7 @@ JavaScript reads as `__nativeComponentRegistry__hasComponent`, each with its rea
 anyway is a plain view whose children still show. They are `<refresh-control>`'s
 `PullToRefreshView` and `AndroidSwipeRefreshLayout` (a Mac has no pull to refresh),
 `<input-accessory-view>` and react-native-keyboard-controller's views, though the library is
-compiled in (a Mac has no software keyboard), and the community `slider`, `picker` and
-`masked-view`, whose libraries have no macOS view (`@expo/ui`'s `ui-slider` and `ui-picker` are
-SwiftUI's on macOS).
+compiled in (a Mac has no software keyboard), and the community `slider` and `picker`, whose
+libraries have no macOS view (`@expo/ui`'s `ui-slider` and `ui-picker` are SwiftUI's on macOS).
+The community `masked-view` is the host's own: its children draw through its first child, which
+`<gradient-text>` is built on.
