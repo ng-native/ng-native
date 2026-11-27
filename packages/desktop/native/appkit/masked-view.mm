@@ -33,8 +33,14 @@ using namespace facebook::react;
 }
 
 + (void)contentChangedIn:(NSView *)view {
+  // Only a masked view whose mask the change is in: one with it in its content draws it live. That
+  // one renders, and its own render tells the masked views around it in turn.
   for (NSView *at = view.superview; at != nil; at = at.superview) {
-    if ([at isKindOfClass:NGNMaskedView.class]) {
+    if (![at isKindOfClass:NGNMaskedView.class]) {
+      continue;
+    }
+    NGNView *mask = ((NGNMaskedView *)at)->_children.firstObject;
+    if (mask != nil && [view isDescendantOf:mask]) {
       [(NGNMaskedView *)at renderMask];
       return;
     }

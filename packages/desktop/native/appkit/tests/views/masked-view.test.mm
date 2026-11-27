@@ -7,11 +7,18 @@
 
 #include <doctest/doctest.h>
 
+#include <objc/runtime.h>
+
 #include <vector>
 
 using namespace facebook::react;
 using ngn::testing::MountedViews;
 using ngn::testing::viewProps;
+
+// What the masked view renders its mask with, counted by a test.
+@interface NGNMaskedView (Render)
+- (void)renderMask;
+@end
 
 namespace {
 
@@ -155,4 +162,39 @@ TEST_CASE("A masked view that masks another masks with the inner one's new mask 
   CHECK(top(pixels).a < 16);
   CHECK(bottom(pixels).r > 240);
   CHECK(bottom(pixels).a > 240);
+}
+
+TEST_CASE("A masked view in another's content does not make that one render its mask again") {
+  MountedViews mounted;
+  constexpr int kBlack = static_cast<int>(0xFF000000);
+  // The outer view masks with a plain view; the inner masked view is in its content.
+  mounted.add(at(5, ngn::MaskedViewComponentName, {{0, 0}, {kWidth, kHeight}}));
+  mounted.add(at(6, "View", {{0, 0}, {kWidth, kHeight}}, folly::dynamic::object("backgroundColor", kBlack)), 5);
+  mounted.add(at(7, ngn::MaskedViewComponentName, {{0, 0}, {kWidth, kHeight}}), 5);
+  auto innerMask = at(8, "View", {{0, 0}, {kWidth, kHeight / 2}}, folly::dynamic::object("backgroundColor", kBlack));
+  mounted.add(innerMask, 7);
+  mounted.add(at(9, "View", {{0, 0}, {kWidth, kHeight}}, folly::dynamic::object("backgroundColor", kBlack)), 7);
+  NSView *outer = mounted.view(5);
+
+  // Counts the outer view's renders while it lives.
+  __block int renders = 0;
+  Method method = class_getInstanceMethod(NGNMaskedView.class, @selector(renderMask));
+  IMP original = method_getImplementation(method);
+  method_setImplementation(method, imp_implementationWithBlock(^(NGNMaskedView *self) {
+                             if (self == outer) {
+                               renders++;
+                             }
+                             reinterpret_cast<void (*)(id, SEL)>(original)(self, @selector(renderMask));
+                           }));
+  struct Restore {
+    Method method;
+    IMP original;
+    ~Restore() { method_setImplementation(method, original); }
+  } restore{method, original};
+
+  auto moved = innerMask;
+  moved.layoutMetrics.frame = {{0, kHeight / 2}, {kWidth, kHeight / 2}};
+  mounted.mount({ShadowViewMutation::UpdateMutation(mounted.mounting->tree().find(8)->view, moved, 7)});
+  // Once, for the refresh after the commit: the inner view changing is not the outer one's mask.
+  CHECK(renders == 1);
 }
