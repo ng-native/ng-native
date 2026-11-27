@@ -109,6 +109,7 @@ using namespace facebook::react;
   NGNView *first = _children.firstObject;
   if (first == nil) {
     _content.layer.mask = nil;
+    [NGNMaskedView contentChangedIn:self];
     return;
   }
   NSRect bounds = _content.bounds;
@@ -118,6 +119,7 @@ using namespace facebook::react;
   if (width == 0 || height == 0) {
     _mask.contents = nil;
     _content.layer.mask = _mask;
+    [NGNMaskedView contentChangedIn:self];
     return;
   }
   [first displayIfNeeded];
@@ -147,6 +149,9 @@ using namespace facebook::react;
   if (image != nullptr) {
     CGImageRelease(image);
   }
+  // A masked view around this one, which may mask with it, renders after it: inner masks first,
+  // whichever order a refresh takes them in.
+  [NGNMaskedView contentChangedIn:self];
 }
 
 @end

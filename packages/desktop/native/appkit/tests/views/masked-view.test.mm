@@ -129,3 +129,30 @@ TEST_CASE("A masked view masks again when an image that is its first child loads
   CHECK(pixel(pixels, kWidth / 4, kHeight / 4).a > 240);
   CHECK(pixel(pixels, kWidth / 4, kHeight * 3 / 4).a < 16);
 }
+
+TEST_CASE("A masked view that masks another masks with the inner one's new mask after a refresh") {
+  MountedViews mounted;
+  constexpr int kRed = static_cast<int>(0xFFFF0000);
+  constexpr int kBlack = static_cast<int>(0xFF000000);
+  // The outer view's mask is the inner masked view: black wherever the inner one's mask is.
+  mounted.add(at(5, ngn::MaskedViewComponentName, {{0, 0}, {kWidth, kHeight}}));
+  mounted.add(at(6, ngn::MaskedViewComponentName, {{0, 0}, {kWidth, kHeight}}), 5);
+  auto innerMask = at(7, "View", {{0, 0}, {kWidth, kHeight / 2}}, folly::dynamic::object("backgroundColor", kBlack));
+  mounted.add(innerMask, 6);
+  mounted.add(at(8, "View", {{0, 0}, {kWidth, kHeight}}, folly::dynamic::object("backgroundColor", kBlack)), 6);
+  mounted.add(at(9, "View", {{0, 0}, {kWidth, kHeight}}, folly::dynamic::object("backgroundColor", kRed)), 5);
+  auto top = [&](const std::vector<uint8_t> &d) { return pixel(d, kWidth / 2, kHeight / 4); };
+  auto bottom = [&](const std::vector<uint8_t> &d) { return pixel(d, kWidth / 2, kHeight * 3 / 4); };
+  auto pixels = drawn(mounted.view(5));
+  CHECK(top(pixels).a > 240);
+  CHECK(bottom(pixels).a < 16);
+
+  // The inner mask moves to the bottom half: the outer view follows it in the same refresh.
+  auto moved = innerMask;
+  moved.layoutMetrics.frame = {{0, kHeight / 2}, {kWidth, kHeight / 2}};
+  mounted.mount({ShadowViewMutation::UpdateMutation(mounted.mounting->tree().find(7)->view, moved, 6)});
+  pixels = drawn(mounted.view(5));
+  CHECK(top(pixels).a < 16);
+  CHECK(bottom(pixels).r > 240);
+  CHECK(bottom(pixels).a > 240);
+}
