@@ -9,8 +9,7 @@
     "android": "expo run:android",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "export": "expo export --platform ios --platform android --output-dir dist",
-    "theme": "node scripts/build-theme.mjs"
+    "export": "expo export --platform ios --platform android --output-dir dist"
   },
   "dependencies": {
     "@angular/cdk": "22.3.0",
@@ -37,14 +36,14 @@
     "@ng-web-apis/platform": "^5.4.1",
     "@ng-web-apis/resize-observer": "^5.4.1",
     "@ng-web-apis/screen-orientation": "^5.4.1",
-    "@taiga-ui/cdk": "5.32.0",
-    "@taiga-ui/core": "5.32.0",
+    "@taiga-ui/cdk": "5.34.1",
+    "@taiga-ui/core": "5.34.1",
     "@taiga-ui/event-plugins": "^5.1.0",
     "@taiga-ui/font-watcher": "~0.7.0",
-    "@taiga-ui/i18n": "5.32.0",
-    "@taiga-ui/kit": "5.32.0",
+    "@taiga-ui/i18n": "5.34.1",
+    "@taiga-ui/kit": "5.34.1",
     "@taiga-ui/polymorpheus": "^5.0.1",
-    "@taiga-ui/styles": "5.32.0",
+    "@taiga-ui/styles": "5.34.1",
     "expo": "~58.0.16",
     "expo-font": "~58.0.9",
     "expo-modules-core": "~58.0.23",
@@ -62,7 +61,6 @@
     "@ng-native/testing": "workspace:*",
     "@tailwindcss/cli": "^4.3.3",
     "@types/react": "~19.3.0",
-    "less": "^4.9.1",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
     "vitest": "^5.0.5"
