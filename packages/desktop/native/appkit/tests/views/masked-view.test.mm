@@ -180,17 +180,22 @@ TEST_CASE("A masked view in another's content does not make that one render its 
   __block int renders = 0;
   Method method = class_getInstanceMethod(NGNMaskedView.class, @selector(renderMask));
   IMP original = method_getImplementation(method);
-  method_setImplementation(method, imp_implementationWithBlock(^(NGNMaskedView *self) {
-                             if (self == outer) {
-                               renders++;
-                             }
-                             reinterpret_cast<void (*)(id, SEL)>(original)(self, @selector(renderMask));
-                           }));
+  IMP counting = imp_implementationWithBlock(^(NGNMaskedView *self) {
+    if (self == outer) {
+      renders++;
+    }
+    reinterpret_cast<void (*)(id, SEL)>(original)(self, @selector(renderMask));
+  });
+  method_setImplementation(method, counting);
   struct Restore {
     Method method;
     IMP original;
-    ~Restore() { method_setImplementation(method, original); }
-  } restore{method, original};
+    IMP counting;
+    ~Restore() {
+      method_setImplementation(method, original);
+      imp_removeBlock(counting);
+    }
+  } restore{method, original, counting};
 
   auto moved = innerMask;
   moved.layoutMetrics.frame = {{0, kHeight / 2}, {kWidth, kHeight / 2}};
