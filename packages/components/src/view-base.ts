@@ -13,9 +13,17 @@
  * Events are element events, typed in `events.ts`: `(layout)`, `(touchStart)`,
  * `(accessibilityAction)` and so on. They are deliberately not outputs; see that file.
  */
-import { Directive, ElementRef, type SimpleChanges, inject, input } from '@angular/core';
-import { hostInputNames, ownHost } from '@ng-native/device';
-import { HostEngine, declareNativeProps, type HostNode } from '@ng-native/fabric';
+import {
+  Directive,
+  ElementRef,
+  Injector,
+  type SimpleChanges,
+  afterNextRender,
+  inject,
+  input,
+} from '@angular/core';
+import { KEYBOARD_FOCUS, hostInputNames, ownHost } from '@ng-native/device';
+import { HostEngine, declareNativeProps, nativePlatform, type HostNode } from '@ng-native/fabric';
 import type { Insets } from './events.ts';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
 import { WRITTEN_PROPS } from './written-props.ts';
@@ -306,10 +314,35 @@ export abstract class ViewBase {
     return (this.node as Contributed)[CONTRIBUTIONS] ?? NO_CONTRIBUTIONS;
   }
 
+  /** iOS: what the components pod was last told of this view's keyboard focus. */
+  private keyboardFocusable = false;
+  /** iOS only, where a focusable view is reported once it has a react tag. */
+  private readonly keyboardInjector = nativePlatform() === 'ios' ? inject(Injector) : null;
+  private readonly keyboardFocus = this.keyboardInjector && inject(KEYBOARD_FOCUS);
+
   constructor() {
     ownHost(this.node, this.constructor);
     declareProps(this.constructor, this.node);
     this.engine.settle(this);
+  }
+
+  /**
+   * iOS: tell the components pod whether this view takes an iPad hardware keyboard's focus, which
+   * React Native's iOS props cannot carry (`reportKeyboardFocusable`). By react tag, so after the
+   * render that first commits the view. The pod forgets a view as React Native recycles it.
+   */
+  private reportKeyboardFocus(focusable: boolean): void {
+    const injector = this.keyboardInjector;
+    const tell = this.keyboardFocus;
+    if (!injector || !tell || this.keyboardFocusable === focusable) return;
+    this.keyboardFocusable = focusable;
+    const engine = this.engine as { tagOf?(node: HostNode): number | null };
+    const report = () => {
+      const tag = engine.tagOf?.(this.node) ?? null;
+      if (tag !== null && this.keyboardFocusable === focusable) tell(tag, focusable);
+    };
+    if ((engine.tagOf?.(this.node) ?? null) !== null) report();
+    else afterNextRender(report, { injector });
   }
 
   /** Whether `ngOnInit` has run, which is what writes the props every element starts with. */
@@ -732,7 +765,9 @@ export abstract class ViewBase {
     write('collapsableChildren', this.collapsableChildren());
     write('removeClippedSubviews', this.removeClippedSubviews());
     write('needsOffscreenAlphaCompositing', this.needsOffscreenAlphaCompositing());
-    write('focusable', this.focusableByDefault() ? (this.focusable() ?? true) : this.focusable());
+    const focusable = this.focusableByDefault() ? (this.focusable() ?? true) : this.focusable();
+    write('focusable', focusable);
+    this.reportKeyboardFocus(focusable === true);
     write('shouldRasterizeIOS', this.shouldRasterizeIOS());
     write('renderToHardwareTextureAndroid', this.renderToHardwareTextureAndroid());
     write('nativeBackgroundAndroid', this.nativeBackgroundAndroid());
@@ -764,6 +799,7 @@ export abstract class ViewBase {
     }
     if (this.focusable() === undefined && this.focusableByDefault()) {
       this.engine.setProp(this.node, 'focusable', true);
+      this.reportKeyboardFocus(true);
     }
     if (this.accessibilityRole() === undefined && this.role() === undefined) {
       const role = this.impliedRole();

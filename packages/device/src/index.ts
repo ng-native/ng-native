@@ -162,6 +162,7 @@ export {
 } from './menus.ts';
 export { Dock, type NativeDock } from './dock.ts';
 export { nativeSplitViews } from './split-views.ts';
+export { KEYBOARD_FOCUS, reportKeyboardFocusable } from './keyboard-focus.ts';
 export {
   DragAndDrop,
   dragAndDropSource,

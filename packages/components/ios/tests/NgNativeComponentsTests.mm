@@ -3,7 +3,8 @@
 // button, the long press a view inside a context menu takes, `NgNativeHook`'s call-through, which
 // first responders answer the
 // shared undo manager, the undo steps, what a dropped item is, the split view's delegate, and which
-// scene a window opens in, and the native button's icon image. The hooks installed on UIApplication and the app delegate, and the
+// scene a window opens in, the native button's icon image, and what the iPad keyboard focuses and
+// which keys press it. The hooks installed on UIApplication and the app delegate, and the
 // modules themselves, need React Native and are not here. Run by `run-tests.sh` on a simulator,
 // through XCTest's own runner; no CI job runs them.
 #import <React/RCTViewComponentView.h>
@@ -20,6 +21,7 @@
 #import "../NgNativeViewBinder.h"
 #import "../NgNativePressMenu.h"
 #import "../NgNativeButtonMetrics.h"
+#import "../NgNativeKeyboardFocus.h"
 
 @implementation RCTViewComponentView
 @end
@@ -783,6 +785,45 @@ static NSString *pngURI(CGFloat pixels)
       image.width - title.width, NgNativeButtonImageSide(@"") + NgNativeButtonImagePadding, 0.001);
   CGSize symbol = NgNativeButtonNaturalSize(@"Add", @"", @"star", NO);
   XCTAssertEqualWithAccuracy(NgNativeButtonNaturalSize(@"Add", @"", @"star", YES).width, symbol.width, 0.001);
+}
+
+@end
+
+#pragma mark - The keyboard's focus
+
+@interface NgNativeKeyboardFocusTests : XCTestCase
+@end
+
+@implementation NgNativeKeyboardFocusTests
+
+- (void)testSpaceReturnAndEnterPressAndOtherKeysDoNot
+{
+  XCTAssertTrue(NgNativeKeyPresses(UIKeyboardHIDUsageKeyboardSpacebar, 0));
+  XCTAssertTrue(NgNativeKeyPresses(UIKeyboardHIDUsageKeyboardReturnOrEnter, 0));
+  XCTAssertTrue(NgNativeKeyPresses(UIKeyboardHIDUsageKeypadEnter, UIKeyModifierNumericPad));
+  XCTAssertFalse(NgNativeKeyPresses(UIKeyboardHIDUsageKeyboardTab, 0));
+  XCTAssertFalse(NgNativeKeyPresses(UIKeyboardHIDUsageKeyboardA, 0));
+}
+
+- (void)testAModifierHeldIsAShortcutAndNotAPressButCapsLockIsNot
+{
+  XCTAssertFalse(NgNativeKeyPresses(UIKeyboardHIDUsageKeyboardReturnOrEnter, UIKeyModifierCommand));
+  XCTAssertFalse(NgNativeKeyPresses(UIKeyboardHIDUsageKeyboardSpacebar, UIKeyModifierShift));
+  XCTAssertFalse(NgNativeKeyPresses(UIKeyboardHIDUsageKeyboardSpacebar, UIKeyModifierControl));
+  XCTAssertTrue(NgNativeKeyPresses(UIKeyboardHIDUsageKeyboardSpacebar, UIKeyModifierAlphaShift));
+}
+
+- (void)testKeepsTheTagsReportedFocusableUntilTheyAreNot
+{
+  XCTAssertFalse(NgNativeKeyboardFocusable(41));
+  NgNativeSetKeyboardFocusable(41, YES);
+  NgNativeSetKeyboardFocusable(43, YES);
+  XCTAssertTrue(NgNativeKeyboardFocusable(41));
+  XCTAssertFalse(NgNativeKeyboardFocusable(42));
+  NgNativeSetKeyboardFocusable(41, NO);
+  XCTAssertFalse(NgNativeKeyboardFocusable(41));
+  XCTAssertTrue(NgNativeKeyboardFocusable(43));
+  NgNativeSetKeyboardFocusable(43, NO);
 }
 
 @end

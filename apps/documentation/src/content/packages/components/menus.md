@@ -176,8 +176,9 @@ touchable inside it or a `[contextMenu]` on it gets no touch of its own, as with
 element stays what VoiceOver reads, with its own label, role and state. From iOS 17.4 `open()` opens
 the menu from code, and a tap made before the button is laid over the element, as it is first shown,
 opens the menu too. Before iOS 17.4 `open()` cannot open the menu: it returns `false`, and a warning
-in development says so once. A hardware keyboard's Space or Return does not open the menu on iOS, as
-it does not press a `<pressable>` there either. A disabled element opens nothing.
+in development says so once. On an iPad with a hardware keyboard, Space or Return on the focused
+element opens the menu from iOS 17.4, as they press a `<pressable>`. A disabled element opens
+nothing.
 
 Expo Go and the web host draw none yet: there a press fires `(press)` as it would without `[menu]`,
 and a warning in development says so once. A menu that shows no item opens nothing, and the press
