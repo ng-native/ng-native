@@ -112,6 +112,7 @@ export const GUIDE: NavSection = {
       ],
     },
     { path: 'guide/deployment', title: 'Deployment' },
+    { path: 'guide/monitoring', title: 'Monitoring' },
     { path: 'guide/ota-updates', title: 'OTA updates' },
     { path: 'guide/updating', title: 'Updating an app' },
   ],

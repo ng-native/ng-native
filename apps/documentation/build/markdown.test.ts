@@ -190,3 +190,25 @@ describe("a page's contents column", () => {
     );
   });
 });
+
+describe('blog posts', () => {
+  const transform = markdown().transform as Transform;
+  const post = '---\ntitle: A post\n---\n\nBefore.\n\n<!-- island: coralogix-about -->\n\nAfter.\n';
+
+  test('`?meta` is the front matter alone', async () => {
+    const { code } = await transform(post, '/repo/src/blog/posts/a-post.md?meta');
+    expect(code).toBe('export const attributes = {"title":"A post"};\n');
+  });
+
+  test('an island line is a block of its own in a post', async () => {
+    const { code } = await transform(post, '/repo/src/blog/posts/a-post.md');
+    const blocks = JSON.parse(/^export const blocks = (.*);$/m.exec(code)![1]!) as {
+      kind: string;
+    }[];
+    expect(blocks.map((block) => block.kind)).toEqual(['html', 'island', 'html']);
+  });
+
+  test('and fails the build anywhere else', async () => {
+    await expect(transform(post, '/repo/src/content/guide/page.md')).rejects.toThrow(/islands/);
+  });
+});

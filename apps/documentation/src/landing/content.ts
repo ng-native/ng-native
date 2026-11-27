@@ -6,7 +6,7 @@
  * project the way prose scattered through templates does. Each entry was checked against the
  * repository when it was written - see the comment beside anything that was not.
  */
-import { GITHUB_REPO, GITHUB_SPONSORS } from '../site.ts';
+import { CORALOGIX_RUM_URL, CORALOGIX_URL, GITHUB_REPO, GITHUB_SPONSORS } from '../site.ts';
 
 export const LINKS = {
   getStarted: '/guide/getting-started',
@@ -31,36 +31,42 @@ export const LINKS = {
   license: `${GITHUB_REPO}/blob/main/LICENSE`,
   sponsor: '/sponsor',
   sponsors: GITHUB_SPONSORS,
+  blog: '/blog',
+  announcement: '/blog/maintained-by-coralogix',
+  desktop: '/guide/desktop',
+  monitoring: '/guide/monitoring',
+  discussions: `${GITHUB_REPO}/discussions`,
+  contributors: `${GITHUB_REPO}/graphs/contributors`,
+  coralogix: CORALOGIX_URL,
+  coralogixRum: CORALOGIX_RUM_URL,
 } as const;
 
 /** The whole setup, as `guide/getting-started.md` gives it. */
 export const CREATE_COMMAND = 'npx create-expo-app@latest my-app --template @ng-native/template';
 
-/** The versions the alpha is built and verified against: `template/package.json` and the workspace's pins. */
-export const STATUS = {
-  stage: 'Alpha',
-  angular: '22',
-  expo: 'SDK 58',
-  reactNative: '0.88',
-  platforms: ['iOS', 'Android', 'Web'],
-  license: 'MIT',
-} as const;
-
 /**
  * The landmark features, in the order the contents list shows them. `section` is the anchor
  * further down the page where it is shown working; a feature with no section of its own links
- * straight to `docs`.
+ * straight to `docs`. `isNew` puts a "New" tag beside the title.
  */
 export const LANDMARKS: readonly {
   readonly title: string;
   readonly body: string;
   readonly section?: string;
   readonly docs: string;
+  readonly isNew?: boolean;
 }[] = [
   {
     title: 'Real native views',
-    body: "Angular's Renderer2 drawing UIView and android.view.View through Expo. No web view.",
+    body: "Angular's Renderer2 drawing UIView, android.view.View and AppKit views. No web view.",
     docs: '/guide/architecture',
+  },
+  {
+    title: 'Desktop apps',
+    body: 'macOS and Linux windows from the same components, with menus, hover and the scroll wheel.',
+    section: 'desktop',
+    docs: '/guide/desktop',
+    isNew: true,
   },
   {
     title: 'A real CSS engine',
@@ -77,13 +83,11 @@ export const LANDMARKS: readonly {
   {
     title: 'Native navigation',
     body: "Angular's Router on native stacks, tabs and headers, with deep links and Android back.",
-    section: 'navigation',
     docs: '/packages/router',
   },
   {
     title: 'Hot reload that keeps state',
     body: 'Template edits swap in on the device, and state survives.',
-    section: 'hot-reload',
     docs: '/guide/getting-started',
   },
   {
@@ -95,11 +99,6 @@ export const LANDMARKS: readonly {
     title: 'Lists that scale',
     body: 'Virtual and section lists render visible rows and a surrounding buffer.',
     docs: '/packages/components/lists',
-  },
-  {
-    title: 'Icons from ng-icons',
-    body: 'Lucide, Heroicons or any @ng-icons set, drawn as native vectors.',
-    docs: '/packages/icons',
   },
   {
     title: 'Animation',
@@ -114,7 +113,6 @@ export const LANDMARKS: readonly {
   {
     title: 'Tests without a simulator',
     body: 'Testing Library in Node, against a fake native layer. The starter app includes one.',
-    section: 'testing',
     docs: '/packages/testing',
   },
   {
@@ -204,6 +202,37 @@ export const EXPO_APIS = [
   },
 ] as const;
 
-/** The conventional independence note: who the project is not, and whose marks it names. */
+/** The independence note: who looks after the project, who it is not, and whose marks it names. */
 export const INDEPENDENCE_NOTE =
-  'Angular Native is an independent open-source project, not affiliated with or endorsed by Google, the Angular team or Expo. Angular is a trademark of Google LLC; Expo is a trademark of 650 Industries, Inc.';
+  'An open-source project maintained by Coralogix. Not affiliated with or endorsed by Google, the Angular team or Expo. Angular is a trademark of Google LLC; Expo is a trademark of 650 Industries, Inc.';
+
+/** The people who maintain the project, as the stewardship section introduces them. */
+export const MAINTAINERS = [
+  { name: 'Ashley Hunter', role: 'Project lead', github: 'ashley-hunter' },
+  { name: 'Dor Peled', role: 'Contributor', github: 'Knat-Dev' },
+  { name: 'Shahar Kazaz', role: 'Contributor', github: 'shaharkazaz' },
+] as const;
+
+/**
+ * The community, as a stack of faces and a count. Both are a snapshot of the repository's
+ * contributors graph and its stars when this was written: TODO: VERIFY before each release.
+ */
+export const COMMUNITY = {
+  avatars: [
+    'nartc',
+    'nathanwalker',
+    'hangell',
+    'gabesilvadev',
+    'emanuel-hosu',
+    'erkamyaman',
+    'medbenmakhlouf',
+    'wassimaarab08',
+  ],
+  moreContributors: 15,
+  stars: 647,
+} as const;
+
+/** A person's avatar, kept in `public/people` so the page does not ask GitHub for each one. */
+export function avatar(handle: string): string {
+  return `/people/${handle.toLowerCase()}.webp`;
+}

@@ -105,11 +105,13 @@ function writeStylesheetDeclaration(): string {
   const file = path.join(OUT_DIR, 'stylesheets.d.ts');
   // Reanimated is a peer an app installs, not a dependency here: a sample that animates with it
   // is checked for everything but what the library returns. Taiga UI is the same, for the
-  // web-compat page's sample that provides it.
+  // web-compat page's sample that provides it, and the Coralogix SDK for the Monitoring guide's:
+  // as a dependency here, its OpenTelemetry zone context brings zone.js into the workspace as
+  // `@angular/core`'s optional peer.
   writeFileSync(
     file,
     "declare module '*.css';\ndeclare module 'react-native-reanimated';\n" +
-      "declare module '@taiga-ui/core';\n",
+      "declare module '@taiga-ui/core';\ndeclare module '@coralogix/react-native-plugin';\n",
   );
   return file;
 }

@@ -81,6 +81,22 @@ production build with `eas submit`; see Expo's guides to
 [submitting to the App Store](https://docs.expo.dev/submit/ios/) and
 [to Google Play](https://docs.expo.dev/submit/android/).
 
+## Monitoring in production
+
+Once the app is in people's hands, report crashes and slow screens so you see problems before your
+reviews do. Angular Native apps report to Coralogix through its React Native SDK.
+
+<a class="doc-link-card" href="/guide/monitoring">
+<span class="doc-link-card-dot" aria-hidden="true"></span>
+<span class="doc-link-card-body">
+<span class="doc-link-card-title">Monitoring with Coralogix</span>
+<span class="doc-link-card-text">
+Install the SDK, name screens after routes and report Angular's errors.
+</span>
+</span>
+<span class="doc-link-card-cta">Read the guide →</span>
+</a>
+
 ## macOS
 
 EAS Build does not build macOS apps. A Mac app is a release build packaged on a Mac by the

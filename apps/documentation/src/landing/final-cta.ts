@@ -1,21 +1,22 @@
 /**
  * The end of the page: one line, and the ways onward.
  *
- * Type only, centred under the mark - the page has shown enough phones by here, and the hero's
+ * Type only, centred under the mark - the page has shown enough screens by here, and the hero's
  * are the ones a reader remembers. The red underline under "every screen" is the same hand as the
- * hero's under "Angular".
+ * hero's. The command is the whole setup, as `guide/getting-started.md` gives it.
  */
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { LINKS } from './content.ts';
+import { LandingCommand } from './command.ts';
+import { CREATE_COMMAND, LINKS } from './content.ts';
 import { underline } from './ink.ts';
 import { LandingMark } from './mark.ts';
 
 @Component({
   selector: 'landing-final-cta',
-  imports: [LandingMark, RouterLink],
+  imports: [LandingCommand, LandingMark, RouterLink],
   template: `
-    <section aria-labelledby="cta-title">
+    <section class="border-t border-ink/15" aria-labelledby="cta-title">
       <div
         class="mx-auto flex max-w-[56rem] flex-col items-center px-[var(--gutter)] py-32 text-center"
       >
@@ -44,13 +45,9 @@ import { LandingMark } from './mark.ts';
           >
           <a class="landing-button" data-kind="secondary" [href]="links.github">Star on GitHub</a>
         </div>
-        <div class="mt-8 flex flex-wrap justify-center gap-x-8 gap-y-3 text-sm">
-          <a class="landing-link" [routerLink]="links.examples">Browse the examples</a>
-          <a class="landing-link" [href]="links.issues">Open an issue</a>
-        </div>
+        <landing-command class="mt-7 w-full max-w-[34rem]" [command]="command" />
         <p class="mt-10 text-sm text-graphite">
-          Angular Native is free, MIT licensed and built in the open.
-          <a class="landing-link" [routerLink]="links.sponsor">Sponsor its development</a>.
+          Angular Native is free, MIT licensed and built in the open, with Coralogix as its steward.
         </p>
       </div>
     </section>
@@ -58,5 +55,6 @@ import { LandingMark } from './mark.ts';
 })
 export class LandingFinalCta {
   protected readonly links = LINKS;
+  protected readonly command = CREATE_COMMAND;
   protected readonly rule = underline(0, 6, 100, 404);
 }

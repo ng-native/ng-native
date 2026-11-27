@@ -9,33 +9,33 @@
  * the source shown beside it. Every source is the file's own text, highlighted at build
  * time. The facts live in `content.ts`; `README.md` says how to retake the screenshots.
  *
- * Each section is composed differently on purpose - a sheet with devices laid beside it, a row of
- * four, a push from one screen to the next, a before and after - so the page reads as a notebook
- * of worked examples rather than one template repeated.
+ * Each section is composed differently on purpose - windows and a phone on one desk, a sheet with
+ * devices laid beside it, a row of four, index cards - so the page reads as a notebook of worked
+ * examples rather than one template repeated. Near the end, a dark band introduces the people who
+ * maintain the project at Coralogix.
  */
-import { Component, afterNextRender, inject, signal } from '@angular/core';
+import { Component, DestroyRef, afterNextRender, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { html as planSource } from '../examples/plans.ts?excerpt';
 import { html as settingsSource } from '../examples/settings.ts?excerpt';
-import { html as testSource } from '@ng-native/template/src/app/app.test.ts?source';
 import { Seo } from '../seo.ts';
 import { GITHUB_REPO, SITE_NAME } from '../site.ts';
 import { LandingCode } from './code-sheet.ts';
-import { EXPO_APIS, INDEPENDENCE_NOTE, LANDMARKS, LINKS } from './content.ts';
+import { EXPO_APIS, LANDMARKS, LINKS } from './content.ts';
 import { LandingPhone } from './phone.ts';
 import { LandingExpoGlyph } from './expo-glyph.ts';
 import { LandingFinalCta } from './final-cta.ts';
+import { LandingFooter } from './footer.ts';
 import { LandingHeader } from './header.ts';
 import { LandingHero } from './hero.ts';
-import { arrow } from './ink.ts';
-import { LandingMark } from './mark.ts';
 import { LandingMore } from './more.ts';
 import { LandingReveal } from './reveal.ts';
-import { html as navigationSource } from './showcase/navigation.ts?excerpt';
+import { observePast } from './scroll.ts';
+import { LandingStewardship } from './stewardship.ts';
 
 export const LANDING_TITLE = `${SITE_NAME} - Build native apps with Angular`;
 export const LANDING_DESCRIPTION =
-  'Build iOS and Android apps with Angular, powered by Expo: Angular components rendered as real native views, with a real CSS engine, Tailwind and native navigation.';
+  'Build iOS, Android, macOS and Linux apps with Angular, powered by Expo: Angular components rendered as real native views, with a real CSS engine, Tailwind and native navigation.';
 
 @Component({
   selector: 'doc-home',
@@ -44,11 +44,12 @@ export const LANDING_DESCRIPTION =
     LandingPhone,
     LandingExpoGlyph,
     LandingFinalCta,
+    LandingFooter,
     LandingHeader,
     LandingHero,
-    LandingMark,
     LandingMore,
     LandingReveal,
+    LandingStewardship,
     RouterLink,
   ],
   template: `
@@ -75,8 +76,8 @@ export const LANDING_DESCRIPTION =
                 What is in the box.
               </h2>
               <p class="landing-prose mt-5">
-                Native UI, CSS and Tailwind, navigation, component tests and Expo's modules, in the
-                Angular you already know.
+                Native UI on phones and desktops, CSS and Tailwind, navigation, component tests and
+                Expo's modules, in the Angular you already know.
               </p>
             </div>
             <ol class="mt-12 grid grid-cols-1 gap-x-10 sm:grid-cols-2 lg:grid-cols-3">
@@ -86,9 +87,12 @@ export const LANDING_DESCRIPTION =
                     <a class="contents-entry group" [href]="'#' + section">
                       <span class="pt-1 font-code text-sm text-ng-red-ink">{{ number(i) }}</span>
                       <span>
-                        <span class="landing-display block text-xl group-hover:text-ng-red-ink">{{
-                          item.title
-                        }}</span>
+                        <span class="landing-display block text-xl group-hover:text-ng-red-ink"
+                          >{{ item.title }}
+                          @if (item.isNew) {
+                            <span class="contents-new">New</span>
+                          }
+                        </span>
                         <span class="mt-1.5 block text-[0.9375rem] text-ink/70">{{
                           item.body
                         }}</span>
@@ -98,9 +102,12 @@ export const LANDING_DESCRIPTION =
                     <a class="contents-entry group" [routerLink]="item.docs">
                       <span class="pt-1 font-code text-sm text-ng-red-ink">{{ number(i) }}</span>
                       <span>
-                        <span class="landing-display block text-xl group-hover:text-ng-red-ink">{{
-                          item.title
-                        }}</span>
+                        <span class="landing-display block text-xl group-hover:text-ng-red-ink"
+                          >{{ item.title }}
+                          @if (item.isNew) {
+                            <span class="contents-new">New</span>
+                          }
+                        </span>
                         <span class="mt-1.5 block text-[0.9375rem] text-ink/70">{{
                           item.body
                         }}</span>
@@ -110,6 +117,69 @@ export const LANDING_DESCRIPTION =
                 </li>
               }
             </ol>
+          </div>
+        </section>
+
+        <!-- ================================================ Platforms: windows and a phone on one desk -->
+        <section
+          id="desktop"
+          class="scroll-mt-20 border-t border-ink/15 bg-paper-light/60"
+          aria-labelledby="desktop-title"
+        >
+          <div class="mx-auto flex max-w-[80rem] flex-col gap-14 px-[var(--gutter)] py-28">
+            <div class="grid grid-cols-1 items-end gap-x-14 gap-y-5 lg:grid-cols-2" landingReveal>
+              <div>
+                <p class="landing-eyebrow">Platforms</p>
+                <h2 id="desktop-title" class="landing-display mt-4 text-[clamp(2.2rem,4vw,3.4rem)]">
+                  Phones, tablets, and now the desktop.
+                </h2>
+              </div>
+              <div>
+                <p class="landing-prose">
+                  The same Angular components run as native apps on macOS and Linux, with real
+                  windows, menus, keyboard shortcuts and hover. Each platform draws them in its own
+                  style, so your app looks at home on every one.
+                </p>
+                <landing-more class="mt-7" [link]="links.desktop" topic="desktop apps" />
+              </div>
+            </div>
+
+            <!--
+              Real captures, as everywhere on this page: two Angular Native apps on Linux and on
+              macOS, and the settings screen from the Tailwind section on the iOS simulator.
+            -->
+            <figure class="desk" landingReveal style="--i: 1">
+              <div class="desk-glow" aria-hidden="true"></div>
+              <img
+                class="desk-window"
+                data-slot="linux"
+                src="/desktop/linux-app.webp"
+                alt="An Angular Native app on Linux, drawn with GTK 4 and libadwaita"
+                width="1400"
+                height="897"
+                loading="lazy"
+              />
+              <img
+                class="desk-window"
+                data-slot="macos"
+                src="/desktop/mac-app.webp"
+                alt="An Angular Native app on macOS, drawn with AppKit"
+                width="1400"
+                height="897"
+                loading="lazy"
+              />
+              <landing-phone
+                class="desk-phone"
+                platform="ios"
+                shot="settings"
+                alt="The settings screen on the iOS simulator"
+              />
+            </figure>
+            <ul class="-mt-6 flex flex-wrap justify-center gap-x-10 gap-y-2" aria-hidden="true">
+              <li class="device-label !mt-0">Linux · GTK 4</li>
+              <li class="device-label !mt-0">macOS · AppKit</li>
+              <li class="device-label !mt-0">iOS simulator</li>
+            </ul>
           </div>
         </section>
 
@@ -242,171 +312,8 @@ export const LANDING_DESCRIPTION =
           </div>
         </section>
 
-        <!-- ================================================ Navigation: a push, devices first -->
-        <section
-          id="navigation"
-          class="scroll-mt-20 border-t border-ink/15"
-          aria-labelledby="navigation-title"
-        >
-          <div
-            class="mx-auto grid grid-cols-1 max-w-[80rem] items-center gap-14 px-[var(--gutter)] py-28 lg:grid-cols-[1fr_1fr]"
-          >
-            <div class="relative order-2 lg:order-1" landingReveal>
-              <div class="mx-auto grid max-w-[30rem] grid-cols-2 items-start gap-10">
-                <figure>
-                  <landing-phone
-                    platform="ios"
-                    shot="nav-list"
-                    alt="A trips list of gradient postcards in a native stack with a large title, on the iOS simulator"
-                  />
-                  <figcaption class="device-label">The stack</figcaption>
-                </figure>
-                <figure class="mt-16">
-                  <landing-phone
-                    platform="ios"
-                    shot="nav-detail"
-                    alt="The pushed trip's itinerary, with the native back button"
-                  />
-                  <figcaption class="device-label">After a push</figcaption>
-                </figure>
-              </div>
-              <svg
-                class="pointer-events-none absolute top-[38%] left-1/2 hidden h-20 w-16 -translate-x-1/2 overflow-visible sm:block"
-                aria-hidden="true"
-              >
-                <path class="ink-red" [attr.d]="pushArrow[0]" />
-                <path class="ink-red" [attr.d]="pushArrow[1]" />
-              </svg>
-            </div>
-
-            <div class="order-1 min-w-0 lg:order-2" landingReveal style="--i: 1">
-              <p class="landing-eyebrow">Navigation</p>
-              <h2
-                id="navigation-title"
-                class="landing-display mt-4 text-[clamp(2.2rem,4vw,3.4rem)]"
-              >
-                Angular's Router, on native navigation.
-              </h2>
-              <p class="landing-prose mt-5">
-                Your <code>Routes</code>, guards, resolvers and input binding, rendered as a native
-                stack with the platform's header, large titles and back gesture. Tabs, sheets and
-                modals are native too, and deep links and Android's back button are real
-                navigations.
-              </p>
-              <landing-code class="mt-8" file="navigation.ts" [html]="sources.navigation" />
-              <landing-more class="mt-7" [link]="links.router" topic="the native router" />
-            </div>
-          </div>
-        </section>
-
-        <!-- ================================================ Hot reload: the edit, playing -->
-        <section
-          id="hot-reload"
-          class="scroll-mt-20 border-t border-ink/15"
-          aria-labelledby="hot-reload-title"
-        >
-          <div
-            class="hot-demo mx-auto grid max-w-[80rem] grid-cols-1 items-center gap-14 px-[var(--gutter)] py-28 lg:grid-cols-[0.75fr_1.25fr]"
-          >
-            <div landingReveal>
-              <p class="landing-eyebrow">Developer experience</p>
-              <h2
-                id="hot-reload-title"
-                class="landing-display mt-4 text-[clamp(2.2rem,4vw,3.4rem)]"
-              >
-                Update templates and styles without losing component state.
-              </h2>
-              <p class="landing-prose mt-5">
-                Save a template or stylesheet edit and it swaps into the running component. No
-                reload, no Angular dev server, and state survives. A change to component logic
-                reloads the app as usual.
-              </p>
-              <ol class="mt-9 flex flex-col gap-4">
-                @for (step of hotSteps; track step; let i = $index) {
-                  <li class="hot-step flex items-center gap-4" [attr.data-step]="i + 1">
-                    <span
-                      class="hot-step-number flex size-8 shrink-0 items-center justify-center rounded-full border-[1.5px] font-code text-sm"
-                      >{{ i + 1 }}</span
-                    >
-                    <span class="text-[0.9375rem]">{{ step }}</span>
-                  </li>
-                }
-              </ol>
-              <landing-more class="mt-8" [link]="links.devLoop" topic="the dev loop" />
-            </div>
-
-            <div
-              class="grid grid-cols-1 items-center gap-8 sm:grid-cols-[minmax(0,1fr)_15rem]"
-              landingReveal
-              style="--i: 1"
-              aria-label="A template edit on Android: the heading changes from Hello, native to Hello, hot reload, and the button still says it was tapped 3 times"
-              role="img"
-            >
-              <div class="code-sheet min-w-0">
-                <div class="code-sheet-head">
-                  <span class="code-sheet-file">hot-reload.ts</span>
-                  <span class="hot-saved ml-auto font-code text-xs">Saved</span>
-                </div>
-                <pre
-                  class="hot-code"
-                  aria-hidden="true"
-                ><span class="hot-dim">&lt;view class="screen"&gt;</span>
-  <span class="hot-line">&lt;text class="title"&gt;Hello, <span class="hot-old">native</span><span class="hot-new">hot reload</span><span class="hot-caret"></span>&lt;/text&gt;</span>
-  <span class="hot-dim">&lt;text class="lede"&gt;One component, both platforms.&lt;/text&gt;</span>
-  <span class="hot-dim">&lt;pressable class="button" (press)="taps.set(taps() + 1)"&gt;</span>
-    <span class="hot-dim">&lt;text class="label"&gt;Tapped &#123;&#123; taps() &#125;&#125; times&lt;/text&gt;</span>
-  <span class="hot-dim">&lt;/pressable&gt;</span>
-<span class="hot-dim">&lt;/view&gt;</span></pre>
-              </div>
-              <figure class="mx-auto w-full max-w-[15rem]">
-                <div class="device-crop" style="--crop: 0.75">
-                  <landing-phone platform="android" shot="hot-reload" swap="hot-reload-after" />
-                </div>
-                <figcaption class="device-label">Android emulator</figcaption>
-              </figure>
-            </div>
-          </div>
-        </section>
-
-        <!-- ================================================ Testing: two sheets on the desk -->
-        <section
-          id="testing"
-          class="scroll-mt-20 border-t border-ink/15 bg-paper-light/60"
-          aria-labelledby="testing-title"
-        >
-          <div class="mx-auto max-w-[80rem] px-[var(--gutter)] py-28">
-            <div class="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_1fr] lg:items-start" landingReveal>
-              <div>
-                <p class="landing-eyebrow">Testing</p>
-                <h2 id="testing-title" class="landing-display mt-4 text-[clamp(2.2rem,4vw,3.4rem)]">
-                  Component tests in Node. No simulator.
-                </h2>
-              </div>
-              <div class="lg:pt-9">
-                <p class="landing-prose">
-                  <code>&#64;ng-native/testing</code> is Testing Library in Node, against a fake
-                  native layer. Render a component, press it, and query the result by role or text.
-                </p>
-                <p class="landing-prose mt-4">
-                  The starter app includes a test, and it runs in under a second with Vitest. For
-                  flows that need a real device, use Maestro.
-                </p>
-                <landing-more class="mt-6" [link]="links.testing" topic="testing" />
-              </div>
-            </div>
-
-            <div class="mt-14 lg:mx-auto lg:max-w-[48rem]" landingReveal style="--i: 1">
-              <landing-code file="app.test.ts" [html]="sources.test" maxHeight="22rem" />
-            </div>
-          </div>
-        </section>
-
         <!-- ================================================ Expo: index cards -->
-        <section
-          id="expo"
-          class="scroll-mt-20 border-t border-ink/15 bg-paper-light/60"
-          aria-labelledby="expo-title"
-        >
+        <section id="expo" class="scroll-mt-20 border-t border-ink/15" aria-labelledby="expo-title">
           <div class="mx-auto max-w-[80rem] px-[var(--gutter)] py-28">
             <div class="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_1fr] lg:items-start" landingReveal>
               <div>
@@ -438,41 +345,17 @@ export const LANDING_DESCRIPTION =
           </div>
         </section>
 
-        <div class="border-t border-ink/15">
-          <landing-final-cta />
-        </div>
+        <landing-stewardship />
+
+        <landing-final-cta />
       </main>
 
-      <footer class="border-t border-ink/15">
-        <div
-          class="mx-auto grid grid-cols-1 max-w-[80rem] gap-10 px-[var(--gutter)] py-14 md:grid-cols-[1fr_auto]"
-        >
-          <div class="max-w-[30rem]">
-            <a routerLink="/" class="flex items-center gap-2.5">
-              <landing-mark class="size-6" />
-              <span class="landing-display text-lg">Angular Native</span>
-            </a>
-            <p class="mt-4 text-sm text-graphite">{{ note }}</p>
-          </div>
-          <nav aria-label="Footer">
-            <ul class="grid grid-cols-2 gap-x-12 gap-y-3 text-sm sm:grid-cols-3">
-              <li><a class="hover:text-ng-red-ink" [routerLink]="links.docs">Docs</a></li>
-              <li><a class="hover:text-ng-red-ink" [routerLink]="links.examples">Examples</a></li>
-              <li><a class="hover:text-ng-red-ink" [href]="links.github">GitHub</a></li>
-              <li><a class="hover:text-ng-red-ink" [href]="links.releases">Releases</a></li>
-              <li><a class="hover:text-ng-red-ink" [href]="links.issues">Issues</a></li>
-              <li><a class="hover:text-ng-red-ink" [href]="links.license">MIT license</a></li>
-              <li><a class="hover:text-ng-red-ink" [routerLink]="links.sponsor">Sponsor</a></li>
-            </ul>
-          </nav>
-        </div>
-      </footer>
+      <landing-footer />
     </div>
   `,
 })
 export class Home {
   protected readonly links = LINKS;
-  protected readonly note = INDEPENDENCE_NOTE;
   protected readonly landmarks = LANDMARKS;
   protected readonly expoApis = EXPO_APIS;
   protected readonly scrolled = signal(false);
@@ -480,8 +363,6 @@ export class Home {
   protected readonly sources = {
     plans: planSource,
     settings: settingsSource,
-    navigation: navigationSource,
-    test: testSource,
   };
   protected readonly variants = [
     {
@@ -526,14 +407,6 @@ export class Home {
       alt: 'Settings on Android, dark',
     },
   ] as const;
-  /** From the list to the pushed screen. */
-  protected readonly pushArrow = arrow({ x: 0, y: 10 }, { x: 60, y: 44 }, 51, 0.3);
-  protected readonly hotSteps = [
-    'Templates and styles swap into the running app.',
-    'Component state survives the swap.',
-    'A change to component logic reloads the app.',
-  ];
-
   constructor() {
     inject(Seo).apply({
       title: LANDING_TITLE,
@@ -551,16 +424,10 @@ export class Home {
       },
     });
 
+    const destroyRef = inject(DestroyRef);
     afterNextRender(() => {
-      const watch = (selector: string, set: (past: boolean) => void) => {
-        const marker = document.querySelector(selector);
-        if (!marker) return;
-        new IntersectionObserver(([entry]) =>
-          set(!!entry && !entry.isIntersecting && entry.boundingClientRect.top < 0),
-        ).observe(marker);
-      };
-      watch('.landing-sentinel', (past) => this.scrolled.set(past));
-      watch('.landing main > .h-px', (past) => this.pastHero.set(past));
+      observePast('.landing-sentinel', (past) => this.scrolled.set(past), destroyRef);
+      observePast('.landing main > .h-px', (past) => this.pastHero.set(past), destroyRef);
     });
   }
 
