@@ -16,6 +16,7 @@ same ones:
 | An Nx workspace            | `nx migrate @ng-native/nx@latest` |
 | An Angular CLI workspace   | `ng update @ng-native/schematics` |
 | A plain Expo app (or both) | `npx @ng-native/migrate@latest`   |
+| A Turborepo workspace      | `npx @ng-native/migrate@latest`   |
 
 Start from a clean git working tree, so `git diff` shows exactly what the update changed.
 
@@ -42,6 +43,9 @@ npx @ng-native/migrate@latest apps/mobile     # an app in another directory
 
 If the new versions are already installed, `package.json` already lists them, and the command finds
 nothing to migrate. Pass the version the app was on with `--from` to run the migrations since then.
+
+In a [Turborepo](/packages/turbo) workspace, run it from the root: it moves the versions in every
+package's `package.json`, and runs the migrations over every app and library.
 
 ## An Nx workspace
 

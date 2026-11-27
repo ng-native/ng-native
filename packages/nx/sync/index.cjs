@@ -24,7 +24,6 @@
  * library imports peers on it without marking the peer optional, as `@ng-native/icons` does on
  * `react-native-svg`.
  */
-const { existsSync, readdirSync, readFileSync } = require('node:fs');
 const nodePath = require('node:path');
 const {
   createProjectGraphAsync,
@@ -36,74 +35,17 @@ const {
   updateJson,
   updateProjectConfiguration,
 } = require('@nx/devkit');
+const nativeModules = require('@ng-native/migrate/native-modules.cjs');
 
 const SYNC_GENERATOR = '@ng-native/nx:sync-native-modules';
-
-/** Whether the package in `dir` has native code Expo's autolinking links. */
-function isNativeModule(dir) {
-  if (existsSync(nodePath.join(dir, 'expo-module.config.json'))) return true;
-  if (readdirSync(dir).some((file) => file.endsWith('.podspec'))) return true;
-  return ['build.gradle', 'build.gradle.kts'].some((file) =>
-    existsSync(nodePath.join(dir, 'android', file)),
-  );
-}
-
-/** The directory `pkg` is installed in, as Node resolves it from `from`. */
-function packageDir(pkg, from) {
-  try {
-    return nodePath.dirname(require.resolve(`${pkg}/package.json`, { paths: [from] }));
-  } catch {
-    // A package whose exports leave out its package.json: up from its entry point.
-  }
-  let dir;
-  try {
-    dir = nodePath.dirname(require.resolve(pkg, { paths: [from] }));
-  } catch {
-    return undefined;
-  }
-  for (; dir !== nodePath.dirname(dir); dir = nodePath.dirname(dir)) {
-    const manifest = nodePath.join(dir, 'package.json');
-    if (existsSync(manifest) && JSON.parse(readFileSync(manifest, 'utf8')).name === pkg) return dir;
-  }
-  return undefined;
-}
 
 /** The workspace beyond the tree: its project graph and its installed packages. Replaced in tests. */
 const workspace = {
   graph: () => createProjectGraphAsync(),
-
-  /**
-   * What `pkg`, resolved from the directory `from`, is to an app, or undefined when it is not
-   * installed.
-   *
-   * @param {string} pkg
-   * @param {string} from
-   * @returns {{ version: string, native: boolean, plugin: boolean, peers: string[], dir: string } | undefined}
-   */
-  installed(pkg, from) {
-    const dir = packageDir(pkg, from);
-    if (!dir) return undefined;
-    const manifest = JSON.parse(readFileSync(nodePath.join(dir, 'package.json'), 'utf8'));
-    const meta = manifest.peerDependenciesMeta ?? {};
-    return {
-      version: manifest.version,
-      native: isNativeModule(dir),
-      plugin: existsSync(nodePath.join(dir, 'app.plugin.js')),
-      peers: Object.keys(manifest.peerDependencies ?? {}).filter((peer) => !meta[peer]?.optional),
-      dir,
-    };
-  },
-
-  /** The config plugins Expo applies whether an app lists them or not, as `expo install` skips. */
-  autoPlugins(from) {
-    try {
-      const expo = packageDir('expo', from);
-      const config = require(require.resolve('@expo/prebuild-config', { paths: [expo ?? from] }));
-      return config.getAutoPlugins();
-    } catch {
-      return [];
-    }
-  },
+  /** @type {typeof nativeModules.installed} */
+  installed: (pkg, from) => nativeModules.installed(pkg, from),
+  /** @type {typeof nativeModules.autoPlugins} */
+  autoPlugins: (from) => nativeModules.autoPlugins(from),
 };
 
 /** The projects the app `name` depends on, directly or through another, in the graph. */
@@ -165,11 +107,6 @@ function needed(tree, graph, name) {
   return modules;
 }
 
-/** The names in an `app.json`'s `plugins`, each a name or a `[name, options]` pair. */
-function pluginNames(plugins) {
-  return (plugins ?? []).map((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin));
-}
-
 /**
  * @param {import('@nx/devkit').Tree} tree
  * @returns {Promise<{ outOfSyncMessage?: string, outOfSyncDetails?: string[] }>}
@@ -198,7 +135,7 @@ async function syncNativeModules(tree) {
     const appJson = joinPathFragments(project.root, 'app.json');
     const auto = new Set(workspace.autoPlugins(nodePath.join(tree.root, project.root)));
     const plugins = all.filter(([pkg, { plugin }]) => plugin && !auto.has(pkg)).map(([pkg]) => pkg);
-    const present = pluginNames(readJson(tree, appJson).expo?.plugins);
+    const present = nativeModules.pluginNames(readJson(tree, appJson).expo?.plugins);
     const missing = plugins.filter((pkg) => !present.includes(pkg));
     if (missing.length > 0) {
       updateJson(tree, appJson, (config) => {

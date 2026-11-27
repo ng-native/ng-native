@@ -23,7 +23,8 @@ configured in `metro.config.js`. No manual installation is needed. For an existi
 
 In an Angular CLI or Nx workspace, add the same app as a project with
 `ng add @ng-native/schematics` (see [Angular CLI](/packages/schematics)), or `nx add @ng-native/nx`
-then `nx g @ng-native/nx:app apps/mobile` (see [Nx](/packages/nx)).
+then `nx g @ng-native/nx:app apps/mobile` (see [Nx](/packages/nx)). In a Turborepo workspace,
+`npx @ng-native/turbo init` then `turbo gen ng-native-app` (see [Turborepo](/packages/turbo)).
 
 Scan the QR code with [Expo Go](https://expo.dev/go), or press `i` or `a` for a simulator. The
 Angular component renders native views: `<view>` becomes a `UIView` on iOS or an

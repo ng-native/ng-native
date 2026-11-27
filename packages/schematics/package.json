@@ -43,6 +43,7 @@
       "@ng-native/schematics",
       "@ng-native/tailwind",
       "@ng-native/testing",
+      "@ng-native/turbo",
       "@ng-native/web",
       "@ng-native/web-compat"
     ]

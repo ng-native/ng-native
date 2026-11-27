@@ -14,7 +14,7 @@ const osTest = (file) => file.startsWith(appkitTest) || file.startsWith(gtkTest)
 const workflowFiles = '.github/workflows/';
 const tooling = /^\.github\/actions\/(?:setup|ci-changes)\//;
 const mobileIrrelevant =
-  /^(?:apps\/documentation\/|examples\/(?!canary\/)|packages\/(?:eslint-plugin|integration-tests|migrate|nx|schematics)\/|template(?:-desktop)?\/)/;
+  /^(?:apps\/documentation\/|examples\/(?!canary\/)|packages\/(?:eslint-plugin|integration-tests|migrate|nx|schematics|turbo)\/|template(?:-desktop)?\/)/;
 const desktopInputs =
   /^(?:packages\/desktop\/|packages\/testing\/(?:device\/fake-portals\.py|src\/device\/(?:fake-portals\.node\.test\.ts|linux-launcher\.ts))$|\.github\/workflows\/desktop\.yml$|\.github\/actions\/desktop-prebuilt(?:-linux)?\/|scripts\/desktop-host-pins\.mjs$|pnpm-workspace\.yaml$)/;
 

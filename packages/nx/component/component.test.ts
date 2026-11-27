@@ -95,9 +95,11 @@ describe('nx g @ng-native/nx:component', () => {
     await assert.rejects(generate(workspace(), { name: 'card', project: 'nope' }), /nope/);
   });
 
-  it("writes the same files as @ng-native/schematics' component schematic", () => {
-    const own = readFileSync(path.join(import.meta.dirname, 'sources.cjs'), 'utf8');
-    const schematics = path.join(import.meta.dirname, '../../schematics/component/sources.cjs');
-    assert.equal(own, readFileSync(schematics, 'utf8'));
-  });
+  for (const other of ['schematics', 'turbo']) {
+    it(`writes the same files as @ng-native/${other}'s component generator`, () => {
+      const own = readFileSync(path.join(import.meta.dirname, 'sources.cjs'), 'utf8');
+      const theirs = path.join(import.meta.dirname, `../../${other}/component/sources.cjs`);
+      assert.equal(own, readFileSync(theirs, 'utf8'));
+    });
+  }
 });

@@ -219,6 +219,25 @@ describe('in a pnpm workspace', () => {
     );
   });
 
+  it("adds at the entries' own indentation, which YAML needs siblings to share", async () => {
+    assert.equal(
+      await after('allowBuilds:\n    nx: true\n'),
+      "allowBuilds:\n    nx: true\n    '@parcel/watcher': false\n    unrs-resolver: false\n",
+    );
+  });
+
+  it('keeps a decision in a file with CRLF line endings, and writes CRLF', async () => {
+    // The block ended before the first entry, and a second '@parcel/watcher' key went above it.
+    assert.equal(
+      await after("allowBuilds:\r\n  '@parcel/watcher': true\r\n"),
+      "allowBuilds:\r\n  '@parcel/watcher': true\r\n  unrs-resolver: false\r\n",
+    );
+    assert.equal(
+      await after("packages:\r\n  - 'apps/*'\r\n"),
+      "packages:\r\n  - 'apps/*'\r\n\r\nallowBuilds:\r\n  '@parcel/watcher': false\r\n  unrs-resolver: false\r\n",
+    );
+  });
+
   it('leaves an allowBuilds it cannot edit as text alone, and says what to decide', async () => {
     // A flow mapping: appending a block below it wrote a second allowBuilds key, which YAML and
     // pnpm refuse.

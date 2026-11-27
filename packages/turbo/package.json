@@ -1,0 +1,71 @@
+{
+  "name": "@ng-native/turbo",
+  "version": "0.25.0",
+  "description": "Turborepo generators for Angular Native: turbo gen for an Expo app package, native libraries and components, and the native modules an app's libraries need.",
+  "keywords": [
+    "angular",
+    "react-native",
+    "angular-native",
+    "ios",
+    "android",
+    "fabric",
+    "native",
+    "turborepo",
+    "turbo",
+    "generators",
+    "expo"
+  ],
+  "type": "module",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "ng-native-turbo": "./cli.cjs"
+  },
+  "dependencies": {
+    "@ng-native/migrate": "workspace:*",
+    "minimatch": "^10.0.0"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  },
+  "nx": {
+    "projectType": "library",
+    "tags": [
+      "scope:turbo",
+      "layer:build"
+    ],
+    "implicitDependencies": [
+      "@ng-native/template"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test \"*.test.ts\" \"{app,component,init,library,sync}/*.test.ts\""
+  },
+  "license": "MIT",
+  "homepage": "https://ng-native.com/packages/turbo",
+  "bugs": {
+    "url": "https://github.com/ng-native/ng-native/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ng-native/ng-native.git",
+    "directory": "packages/turbo"
+  },
+  "files": [
+    "*.cjs",
+    "*/*.cjs",
+    "index.d.ts",
+    "files"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

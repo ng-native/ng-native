@@ -31,7 +31,7 @@ const { findMatchingConfigFiles } =
     findMatchingConfigFiles: (files: string[], include?: string[], exclude?: string[]) => string[];
   };
 const { application } = require('./index.cjs');
-const { pnpmGlobs } = require('./workspaces.cjs');
+const { pnpmGlobs, globs, includeInWorkspaces } = require('./workspaces.cjs');
 const native = require('../native-app.cjs');
 const VITE_RANGE = native.vitestViaViteDependencies.vite;
 const { registry } = require('../save-exact.cjs') as {
@@ -1140,6 +1140,60 @@ describe('pnpmGlobs', () => {
     const yaml =
       'packages:\n  - \'apps/*\'\n  - packages/* # libraries\n  - "tools"\nonlyBuiltDependencies:\n  - nx\n';
     assert.deepEqual(pnpmGlobs(yaml), ['apps/*', 'packages/*', 'tools']);
+  });
+
+  it('reads a list past comment and blank lines, with CRLF line endings', () => {
+    const yaml =
+      "packages:\r\n  - 'apps/*'\r\n  # libraries\r\n\r\n  - packages/*\r\nallowBuilds:\r\n";
+    assert.deepEqual(pnpmGlobs(yaml), ['apps/*', 'packages/*']);
+    assert.deepEqual(pnpmGlobs('packages: # every one\n  - apps/*\n'), ['apps/*']);
+  });
+
+  it("keeps a quoted entry's # and commas, in a block list and a flow list", () => {
+    assert.deepEqual(pnpmGlobs("packages:\n  - 'apps/#1' # one\n"), ['apps/#1']);
+    assert.deepEqual(pnpmGlobs('packages: [\'apps/{a,b}\', "tools", libs/*]\n'), [
+      'apps/{a,b}',
+      'tools',
+      'libs/*',
+    ]);
+    assert.deepEqual(pnpmGlobs("packages: [\n  'apps/*', # apps\n  'packages/*'\n]\n"), [
+      'apps/*',
+      'packages/*',
+    ]);
+  });
+});
+
+describe('the workspace globs', () => {
+  const files = (yaml: string) => {
+    let text = yaml;
+    return {
+      exists: (file: string) => file === 'pnpm-workspace.yaml',
+      read: () => text,
+      write: (_: string, content: string) => (text = content),
+      children: () => [],
+      get text() {
+        return text;
+      },
+    };
+  };
+
+  it('match a directory with or without a leading ./', () => {
+    assert.deepEqual(globs(files("packages:\n  - './apps/*'\n  - '!./apps/old'\n")), [
+      'apps/*',
+      '!apps/old',
+    ]);
+    const workspace = files("packages:\n  - './apps/*'\n");
+    includeInWorkspaces(workspace, 'apps/mobile');
+    assert.equal(workspace.text, "packages:\n  - './apps/*'\n");
+  });
+
+  it("are added to under the packages key, in the file's own line endings", () => {
+    const crlf = files('packages:\r\n  - "packages/*"\r\n');
+    includeInWorkspaces(crlf, 'apps/mobile');
+    assert.equal(crlf.text, 'packages:\r\n  - \'apps/*\'\r\n  - "packages/*"\r\n');
+    const commented = files('packages: # all\n  - packages/*\n');
+    includeInWorkspaces(commented, 'apps/mobile');
+    assert.equal(commented.text, "packages: # all\n  - 'apps/*'\n  - packages/*\n");
   });
 });
 

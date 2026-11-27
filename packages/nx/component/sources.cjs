@@ -1,7 +1,7 @@
 /**
  * The files a generated component is made of: a component built from `<view>` and `<text>`, and a
- * test that renders it on the fake Fabric. `@ng-native/schematics` and `@ng-native/nx` each ship
- * this file, and a test in `@ng-native/nx` keeps the two identical.
+ * test that renders it on the fake Fabric. `@ng-native/schematics`, `@ng-native/nx` and
+ * `@ng-native/turbo` each ship this file, and a test in `@ng-native/nx` keeps the three identical.
  */
 
 /**

@@ -38,6 +38,7 @@
       "@ng-native/schematics",
       "@ng-native/tailwind",
       "@ng-native/testing",
+      "@ng-native/turbo",
       "@ng-native/web",
       "@ng-native/web-compat"
     ]
@@ -63,7 +64,9 @@
     ],
     "implicitDependencies": [
       "@ng-native/template",
-      "@ng-native/template-desktop"
+      "@ng-native/template-desktop",
+      "@ng-native/schematics",
+      "@ng-native/turbo"
     ]
   },
   "scripts": {

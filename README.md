@@ -91,8 +91,8 @@ to native styles at build time.
   worklets.
 - **Testing.** A Testing Library API that runs components in Node against a fake Fabric, with no
   simulator.
-- **Fits existing workspaces.** Generators for the Angular CLI (`ng add @ng-native/schematics`) and
-  Nx (`nx add @ng-native/nx`).
+- **Fits existing workspaces.** Generators for the Angular CLI (`ng add @ng-native/schematics`), Nx
+  (`nx add @ng-native/nx`) and Turborepo (`npx @ng-native/turbo init`).
 - **The web too.** `@ng-native/web` renders the same components to the DOM.
 
 ## Documentation
@@ -129,6 +129,7 @@ Analog's file-based routing (`analog`).
 | `@ng-native/web`                | A DOM renderer for the same components, with a Vite preset.                        |
 | `@ng-native/schematics`         | `ng add` and `ng generate` for Angular CLI workspaces.                             |
 | `@ng-native/nx`                 | `nx add` and an app generator for Nx workspaces.                                   |
+| `@ng-native/turbo`              | `turbo gen` generators for Turborepo workspaces.                                   |
 | `@ng-native/migrate`            | The migrations that update an app to a new release.                                |
 | `@ng-native/fabric`             | The framework-agnostic retained tree and commit engine the renderer is built on.   |
 

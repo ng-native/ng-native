@@ -39,6 +39,7 @@ const semver = require('semver');
 const native = require('../native-app.cjs');
 const { usesWorkspaces } = require('../application/workspaces.cjs');
 const { asSaved, savesExact } = require('../save-exact.cjs');
+const { declineBuilds } = require('@ng-native/migrate/decline-builds.cjs');
 
 /** The plugin entry `@nx/expo:init` itself writes, so the target names are the ones Nx documents. */
 const EXPO_PLUGIN = {
@@ -192,80 +193,6 @@ function rootDependencies(tree) {
  */
 const DECLINED_BUILDS = ['@parcel/watcher', 'unrs-resolver'];
 
-const PNPM = 'pnpm-workspace.yaml';
-
-/**
- * `allowBuilds`' entries with `name` declined, unless it is already `true` or `false`.
- *
- * @param {string} entries
- * @param {string} name
- */
-function decline(entries, name) {
-  const key = name.startsWith('@') ? `'${name}'` : name;
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const line = new RegExp(`^([ \\t]+)['"]?${escaped}['"]?:[ \\t]*(.*)$`, 'm');
-  const found = line.exec(entries);
-  if (!found) return `${entries && entries.replace(/\n?$/, '\n')}  ${key}: false\n`;
-  if (/^(true|false)\b/.test(found[2])) return entries;
-  return entries.replace(line, `$1${key}: false`);
-}
-
-/**
- * `allowBuilds` as a block mapping, the form pnpm writes: the key alone on its line, with a comment
- * after it at most, then its entries, indented, with blank and comment lines among them. The
- * entries end at their last indented line, before any blank lines that lead to the next key. Null
- * when there is no such block.
- *
- * @param {string} yaml
- * @returns {{ head: string, entries: string, start: number, end: number } | null}
- */
-function allowBuildsBlock(yaml) {
-  const key = /^allowBuilds:[ \t]*(?:#.*)?(?:\n|$)/m.exec(yaml);
-  if (!key) return null;
-  const head = key[0].endsWith('\n') ? key[0] : `${key[0]}\n`;
-  const from = key.index + key[0].length;
-  let end = from;
-  for (let at = from; at < yaml.length;) {
-    const next = yaml.indexOf('\n', at);
-    const lineEnd = next === -1 ? yaml.length : next + 1;
-    const line = yaml.slice(at, lineEnd);
-    if (/^[ \t]+\S/.test(line)) end = lineEnd;
-    else if (!/^[ \t]*\n?$/.test(line)) break;
-    at = lineEnd;
-  }
-  return { head, entries: yaml.slice(from, end), start: key.index, end };
-}
-
-/**
- * Decides the builds above in `pnpm-workspace.yaml`'s `allowBuilds`, which pnpm 10.26 and later
- * read. A decision the workspace already made stays, and the placeholder pnpm writes after refusing
- * an install is settled. A workspace without pnpm is left alone.
- *
- * Edited as text, so the file keeps its comments and layout. An `allowBuilds` in any form other than
- * a block mapping, such as a flow mapping, is left as it is with a warning: a second key beside it
- * would make the file invalid YAML, which pnpm refuses to read.
- */
-function declineBuilds(tree) {
-  if (!tree.exists(PNPM) && !tree.exists('pnpm-lock.yaml')) return;
-  const yaml = tree.read(PNPM, 'utf-8') ?? '';
-  const block = allowBuildsBlock(yaml);
-  if (!block && /^allowBuilds:/m.test(yaml)) {
-    logger.warn(
-      `${PNPM} sets allowBuilds in a form this cannot add to. Add ` +
-        `${DECLINED_BUILDS.map((name) => `${name}: false`).join(' and ')} to it, ` +
-        'or pnpm 11 stops the install until they are decided.',
-    );
-    return;
-  }
-  const entries = DECLINED_BUILDS.reduce(decline, block?.entries ?? '');
-  const allowBuilds = `${block?.head ?? 'allowBuilds:\n'}${entries}`;
-  if (block) {
-    tree.write(PNPM, yaml.slice(0, block.start) + allowBuilds + yaml.slice(block.end));
-  } else {
-    tree.write(PNPM, yaml ? `${yaml.replace(/\n*$/, '\n')}\n${allowBuilds}` : allowBuilds);
-  }
-}
-
 /**
  * With `desktopOnly`, makes it the default of the `application` generator in `nx.json`, so every
  * app generated here starts from the desktop template: macOS alone, with no phone settings.
@@ -288,7 +215,8 @@ function defaultToDesktopOnly(tree) {
 async function init(tree, options = {}) {
   registerExpoPlugin(tree);
   if (options.desktopOnly) defaultToDesktopOnly(tree);
-  declineBuilds(tree);
+  const undecided = declineBuilds(tree, DECLINED_BUILDS);
+  if (undecided) logger.warn(undecided);
   const { dependencies, devDependencies } = readJson(tree, 'package.json');
   const existing = Object.keys({ ...dependencies, ...devDependencies });
   const companions = await asSaved(tree, rootDependencies(tree), existing);

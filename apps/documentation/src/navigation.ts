@@ -398,6 +398,11 @@ export const PACKAGES: NavSection = {
       title: 'Nx',
       summary: 'nx add, and an app generator whose targets run Expo',
     },
+    {
+      path: 'packages/turbo',
+      title: 'Turborepo',
+      summary: 'turbo gen for apps, libraries and components, cached by turbo run',
+    },
   ],
 };
 

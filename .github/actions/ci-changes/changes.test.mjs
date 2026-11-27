@@ -43,6 +43,15 @@ test('integration tests can change product coverage without changing a published
   ]);
 });
 
+test('the generator packages never build the canary', () => {
+  for (const name of ['migrate', 'nx', 'schematics', 'turbo']) {
+    const run = selected([`packages/${name}/index.cjs`]);
+    assert.ok(run.includes('workspace'), name);
+    assert.ok(!run.includes('native'), name);
+    assert.ok(!run.includes('device'), name);
+  }
+});
+
 test('native desktop test-only changes select their own OS', () => {
   assert.deepEqual(selected([camera]), ['desktop-macos']);
   assert.deepEqual(selected([gtk]), ['desktop-linux']);

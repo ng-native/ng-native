@@ -41,6 +41,7 @@ export default tseslint.config(
       // source, and a test in each package fails if they stop matching the template's.
       'packages/schematics/files/**',
       'packages/nx/files/**',
+      'packages/turbo/files/**',
       // A library as ng-packagr builds it, kept byte for byte: the tests read what it really emits.
       'packages/integration-tests/fixtures/ng-packagr/**',
       // Web Platform Tests as `packages/web-compat/wpt/fetch.mjs` checks them out: another

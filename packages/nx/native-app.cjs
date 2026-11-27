@@ -24,11 +24,10 @@
  */
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
-const semver = require('semver');
 const { addDependenciesToPackageJson, readJson } = require('@nx/devkit');
 const shared = require('@ng-native/migrate/native-app.cjs');
 
-const { dependencies, devDependencies, accepted } = shared;
+const { dependencies, devDependencies } = shared;
 
 /**
  * What `nx add` puts beside `@nx/expo`, in place of the `@nx/expo:init` it does not run: see
@@ -42,13 +41,6 @@ const expoCompanions = {
   '@babel/core': devDependencies['@babel/core'],
   '@expo/metro': '~58.0.0',
 };
-
-/**
- * The template's `typecheck` script. It loads the Metro config first, which builds the sheet
- * `@ng-native/tailwind` generates into `.angular-native/` once and exits: `src/main.ts` imports it
- * once Tailwind is added, and a fresh checkout has none until Metro has run.
- */
-const TYPECHECK = 'node metro.config.js && ngc -p tsconfig.json --noEmit';
 
 /** The template's files, copied verbatim into the new app. */
 const SOURCE_FILES = [
@@ -71,12 +63,6 @@ const DESKTOP_SOURCE_FILES = [
   'src/main.ts',
   'vitest.config.mts',
 ];
-
-/**
- * The template's Vitest project that runs in Node, which `test` runs alone: its `ios` and `android`
- * projects build and open the app.
- */
-const TEST = 'vitest run --project node';
 
 /**
  * The desktop template's Vitest projects that run in Node, one for each OS, which `test` runs
@@ -185,53 +171,6 @@ function tsconfig(workspaceBase, conditions = []) {
   };
 }
 
-/** The `@ng-native` packages with entry points beside their main one, each published in `dist`. */
-const WITH_ENTRY_POINTS = [
-  'components',
-  'device',
-  'expo',
-  'platform',
-  'testing',
-  'web',
-  'web-compat',
-];
-
-/** `nx typecheck` in a workspace whose libraries are the package manager's links. */
-const TYPECHECK_ONE_COPY = TYPECHECK.replace('tsconfig.json', 'tsconfig.typecheck.json');
-
-/**
- * The tsconfig `nx typecheck` reads where libraries are the package manager's links: the app's,
- * with every `@ng-native` package resolved to the app's own copy.
- *
- * pnpm gives a library a copy of its own of a package whose peers it does not share with the app,
- * the gesture and animation packages an app adds among them. `ngc` then finds a component a
- * library imports in one copy and the app's import of it in the other, and stops at `NG3004`
- * before it checks a template. The Metro preset and the Vitest plugin make the same choice where
- * they resolve. It is a file of its own because Metro reads the `paths` of `tsconfig.json`, and
- * these skip the `exports` of each package, its `browser` condition included.
- */
-function typecheckTsconfig() {
-  const paths = { '@ng-native/*': ['./node_modules/@ng-native/*'] };
-  for (const name of WITH_ENTRY_POINTS) {
-    paths[`@ng-native/${name}/*`] = [`./node_modules/@ng-native/${name}/dist/*`];
-  }
-  return { extends: './tsconfig.json', compilerOptions: { paths } };
-}
-
-/**
- * A library's Vitest config: the app's Node project alone, since a library has no app of its own
- * for in-app tests to run in.
- */
-const LIBRARY_VITEST_CONFIG = `import { ngNative } from '@ng-native/testing/vitest';
-import { defineConfig } from 'vitest/config';
-
-// Compiles Angular for the tests the way Metro compiles it for the app. Tests run in Node against
-// a fake of the native side: no simulator, no device.
-export default defineConfig({
-  plugins: [ngNative()],
-});
-`;
-
 /**
  * @param {boolean} withPaths whether to resolve the workspace's tsconfig path aliases
  * @param {boolean} [viaVite] whether Vite does that itself, as from Vite 8, rather than the
@@ -242,7 +181,7 @@ export default defineConfig({
 function vitestConfig(withPaths, variant = 'app', viaVite = false) {
   const config =
     variant === 'library'
-      ? LIBRARY_VITEST_CONFIG
+      ? shared.LIBRARY_VITEST_CONFIG
       : readFileSync(
           path.join(
             __dirname,
@@ -314,45 +253,16 @@ function eslintConfig(rootConfig) {
   ).replace('export default [\n', 'export default [\n  ...baseConfig,\n');
 }
 
-/**
- * The ranges a workspace package's `package.json` lists: the root's own where everything it can
- * resolve to is a version Angular Native accepts, so that pnpm does not install a second Vitest
- * beside the root's. A wider root range is not reused: React Native needs its exact React, not
- * whatever `^19.0.0` resolves to.
- *
- * @param {Record<string, string>} wanted
- * @param {{ dependencies?: Record<string, string>, devDependencies?: Record<string, string> }} root
- */
-function reuseRootRanges(wanted, root) {
-  const installed = { ...root.devDependencies, ...root.dependencies };
-  return Object.fromEntries(
-    Object.entries(wanted).map(([name, range]) => {
-      const existing = installed[name];
-      const reuse =
-        existing &&
-        !name.startsWith('@ng-native/') &&
-        semver.validRange(existing) &&
-        semver.subset(existing, accepted[name] ?? range);
-      return [name, reuse ? existing : range];
-    }),
-  );
-}
-
 module.exports = {
   ...shared,
   SOURCE_FILES,
   DESKTOP_SOURCE_FILES,
-  TEST,
   DESKTOP_TEST,
   sourceFile,
   agentsFile,
   METRO_CONFIG,
   MOUNT_OPTIONS,
-  TYPECHECK,
-  TYPECHECK_ONE_COPY,
-  WITH_ENTRY_POINTS,
   tsconfig,
-  typecheckTsconfig,
   vitestConfig,
   vitestPathsDependencies,
   vitestViaViteDependencies,
@@ -360,6 +270,5 @@ module.exports = {
   ROOT_ESLINT_CONFIGS,
   eslintConfig,
   addVitestPathsDependencies,
-  reuseRootRanges,
   expoCompanions,
 };
