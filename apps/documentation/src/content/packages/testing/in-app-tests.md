@@ -59,6 +59,20 @@ if (process.env.EXPO_PUBLIC_DEVICE_TESTS) {
 }
 ```
 
+An entry that waits for something before its own `mount()`, such as `loadFonts()` from
+[`@ng-native/expo/fonts`](/packages/expo/fonts), gives the host the same wait as `beforeMount`. The
+host calls it each time it mounts and mounts once it resolves, so tests, and their screenshots,
+render in the app's faces rather than in the fallback one. When it rejects, the host still connects,
+and every test file fails with its error. An app that mounts in the fallback face when the load
+fails catches the error itself:
+
+```ts
+startDeviceTests({
+  mount: mountOptions,
+  beforeMount: () => loadFonts(tailwind).catch(() => undefined),
+});
+```
+
 A project per OS goes in the Vitest config, beside the Node project. Device tests are the files
 that end in `.device.ts` under `src`:
 
