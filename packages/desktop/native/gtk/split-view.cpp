@@ -885,8 +885,14 @@ void SplitViews::rebuild(Tag parent, const std::vector<SourceList> &lists) {
   // A tabs host's list fills its sidebar instead, once it is placed.
   const ViewData *parentData = backend_.data(parent);
   bool tabs = parentData && parentData->component == kTabsHost;
+  // The parent's folds once, over every list it has: a list on its own would forget the sections of
+  // the others.
+  SourceList all;
+  for (const auto &list : lists) {
+    all.groups.insert(all.groups.end(), list.groups.begin(), list.groups.end());
+  }
+  l.folds.setList(all);
   for (size_t i = 0; i < lists.size(); i++) {
-    l.folds.setList(lists[i]);
     if (!tabs && parentWidget && gtk_widget_get_parent(l.boxes[i]) != parentWidget) {
       gtk_widget_set_parent(l.boxes[i], parentWidget);
     }
@@ -909,7 +915,10 @@ void SplitViews::fill(Tag parent, Lists &l, size_t index) {
   GtkListBoxRow *selected = nullptr;
   auto selectedTag = selectedRow(list);
   for (const auto &group : list.groups) {
-    bool folded = group.collapsible && l.folds.folded(group.tag);
+    // Only a titled one folds: an untitled section has no title row to open it again from.
+    bool folded = group.collapsible && !group.title.empty() && l.folds.folded(group.tag);
+    // The app's fold too, as the user's sets it in fold().
+    foldLayout(group.tag, folded);
     if (!group.title.empty()) {
       GtkWidget *title = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
       GtkWidget *label = gtk_label_new(group.title.c_str());
@@ -1087,13 +1096,8 @@ void SplitViews::fold(Tag parent, Tag section, bool folded) {
   }
   auto &l = it->second;
   l.folds.fold(section, folded);
-  // The section's layout follows: a folded one is only its title row.
-  if (const ViewData *d = backend_.data(section)) {
-    if (auto state = std::dynamic_pointer_cast<const ConcreteState<SidebarSectionState>>(d->state);
-        state && state->getData().collapsed != folded) {
-      state->updateState(SidebarSectionState{.collapsed = folded});
-    }
-  }
+  foldLayout(section, folded);
+  send(backend_.data(section), "sidebarSectionCollapse", folly::dynamic::object("collapsed", folded));
   // Rebuilt on the next idle, at most once: the row activated is the list's own until its signal
   // returns.
   if (l.refill == 0) {
@@ -1106,6 +1110,23 @@ void SplitViews::fold(Tag parent, Tag section, bool folded) {
       return G_SOURCE_REMOVE;
     }, new RowTarget{this, parent}, [](gpointer data) { delete static_cast<RowTarget *>(data); });
   }
+}
+
+// The section's layout follows its fold: a folded one is only its title row.
+void SplitViews::foldLayout(Tag section, bool folded) {
+  const ViewData *d = backend_.data(section);
+  auto state = d ? std::dynamic_pointer_cast<const ConcreteState<SidebarSectionState>>(d->state) : nullptr;
+  if (!state) {
+    return;
+  }
+  // Compared with the state the update applies to, not the one mounted: a fold and an opening
+  // before the queue flushes leave the opening.
+  state->updateState([folded](const SidebarSectionState &old) -> facebook::react::StateData::Shared {
+    if (old.collapsed == folded) {
+      return nullptr;
+    }
+    return std::make_shared<SidebarSectionState>(SidebarSectionState{.collapsed = folded});
+  });
 }
 
 void SplitViews::refill(Tag parent) {

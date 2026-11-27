@@ -237,3 +237,53 @@ TEST_CASE("A native row draws its item's SVG icon as a template image, and none 
   mounted.update(item, itemProps(folly::dynamic::object("label", "Skills")("svgIcon", "lucideBlocks")));
   CHECK((imageOf() == nil));
 }
+
+TEST_CASE("A collapsible section folds as the app says, and the app hears the user fold it") {
+  MountedViews mounted;
+  Restore restore;
+  NGNSplitView.input = &mounted.input;
+  ngn::testing::SentEvents<ViewEventEmitter> sent;
+  auto props = [](bool collapsed, const char *title) {
+    return sectionProps(folly::dynamic::object("title", title)("collapsible", true)("collapsed", collapsed));
+  };
+  mounted.add(MountedViews::shadow(4, "View", viewProps(folly::dynamic::object())));
+  auto section = MountedViews::shadow(5, ngn::SidebarSectionComponentName, props(true, "Done"));
+  section.eventEmitter = sent.emitter;
+  mounted.add(section, 4);
+  mounted.add(MountedViews::shadow(6, ngn::SidebarItemComponentName, itemProps(folly::dynamic::object("label", "Ship"))), 5);
+  NSOutlineView *outline = outlineIn(mounted.view(4));
+  REQUIRE((outline != nil));
+  auto group = [&] { return [outline itemAtRow:0]; };
+  CHECK_FALSE([outline isItemExpanded:group()]);
+
+  // The app opens it: no event goes back for its own change.
+  mounted.update(section, props(false, "Done"));
+  CHECK([outline isItemExpanded:group()]);
+  // And folds it again, open as it is.
+  mounted.update(section, props(true, "Done"));
+  CHECK_FALSE([outline isItemExpanded:group()]);
+  mounted.update(section, props(false, "Done"));
+  CHECK([outline isItemExpanded:group()]);
+  CHECK(sent.count("topSidebarSectionCollapse") == 0);
+
+  // The user folds it with the disclosure: the app hears it, and an unrelated update keeps it.
+  [outline collapseItem:group()];
+  CHECK(sent.count("topSidebarSectionCollapse") == 1);
+  mounted.update(section, props(false, "Done (2)"));
+  CHECK_FALSE([outline isItemExpanded:group()]);
+  CHECK(sent.count("topSidebarSectionCollapse") == 1);
+}
+
+TEST_CASE("A section that is not collapsible stays open whatever its collapsed prop says") {
+  MountedViews mounted;
+  Restore restore;
+  NGNSplitView.input = &mounted.input;
+  mounted.add(MountedViews::shadow(4, "View", viewProps(folly::dynamic::object())));
+  mounted.add(MountedViews::shadow(5, ngn::SidebarSectionComponentName,
+                                   sectionProps(folly::dynamic::object("title", "Tasks")("collapsed", true))),
+              4);
+  mounted.add(MountedViews::shadow(6, ngn::SidebarItemComponentName, itemProps(folly::dynamic::object("label", "Write"))), 5);
+  NSOutlineView *outline = outlineIn(mounted.view(4));
+  REQUIRE((outline != nil));
+  CHECK([outline isItemExpanded:[outline itemAtRow:0]]);
+}

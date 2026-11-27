@@ -734,9 +734,18 @@ NSWindow *NGNWindowOfSplit(NSView *surfaceView) {
 }
 - (void)setFolded:(BOOL)folded {
   auto concrete = std::dynamic_pointer_cast<const ConcreteState<ngn::SidebarSectionState>>(self.state);
-  if (concrete && concrete->getData().collapsed != folded) {
-    concrete->updateState(ngn::SidebarSectionState{.collapsed = static_cast<bool>(folded)});
+  if (!concrete) {
+    return;
   }
+  // Compared with the state the update applies to, not the one mounted: a fold and an opening
+  // before the queue flushes leave the opening.
+  bool collapsed = folded;
+  concrete->updateState([collapsed](const ngn::SidebarSectionState &old) -> StateData::Shared {
+    if (old.collapsed == collapsed) {
+      return nullptr;
+    }
+    return std::make_shared<ngn::SidebarSectionState>(ngn::SidebarSectionState{.collapsed = collapsed});
+  });
 }
 - (void)applyToolkitSize:(facebook::react::Size)size {
 }
@@ -1063,10 +1072,20 @@ constexpr CGFloat kRowIconSize = 16;
   }
   _syncing = YES;
   [self reloadData];
+  // Each section as the folds say: the app's collapsed prop, or what the user left it as.
   for (id item in _top) {
-    if ([item isKindOfClass:NGNSourceGroup.class] && !_folds.folded(((NGNSourceGroup *)item).tag)) {
-      [self expandItem:item];
+    if (![item isKindOfClass:NGNSourceGroup.class]) {
+      continue;
     }
+    NGNSourceGroup *group = item;
+    BOOL folded = group.collapsible && _folds.folded(group.tag);
+    if (folded) {
+      [self collapseItem:group];
+    } else {
+      [self expandItem:group];
+    }
+    // The section's layout too: one that comes folded is collapsed already, and says nothing.
+    [self folded:group folded:folded];
   }
   _syncing = NO;
   [self syncSelection];
@@ -1294,10 +1313,12 @@ constexpr CGFloat kRowIconSize = 16;
     return;
   }
   NSInteger tag = ((NGNSourceGroup *)item).tag;
+  NGNView *section = self.views ? self.views(tag) : nil;
+  // The user's: kept, and the app hears it. A list applied above is the app's own already.
   if (!_syncing) {
     _folds.fold(tag, folded);
+    send(section, "sidebarSectionCollapse", folly::dynamic::object("collapsed", (bool)folded));
   }
-  NGNView *section = self.views ? self.views(tag) : nil;
   if ([section isKindOfClass:NGNSidebarSectionView.class]) {
     [(NGNSidebarSectionView *)section setFolded:folded];
   }

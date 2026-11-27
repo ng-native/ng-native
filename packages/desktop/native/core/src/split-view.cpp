@@ -47,7 +47,8 @@ SidebarSectionProps::SidebarSectionProps(
     const RawProps &rawProps)
     : ViewProps(context, sourceProps, rawProps),
       title(convertRawProp(context, rawProps, "title", sourceProps.title, std::string{})),
-      collapsible(convertRawProp(context, rawProps, "collapsible", sourceProps.collapsible, false)) {}
+      collapsible(convertRawProp(context, rawProps, "collapsible", sourceProps.collapsible, false)),
+      collapsed(convertRawProp(context, rawProps, "collapsed", sourceProps.collapsed, false)) {}
 
 SidebarItemProps::SidebarItemProps(
     const PropsParserContext &context,
@@ -131,6 +132,7 @@ SidebarGroup group(const ViewTree &tree, const ViewTree::Node &section) {
   if (const auto *props = dynamic_cast<const SidebarSectionProps *>(section.view.props.get())) {
     out.title = props->title;
     out.collapsible = props->collapsible;
+    out.collapsed = props->collapsed;
   }
   for (Tag child : section.children) {
     const auto *node = tree.find(child);
@@ -386,8 +388,14 @@ void SourceListFolds::setList(const SourceList &list) {
   std::unordered_set<Tag> live;
   for (const auto &group : list.groups) {
     live.insert(group.tag);
+    auto known = app_.find(group.tag);
+    if (known == app_.end() || known->second != group.collapsed) {
+      app_[group.tag] = group.collapsed;
+      fold(group.tag, group.collapsed);
+    }
   }
   std::erase_if(folded_, [&live](Tag tag) { return !live.contains(tag); });
+  std::erase_if(app_, [&live](const auto &entry) { return !live.contains(entry.first); });
 }
 
 void SourceListFolds::fold(Tag section, bool folded) {

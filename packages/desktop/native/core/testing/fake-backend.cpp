@@ -117,7 +117,7 @@ void FakeBackend::setSourceLists(SurfaceId, Tag parent, const std::vector<Source
     for (size_t g = 0; g < list.groups.size(); g++) {
       const auto &group = list.groups[g];
       line += (g > 0 ? " | " : "") + std::to_string(group.tag) + (group.title.empty() ? "" : " " + group.title) +
-          (group.collapsible ? " (collapsible)" : "") + ":";
+          (group.collapsible ? " (collapsible)" : "") + (group.collapsed ? " (collapsed)" : "") + ":";
       for (size_t r = 0; r < group.rows.size(); r++) {
         const auto &row = group.rows[r];
         line += (r > 0 ? ", " : " ") + std::to_string(row.tag);

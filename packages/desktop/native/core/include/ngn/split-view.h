@@ -138,9 +138,11 @@ class SidebarSectionProps final : public facebook::react::ViewProps {
 
   std::string title;
   bool collapsible{false};
+  // Whether the app has a collapsible section folded away.
+  bool collapsed{false};
 };
 
-// Whether the user folded the section away with its disclosure.
+// Whether the section is folded away with its disclosure, by the app or the user.
 struct SidebarSectionState {
   bool collapsed{false};
 };
@@ -219,6 +221,8 @@ struct SidebarGroup {
   // Empty for a section with no title row: its rows sit at the top level.
   std::string title;
   bool collapsible{false};
+  // The app's collapsed prop: SourceListFolds decides the fold.
+  bool collapsed{false};
   std::vector<SidebarRow> rows;
   bool operator==(const SidebarGroup &) const = default;
 };
@@ -338,17 +342,22 @@ class FoldingSplit {
   bool sidebarInFront_{false};
 };
 
-// What a toolkit drawing a source list keeps between the lists the core sends: the sections the
-// user folded with their disclosure, each forgotten as its section goes.
+// What a toolkit drawing a source list keeps between the lists the core sends: which sections are
+// folded away, each forgotten as its section goes. A section takes the app's collapsed prop as it
+// comes and whenever the prop changes; otherwise it stays as the user left it with its disclosure,
+// as SidebarCollapse settles the sidebar's own.
 class SourceListFolds {
  public:
-  // The list now: the folds of sections no longer in it go.
+  // The list now: the app's folds applied, and the sections no longer in it forgotten.
   void setList(const SourceList &list);
+  // The user folded or opened a section.
   void fold(Tag section, bool folded);
   bool folded(Tag section) const;
 
  private:
   std::unordered_set<Tag> folded_;
+  // The collapsed prop each section had in the last list.
+  std::unordered_map<Tag, bool> app_;
 };
 
 // The row the app has selected in `list`, if any: the last one that says so.

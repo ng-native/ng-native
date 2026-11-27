@@ -1,4 +1,4 @@
-import { Component, computed, input, signal } from '@angular/core';
+import { Component, computed, input, model, type OnDestroy, type OnInit } from '@angular/core';
 import { registerViewName } from '@ng-native/fabric';
 import { Pressable } from './pressable.ts';
 import { hostDraws } from './split-view.ts';
@@ -19,7 +19,8 @@ registerViewName('sidebar-section', {
 /**
  * A group of `<sidebar-item>`s with an optional `title`. A `collapsible` one shows and hides its
  * items from its title: on macOS with the source list's own disclosure, drawn by a press on the
- * title elsewhere. Selection survives the section collapsing.
+ * title elsewhere. `[(collapsed)]` starts it folded, folds it from code and hears the user fold or
+ * open it. Selection survives the section collapsing.
  */
 @Component({
   selector: 'sidebar-section',
@@ -30,7 +31,7 @@ registerViewName('sidebar-section', {
         class="sidebar-section-title"
         accessibilityRole="header"
         [disabled]="!collapsible()"
-        (press)="expanded.set(!expanded())"
+        (press)="collapsed.set(!collapsed())"
       >
         <text>{{ title() }}</text>
       </pressable>
@@ -48,21 +49,48 @@ registerViewName('sidebar-section', {
   host: {
     '[title]': 'drawn ? undefined : title()',
     '[collapsible]': 'drawn ? undefined : collapsible()',
+    '[collapsed]': 'drawn ? undefined : collapsed()',
   },
 })
-export class SidebarSection extends ViewBase {
+export class SidebarSection extends ViewBase implements OnInit, OnDestroy {
   /** Whether this section is drawn here rather than by the desktop host. */
   protected readonly drawn = !hostDraws('sidebar-section');
-  /** Drawn, whether the items show: a collapsible section's title toggles it. */
-  protected readonly expanded = signal(true);
 
   /** The heading over the section's items. None gives an untitled group. */
   readonly title = input<string>();
   /** Whether the title shows and hides the section's items. */
   readonly collapsible = input(false, { transform: optionalBoolean });
+  /** Whether a collapsible section's items are folded away. Kept in step with the user's folds. */
+  readonly collapsed = model(false);
+
+  private stopCollapsed: (() => void) | null = null;
 
   /** Whether the items show: always, unless a title that can show them again hid them. */
   protected readonly shown = computed(
-    () => !this.drawn || this.expanded() || !(this.collapsible() && this.title()),
+    () => !this.drawn || !this.collapsed() || !(this.collapsible() && this.title()),
   );
+
+  override ngOnInit(): void {
+    super.ngOnInit();
+    if (this.drawn || this.stopCollapsed) return;
+    this.stopCollapsed = this.engine.setEventListener(
+      this.node,
+      'topSidebarSectionCollapse',
+      (event) => this.hearFold(event),
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.stopCollapsed?.();
+  }
+
+  /** The host's report of the user folding or opening this section. */
+  private hearFold(event: unknown): void {
+    const { target, nativeEvent } = event as {
+      target?: unknown;
+      nativeEvent?: { collapsed?: unknown };
+    };
+    if (target !== this.node) return;
+    if (typeof nativeEvent?.collapsed === 'boolean') this.collapsed.set(nativeEvent.collapsed);
+  }
 }

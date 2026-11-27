@@ -510,6 +510,53 @@ TEST_CASE("a source list keeps the sections the user folded until they go, and f
   CHECK_FALSE(folds.folded(3));
 }
 
+TEST_CASE("a section's collapsed prop goes in its list, and a change of it alone sends the list again") {
+  Fixture f;
+  auto sidebar = shadowView(2, ngn::SidebarComponentName, {});
+  auto lines = f.mount(
+      add(1, {sidebar}) + add(2, {section(4, dynamic::object("title", "Done")("collapsible", true)("collapsed", true))}) +
+      add(4, {item(5, dynamic::object("label", "Shipped"))}));
+  CHECK(lines == Lines{"lists of 2: [4 Done (collapsible) (collapsed): 5 Shipped]"});
+  lines = f.mount({ShadowViewMutation::UpdateMutation(
+      section(4, dynamic::object("title", "Done")("collapsible", true)("collapsed", true)),
+      section(4, dynamic::object("title", "Done")("collapsible", true)("collapsed", false)), 2)});
+  CHECK(lines == Lines{"lists of 2: [4 Done (collapsible): 5 Shipped]"});
+}
+
+TEST_CASE("a source list folds a section as the app says when it comes and when the app changes it, and as the user leaves it otherwise") {
+  ngn::SourceList list{.groups = {
+      {.tag = 3, .title = "Tasks", .collapsible = true, .rows = {{.tag = 4, .label = "Write"}}},
+      {.tag = 6, .title = "Done", .collapsible = true, .collapsed = true, .rows = {{.tag = 7, .label = "Ship"}}},
+  }};
+  ngn::SourceListFolds folds;
+  folds.setList(list);
+  CHECK_FALSE(folds.folded(3));
+  CHECK(folds.folded(6));
+
+  // The user opens Done and folds Tasks; the same app values again leave both as the user put them.
+  folds.fold(6, false);
+  folds.fold(3, true);
+  folds.setList(list);
+  CHECK(folds.folded(3));
+  CHECK_FALSE(folds.folded(6));
+
+  // The app changes Tasks: its value wins. Done's value has not changed, so the user's fold stays.
+  list.groups[0].collapsed = true;
+  folds.setList(list);
+  list.groups[0].collapsed = false;
+  folds.setList(list);
+  CHECK_FALSE(folds.folded(3));
+  CHECK_FALSE(folds.folded(6));
+
+  // A section gone and back under its tag starts as the app says again.
+  auto done = list.groups[1];
+  list.groups.pop_back();
+  folds.setList(list);
+  list.groups.push_back(done);
+  folds.setList(list);
+  CHECK(folds.folded(6));
+}
+
 TEST_CASE("a source list that changed only its selection is told apart from one that changed its rows") {
   ngn::SourceList tabs{.groups = {{.rows = {{.tag = 3, .label = "Library", .selected = true}, {.tag = 4, .label = "Search"}}}}};
   auto chosen = tabs;
