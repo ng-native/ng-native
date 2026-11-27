@@ -225,7 +225,8 @@ class DeviceWorker implements PoolWorker {
         timeout: left ?? this.options.connectTimeout ?? (launched ? 600_000 : 60_000),
         waited,
         launched,
-        root: this.projectRoot,
+        // A library's tests can be outside the project, anywhere in the workspace Metro serves.
+        root: this.serverRoot,
         screenshots: this.options.screenshots ?? {},
         signal: signal ? AbortSignal.any([signal, this.shutdown.signal]) : this.shutdown.signal,
       });
@@ -635,7 +636,7 @@ interface Session {
   owed: Set<number>;
   /** The id the next request is sent with. */
   nextRequest: number;
-  /** The project of the worker that has the app, which its snapshot files are in. */
+  /** The directory Metro serves for the worker that has the app, which its snapshot files are in. */
   root: string | null;
   /** The test files the app was sent to run, which an inline snapshot is written into. */
   files: Set<string>;
@@ -727,7 +728,7 @@ class Bridge {
 
   /**
    * Wait for an app no other worker has, on the platform asked for, and take it, for the worker
-   * whose project is `root`. An abort of `signal` gives up the wait.
+   * whose snapshot files are in `root`. An abort of `signal` gives up the wait.
    */
   claim(
     claimant: (message: unknown) => void,
@@ -981,7 +982,7 @@ class Bridge {
 
   /**
    * Snapshot files, which the app reads and writes through here: only an app a worker has, and
-   * only its project's `.snap` files and the test files it was sent.
+   * only the `.snap` files in the workspace it serves and the test files it was sent.
    */
   private files(
     session: Session | undefined,
@@ -1154,8 +1155,8 @@ function snapshotFile(
 const normalised = (file: string): string => (path.isAbsolute(file) ? path.resolve(file) : file);
 
 /**
- * Whether the app may touch `file`: a test file it was sent, or a `.snap` file in its worker's
- * project and outside its packages, whichever way a symlink on the path points.
+ * Whether the app may touch `file`: a test file it was sent, or a `.snap` file in the directory its
+ * worker's Metro serves and outside its packages, whichever way a symlink on the path points.
  */
 function permitted(session: Session, file: string): boolean {
   const resolved = file;
