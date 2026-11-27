@@ -211,12 +211,27 @@ void AppKitWindows::openWindow(
     [delegate placeButtons:window];
     windows_[@(surface)] = window;
     unshown_[@(surface)] = @(request.fullScreen);
+    // Shown by kFirstShowWait whether or not its content has settled by then.
+    std::weak_ptr<bool> alive = alive_;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(kFirstShowWait * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+                     if (alive.lock()) {
+                       release(surface);
+                     }
+                   });
     hooks_.startSurface(surface, window);
     opened();
   });
 }
 
 void AppKitWindows::didMount(SurfaceId surface) {
+  if (hooks_.settled && !hooks_.settled()) {
+    return;
+  }
+  release(surface);
+}
+
+void AppKitWindows::release(SurfaceId surface) {
   if (unshown_[@(surface)] == nil || windows_[@(surface)] == nil || held_.count(surface) > 0) {
     return;
   }
