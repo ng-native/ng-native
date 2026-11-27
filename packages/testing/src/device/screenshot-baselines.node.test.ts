@@ -8,7 +8,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { PNG } from 'pngjs';
-import { matchScreenshot, screenshotPath, type ScreenshotRequest } from './screenshot-baselines.ts';
+import {
+  matchScreenshot,
+  screenshotPath,
+  type ScreenshotPathData,
+  type ScreenshotRequest,
+} from './screenshot-baselines.ts';
 
 /** A PNG in base64, `width` by `height`, one colour, with the pixels at `changed` another. */
 function png(width: number, height: number, changed: number[] = [], shift = 255): string {
@@ -67,6 +72,80 @@ describe('screenshot references', () => {
       'the same name, the same file',
     );
     assert.equal(path.basename(screenshotPath('/app/a.device.ts', 'card', 'ios')), 'card-ios.png');
+  });
+
+  it('are where resolveScreenshotPath puts them, from what Vitest browser mode gives it', () => {
+    const given: ScreenshotPathData[] = [];
+    const resolveScreenshotPath = (data: ScreenshotPathData) => {
+      given.push(data);
+      const { root, testFileDirectory, screenshotDirectory, testFileName, name, platform } = data;
+      return path.join(
+        root,
+        testFileDirectory,
+        screenshotDirectory,
+        testFileName,
+        `${name}-${platform}-ci${data.ext}`,
+      );
+    };
+    const location = { root: '/ws/apps/app', resolveScreenshotPath };
+    assert.equal(
+      screenshotPath('/ws/libs/ui/src/card.device.ts', 'card', 'android', location),
+      '/ws/libs/ui/src/__screenshots__/card.device.ts/card-android-ci.png',
+    );
+    assert.deepEqual(given, [
+      {
+        name: 'card',
+        ext: '.png',
+        platform: 'android',
+        host: process.platform,
+        root: '/ws/apps/app',
+        testFileDirectory: '../../libs/ui/src',
+        testFileName: 'card.device.ts',
+        screenshotDirectory: '__screenshots__',
+      },
+    ]);
+    screenshotPath('/ws/apps/app/src/a.device.ts', '../../etc/passwd', 'ios', location);
+    assert.equal(
+      `${given[1]!.name}-ios.png`,
+      path.basename(screenshotPath('/ws/apps/app/src/a.device.ts', '../../etc/passwd', 'ios')),
+      'the name as a file name, as the default path has it',
+    );
+    assert.equal(given[1]!.testFileDirectory, 'src');
+    assert.equal(
+      screenshotPath('/ws/apps/app/src/a.device.ts', 'card', 'ios', {
+        root: '/ws/apps/app',
+        resolveScreenshotPath: ({ name, host }) => `screenshots/${name}-${host}.png`,
+      }),
+      `/ws/apps/app/screenshots/card-${process.platform}.png`,
+      "a relative path is from the project's root",
+    );
+  });
+
+  it('keep their default path with a root and no resolveScreenshotPath', () => {
+    assert.equal(
+      screenshotPath('/ws/libs/ui/card.device.ts', 'card', 'ios', { root: '/ws/apps/app' }),
+      screenshotPath('/ws/libs/ui/card.device.ts', 'card', 'ios'),
+    );
+  });
+
+  it('keep the capture and difference beside the reference resolveScreenshotPath names', () => {
+    inTemp((file) => {
+      const location = {
+        root: path.dirname(file),
+        resolveScreenshotPath: ({ name, platform, ext }: ScreenshotPathData) =>
+          `refs/${name}-${platform}-host${ext}`,
+      };
+      const reference = path.join(path.dirname(file), 'refs/card-ios-host.png');
+      assert.equal(matchScreenshot(request(file), {}, location).reference, reference);
+      assert.equal(existsSync(reference), true);
+      const failed = matchScreenshot(request(file, { png: png(4, 4, [0]) }), {}, location);
+      assert.equal(failed.pass, false);
+      assert.equal(
+        existsSync(path.join(path.dirname(reference), 'card-ios-host-actual.png')),
+        true,
+      );
+      assert.equal(existsSync(path.join(path.dirname(reference), 'card-ios-host-diff.png')), true);
+    });
   });
 
   it('are recorded when there is none, and the capture passes', () => {

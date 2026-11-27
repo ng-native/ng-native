@@ -438,6 +438,31 @@ place that matches, let a CI run fail on a missing reference, which keeps the ca
 `card-ios-actual.png`; upload the `__screenshots__` folders as an artifact when the job fails, and
 commit the captures as the references, without `-actual`.
 
+To keep references from different machines apart, such as CI's and a laptop's, give the project a
+`resolveScreenshotPath`, as in Vitest's browser mode. It returns the reference's path, absolute or
+from the project's root, and the capture and difference of a failure go beside it. It is given the
+screenshot's `name`, `ext` (`.png`), `platform` (the OS the app runs on), `host` (the OS of the
+machine running Vitest, which Vitest names `platform`), the project's `root`, the
+`testFileDirectory` from that root, the `testFileName` and the `screenshotDirectory`
+(`__screenshots__`). Here CI records `card-android-ci.png`, which is committed, and a Mac
+`card-android-darwin.png`, which `.gitignore` can leave out:
+
+```ts
+import path from 'node:path';
+import { deviceTests } from '@ng-native/testing/device/vitest';
+
+deviceTests({
+  platform: 'android',
+  screenshots: {
+    resolveScreenshotPath: (shot) => {
+      const machine = process.env['CI'] ? 'ci' : shot.host;
+      const file = `${shot.name}-${shot.platform}-${machine}${shot.ext}`;
+      return path.join(shot.testFileDirectory, shot.screenshotDirectory, shot.testFileName, file);
+    },
+  },
+});
+```
+
 The capture comes from a native module in `@ng-native/testing`, which the build the run makes
 includes. It needs Android 8 (API 26) or later. Expo Go does not have it, and macOS does not yet.
 

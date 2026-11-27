@@ -227,6 +227,7 @@ class DeviceWorker implements PoolWorker {
         launched,
         // A library's tests can be outside the project, anywhere in the workspace Metro serves.
         root: this.serverRoot,
+        project: this.projectRoot,
         screenshots: this.options.screenshots ?? {},
         signal: signal ? AbortSignal.any([signal, this.shutdown.signal]) : this.shutdown.signal,
       });
@@ -638,6 +639,8 @@ interface Session {
   nextRequest: number;
   /** The directory Metro serves for the worker that has the app, which its snapshot files are in. */
   root: string | null;
+  /** The project of the worker that has the app, the root its screenshot references are named from. */
+  project: string | null;
   /** The test files the app was sent to run, which an inline snapshot is written into. */
   files: Set<string>;
   /** The screenshot options of the worker that has the app. */
@@ -737,6 +740,7 @@ class Bridge {
       timeout,
       waited = timeout,
       root,
+      project,
       screenshots,
       signal,
       launched,
@@ -747,6 +751,7 @@ class Bridge {
       waited?: number;
       launched?: boolean;
       root: string;
+      project: string;
       screenshots: ScreenshotOptions;
       signal?: AbortSignal;
     },
@@ -786,6 +791,7 @@ class Bridge {
           cleanup();
           session.claimant = claimant;
           session.root = root;
+          session.project = project;
           session.screenshots = screenshots;
           session.files.clear();
           resolve(session);
@@ -999,7 +1005,8 @@ class Bridge {
 
   /**
    * A screenshot to compare with its reference, or record as one: only from an app a worker has,
-   * and only for a test file it was sent, whose `__screenshots__` the reference goes in.
+   * and only for a test file it was sent, beside which the reference goes unless the project's
+   * `resolveScreenshotPath` says otherwise.
    */
   private screenshot(
     session: Session | undefined,
@@ -1020,6 +1027,10 @@ class Bridge {
       const result = matchScreenshot(
         { ...request, file, platform: session.platform },
         session.screenshots.comparatorOptions,
+        {
+          root: session.project ?? undefined,
+          resolveScreenshotPath: session.screenshots.resolveScreenshotPath,
+        },
       );
       response.end(JSON.stringify({ result }));
     } catch (error) {
@@ -1110,6 +1121,7 @@ class Bridge {
       owed: new Set(),
       nextRequest: 1,
       root: null,
+      project: null,
       files: new Set(),
       screenshots: {},
       lastType: undefined,

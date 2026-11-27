@@ -492,6 +492,44 @@ describe('the device pool', () => {
     }
   });
 
+  it("names a screenshot's reference with the project's resolveScreenshotPath, from the worker's project", async () => {
+    const run = await setup(
+      {
+        screenshots: {
+          resolveScreenshotPath: ({ root, testFileName, name, platform, host, ext }) =>
+            join(root, 'shots', `${testFileName}-${name}-${platform}-${host}${ext}`),
+        },
+      },
+      'apps/app',
+    );
+    try {
+      mkdirSync(join(run.root, 'apps/app'), { recursive: true });
+      const { worker } = run.worker();
+      const starting = worker.start();
+      const phone = run.app('one', 'android');
+      const first = phone.poll();
+      await starting;
+      const test = join(run.root, 'src/a.device.ts');
+      worker.send(request('run', { files: [{ filepath: test }] }) as never);
+      await first;
+      const image = new PNG({ width: 1, height: 1 });
+      const png = PNG.sync.write(image).toString('base64');
+      const recorded = await phone.post('/screenshot', {
+        file: test,
+        name: 'card',
+        png,
+        update: 'new',
+      });
+      assert.equal(
+        recorded.result.reference,
+        join(run.root, `apps/app/shots/a.device.ts-card-android-${process.platform}.png`),
+      );
+      assert.equal(existsSync(recorded.result.reference), true);
+    } finally {
+      await run.done();
+    }
+  });
+
   it('keeps no screenshot for an app that says it is a platform a file name cannot be made from', async () => {
     const run = await setup();
     try {

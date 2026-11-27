@@ -126,7 +126,11 @@ function launcherFor(platform: DevicePoolOptions['platform'], device: string | u
 }
 
 export { devicePool, type DevicePoolOptions } from './pool.ts';
-export type { ScreenshotComparatorOptions, ScreenshotOptions } from './screenshot-baselines.ts';
+export type {
+  ScreenshotComparatorOptions,
+  ScreenshotOptions,
+  ScreenshotPathData,
+} from './screenshot-baselines.ts';
 export { macosLauncher, type MacosLauncherOptions } from './macos-launcher.ts';
 export { iosSimulatorLauncher, type IosSimulatorOptions } from './ios-launcher.ts';
 export { androidEmulatorLauncher, type AndroidEmulatorOptions } from './android-launcher.ts';
