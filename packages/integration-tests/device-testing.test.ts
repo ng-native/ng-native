@@ -102,8 +102,10 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
  * A project with a test that mocks its neighbour, a stand-in Metro that serves the test's bundle
  * (`bundle` is what it serves), and a pool whose workers' messages to Vitest are collected.
+ * `project` puts the workers' project in a directory below the one Metro serves, as an app in a
+ * workspace whose tests are in a library beside it.
  */
-async function setup(options: Parameters<typeof devicePool>[0] = {}) {
+async function setup(options: Parameters<typeof devicePool>[0] = {}, project = '') {
   const root = mkdtempSync(join(tmpdir(), 'device-pool-'));
   mkdirSync(join(root, 'src'));
   writeFileSync(join(root, 'src/a.device.ts'), "vi.mock('./dep.ts', () => ({}));\n");
@@ -153,7 +155,9 @@ async function setup(options: Parameters<typeof devicePool>[0] = {}) {
   });
   const workers: ReturnType<typeof pool.createPoolWorker>[] = [];
   const worker = () => {
-    const made = pool.createPoolWorker({ project: { config: { root } } } as never);
+    const made = pool.createPoolWorker({
+      project: { config: { root: join(root, project) } },
+    } as never);
     const messages: unknown[] = [];
     made.on('message', (message) => void messages.push(message));
     workers.push(made);
@@ -417,6 +421,33 @@ describe('the device pool', () => {
       symlinkSync(tmpdir(), linked);
       await refused({ op: 'write', path: join(linked, 'escape.snap'), content: '' });
       await refused({ op: 'read', path: snap }, run.app('stranger'));
+    } finally {
+      await run.done();
+    }
+  });
+
+  it("reads and writes snapshot files of a library's tests outside the app, in the workspace Metro serves", async () => {
+    const run = await setup({}, 'apps/app');
+    try {
+      mkdirSync(join(run.root, 'apps/app'), { recursive: true });
+      const { worker } = run.worker();
+      const starting = worker.start();
+      const phone = run.app('one');
+      const first = phone.poll();
+      await starting;
+      worker.send(
+        request('run', { files: [{ filepath: join(run.root, 'src/a.device.ts') }] }) as never,
+      );
+      await first;
+      const snap = join(run.root, 'src/__snapshots__/a.device.ts.android.snap');
+      assert.deepEqual(await phone.post('/files', { op: 'read', path: snap }), { result: null });
+      await phone.post('/files', { op: 'write', path: snap, content: 'exports[`a`] = `1`;' });
+      assert.equal(readFileSync(snap, 'utf8'), 'exports[`a`] = `1`;');
+      const refused = async (body: Record<string, unknown>) =>
+        assert.match((await phone.post('/files', body)).error, /Not a snapshot file/);
+      mkdirSync(join(run.root, 'node_modules/pkg'), { recursive: true });
+      await refused({ op: 'write', path: join(run.root, 'node_modules/pkg/a.snap'), content: '' });
+      await refused({ op: 'read', path: join(run.root, '../elsewhere.snap') });
     } finally {
       await run.done();
     }
