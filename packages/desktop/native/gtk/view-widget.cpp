@@ -281,10 +281,28 @@ void snapshotMasked(GtkWidget *widget, GtkSnapshot *snapshot) {
   gtk_snapshot_push_mask(snapshot, GSK_MASK_MODE_ALPHA);
   gtk_widget_snapshot_child(widget, first, snapshot);
   gtk_snapshot_pop(snapshot);
+  // The content, blended as a view's children are (viewSnapshot): each blending child's node is
+  // pushed up front, and its bottom is everything drawn before it.
+  std::vector<GskBlendMode> blends;
   for (GtkWidget *child = gtk_widget_get_next_sibling(first); child; child = gtk_widget_get_next_sibling(child)) {
-    if (!GTK_IS_NATIVE(child)) {
-      gtk_widget_snapshot_child(widget, child, snapshot);
+    if (auto mode = GTK_IS_NATIVE(child) ? std::nullopt : blendOf(child)) {
+      blends.push_back(*mode);
     }
+  }
+  for (auto it = blends.rbegin(); it != blends.rend(); ++it) {
+    gtk_snapshot_push_blend(snapshot, *it);
+  }
+  for (GtkWidget *child = gtk_widget_get_next_sibling(first); child; child = gtk_widget_get_next_sibling(child)) {
+    if (GTK_IS_NATIVE(child)) {
+      continue;
+    }
+    if (!blendOf(child)) {
+      gtk_widget_snapshot_child(widget, child, snapshot);
+      continue;
+    }
+    gtk_snapshot_pop(snapshot);
+    gtk_widget_snapshot_child(widget, child, snapshot);
+    gtk_snapshot_pop(snapshot);
   }
   gtk_snapshot_pop(snapshot);
 }

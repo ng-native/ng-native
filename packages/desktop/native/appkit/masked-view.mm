@@ -32,6 +32,15 @@ using namespace facebook::react;
   }
 }
 
++ (void)contentChangedIn:(NSView *)view {
+  for (NSView *at = view.superview; at != nil; at = at.superview) {
+    if ([at isKindOfClass:NGNMaskedView.class]) {
+      [(NGNMaskedView *)at renderMask];
+      return;
+    }
+  }
+}
+
 - (instancetype)initWithShadowView:(const ShadowView &)view {
   if ((self = [super initWithShadowView:view])) {
     _children = [NSMutableArray array];
@@ -49,6 +58,11 @@ using namespace facebook::react;
     [NGNMaskedView.live addObject:self];
   }
   return self;
+}
+
+// The mask first, then the content, wherever each is held.
+- (NSArray<NSView *> *)fabricChildren {
+  return _children;
 }
 
 - (void)mountChild:(NGNView *)child index:(NSInteger)index {
@@ -117,6 +131,8 @@ using namespace facebook::react;
   CGContextTranslateCTM(context, 0, static_cast<CGFloat>(height));
   CGContextScaleCTM(context, scale, -scale);
   CGContextTranslateCTM(context, NSMinX(first.frame), NSMinY(first.frame));
+  // Moved as it is drawn: its transform is about its corner, which a layer's own render leaves out.
+  CGContextConcatCTM(context, CATransform3DGetAffineTransform(first.viewTransform));
   [first.layer renderInContext:context];
   CGImageRef image = CGBitmapContextCreateImage(context);
   CGContextRelease(context);

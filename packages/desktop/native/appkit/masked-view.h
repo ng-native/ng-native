@@ -11,4 +11,7 @@
 // Renders each masked view's mask again from its first child, after a transaction: the child's
 // text, frame or children may have changed. Main thread.
 + (void)refreshMasks;
+// `view` drew new content with no transaction behind it (an image that loaded): the masked view it
+// is in renders its mask again.
++ (void)contentChangedIn:(NSView *)view;
 @end

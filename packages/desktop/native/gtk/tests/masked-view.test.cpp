@@ -34,3 +34,16 @@ TEST_CASE("a masked view draws its children through its first child, which it do
   CHECK_FALSE(black(views.pixel(150, 25)));
   CHECK_FALSE(reddish(views.pixel(50, 75)));
 }
+
+TEST_CASE("a masked view's content keeps its blend modes") {
+  REQUIRE(ngn::testing::gtkReady());
+  MountedViews views;
+  constexpr int64_t kBlue = 0xff0000ff;
+  views.add(MountedViews::shadow(2, ngn::MaskedViewComponentName, desktopViewProps(dynamic::object()), {{0, 0}, {200, 100}}));
+  views.add(MountedViews::shadow(3, "View", desktopViewProps(dynamic::object("backgroundColor", kBlack)), {{0, 0}, {200, 100}}), 2);
+  views.add(MountedViews::shadow(4, "View", desktopViewProps(dynamic::object("backgroundColor", kRed)), {{0, 0}, {200, 100}}), 2);
+  // Blue multiplied over red is black.
+  views.add(MountedViews::shadow(5, "View", desktopViewProps(dynamic::object("backgroundColor", kBlue)("mixBlendMode", "multiply")), {{0, 0}, {100, 100}}), 2);
+  CHECK(black(views.pixel(50, 50)));
+  CHECK(reddish(views.pixel(150, 50)));
+}

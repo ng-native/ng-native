@@ -495,8 +495,16 @@ static BOOL focusFromKeyboard() {
   return info.label.empty() ? nil : nsString(info.label);
 }
 
+- (NSArray<NSView *> *)fabricChildren {
+  return [self contentContainer].subviews;
+}
+
+- (CATransform3D)viewTransform {
+  return _transform;
+}
+
 - (void)collectTextInto:(NSMutableArray<NSString *> *)texts {
-  for (NSView *child in [self contentContainer].subviews) {
+  for (NSView *child in [self fabricChildren]) {
     if (![child isKindOfClass:NGNView.class] || child.hidden) {
       continue;
     }

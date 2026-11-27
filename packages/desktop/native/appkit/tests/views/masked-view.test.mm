@@ -80,3 +80,52 @@ TEST_CASE("A masked view draws its children through its first child, which it do
   CHECK(bottom(pixels).r > 240);
   CHECK(bottom(pixels).a > 240);
 }
+
+TEST_CASE("A masked view read as one element is named by the text of its children, the mask's included") {
+  MountedViews mounted;
+  mounted.add(at(5, ngn::MaskedViewComponentName, {{0, 0}, {kWidth, kHeight}}, folly::dynamic::object("accessible", true)));
+  mounted.add(at(6, "View", {{0, 0}, {kWidth, kHeight}}, folly::dynamic::object("accessibilityLabel", "Week")), 5);
+  mounted.add(at(7, "View", {{0, 0}, {kWidth, kHeight}}, folly::dynamic::object("accessibilityLabel", "fill")), 5);
+  NGNView *view = mounted.view(5);
+  REQUIRE((view != nil));
+  CHECK([view.accessibilityLabel isEqualToString:@"Week fill"]);
+}
+
+TEST_CASE("A masked view masks with its first child where its transform puts it") {
+  MountedViews mounted;
+  constexpr int kRed = static_cast<int>(0xFFFF0000);
+  constexpr int kBlack = static_cast<int>(0xFF000000);
+  mounted.add(at(5, ngn::MaskedViewComponentName, {{0, 0}, {kWidth, kHeight}}));
+  // Laid out over the top half, moved down to the bottom half.
+  auto down = folly::dynamic::array(folly::dynamic::object("translateY", kHeight / 2));
+  mounted.add(at(6, "View", {{0, 0}, {kWidth, kHeight / 2}}, folly::dynamic::object("backgroundColor", kBlack)("transform", down)), 5);
+  mounted.add(at(7, "View", {{0, 0}, {kWidth / 2, kHeight}}, folly::dynamic::object("backgroundColor", kRed)), 5);
+  auto pixels = drawn(mounted.view(5));
+  CHECK(pixel(pixels, kWidth / 4, kHeight / 4).a < 16);
+  CHECK(pixel(pixels, kWidth / 4, kHeight * 3 / 4).r > 240);
+  CHECK(pixel(pixels, kWidth / 4, kHeight * 3 / 4).a > 240);
+}
+
+TEST_CASE("A masked view masks again when an image that is its first child loads") {
+  MountedViews mounted;
+  constexpr int kRed = static_cast<int>(0xFFFF0000);
+  mounted.add(at(5, ngn::MaskedViewComponentName, {{0, 0}, {kWidth, kHeight}}));
+  mounted.add(at(6, "Image", {{0, 0}, {kWidth, kHeight}}), 5);
+  mounted.add(at(7, "View", {{0, 0}, {kWidth / 2, kHeight}}, folly::dynamic::object("backgroundColor", kRed)), 5);
+  // Nothing loaded yet: nothing shows.
+  CHECK(pixel(drawn(mounted.view(5)), kWidth / 4, kHeight / 4).a < 16);
+
+  // The image arrives, opaque over its top half, with no commit after it.
+  NSImage *image = [NSImage imageWithSize:NSMakeSize(kWidth, kHeight)
+                                  flipped:YES
+                           drawingHandler:^BOOL(NSRect) {
+                             [NSColor.blackColor setFill];
+                             NSRectFill(NSMakeRect(0, 0, kWidth, kHeight / 2));
+                             return YES;
+                           }];
+  [mounted.view(6) performSelector:@selector(loaded:) withObject:image];
+  auto pixels = drawn(mounted.view(5));
+  CHECK(pixel(pixels, kWidth / 4, kHeight / 4).r > 240);
+  CHECK(pixel(pixels, kWidth / 4, kHeight / 4).a > 240);
+  CHECK(pixel(pixels, kWidth / 4, kHeight * 3 / 4).a < 16);
+}
