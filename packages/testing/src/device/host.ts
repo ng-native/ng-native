@@ -40,6 +40,14 @@ export interface DeviceTestsOptions {
    * reaches at 127.0.0.1 and an Android emulator at 10.0.2.2.
    */
   url?: string;
+  /**
+   * What the host waits for before it mounts, as the app's own entry does before its `mount()`:
+   * `() => loadFonts(styles)` registers the faces the app's sheets declare, so tests render in them
+   * rather than in the fallback face. Called at each mount, like `mount`. When it rejects, the host
+   * still connects, and each test file it is sent fails with the error; an app that mounts in the
+   * fallback face instead catches it, `() => loadFonts(styles).catch(() => undefined)`.
+   */
+  beforeMount?: () => unknown;
   /** What the app does to its mount besides its options, such as adding a global sheet. */
   onMount?: (app: MountResult) => void;
 }
@@ -70,22 +78,48 @@ const mountOptions = (given: DeviceTestsOptions['mount']): MountOptions =>
 export function startDeviceTests(options: DeviceTestsOptions = {}): void {
   const { AppRegistry } = reactNative();
   AppRegistry.registerRunnable('main', ({ rootTag }) => {
-    const recorder = record(getFabricUIManager());
-    const app = mount(
-      Number(rootTag),
-      DeviceTestHost,
-      recorder.fabric,
-      mountOptions(options.mount),
-    );
-    options.onMount?.(app);
-    void Promise.all([rootComponent(app), poolUrl(options.url)]).then(([host, url]) => {
-      setHarness({ app, recorder, slot: () => host.slot(), pool: { url, session } });
-      void serve(url, (status) => {
-        host.status.set(status);
-        app.applicationRef.tick();
+    const start = (failure: Error | null) => {
+      const recorder = record(getFabricUIManager());
+      const app = mount(
+        Number(rootTag),
+        DeviceTestHost,
+        recorder.fabric,
+        mountOptions(options.mount),
+      );
+      options.onMount?.(app);
+      void Promise.all([rootComponent(app), poolUrl(options.url)]).then(([host, url]) => {
+        setHarness({ app, recorder, slot: () => host.slot(), pool: { url, session } });
+        const status = (text: string) => {
+          host.status.set(failure ? failure.message : text);
+          app.applicationRef.tick();
+        };
+        if (failure) status('');
+        // After a failed beforeMount, each test file fails with its error rather than running.
+        void serve(url, status, failure ? () => Promise.reject(failure) : runFiles);
       });
-    });
+    };
+    if (!options.beforeMount) return start(null);
+    void Promise.resolve()
+      .then(options.beforeMount)
+      .then(
+        () => start(null),
+        (error: unknown) => {
+          const failure = beforeMountFailed(error);
+          console.error(failure);
+          start(failure);
+        },
+      );
   });
+}
+
+/** What each test file fails with when the app's `beforeMount` rejected, with its error. */
+function beforeMountFailed(error: unknown): Error {
+  const reason = error instanceof Error ? error.message : String(error);
+  const failure = new Error(
+    `No test ran: the beforeMount given to startDeviceTests() rejected: ${reason}`,
+  );
+  if (error instanceof Error && error.stack) failure.stack = `${failure.message}\n${error.stack}`;
+  return failure;
 }
 
 /**
@@ -113,7 +147,11 @@ interface Request {
 /** This launch of the app, to the pool: a reload is a new session. */
 const session = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
-async function serve(url: string, status: (text: string) => void): Promise<void> {
+async function serve(
+  url: string,
+  status: (text: string) => void,
+  run: typeof runFiles,
+): Promise<void> {
   let config: Record<string, unknown> = {};
   let reply: unknown = null;
   for (;;) {
@@ -145,7 +183,7 @@ async function serve(url: string, status: (text: string) => void): Promise<void>
         respond('started');
       } else if (request.type === 'run' || request.type === 'collect') {
         status('');
-        await runFiles(url, session, request as RunRequest, config);
+        await run(url, session, request as RunRequest, config);
         status('Waiting for Vitest');
         respond('testfileFinished');
       } else if (request.type === 'stop') {
