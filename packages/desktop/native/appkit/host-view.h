@@ -51,6 +51,12 @@
 - (void)refreshControlRelations;
 // Where Fabric children mount: the view itself, or a scroll view's document view.
 - (NSView *)contentContainer;
+// The Fabric children in order, for reading their text: the content container's subviews, or a
+// view's own where it places them elsewhere (a masked view's mask and content).
+- (NSArray<NSView *> *)fabricChildren;
+// Its `transform`, about its top-left corner in its parent's y-down space (view-transform.h): the
+// identity for none.
+@property (nonatomic, readonly) CATransform3D viewTransform;
 // What takes the keyboard when Tab moves the focus here: the view itself, or the AppKit control
 // or field it holds.
 - (NSResponder *)keyboardResponder;

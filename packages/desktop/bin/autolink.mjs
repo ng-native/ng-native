@@ -42,8 +42,9 @@ const OS_LABELS = { macos: 'macOS', linux: 'Linux' };
  * Packages whose native side is answered another way on a desktop OS, so they are neither linked nor
  * reported: React Native and React themselves, Expo (`expo` and `expo-*` resolve to empty modules
  * there, and the host's own modules answer the services that use them), this framework, and the
- * libraries whose native modules the core implements (`core-modules.cpp`): async-storage's
- * RNCAsyncStorage and RNAsyncStorage, and the gesture handler's RNGestureHandlerModule.
+ * libraries whose native side the core implements: async-storage's RNCAsyncStorage and
+ * RNAsyncStorage and the gesture handler's RNGestureHandlerModule (`core-modules.cpp`), and the
+ * masked view's RNCMaskedView (`masked-view.h`).
  *
  * @param {string} name
  */
@@ -53,6 +54,7 @@ function suppliedOtherwise(name) {
     name === 'react-native' ||
     name === '@react-native-async-storage/async-storage' ||
     name === 'react-native-gesture-handler' ||
+    name === '@react-native-masked-view/masked-view' ||
     name === 'expo' ||
     name.startsWith('expo-') ||
     name.startsWith('@expo/') ||

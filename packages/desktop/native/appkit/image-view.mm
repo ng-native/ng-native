@@ -1,4 +1,5 @@
 #import "image-view.h"
+#import "masked-view.h"
 #import "image-request.h"
 
 #import <QuartzCore/QuartzCore.h>
@@ -229,6 +230,8 @@ NSImage *tintedImage(NSImage *image, const SharedColor &tint) {
     layer.contents = shown;
   }
   [CATransaction commit];
+  // A picture that arrives after its commit, in a masked view, is the mask's to show.
+  [NGNMaskedView contentChangedIn:self];
 }
 
 - (void)loaded:(NSImage *)image {

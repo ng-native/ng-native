@@ -43,8 +43,8 @@ export const NATIVE_VIEWS: Readonly<Record<string, [string, Record<string, unkno
    */
   'segmented-control': ['RNCSegmentedControl', { onChange: true }],
   /**
-   * `@react-native-masked-view/masked-view`: its `maskElement` is a prop, not a child. Absent on
-   * macOS, where the library has no view: the content shows unmasked.
+   * `@react-native-masked-view/masked-view`: its `maskElement` is a prop, not a child. On macOS
+   * and Linux the desktop host draws the view itself.
    */
   'masked-view': ['RNCMaskedView'],
   /** `react-native-pager-view`, the swipeable pager a tab layout is built on. */

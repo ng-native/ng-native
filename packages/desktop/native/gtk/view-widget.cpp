@@ -13,6 +13,7 @@
 #include "video.h"
 #endif
 
+#include "ngn/masked-view.h"
 #include "ngn/view-box.h"
 #include "ngn/view-filter.h"
 #include "ngn/view-transform.h"
@@ -267,6 +268,45 @@ std::optional<GskBlendMode> blendOf(GtkWidget *child) {
   }
 }
 
+// A masked view's children: the first is the mask, recorded and never drawn, and the rest draw
+// through it, where it is opaque.
+void snapshotMasked(GtkWidget *widget, GtkSnapshot *snapshot) {
+  GtkWidget *first = gtk_widget_get_first_child(widget);
+  while (first && GTK_IS_NATIVE(first)) {
+    first = gtk_widget_get_next_sibling(first);
+  }
+  if (!first) {
+    return;
+  }
+  gtk_snapshot_push_mask(snapshot, GSK_MASK_MODE_ALPHA);
+  gtk_widget_snapshot_child(widget, first, snapshot);
+  gtk_snapshot_pop(snapshot);
+  // The content, blended as a view's children are (viewSnapshot): each blending child's node is
+  // pushed up front, and its bottom is everything drawn before it.
+  std::vector<GskBlendMode> blends;
+  for (GtkWidget *child = gtk_widget_get_next_sibling(first); child; child = gtk_widget_get_next_sibling(child)) {
+    if (auto mode = GTK_IS_NATIVE(child) ? std::nullopt : blendOf(child)) {
+      blends.push_back(*mode);
+    }
+  }
+  for (auto it = blends.rbegin(); it != blends.rend(); ++it) {
+    gtk_snapshot_push_blend(snapshot, *it);
+  }
+  for (GtkWidget *child = gtk_widget_get_next_sibling(first); child; child = gtk_widget_get_next_sibling(child)) {
+    if (GTK_IS_NATIVE(child)) {
+      continue;
+    }
+    if (!blendOf(child)) {
+      gtk_widget_snapshot_child(widget, child, snapshot);
+      continue;
+    }
+    gtk_snapshot_pop(snapshot);
+    gtk_widget_snapshot_child(widget, child, snapshot);
+    gtk_snapshot_pop(snapshot);
+  }
+  gtk_snapshot_pop(snapshot);
+}
+
 // A view draws its box, then its children in Fabric's order. A child with a mix-blend-mode blends
 // with what the view drew before it: its box and the children under it. Each such child is a blend
 // node whose bottom is everything drawn before it, so the nodes are pushed up front, the last
@@ -275,8 +315,10 @@ void viewSnapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
   ViewData *d = NGN_VIEW(widget)->data;
   auto props = std::dynamic_pointer_cast<const ViewProps>(d->props);
   int filters = props ? pushFilter(snapshot, *props) : 0;
+  // A masked view (masked-view.h) draws its children through its first one instead.
+  bool masked = d->component == ngn::MaskedViewComponentName;
   std::vector<GskBlendMode> blends;
-  for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
+  for (GtkWidget *child = gtk_widget_get_first_child(widget); child && !masked; child = gtk_widget_get_next_sibling(child)) {
     if (auto mode = GTK_IS_NATIVE(child) ? std::nullopt : blendOf(child)) {
       blends.push_back(*mode);
     }
@@ -297,7 +339,10 @@ void viewSnapshot(GtkWidget *widget, GtkSnapshot *snapshot) {
   }
   auto clip = [&] { return box && ngn::gtk::pushOverflowClip(snapshot, *box); };
   bool clipped = clip();
-  for (GtkWidget *child = gtk_widget_get_first_child(widget); child; child = gtk_widget_get_next_sibling(child)) {
+  if (masked) {
+    snapshotMasked(widget, snapshot);
+  }
+  for (GtkWidget *child = gtk_widget_get_first_child(widget); child && !masked; child = gtk_widget_get_next_sibling(child)) {
     if (GTK_IS_NATIVE(child)) {
       // A popover is a surface of its own.
       continue;

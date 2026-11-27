@@ -4,6 +4,7 @@
 #import "expo-ui-view.h"
 #import "header-toolbar.h"
 #import "host-view.h"
+#import "masked-view.h"
 #import "modal-host-view.h"
 #import "presented-screen.h"
 #import "split-view.h"
@@ -308,6 +309,7 @@ void AppKitBackend::setAccessibilityRelations(SurfaceId, Tag tag, const AxRelati
 void AppKitBackend::didMount(SurfaceId surfaceId) {
   [NGNPresentedScreenView refreshChrome];
   [NGNModalHostView fitPopovers];
+  [NGNMaskedView refreshMasks];
   for (NGNSourceLists *lists in sourceLists_.allValues) {
     [lists layOut];
   }

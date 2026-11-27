@@ -17,10 +17,12 @@
 #import "view-effects.h"
 #import "symbol-view.h"
 #import "glass-view.h"
+#import "masked-view.h"
 #import "visual-effect-view.h"
 
 #include "ngn/dom-web-view.h"
 #include "ngn/glass.h"
+#include "ngn/masked-view.h"
 #include "ngn/visual-effect.h"
 #import "web-view-component.h"
 #import "expo-image-view.h"
@@ -493,8 +495,16 @@ static BOOL focusFromKeyboard() {
   return info.label.empty() ? nil : nsString(info.label);
 }
 
+- (NSArray<NSView *> *)fabricChildren {
+  return [self contentContainer].subviews;
+}
+
+- (CATransform3D)viewTransform {
+  return _transform;
+}
+
 - (void)collectTextInto:(NSMutableArray<NSString *> *)texts {
-  for (NSView *child in [self contentContainer].subviews) {
+  for (NSView *child in [self fabricChildren]) {
     if (![child isKindOfClass:NGNView.class] || child.hidden) {
       continue;
     }
@@ -1383,6 +1393,9 @@ NGNView *NGNMakeView(const ShadowView &view) {
   }
   if (name == ngn::VisualEffectComponentName) {
     return [[NGNVisualEffectView alloc] initWithShadowView:view];
+  }
+  if (name == ngn::MaskedViewComponentName) {
+    return [[NGNMaskedView alloc] initWithShadowView:view];
   }
   // react-native-svg's: the svg draws its elements, whose own views are hidden.
   if (name == "RNSVGSvgView") {

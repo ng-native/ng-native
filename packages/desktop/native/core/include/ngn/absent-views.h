@@ -3,7 +3,7 @@
 // `__nativeComponentRegistry__hasComponent`) answers false for each, so the element reports itself
 // absent, and one committed anyway mounts as a plain view (UnimplementedNativeView) whose children
 // still show. A library compiled into the host that declares one (react-native-keyboard-controller)
-// has it left out of the registry. The community views `slider`, `picker` and `masked-view` are
+// has it left out of the registry. The community views `slider` and `picker` are
 // here too: their libraries ship no macOS code, and `@expo/ui`'s SwiftUI slider and picker are
 // the macOS ones.
 #pragma once
