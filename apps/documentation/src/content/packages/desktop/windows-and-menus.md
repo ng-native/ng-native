@@ -11,16 +11,17 @@ How the desktop host turns an app's windows, menus, tray icons and Dock into App
 
 The app starts on a surface the host never shows, and every window it opens (`AppWindows`, through
 the `NgNativeWindows` module) is an NSWindow with a surface of its own on the one runtime, shown
-when its first frame mounts, or once the app hides the splash screen it holds
-(`NgNativeSplashScreen`). The close button, Cmd-W, Cmd-Q and a logout ask the app, which closes
-the window or answers the quit; the host never closes a window or quits on its own, and closing the
-last window leaves the app running. A Dock click with no window open sends `reopen`. A window's
-frame autosaves under its key (`main`, a route outlet or a `restoreKey`) in the app's preferences
-and comes back there, within its size limits, when a window with that key opens again. A reload
-closes the windows with no key and keeps the rest for five seconds for the reloaded app to open
-again. An app that renders on its own surface instead gets that surface in a window. Each window
-tells the app its size and its backing scale as it shows and whenever either changes, as when it
-moves to a display of another density, so its engine keeps its own media query size, pixel ratio
+once its first frame has mounted with the title bar's safe areas and its controls' sizes, or 0.3
+seconds after it opens if they have not settled by then, and after the app hides the splash screen
+it holds (`NgNativeSplashScreen`). The close button, Cmd-W, Cmd-Q and a logout ask the app, which
+closes the window or answers the quit; the host never closes a window or quits on its own, and
+closing the last window leaves the app running. A Dock click with no window open sends `reopen`. A
+window's frame autosaves under its key (`main`, a route outlet or a `restoreKey`) in the app's
+preferences and comes back there, within its size limits, when a window with that key opens again. A
+reload closes the windows with no key and keeps the rest for five seconds for the reloaded app to
+open again. An app that renders on its own surface instead gets that surface in a window. Each
+window tells the app its size and its backing scale as it shows and whenever either changes, as when
+it moves to a display of another density, so its engine keeps its own media query size, pixel ratio
 and `--hairline`. In a right-to-left language AppKit mirrors each window's chrome (the window
 buttons, the toolbar and its chevrons, the sidebar), and the app's views lay out right to left
 whenever `I18nManager.isRTL` says so, `allowRTL` and `forceRTL` included, as on iOS. Text with no

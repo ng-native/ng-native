@@ -124,7 +124,7 @@ struct Host {
   bool firstFrameLogged = false;
   // What the host runs and how (launch-settings.h), set once at launch.
   const ngn::LaunchSettings *launch = nullptr;
-  // The app window is ordered front once, when its safe areas settle (showAppWindowWhenSettled).
+  // The app window is ordered front once, when its safe areas settle (showAppWindow).
   bool appWindowShown = false;
   // The launch running, the first or a reload's, has yet to put content its own JavaScript
   // instance mounted in a window on screen, which starts its success timer (launch-frame.h).
@@ -625,10 +625,10 @@ void showAppSurfaceIfUsed() {
   gHost.appWindow.contentView = gHost.appSurface;
   [gHost.appWindow setFrameTopLeftPoint:NSMakePoint(NSMinX(visible) + 40, NSMaxY(visible) - 40)];
   // Shown once the content has the insets of the title bar and toolbar it runs under and its native
-  // controls their measured sizes, a commit or two later, or after kSettleWait at the latest: shown
+  // controls their measured sizes, a commit or two later, or after kFirstShowWait at the latest: shown
   // at once, its first frames would draw under the toolbar and then jump down.
-  constexpr int64_t kSettleWait = 300 * NSEC_PER_MSEC;
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, kSettleWait), dispatch_get_main_queue(), ^{
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(ngn::appkit::kFirstShowWait * NSEC_PER_SEC)),
+                 dispatch_get_main_queue(), ^{
     showAppWindow();
   });
 }
@@ -1104,6 +1104,9 @@ int main(int argc, const char *argv[]) {
               logFirstFrame(window);
               launchFrameShown(gHost.windows->surfaceOf(window), window);
             },
+        // As the app surface's window waits (showAppWindow): the first frame has the title bar's
+        // insets and the controls their sizes.
+        .settled = [] { return gHost.mounting->safeAreasSettled() && gHost.mounting->controlSizesSettled(); },
     });
     gHost.windowHost = std::make_shared<ngn::WindowHost>(gHost.windows, system);
     gHost.windows->setHost(gHost.windowHost);

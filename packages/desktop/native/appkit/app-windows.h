@@ -15,6 +15,10 @@
 
 namespace ngn::appkit {
 
+// The longest a window's first show waits for its content to settle: shown at once, its first
+// frames would draw under the title bar and toolbar and then jump.
+inline constexpr double kFirstShowWait = 0.3;
+
 class AppKitWindows final : public WindowBackend {
  public:
   // What a window needs from the rest of the host. Main thread.
@@ -31,6 +35,9 @@ class AppKitWindows final : public WindowBackend {
     std::function<void(std::function<void()>)> whenShown;
     // A window is on screen for the first time.
     std::function<void(NSWindow *)> shown;
+    // Whether the content has its safe areas and its controls' sizes: a first show waits for a
+    // mount that has them, or kFirstShowWait at the latest. Unset, a first mount shows at once.
+    std::function<bool()> settled;
   };
 
   explicit AppKitWindows(Hooks hooks);
@@ -41,7 +48,7 @@ class AppKitWindows final : public WindowBackend {
     return host_.get();
   }
 
-  // A surface mounted: its window shows on the first. Main thread.
+  // A surface mounted: its window shows on the first that has settled. Main thread.
   void didMount(SurfaceId surface);
   NSWindow *window(SurfaceId surface) const;
   // The surface whose window this is, or 0.
@@ -68,6 +75,10 @@ class AppKitWindows final : public WindowBackend {
  private:
   // Shows a mounted window that has not shown yet. Main thread.
   void show(SurfaceId surface);
+  // Lets a window's first show go, past the splash screen. Main thread.
+  void release(SurfaceId surface);
+  // Gone with this object, so a first-show timer that outlives it does nothing.
+  std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
   Hooks hooks_;
   // Mounted, and waiting for the splash screen to show them.
   std::set<SurfaceId> held_;
