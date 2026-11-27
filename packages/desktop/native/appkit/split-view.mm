@@ -155,9 +155,13 @@ void updatePaneState(NGNView *view, facebook::react::Size size) {
 - (void)placeCard {
   CGFloat margin = ngn::kInsetContentMargin;
   NSRect bounds = self.bounds;
+  // Below the toolbar or a title bar that shows its title; up to the window's top when the title
+  // is hidden and there is no toolbar, as the window controls sit over the sidebar.
+  NSWindow *window = self.window;
+  BOOL bare = window != nil && window.toolbar == nil && window.titleVisibility == NSWindowTitleHidden;
+  CGFloat top = bare ? 0 : self.safeAreaInsets.top;
   NSRect frame = NSMakeRect(
-      margin, margin, MAX(0, NSWidth(bounds) - 2 * margin),
-      MAX(0, NSHeight(bounds) - self.safeAreaInsets.top - 2 * margin));
+      margin, margin, MAX(0, NSWidth(bounds) - 2 * margin), MAX(0, NSHeight(bounds) - top - 2 * margin));
   if (!NSEqualRects(frame, _card.frame)) {
     _card.frame = frame;
   }

@@ -233,7 +233,9 @@ NSImage *picture(const std::string &name, const std::string &svgIcon, CGFloat si
     _homes = [NSMapTable weakToWeakObjectsMapTable];
     _hostedTypes = [NSMapTable weakToStrongObjectsMapTable];
     _searchItems = [NSMutableDictionary dictionary];
-    _toolbar = [[NSToolbar alloc] initWithIdentifier:@"ngn.header"];
+    // An identifier of its own: AppKit keeps toolbars that share one in step, item for item, and
+    // each window's header is its own, so one window's rebuild would reach into another's.
+    _toolbar = [[NSToolbar alloc] initWithIdentifier:[@"ngn.header." stringByAppendingString:NSUUID.UUID.UUIDString]];
     _toolbar.delegate = self;
     _toolbar.displayMode = NSToolbarDisplayModeIconOnly;
     _toolbar.allowsUserCustomization = NO;
@@ -410,19 +412,25 @@ NSImage *picture(const std::string &name, const std::string &svgIcon, CGFloat si
 
   window.title = bar && !_bar.title.empty() ? nsString(_bar.title) : _appTitle;
   window.subtitle = bar ? nsString(_bar.subtitle) : @"";
-  while (_toolbar.items.count > 0) {
-    [_toolbar removeItemAtIndex:0];
-  }
-  for (NSUInteger i = 0; i < ids.count; i++) {
-    [_toolbar insertItemWithItemIdentifier:ids[i] atIndex:(NSInteger)i];
-  }
-  if ((bar && !_bar.hidden) || _sidebar) {
+  // A sidebar's toolbar only while it holds something to see: the sidebar button or the chevrons.
+  // With neither, the window has no toolbar, and an inset card can run up under the title bar. In
+  // the window before its items go in: a tracking separator inserted with no window to track is
+  // dropped.
+  if ((bar && !_bar.hidden) || (_sidebar && (_sidebarToggle || _buttons.shown))) {
     window.toolbar = _toolbar;
     window.toolbarStyle = NSWindowToolbarStyleUnified;
     window.titlebarSeparatorStyle =
         bar && _bar.hideShadow ? NSTitlebarSeparatorStyleNone : NSTitlebarSeparatorStyleAutomatic;
   } else {
     window.toolbar = nil;
+  }
+  while (_toolbar.items.count > 0) {
+    [_toolbar removeItemAtIndex:0];
+  }
+  // Each after the last one in: AppKit leaves out an item it will not take (a tracking separator in
+  // a toolbar with no window), and an index past the end throws.
+  for (NSToolbarItemIdentifier identifier in ids) {
+    [_toolbar insertItemWithItemIdentifier:identifier atIndex:(NSInteger)_toolbar.items.count];
   }
   // The safe area's top follows the toolbar; containers report it as they lay out.
   [NGNSurfaceView safeAreaChangedIn:window];
