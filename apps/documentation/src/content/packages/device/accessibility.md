@@ -59,6 +59,18 @@ Every value here starts at its neutral setting (nothing on, a font scale of one)
 once the platform answers, because React Native reports all three asynchronously - a first paint
 never assumes a setting is on that has not actually been confirmed.
 
+## On an iPad with a hardware keyboard
+
+A view that is focusable takes the keyboard's focus: a `<pressable>`, a `<touchable-opacity>`, and
+any view with `[focusable]="true"`. UIKit draws its focus halo around the focused view, and Space
+or Return presses it as a tap would: `(press)` fires, or on a view with a `[menu]`, from iOS 17.4,
+the menu opens instead, as it does for a tap. Tab moves the focus
+between focus groups and the arrow keys move it within one, as in other iPad apps. A disabled view
+is not focused.
+
+This needs `@ng-native/components`' pod, which Expo Go does not have. Full Keyboard Access moves
+the focus by its own rules.
+
 ## On macOS
 
 VoiceOver reads a view's role, label, hint and value, and its checked, selected and disabled
