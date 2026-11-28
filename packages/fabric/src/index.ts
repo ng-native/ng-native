@@ -36,7 +36,12 @@ export {
   type TokenValue,
 } from './css.ts';
 export { DOM_EVENT_TYPES, MOUSE_EVENTS } from './dom-events.ts';
-export { ELEMENT_STYLES, ELEMENT_STYLES_CSS } from './element-styles.ts';
+export {
+  BROWSER_STYLES,
+  BROWSER_STYLES_CSS,
+  ELEMENT_STYLES,
+  ELEMENT_STYLES_CSS,
+} from './element-styles.ts';
 export { EngineIntersectionObserver, installDeferTriggers } from './defer-triggers.ts';
 export { installNodeGlobal } from './node-global.ts';
 export { nextFrame } from './next-frame.ts';

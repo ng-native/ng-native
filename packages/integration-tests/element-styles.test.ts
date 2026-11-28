@@ -5,6 +5,8 @@
 import assert from 'node:assert/strict';
 import { it } from 'node:test';
 import {
+  BROWSER_STYLES,
+  BROWSER_STYLES_CSS,
   ELEMENT_STYLES,
   ELEMENT_STYLES_CSS,
   Engine,
@@ -19,6 +21,15 @@ it('ELEMENT_STYLES is ELEMENT_STYLES_CSS, compiled', () => {
   });
   assert.deepEqual(warnings, []);
   assert.deepEqual(JSON.parse(JSON.stringify(ELEMENT_STYLES.rules)), compiled.rules);
+});
+
+it('BROWSER_STYLES is BROWSER_STYLES_CSS, compiled', () => {
+  const warnings: string[] = [];
+  const compiled = compileCss(BROWSER_STYLES_CSS, 'browser-styles', {
+    onUnsupported: (message: string) => warnings.push(message),
+  });
+  assert.deepEqual(warnings, []);
+  assert.deepEqual(JSON.parse(JSON.stringify(BROWSER_STYLES.rules)), compiled.rules);
 });
 
 it('draws code in Menlo on a Mac, as on iOS, and in monospace on Linux, as on Android', () => {
@@ -43,4 +54,21 @@ it('draws code in Menlo on a Mac, as on iOS, and in monospace on Linux, as on An
   } finally {
     registerPlatformComponents('ios');
   }
+});
+
+it("gives an element a browser's styles when told after it was committed", () => {
+  const fabric = createFakeFabric();
+  const engine = new Engine(fabric, 1);
+  const paragraph = engine.createElement('p');
+  engine.appendChild(engine.root, paragraph);
+  engine.appendChild(paragraph, engine.createText('x'));
+  engine.commit();
+  const marginTop = () =>
+    /"marginTop":(\d+)/.exec(
+      JSON.stringify(fabric.committed, (key, value) => (key === 'parent' ? undefined : value)),
+    )?.[1];
+  assert.equal(marginTop(), undefined);
+  engine.giveBrowserStyles(paragraph);
+  engine.commit();
+  assert.ok(Number(marginTop()) > 0, 'a margin of 1em');
 });
