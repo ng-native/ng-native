@@ -52,6 +52,10 @@ last app has gone, as Angular never gives one back.
   `type`, the ARIA properties and the rest. `isContentEditable` is read from `contenteditable` on
   the element or the nearest element above it with a value other than `inherit` or one HTML does
   not define, and a text field answers `false`.
+- A `<progress>` is filled to its value: the bar a stylesheet styles as `::-webkit-progress-value`
+  or `::-moz-progress-bar` is a box in the element, as wide a share of it as `value` is of `max`,
+  and with no value the element is `:indeterminate`. `value`, `max` and `position` read and write
+  as a browser's do.
 - A table's rows and cells, laid out in columns: a cell is as wide as the columns it is across
   (`colspan`), one down several rows (`rowspan`) is drawn over them, and the columns share the
   table's width by what their cells hold or by the widths the cells say. `table-layout: fixed`

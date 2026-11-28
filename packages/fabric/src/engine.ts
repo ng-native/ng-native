@@ -7895,6 +7895,12 @@ function hasGeneratedAttribute(node: EngineNode, boxes: GeneratedFor): boolean {
   return false;
 }
 
+/**
+ * Whether a box of a pseudo-element is drawn by its `content`: `::before` and `::after`. A
+ * package's own, a progress bar's value, is drawn while it is there.
+ */
+const byContent = (tag: string): boolean => tag === BEFORE || tag === AFTER;
+
 /** What a generated box has before any rule: a browser's is not positioned, where a view is. */
 const GENERATED_STYLE = { position: 'static' };
 const NOT_GENERATED = { display: 'none' };
@@ -13998,7 +14004,7 @@ export class Engine implements HostEngine {
   private ruleStyle(node: EngineNode): Readonly<Record<string, unknown>> {
     const { style } = this.styles.resolve(node, this.styleEpoch);
     // Asked of every node a commit: told from a generated box here, without a call.
-    return this.generated !== null && isGenerated(node.tag) ? generatedStyle(style) : style;
+    return this.generated !== null && byContent(node.tag) ? generatedStyle(style) : style;
   }
 
   /** Each node's layout styles while one container is planned, so each is merged once. */
@@ -17152,7 +17158,7 @@ export class Engine implements HostEngine {
     // Moved with a finger on it, it is committed where it was: see `heldHandles`.
     if (this.heldMoves.size && this.heldElsewhere(child)) return true;
     // A box drawn and then hidden is `display: none`, as any element is.
-    if (this.generated !== null && isGenerated(child.tag)) {
+    if (this.generated !== null && byContent(child.tag)) {
       return this.undrawn(child) || this.undisplayed(child);
     }
     if (this.undisplayed(child)) return true;

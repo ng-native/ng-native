@@ -286,6 +286,21 @@ export class Bar {}`;
     );
     assert.throws(() => compiled('/app/src/page/bar.ts', broken));
   });
+
+  it('draws its generated boxes and background images, as a library its own', () => {
+    // Taiga UI's surface example sets a wallpaper on its host, and a badge draws its dot after.
+    const widget = `import {Component} from '@angular/core';
+@Component({ selector: 'hlm-wall', template: '', styles: ':host { background: url(wall.jpg) } :host::after { content: "" }' })
+export class Wall {}`;
+    const compiled = (file: string) =>
+      withEnv('ANGULAR_NATIVE_SOURCE_BROWSER', '/app/src/helm', () =>
+        warned(() => transformAngular(widget, file, { dev: false, platform: 'ios' }).code),
+      ).result;
+    const helm = compiled('/app/src/helm/wall.ts');
+    assert.match(helm, /"backgroundUrl":"url\(\\"wall\.jpg\\"\)"/);
+    assert.match(helm, /"::after"/);
+    assert.doesNotMatch(compiled('/app/src/page/wall.ts'), /backgroundUrl/);
+  });
 });
 
 describe("a library's component CSS, opted in", () => {

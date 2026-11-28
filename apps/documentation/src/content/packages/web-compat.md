@@ -101,9 +101,10 @@ module.exports = withWebCompat(withAngularNative(getDefaultConfig(__dirname)), {
 ```
 
 `libraries` are npm packages, and at least one is required. `sources` are directories of the app's
-own sources, relative to the project. A library written for native is left out of both, and keeps
-its columns. The transformer's cache version changes with both lists, so a file transformed before
-a list changed is transformed again.
+own sources, relative to the project, whose components' styles are read as a library's are:
+their `::before` and `::after`, masks and background images included. A library written for
+native is left out of both, and keeps its columns. The transformer's cache version changes with
+both lists, so a file transformed before a list changed is transformed again.
 
 `withWebCompat` also gives the window its `addEventListener`, `removeEventListener` and
 `dispatchEvent` before any module runs, for a library that adds a listener as it loads, as the

@@ -1,3 +1,4 @@
+import { progressCreated } from './progress.ts';
 import { isTextInput, type Engine, type EngineNode } from '@ng-native/fabric';
 import type { RendererExtension } from '@ng-native/platform';
 import { activate, ancestry, clickElement, disabled } from './activation.ts';
@@ -227,6 +228,8 @@ export const webListen: RendererExtension = {
     if (documentOf(engine)) canvasCreated(node, engine);
     // An image is the platform's image view: see `image.ts`.
     imageCreated(node, engine);
+    // A progress bar holds the box its value fills: see `progress.ts`.
+    progressCreated(node, engine);
     // A web view, or a document of its own: see `frame-view.ts` and `frame.ts`.
     frameCreated(node, engine);
     // The window starts under a screen's navigation header: see `underHeader`.
