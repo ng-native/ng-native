@@ -2,7 +2,13 @@ import { isTextInput, type Engine, type EngineNode } from '@ng-native/fabric';
 import type { RendererExtension } from '@ng-native/platform';
 import { activate, ancestry, clickElement, disabled } from './activation.ts';
 import { canvasCreated, setCanvasSize } from './canvas.ts';
-import { documentOf, heldForMenu, listenAnywhere, type CompatDocument } from './document.ts';
+import {
+  documentOf,
+  eventPath,
+  heldForMenu,
+  listenAnywhere,
+  type CompatDocument,
+} from './document.ts';
 import { giveDefaults, giveRole, hoverWritten, scrollWhereStyled } from './elements.ts';
 import { nativeEvent } from './event-classes.ts';
 import { pluginFor } from './event-plugins.ts';
@@ -935,10 +941,26 @@ function noKeysHeld(type: string): object {
 }
 
 /** A DOM event as a listener reads one, of the kind a browser sends it as. */
-function dom(type: string, target: EngineNode, event: unknown): object {
+export function dom(type: string, target: EngineNode, event: unknown): object {
   const fields = domFields(type, target, event);
   const mouse = MOUSE_OF_TOUCH.has(type);
   return nativeEvent(type, mouse ? { ...fields, ...noKeysHeld(type), detail: 1 } : fields);
+}
+
+/** The path each event native said goes up, taken before the first listener hears it. */
+const paths = new WeakMap<object, readonly object[]>();
+
+/**
+ * The path an event goes up from where it was sent, to the document and the window where that
+ * is in the page: taken once, so a listener that moves the node leaves the path it went up.
+ */
+function pathOf(sentTo: EngineNode, event: unknown): readonly object[] {
+  const key = typeof event === 'object' && event !== null ? event : undefined;
+  const taken = key && paths.get(key);
+  if (taken) return taken;
+  const path = eventPath(engineOf(sentTo), sentTo);
+  if (key) paths.set(key, path);
+  return path;
 }
 
 /** What native said of events a listener has cancelled. */
@@ -953,14 +975,19 @@ function domFields(type: string, target: EngineNode, event: unknown): Record<str
   const native = (event as { nativeEvent?: object } | undefined)?.nativeEvent;
   // Before a listener is told of a touch and measures: see `touch-place.ts`.
   noteTouch(engineOf(target), type, event);
+  // What the event was sent to, which a listener on a box around it tells from that box.
+  const sentTo = (event as { target?: EngineNode | null } | undefined)?.target ?? target;
+  const path = pathOf(sentTo, event);
   return {
     ...touchFields(native, windowTop(engineOf(target))),
     // The key a field says was pressed: see `field.ts`.
     ...keyOf(native as { key?: unknown } | undefined),
     type,
-    // What the event was sent to, which a listener on a box around it tells from that box.
-    target: (event as { target?: EngineNode | null } | undefined)?.target ?? target,
+    target: sentTo,
     currentTarget: target,
+    // What it goes up through, from where it was sent: Taiga UI tells where a focus went by the
+    // first of it.
+    composedPath: () => [...path],
     nativeEvent: event,
     defaultPrevented: cancelled.has(native ?? {}),
     preventDefault(this: { defaultPrevented?: boolean }) {

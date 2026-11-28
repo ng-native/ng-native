@@ -16,7 +16,7 @@ import { isField } from './field.ts';
 import { frameCreated } from './frame.ts';
 import { setFrameView } from './frame-view.ts';
 import { descendants, inDocument, isInDocument, lastInDocument } from './in-document.ts';
-import { announcesDisabled, listenNatively, hasCapture, topLevel } from './listen.ts';
+import { announcesDisabled, dom, listenNatively, hasCapture, topLevel } from './listen.ts';
 import { observing, removingAttribute, settingAttribute, together } from './mutation-observer.ts';
 import { NODE_CONSTANTS } from './node-constants.ts';
 import { isProcessingInstruction, targetOf } from './processing-instruction.ts';
@@ -377,8 +377,10 @@ export function writeAttribute(
 function attachNatively(node: EngineNode, type: string, heard: Heard, core: CoreNode) {
   // A key down in a field is a key, which native says: not the focus core takes it for.
   if (DEFER_TRIGGERS.has(type) && !(type === 'keydown' && isField(node))) {
-    core.addEventListener.call(node, type, heard);
-    return () => core.removeEventListener.call(node, type, heard);
+    // Told as the DOM event it is, not the engine's own a template's listener hears.
+    const told = (event: unknown) => heard(dom(type, node, event) as never);
+    core.addEventListener.call(node, type, told);
+    return () => core.removeEventListener.call(node, type, told);
   }
   const engine = engineOf(node);
   return (
