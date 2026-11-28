@@ -169,6 +169,7 @@ function becomeField(node: EngineNode, engine: Engine): void {
     edited: false,
   };
   fields.set(node, field);
+  shownPlaceholder(node, field, node.props['placeholder'], engine);
   setEditable(node, field, engine);
   // A text area too: twenty columns, where it has no `cols` of its own.
   asAField(node, engine, true);
@@ -189,6 +190,7 @@ function typed(node: EngineNode, field: Field, event: unknown, engine: Engine): 
   }
   field.text = text ?? '';
   field.edited = true;
+  shownPlaceholder(node, field, node.props['placeholder'], engine);
   // Native takes a text set from here only when it is told which edit it follows.
   engine.setProp(node, 'mostRecentEventCount', field.count);
 }
@@ -229,6 +231,21 @@ function setText(node: EngineNode, field: Field, value: unknown, engine: Engine)
   field.text = text;
   field.edited = true;
   engine.setProp(node, 'text', text);
+  shownPlaceholder(node, field, node.props['placeholder'], engine);
+}
+
+/**
+ * Whether a field shows its placeholder: it has one and is empty. A library's `:placeholder-shown`
+ * matches by it, as Taiga UI rests a field's label inside it until something is typed.
+ */
+function shownPlaceholder(
+  node: EngineNode,
+  field: Field,
+  placeholder: unknown,
+  engine: Engine,
+): void {
+  const has = placeholder != null && placeholder !== false;
+  engine.setControlState(node, 'placeholder-shown', has && field.text === '');
 }
 
 /** `input.value = text` from a script: the field's text, and no attribute. */
@@ -339,6 +356,7 @@ export function setField(node: EngineNode, name: string, value: unknown, engine:
     becomeField(node, engine);
   }
   const field = fields.get(node);
+  if (field && name.toLowerCase() === 'placeholder') shownPlaceholder(node, field, value, engine);
   const set = field && SETTERS[name.toLowerCase()];
   return set ? set(field, node, value, engine) : false;
 }

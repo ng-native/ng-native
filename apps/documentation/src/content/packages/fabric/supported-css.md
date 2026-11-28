@@ -78,7 +78,8 @@ included.
 pseudo-classes are unsupported too: a native control keeps that state in its component's inputs,
 where no selector can see it. Bind an attribute from the same signal (`[attr.data-checked]`) and
 select on that. A [sheet read as a browser reads it](#a-sheet-read-as-a-browser-reads-it) reads
-`:checked`, `:indeterminate` and `:enabled` from the element's own props.
+`:checked`, `:indeterminate` and `:enabled` from the element's own props, and `:checked`,
+`:indeterminate` and `:placeholder-shown` from a control's state instead where a package keeps one.
 
 `:has()` styles a node by what is beneath it, or after it. Its argument is any relative
 selector: a descendant (`.card:has(.action)`), a child (`.card:has(> img)`), a longer selector
@@ -802,7 +803,12 @@ write another way:
   box scrolls only where the element is a `<scroll-view>`, and a plain view does not. Any other
   value on one axis is no clip.
 - `:checked` and `:indeterminate` match an element whose prop of that name is set, and `:enabled`
-  one with no `disabled` prop.
+  one with no `disabled` prop. Where a package keeps a control's state apart from its props, as
+  `@ng-native/web-compat` does for a checkbox or a radio that a tap, a script or a form checks,
+  they match that state instead, and `[checked]` written as an attribute selector still reads the
+  attribute. `:placeholder-shown` matches a field whose state a package keeps, as
+  `@ng-native/web-compat` does, while it has a placeholder and no text, and elsewhere only an
+  element whose `placeholder-shown` prop is set.
 
 ## What has nothing to map onto
 

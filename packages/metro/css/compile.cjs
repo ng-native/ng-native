@@ -1219,7 +1219,7 @@ function compound(parts, context) {
                   ? { value: operation.value.toLowerCase(), insensitive: true }
                   : { value: operation.value }),
               }
-            : { name: part.name },
+            : { name: part.name, ...(part.state ? { state: true } : {}) },
         );
         classes++;
         break;
@@ -1374,7 +1374,13 @@ const attribute = (name) => ({ type: 'attribute', namespace: null, name, operati
  */
 function controlState(part) {
   if (part.type !== 'pseudo-class') return part;
-  if (part.kind === 'checked' || part.kind === 'indeterminate') return attribute(part.kind);
+  if (part.kind === 'checked' || part.kind === 'indeterminate') {
+    return { ...attribute(part.kind), state: true };
+  }
+  // A field that shows its placeholder: empty, with one. A state the field keeps, as `:checked` is.
+  if (part.kind === 'placeholder-shown') {
+    return { ...attribute('placeholder-shown'), state: true };
+  }
   if (part.kind === 'enabled') {
     return { type: 'pseudo-class', kind: 'not', selectors: [[attribute('disabled')]] };
   }

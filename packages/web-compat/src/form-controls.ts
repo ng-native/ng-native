@@ -113,9 +113,18 @@ export function isChecked(node: EngineNode): boolean {
  * the others of its group.
  */
 export function setChecked(node: EngineNode, value: boolean): void {
-  checkedness.set(node, value);
+  checkedState(node, value);
   if (!value || typeOf(node as Reflecting) !== 'radio') return;
-  for (const other of groupOf(node as Reflecting)) checkedness.set(other, false);
+  for (const other of groupOf(node as Reflecting)) checkedState(other, false);
+}
+
+/**
+ * Set whether a control is checked, which a library's `:checked` matches by: the state, not the
+ * attribute it started as. See `Engine.setControlState`.
+ */
+function checkedState(node: EngineNode, value: boolean): void {
+  checkedness.set(node, value);
+  engineOf(node).setControlState(node, 'checked', value);
 }
 
 /**
@@ -141,7 +150,11 @@ const checked: Reflection = own(isChecked, (node, value) => setChecked(node, !!v
 const indeterminates = new WeakSet<EngineNode>();
 const indeterminate: Reflection = own(
   (node) => indeterminates.has(node),
-  (node, value) => void (value ? indeterminates.add(node) : indeterminates.delete(node)),
+  (node, value) => {
+    if (value) indeterminates.add(node);
+    else indeterminates.delete(node);
+    engineOf(node).setControlState(node, 'indeterminate', !!value);
+  },
 );
 
 /** The form a control is in: the one its `form` attribute names, or the one it is inside. */
@@ -301,6 +314,10 @@ export const CONTROLS: Readonly<Record<string, Readonly<Record<string, Reflectio
 export function resetControl(node: EngineNode): void {
   checkedness.delete(node);
   indeterminates.delete(node);
+  // Checked as its attribute says again, which `:checked` reads the prop of.
+  const engine = engineOf(node);
+  engine.setControlState(node, 'checked', undefined);
+  engine.setControlState(node, 'indeterminate', undefined);
   values.delete(node);
   forgetRangeValue(node);
   const text = node.tag === 'textarea' ? textOf(node) : (node as Reflecting).getAttribute('value');

@@ -103,7 +103,7 @@ describe("a control's state, in a stylesheet read as a browser reads it", () => 
       [':host(.active) { opacity: 0.5 }', { classes: ['active'], host: true }],
       [
         ':host(:checked) { opacity: 0.5 }',
-        { classes: [], host: true, attributes: [{ name: 'checked' }] },
+        { classes: [], host: true, attributes: [{ name: 'checked', state: true }] },
       ],
     ] as const) {
       const { sheet, reports } = compiled(css);
