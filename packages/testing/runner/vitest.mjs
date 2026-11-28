@@ -32,6 +32,7 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { defaultClientConditions, defaultServerConditions } from 'vite';
 import {
   compileAngular,
@@ -42,6 +43,23 @@ import {
 } from './compile.mjs';
 
 const SETUP = fileURLToPath(new URL('./setup.mjs', import.meta.url));
+
+/**
+ * What a compiled module depends on beside its own text: the compiler's sources, as Metro's cache
+ * keys a transform by (`compilerFingerprint`), and the libraries and directories web-compat has
+ * read as a browser's. A change to either compiles every module again, where Vitest's cache
+ * kept the output of the compiler before it.
+ */
+function compilerKey() {
+  const require = createRequire(import.meta.url);
+  const metro = path.dirname(require.resolve('@ng-native/metro/config.cjs'));
+  compilerKey.fingerprint ??= require('@ng-native/metro/config.cjs').compilerFingerprint(metro);
+  return [
+    compilerKey.fingerprint,
+    process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'] ?? '',
+    process.env['ANGULAR_NATIVE_SOURCE_BROWSER'] ?? '',
+  ].join('|');
+}
 const HERMES_INTL = fileURLToPath(new URL('./hermes-intl.mjs', import.meta.url));
 
 /**
@@ -459,10 +477,19 @@ export function ngNative(options = {}) {
       root = config.root;
     },
     // Once for each project; the directory is the Vitest instance's, so it is removed once.
-    configureVitest({ vitest, project }) {
+    configureVitest({
+      vitest,
+      project,
+      defineCacheKeyGenerator,
+      experimental_defineCacheKeyGenerator,
+    }) {
       // Ahead of the app's own setup files, which `config` can only add after: a polyfill there
       // that installs only what `Intl` lacks then sees it lacking, as it does on a device.
       if (options.intl !== 'node') project.config.setupFiles.unshift(HERMES_INTL);
+      // A module Vitest keeps in `node_modules/.vitest-cache` is what this compiled, which the
+      // file's own text does not say: the compiler, and what web-compat reads as a browser's.
+      // Vitest 4 names the hook as experimental, and 5 warns where that name is called.
+      (defineCacheKeyGenerator ?? experimental_defineCacheKeyGenerator)?.(compilerKey);
       if (cleaned.has(vitest)) return;
       cleaned.add(vitest);
       removeModuleCopies(vitest);

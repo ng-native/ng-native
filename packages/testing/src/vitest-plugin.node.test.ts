@@ -649,3 +649,42 @@ describe('an Angular library in node_modules', () => {
     assert.deepEqual(await run(helperTest('undeclared-lib'), true), []);
   });
 });
+
+describe("Vitest's cache of compiled modules", () => {
+  it('is keyed by the compiler and by what web-compat reads as a browser', () => {
+    const keys: (() => unknown)[] = [];
+    const plugin = ngNative({ intl: 'node' }) as unknown as {
+      configureVitest(context: object): void;
+    };
+    const named = process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'];
+    try {
+      plugin.configureVitest({
+        vitest: {},
+        project: { config: { setupFiles: [] } },
+        defineCacheKeyGenerator: (generator: () => unknown) => keys.push(generator),
+      });
+      assert.equal(keys.length, 1);
+      delete process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'];
+      const plain = keys[0]!();
+      assert.match(String(plain), /^[0-9a-f]{16}\|/);
+      process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'] = '@acme/web';
+      assert.notEqual(keys[0]!(), plain, 'a library named as a browser compiles again');
+    } finally {
+      if (named === undefined) delete process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'];
+      else process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'] = named;
+    }
+  });
+
+  it('is keyed on Vitest 4 too, which names the hook as experimental', () => {
+    const keys: (() => unknown)[] = [];
+    const plugin = ngNative({ intl: 'node' }) as unknown as {
+      configureVitest(context: object): void;
+    };
+    plugin.configureVitest({
+      vitest: {},
+      project: { config: { setupFiles: [] } },
+      experimental_defineCacheKeyGenerator: (generator: () => unknown) => keys.push(generator),
+    });
+    assert.equal(keys.length, 1);
+  });
+});
