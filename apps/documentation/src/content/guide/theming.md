@@ -96,7 +96,9 @@ in a component stylesheet, a `style` attribute, a `[style.--color-brand]` bindin
 
 A bound declaration reads a token too, where its whole value is the `var()`:
 `[style.background-color]="'var(--color-brand)'"`, with a fallback if it needs one. It follows the
-token as a stylesheet declaration does. A `var()` inside a longer value, a `calc()` included, is
+token as a stylesheet declaration does, and so does a length that is a `calc()`, `min()` or
+`max()` of tokens, numbers, `px`, `rem`, `em`, viewport units and percentages:
+`[style.font-size]="'calc(1.25rem + var(--offset))'"`. A `var()` inside any other longer value is
 not read from a binding: set a custom property and read that in the stylesheet.
 
 Every theme token is resolved on device, where it is read: colours, including the `color-mix()`

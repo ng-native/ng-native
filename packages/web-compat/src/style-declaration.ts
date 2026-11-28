@@ -1,4 +1,4 @@
-import type { EngineNode } from '@ng-native/fabric';
+import type { Engine, EngineNode } from '@ng-native/fabric';
 import {
   BLOCK,
   CSSStyleProperties,
@@ -39,6 +39,8 @@ function apply(node: EngineNode, property: string, written: unknown): void {
   const key = camel(property);
   // A shape's paint and font are its own, set as the attribute of the name: see `svg-box.ts`.
   if (styleShape(node, key, value, engine)) return;
+  // A sum of tokens, worked out where the tokens are known: see the engine's `bound-calc.ts`.
+  if (boundSum(node, key, value, engine)) return;
   const as = inlineStyle(node, key, value);
   const next = { ...currentStyle(node) };
   for (const [name, set] of Object.entries(as ?? { [key]: value })) {
@@ -47,6 +49,27 @@ function apply(node: EngineNode, property: string, written: unknown): void {
   }
   // None left is none: a selector reads a style prop as a `style` attribute where none is kept.
   engine.setProp(node, 'style', Object.keys(next).length ? next : null);
+}
+
+const TOKEN_SUM = /^\s*(?:calc|min|max)\([\s\S]*var\(/i;
+
+/**
+ * A length a script sets as a sum of tokens, `calc(1.25rem + var(--tui-font-offset))` as Taiga UI
+ * sizes a field's text, kept for the cascade as a binding of it is, and out of the view's props,
+ * where native would be sent the text. Answers whether it was one; one set again as anything
+ * else is let go.
+ */
+function boundSum(node: EngineNode, key: string, value: unknown, engine: Engine): boolean {
+  const sum = typeof value === 'string' && TOKEN_SUM.test(value);
+  if (!sum && !node.boundByProp?.has(key)) return false;
+  if (!sum || engine.setBoundStyle(node, key, value) !== true) {
+    engine.setBoundStyle(node, key, null);
+    return false;
+  }
+  const next = { ...currentStyle(node) };
+  delete next[key];
+  engine.setProp(node, 'style', Object.keys(next).length ? next : null);
+  return true;
 }
 
 /**
