@@ -6508,9 +6508,10 @@ function boundKind(prop: string): TokenKind {
  * A colour made of tokens, `color-mix(in srgb, var(--brand), white 20%)`, is worked out from the
  * tokens where it is used, as a fallback of the same shape is.
  *
- * ponytail: any other value has to be the whole `var()`. One inside a longer value, `calc()`
- * included, is what the compiler parses at build time and nothing here does; write the sum in a
- * custom property, `[style.--gap]`, and read that in the stylesheet.
+ * ponytail: any other value has to be the whole `var()`, but for a length that is a sum of tokens
+ * (see `bound-calc.ts`). One inside another longer value is what the compiler parses at build
+ * time and nothing here does; write it in a custom property, `[style.--gap]`, and read that in
+ * the stylesheet.
  */
 export function boundDeclaration(
   prop: string,

@@ -8,6 +8,7 @@
  * inherent and is what React's own Fabric renderer does.
  */
 
+import { boundCalc } from './bound-calc.ts';
 import {
   boundDeclaration,
   boundRefusal,
@@ -6863,6 +6864,12 @@ function boundFrom(prop: string, text: string, on: string): DeferredDeclaration 
     return { props: [prop], on, within: CURRENT_COLOUR_MARKER };
   }
   if (BOUND_TOKEN.test(text)) return boundDeclaration(prop, tokenFromValue(text), on);
+  // A sum of tokens, `calc(1.25rem + var(--tui-font-offset))`: see `bound-calc.ts`.
+  const calc = boundCalc(text);
+  if (calc !== undefined) {
+    const within = { __calc: { expression: calc, kind: 'length' } };
+    return { props: [prop], ...(on === undefined ? {} : { on }), within };
+  }
   // The parent's, as a rule's `inherit` is: `unset` too, for a property CSS inherits.
   if (inheritsInline(prop, text)) return { props: [prop], on, inherit: true };
   if (prop !== 'transform') return boundRelativeLength(prop, text, on);
