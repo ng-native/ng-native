@@ -398,3 +398,31 @@ describe("an HTML element's start under web-compat, as a browser lays it out", (
     assert.equal(props('item')['flexShrink'] ?? 0, 0);
   });
 });
+
+@Component({
+  selector: 'x-known',
+  template: `<aside>Side</aside>
+    <output>1</output>
+    <pre>Code</pre>
+    <dl><dt>Term</dt></dl>
+    <hgroup><h2>Title</h2></hgroup>`,
+})
+class Known {}
+
+describe("HTML's elements the engine has no view of", () => {
+  it('are no unknown name to the engine, which says nothing of them', async () => {
+    const said: string[] = [];
+    const error = console.error;
+    console.error = (...args: unknown[]) => void said.push(args.map(String).join(' '));
+    try {
+      await render(Known, { providers: [provideWebCompat()] });
+      await settle();
+    } finally {
+      console.error = error;
+    }
+    assert.deepEqual(
+      said.filter((each) => /not a known element/.test(each)),
+      [],
+    );
+  });
+});

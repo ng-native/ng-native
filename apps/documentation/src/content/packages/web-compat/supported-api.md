@@ -169,7 +169,10 @@ Gaps:
 - Stand-ins for what a library asks of the window: `localStorage` and `sessionStorage` held in
   memory for as long as the app is up and empty at the start of the next, `getSelection()` on the
   window and the document with nothing selected, `open()` returning `null`, and a `ShadowRoot`
-  that nothing is an instance of. A global the runtime already has is left alone.
+  that nothing is an instance of. `Intl.NumberFormat`'s `formatToParts`, for a number mask that
+  reads where a locale groups digits: added where the runtime has none, as Hermes on iOS has
+  none, and wrapped where the runtime's own refuses a `BigInt`, as Hermes's on Android does, to
+  format it as a number. Any other global the runtime already has is left alone.
 
 Gaps: `ResizeObserver` has no `device-pixel-content-box`, `matchMedia` does not read
 `resolution` or `-webkit-device-pixel-ratio`, and `scrollIntoView` reads no `scroll-margin` or
