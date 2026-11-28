@@ -491,3 +491,22 @@ describe('the details of a text field', () => {
     assert.equal(prop('sized', 'size'), undefined);
   });
 });
+
+@Component({
+  selector: 'x-limited',
+  template: `<input testID="limited" [attr.maxLength]="most" />`,
+})
+class Limited {
+  readonly most = 27;
+}
+
+describe('a limit bound as an attribute in its camel case', () => {
+  it('is the number native takes, and reads back as written', async () => {
+    // Taiga UI's number input binds `[attr.maxLength]`, whose text Android's field refuses.
+    await render(Limited, { providers: [provideWebCompat()] });
+    await settle();
+    assert.equal(screen.getByTestId('limited').props['maxLength'], 27);
+    const input = (globalThis as { document?: any }).document.querySelector('input');
+    assert.equal(input.getAttribute('maxlength'), '27');
+  });
+});

@@ -330,10 +330,15 @@ const SETTERS: Readonly<
     engine.setProp(node, 'autoComplete', android);
     return false;
   },
+  // The number native takes, and nothing written as well: `[attr.maxLength]`, as Taiga UI binds
+  // it, would write its text over the number, which Android's field refuses.
   maxlength(_, node, value, engine) {
     const most = Number.parseInt(String(value ?? ''), 10);
     engine.setProp(node, 'maxLength', most >= 0 ? most : null);
-    return false;
+    // As written, to read back, by its name as HTML has it, and not sent to native.
+    engine.setProp(node, 'maxlength', value);
+    engine.keepAsAttribute(node, 'maxlength');
+    return true;
   },
 };
 
