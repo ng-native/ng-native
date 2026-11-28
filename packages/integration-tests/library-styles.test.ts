@@ -237,6 +237,30 @@ export class Panel {}`;
     assert.equal(named('/app/src/page/panel.ts', empty), false, 'an empty entry');
   });
 
+  it('names the element a component with no selector is hosted by, as a browser has it', () => {
+    // Taiga UI's examples have no selector: Angular hosts each in an `ng-component` element,
+    // which a browser lays out inline as it does any element it does not know.
+    const named = (widget: string) =>
+      withEnv('ANGULAR_NATIVE_SOURCE_BROWSER', '/app/src/helm', () => {
+        const { code } = transformAngular(widget, '/app/src/helm/example.ts', {
+          dev: false,
+          platform: 'ios',
+        });
+        return /ɵngNativeBrowserElements[^\n]*"ng-component"/.test(code);
+      });
+    const head = `import {Component} from '@angular/core';\n`;
+    assert.equal(named(`${head}@Component({ template: '' })\nexport class Example {}`), true);
+    assert.equal(
+      named(`${head}@Component({ selector: 'x-one', template: '' })\nexport class One {}`),
+      false,
+    );
+    // Words in its template are not its selector.
+    assert.equal(
+      named(`${head}@Component({ template: 'selector: none' })\nexport class Two {}`),
+      true,
+    );
+  });
+
   it("reads its component styles as a browser does, and no other directory's", () => {
     // An example copied from a library's documentation: a flex container that is a row, and a
     // rule that does not parse, which is dropped and not a failed build.

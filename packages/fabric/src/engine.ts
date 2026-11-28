@@ -780,6 +780,12 @@ export interface EngineNode extends HostNode {
   words?: EngineNode[];
   /** A node the engine made, which no rule matches: it only inherits. */
   anonymous?: true;
+  /** Set on a run's paragraph in a line of text and boxes, which is a span of that line's. */
+  spanned?: true;
+  /** Whether it can sit among a paragraph's words, a box on its lines: see `inParagraph`. */
+  inlineBox?: true;
+  /** Whether it is a text element that can be a span of a line of words: see `spanOnLine`. */
+  plainSpan?: true;
   /** See `StyleTarget.outsideCascade`. */
   outsideCascade?: true;
   /** See `StyleTarget.styled`. */
@@ -3982,6 +3988,8 @@ interface Flow {
  */
 interface LineBox {
   handle: FabricNode | null;
+  /** Whether it holds words, and is a paragraph: see `Engine.lineBox`. */
+  text?: boolean;
   top: number;
   /** Where its boxes sit along it, by the `text-align` its container has: see `alongLine`. */
   along?: string;
@@ -4245,6 +4253,26 @@ const FIXED_LAYER = {
   collapsable: false,
 };
 
+/** A line box's props: a row of boxes, or a paragraph of words with boxes among them. */
+function lineProps(
+  text: boolean,
+  top: number,
+  along: string | undefined,
+  strut: LineStrut,
+): Record<string, unknown> {
+  const where = { marginTop: top, justifyContent: along ?? 'flex-start', ...strut };
+  if (!text) return { ...LINE_BOX, ...where };
+  return { ...TEXT_LINE, ...where, textAlign: ALONG_TO_TEXT[along ?? 'flex-start'] };
+}
+
+/** A line box of words and boxes: a paragraph, which touches pass through as a row's do. */
+const TEXT_LINE = { pointerEvents: 'box-none' };
+const ALONG_TO_TEXT: Record<string, string> = {
+  'flex-start': 'auto',
+  center: 'center',
+  'flex-end': 'right',
+};
+
 const LINE_BOX = {
   flexDirection: 'row',
   flexWrap: 'wrap',
@@ -4384,7 +4412,9 @@ function blockContainer(
     return unsqueezed(props);
   }
   props['flexDirection'] = 'row';
-  props['flexWrap'] = 'wrap';
+  // A box on a paragraph's lines is laid out again at the size it measured, rounded to the
+  // pixel grid, which can be a hair too narrow for its own line: it keeps that line whole.
+  props['flexWrap'] = isTextElement(node.parent) || inTextLine(node) ? 'nowrap' : 'wrap';
   // An empty box sits on the line's baseline, which is its bottom edge.
   //
   // ponytail: and so does one with text, by its bottom edge where a browser has its text's
@@ -5220,6 +5250,9 @@ function borderBoxRatio(
  */
 const BREAKS = /[\s\-\u00ad\u200b\u2010\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/;
 
+/** What a box among a paragraph's words is to `unbroken`: something, and no place to break. */
+const BOX_ON_LINE = '\ufffc';
+
 /** Whether a paragraph's text, all its runs together, is one word: something, with no break. */
 function unbroken(node: EngineNode): boolean {
   let text = '';
@@ -5227,6 +5260,8 @@ function unbroken(node: EngineNode): boolean {
     for (const child of from.childList) {
       if (child.nodeKind === 'text') text += child.nodeText;
       else if (isTextElement(child)) collect(child);
+      // A box among its words, which breaks from them where white space is between them.
+      else if (child.inlineBox) text += BOX_ON_LINE;
     }
   };
   collect(node);
@@ -6008,8 +6043,42 @@ interface KeptHoist {
 function paragraphText(node: EngineNode): string {
   let root = node.parent;
   // Text written straight into a view is a paragraph of its own, and all of it.
-  if (root === null || !isTextElement(root))
+  if (root === null || !isTextElement(root)) {
+    if (node.box?.spanned) return lineText(node);
     return node.box ? trimEnds(node.nodeText) : node.nodeText;
+  }
+  // A span of a line of words, `<code>` beside a link: its line breaks are spaces, as the line's,
+  // and its runs are trimmed where it starts and ends, as a paragraph's are.
+  if (root.spanned) return collapsed(paragraphRun(node, root));
+  const text = paragraphRun(node, root);
+  // One of HTML's, given a browser's defaults: its white space is a space between words, as a
+  // browser collapses it. A `<text>` keeps its line breaks, as React Native's does.
+  return browsersText(root) ? collapsed(text) : text;
+}
+
+/** Whether a text element is HTML's, laid out as a browser lays it out: see `Engine.setInline`. */
+const browsersText = (node: EngineNode): boolean =>
+  TEXT_ELEMENTS.has(node.tag) &&
+  (node.inlineLevel !== undefined || node.browserStyled === true) &&
+  !inPre(node);
+
+/**
+ * Whether a text element is in a `<pre>`, whose white space a browser keeps as written, and keeps
+ * in what it holds: a `<code>` in one, as JSON is shown. Up through the text elements it is in.
+ *
+ * ponytail: `white-space` is read nowhere else, and `pre` set by a rule is refused at build time.
+ */
+function inPre(node: EngineNode): boolean {
+  for (let at: EngineNode | null = node; at; at = at.parent) {
+    if (at.tag === 'pre') return true;
+    if (!TEXT_ELEMENTS.has(at.tag)) return false;
+  }
+  return false;
+}
+
+/** A run of a paragraph, without the space at the paragraph's very start or end. */
+function paragraphRun(node: EngineNode, start: EngineNode): string {
+  let root = start;
   // A text element a view stands in for, which places what it holds: no paragraph runs past it.
   const inParagraph = (above: EngineNode | null) =>
     isTextElement(above) && !aligningText(above as EngineNode);
@@ -6022,6 +6091,8 @@ function paragraphText(node: EngineNode): string {
       if (child.nodeKind === 'text') {
         if (child.nodeText) runs.push(child);
       } else if (isTextElement(child)) collect(child);
+      // A box among its words is on its lines too: the space before one is no space at its end.
+      else if (child.inlineBox) runs.push(child);
     }
   };
   collect(root);
@@ -6030,6 +6101,104 @@ function paragraphText(node: EngineNode): string {
   if (runs[runs.length - 1] === node) text = trimEnd(text);
   return text;
 }
+
+/**
+ * A run of text in a line of words and boxes, as the line shows it: its spaces beside a box kept,
+ * and those at the line's start or end dropped.
+ */
+function lineText(node: EngineNode): string {
+  const flow = node.parent?.flow;
+  const first = flow?.lined.get(node);
+  const boxes = first ? flow!.plan.lines.get(first)?.boxes : undefined;
+  // A line break written in the template is a space, as white space is between words.
+  let text = collapsed(node.nodeText);
+  const at = boxes?.indexOf(node) ?? 0;
+  if (!boxes || boxes.slice(0, at).every(nothingOnLine)) text = trimStart(text);
+  if (!boxes || boxes.at(-1) === node) text = trimEnd(text);
+  return text;
+}
+
+/**
+ * The space between two boxes on a line of words, a run of nothing but white space, which is a
+ * space of the paragraph's: `<b>Files</b> <i>3</i>`. Elsewhere such a run is nothing.
+ */
+function spacesInLines(
+  node: EngineNode,
+  plan: FlowPlan<EngineNode>,
+  lined: Map<EngineNode, EngineNode>,
+): void {
+  const children = node.childList;
+  for (let at = 1; at < children.length - 1; at++) {
+    const blank = children[at]!;
+    if (blank.nodeKind !== 'text' || blank.nodeText.trim() !== '') continue;
+    const first = lined.get(children[at - 1]!);
+    if (first === undefined || lined.get(children[at + 1]!) !== first) continue;
+    if (wordsLine(plan.lines.get(first)!.boxes)) lined.set(blank, first);
+  }
+}
+
+/**
+ * Whether a run written straight into a view is drawn: one with words, and white space between
+ * two boxes on a line of words, which is a space there (see `spacesInLines`).
+ */
+const drawnText = (parent: EngineNode, text: EngineNode): boolean =>
+  trimEnds(text.nodeText) !== '' || parent.flow?.lined.has(text) === true;
+
+/** Whether a box on a line puts nothing on it: an empty inline box, see `addsNothing`. */
+const nothingOnLine = (box: EngineNode): boolean =>
+  box.nodeKind === 'element' ? addsNothing(box) : box.nodeText.trim() === '';
+
+/**
+ * Whether anything is on the line before a child: a run's space at the start of a line goes, and
+ * an empty inline box puts nothing there, Taiga UI's `.t-wrapper::before { content: '' }`.
+ */
+function holdsBefore(parent: EngineNode, at: number): boolean {
+  for (let before = 0; before < at; before++) {
+    const child = parent.childList[before]!;
+    if (!nothingOnLine(child)) return true;
+  }
+  return false;
+}
+
+/** White space as one space, as CSS collapses it between words. */
+const collapsed = (text: string): string => text.replace(/[\t\n\r\f ]+/g, ' ');
+
+/** Whether a box is on a line of words, a paragraph's: see `Engine.lineBox`. */
+function inTextLine(node: EngineNode): boolean {
+  const flow = node.parent?.flow;
+  const first = flow?.lined.get(node);
+  return first !== undefined && wordsLine(flow!.plan.lines.get(first)!.boxes);
+}
+const isRun = (node: EngineNode): boolean => node.nodeKind === 'text';
+const NO_BOXES: readonly EngineNode[] = [];
+
+/**
+ * Whether a line among blocks is a paragraph: one with a run of text on it, or a span of text
+ * beside a box, which wraps with the words around the box. Spans alone are the boxes they were.
+ */
+function wordsLine(boxes: readonly EngineNode[]): boolean {
+  const known = wordsLines?.get(boxes);
+  if (known !== undefined) return known;
+  const words =
+    boxes.some(isRun) || (boxes.some(spanOnLine) && boxes.some((box) => !isTextElement(box)));
+  wordsLines?.set(boxes, words);
+  return words;
+}
+
+/**
+ * What `wordsLine` found of each line, while a commit runs: every box on a line asks of its line,
+ * which would read the whole line once a box. Made at a commit's start and dropped at its end,
+ * as a box's children change between commits, and dropped when a box's style makes it a span or
+ * a box on a paragraph's lines, or neither (`settleAmongWords`).
+ */
+let wordsLines: WeakMap<readonly EngineNode[], boolean> | undefined;
+
+/**
+ * Whether a text element on a line of words is one of the paragraph's spans: one with no size,
+ * padding, border or margin, which a span of native text has none of. One with any is a box.
+ */
+const spanOnLine = (node: EngineNode): boolean =>
+  node.nodeKind === 'element' && node.plainSpan === true && isTextElement(node);
 
 /** The part of a node `viewNameOf` reads: an engine node, or any host's mirror of one. */
 export interface ViewNameNode {
@@ -6043,6 +6212,12 @@ export interface ViewNameNode {
   readonly childList?: readonly ViewNameNode[];
   /** Set on the paragraph the engine makes for a run of text written straight into a view. */
   readonly anonymous?: boolean;
+  /** Whether a browser lays it out inline: see `Engine.setInline`. */
+  readonly inlineLevel?: 'always' | 'unless-block';
+  /** Whether it is the paragraph of a run in a line of text, a span of it: see `EngineNode`. */
+  readonly spanned?: true;
+  /** Whether it can sit among a paragraph's words: see `inParagraph`. */
+  readonly inlineBox?: true;
   /** Set on a text element that lays out what it holds itself: see `Engine.settleBoxed`. */
   readonly boxed?: boolean;
   /** Its props, of which `horizontal` decides which scroll view a scroll view is on Android. */
@@ -6061,14 +6236,60 @@ function isTextElement(node: ViewNameNode | null): boolean {
   return !TEXT_ELEMENTS.has(node.tag) || holdsOnlyText(node);
 }
 
-/** Whether a text element holds text and nothing else. One that holds nothing holds no text. */
+/**
+ * Whether a text element holds text and nothing else, but for boxes a browser lays out inline
+ * among its words, which the paragraph holds as views on its lines: see `inParagraph`. One that
+ * holds nothing holds no text, and one that holds only such boxes is no paragraph.
+ */
 function holdsOnlyText(node: ViewNameNode): boolean {
   const children = node.childList ?? [];
+  let words = false;
+  let boxes = false;
   for (const child of children) {
-    if (child.nodeKind === 'element' && !isTextElement(child)) return false;
+    if (child.nodeKind === 'element' && !isTextElement(child)) {
+      if (!inParagraph(child)) return false;
+      boxes = true;
+    } else if (child.nodeKind === 'element' || /\S/.test(textOf(child))) words = true;
   }
-  return children.length > 0;
+  // Boxes with no words among them are a line of boxes, which keep their margins there.
+  return boxes ? words : children.length > 0;
 }
+
+const textOf = (node: ViewNameNode): string => (node as { nodeText?: string }).nodeText ?? '';
+
+/**
+ * Whether an element in a text element is a box on the paragraph's lines, as a link with an icon
+ * is in a browser's paragraph: an element a browser lays out inline (`Engine.setInline`), a plain
+ * view, in the flow and with no display that is a block. Fabric lays a view in a paragraph out as
+ * an attachment, as wide and tall as its content, on the line with the words around it.
+ */
+const inParagraph = (node: ViewNameNode): boolean => node.inlineBox === true;
+
+/** Whether an element is one `inParagraph` can be, by its own style as the cascade has it now. */
+function inlineBox(node: EngineNode, style: Record<string, unknown>): boolean {
+  const view =
+    node.boxed === true || (registeredViewName(node.tag) ?? DEFAULT_VIEW) === DEFAULT_VIEW;
+  if (!node.inlineLevel || !view) return false;
+  const display = style['display'];
+  if (display != null && !INLINE_DISPLAYS.has(display as string)) return false;
+  // Native lays a view among a paragraph's words out by its own box alone, with no margin
+  // around it: a box with one is laid out in a line of boxes, which keeps it.
+  //
+  // ponytail: such a box among words breaks the line, as every box did. Give it its margin as
+  // padding of a view around it if a library is seen spacing a link in a sentence so.
+  if (AROUND_KEYS.some((key) => !isNone(style[key]))) return false;
+  return !OUT_OF_FLOW.has(style['position'] as string);
+}
+
+const AROUND_KEYS = BOX_KEYS.filter((key) => key.startsWith('margin'));
+const isNone = (value: unknown): boolean => value == null || value === 0 || value === 'auto';
+
+/** Whether a text element has no size, padding, border or margin: what a span can be. */
+const plainSpan = (style: Record<string, unknown>): boolean =>
+  BOX_KEYS.every((key) => {
+    const value = style[key];
+    return value == null || value === 0 || value === 'auto';
+  });
 
 const ALIGNS = new Set(['center', 'flex-end', 'space-around', 'space-evenly']);
 
@@ -6202,6 +6423,7 @@ export function viewNameOf(node: ViewNameNode): string {
     return DEFAULT_VIEW;
   }
   if (node.boxed) return DEFAULT_VIEW;
+  if (node.spanned) return VIRTUAL_TEXT;
   // The paragraph the engine makes for a view's loose text is under a view, whatever the name
   // of the element that view is.
   return nestedText(node) ? VIRTUAL_TEXT : PARAGRAPH;
@@ -6705,6 +6927,9 @@ class RetainedNode {
   box: EngineNode | undefined = undefined;
   words: EngineNode[] | undefined = undefined;
   anonymous: true | undefined = undefined;
+  spanned: true | undefined = undefined;
+  inlineBox: true | undefined = undefined;
+  plainSpan: true | undefined = undefined;
   outsideCascade: true | undefined = undefined;
   styled: true | undefined = undefined;
   browserStyled: true | undefined = undefined;
@@ -6887,6 +7112,9 @@ const ENGINE_NODE_FIELDS = {
   box: true,
   words: true,
   anonymous: true,
+  spanned: true,
+  inlineBox: true,
+  plainSpan: true,
   outsideCascade: true,
   styled: true,
   browserStyled: true,
@@ -9007,6 +9235,8 @@ export class Engine implements HostEngine {
     if (there) return this.removeChild(node, there);
     const made = this.createElement(box, node.templateSheet);
     this.setDefaultStyle(made, GENERATED_STYLE);
+    // Inline, as a browser's is until a rule gives it a display.
+    this.setInline(made, 'always');
     if (box === BEFORE) this.insertBefore(node, made, node.childList[0] ?? null);
     else this.appendChild(node, made);
   }
@@ -10408,11 +10638,14 @@ export class Engine implements HostEngine {
    * optimisation.
    */
   commit(): boolean {
+    const outer = wordsLines === undefined;
+    if (outer) wordsLines = new WeakMap();
     try {
       const committed = this.commitChanges();
       this.setEndedOwned();
       return committed;
     } finally {
+      if (outer) wordsLines = undefined;
       // A commit on a disposed engine, or one a listener disposed it during, can have handed
       // native an animation, a transition or a move to lay out: each is taken back at once.
       if (this.disposed) this.letGoNative();
@@ -11484,10 +11717,32 @@ export class Engine implements HostEngine {
   private settleInlines(node: EngineNode): void {
     for (const child of node.childList) {
       if (child.inlineLevel === 'unless-block') this.settleInline(child);
-      else if (child.inlineLevel === 'always') this.settleLine(child);
+      else if (child.inlineLevel === 'always') this.settleBoxed(child);
+      // After the display it is given for what it holds, which it can sit in a paragraph by,
+      // and before its line, which is laid out for sitting there.
+      if (child.nodeKind === 'element') this.settleAmongWords(child);
+      if (child.inlineLevel === 'always') this.settleLine(child);
     }
     if (node.inlineLevel === 'unless-block') this.settleInline(node);
     else if (node.inlineLevel === 'always') this.settleLine(node);
+  }
+
+  /**
+   * Note whether a box can sit among a paragraph's words (`inParagraph`), and whether a text
+   * element can be one of its spans (`spanOnLine`), by its style now: settled before its parent
+   * is named and laid out, which read them, and so before the box itself is styled again.
+   */
+  private settleAmongWords(node: EngineNode): void {
+    this.flowStyles.clear();
+    const style = this.flowStyle(node);
+    this.flowStyles.clear();
+    const box = (node.inlineLevel !== undefined && inlineBox(node, style)) || undefined;
+    const span = (TEXT_ELEMENTS.has(node.tag) && plainSpan(style)) || undefined;
+    if (node.inlineBox === box && node.plainSpan === span) return;
+    node.inlineBox = box;
+    node.plainSpan = span;
+    if (wordsLines) wordsLines = new WeakMap();
+    dirtyProps(node);
   }
 
   /**
@@ -11496,15 +11751,19 @@ export class Engine implements HostEngine {
    * browser, and a view's children are a column. Nothing where it holds only text, which a text
    * element lays out itself, or where it has a display of its own.
    *
-   * ponytail: the elements that are text and nothing else. A button or a link with no display
-   * is inline too, and is left the flex box it has been: one as wide as an item that is as wide
-   * as its content, `width: 100%`, is as wide as the room where it sits in a line. Fit the item
-   * to its content first if a library leaves a button's display to the browser.
+   * A button or a link with no display does the same among a paragraph's words, where it is a
+   * box on the paragraph's lines: a link's icon and its words are one line.
+   *
+   * ponytail: elsewhere a button or a link with no display is left the flex box it has been: one
+   * as wide as an item that is as wide as its content, `width: 100%`, is as wide as the room
+   * where it sits in a line. Fit the item to its content first if a library leaves a button's
+   * display to the browser there.
    */
   private settleLine(node: EngineNode): void {
     this.settleBoxed(node);
+    const amongWords = inParagraph(node) && (isTextElement(node.parent) || inTextLine(node));
     const holds =
-      inlineText(node) &&
+      (inlineText(node) || amongWords) &&
       !isTextElement(node) &&
       node.childList.some((child) => child.nodeKind === 'element');
     if (holds === (node.lined === true)) return;
@@ -11521,10 +11780,25 @@ export class Engine implements HostEngine {
    * between them. Text all the way down is one paragraph otherwise, whatever its display.
    */
   private settleBoxed(node: EngineNode): void {
-    const boxed = LAYS_OUT_ITSELF.has(readStyle(node, 'display') as string) || undefined;
+    const boxed =
+      LAYS_OUT_ITSELF.has(readStyle(node, 'display') as string) ||
+      this.clippedLine(node) ||
+      undefined;
     if (boxed === node.boxed) return;
     node.boxed = boxed;
     dirtyProps(node);
+  }
+
+  /**
+   * Whether a span is an inline-block that clips what it holds, as a line cut short with an
+   * ellipsis is written: `display: inline-block; overflow: hidden; white-space: nowrap`. A box
+   * of its own in a browser, which a span of a paragraph cannot be: it is a view among the
+   * paragraph's words, its text a paragraph inside it.
+   */
+  private clippedLine(node: EngineNode): boolean {
+    if (!TEXT_ELEMENTS.has(node.tag)) return false;
+    const rules = this.ruleStyle(node);
+    return rules['display'] === 'inline-block' && rules['overflow'] === 'hidden';
   }
 
   /** Give an element that is inline in a browser the display it has for what it holds now. */
@@ -13654,6 +13928,22 @@ export class Engine implements HostEngine {
     this.alignLine(node, style);
     onBaseline(node, style);
     alignedInLine(node, style);
+    this.onTextBaseline(node, style);
+  }
+
+  /**
+   * A box among a paragraph's words, which native sits on the baseline by its bottom edge: moved
+   * down by the room under its own baseline, as a browser sits an inline-block on its last line.
+   * Moved by a transform, which leaves the line as tall as it is.
+   */
+  private onTextBaseline(node: EngineNode, style: Record<string, unknown>): void {
+    if (node.nodeKind !== 'element' || !(isTextElement(node.parent) || inTextLine(node))) return;
+    if (isTextElement(node)) return;
+    const depth = this.depthOnLine(node, 0);
+    if (!(depth > 0)) return;
+    const transform = style['transform'];
+    if (transform !== undefined && !Array.isArray(transform)) return;
+    style['transform'] = [{ translateY: depth }, ...(transform ?? [])];
   }
 
   /** What the engine lays out in Yoga's place, of what has been asked for: see `asked`. */
@@ -13718,7 +14008,11 @@ export class Engine implements HostEngine {
         if (style[source] != null) return style[source];
       }
       // An element said to be always inline, a span, with no display given: a box in a line.
-      if (key === 'display' && inlineText(node)) return 'inline-block';
+      // So is a generated box, `::before` or `::after`, as a browser's is, and a link or a
+      // button with no display: each a box on the line.
+      if (key === 'display' && (inlineText(node) || isGenerated(node.tag) || node.inlineBox)) {
+        return 'inline-block';
+      }
       return undefined;
     },
     hasText: (node) =>
@@ -13969,6 +14263,7 @@ export class Engine implements HostEngine {
     );
     const lined = new Map<EngineNode, EngineNode>();
     for (const [first, line] of plan.lines) for (const box of line.boxes) lined.set(box, first);
+    spacesInLines(node, plan, lined);
     return { plan, members, lined };
   }
 
@@ -16483,6 +16778,8 @@ export class Engine implements HostEngine {
       ) {
         continue;
       }
+      // On no line, and so no span of one's, as it can have been before its parent had no flow.
+      if (child.nodeKind === 'element') this.spanInLine(child, NO_BOXES);
       const handle =
         child.nodeKind === 'text'
           ? this.reconcileText(node, child, viewName, context)
@@ -16551,7 +16848,16 @@ export class Engine implements HostEngine {
     // A box in a line box is under that view, which is named by the line's first box: one that
     // joins a line, leaves it, or changes lines is made again, as native never moves one.
     const first = node.flow?.lined.get(child);
+    this.spanInLine(child, first ? node.flow!.plan.lines.get(first)!.boxes : NO_BOXES);
     return this.reconcileUnder(first ? this.lineOf(node, first) : node, child, context);
+  }
+
+  /** Make a text element on a line of words a span of its paragraph, or a box again. */
+  private spanInLine(child: EngineNode, boxes: readonly EngineNode[]): void {
+    const spanned = (wordsLine(boxes) && spanOnLine(child)) || undefined;
+    if (child.spanned === spanned) return;
+    child.spanned = spanned;
+    dirtyProps(child);
   }
 
   /**
@@ -16605,14 +16911,14 @@ export class Engine implements HostEngine {
       line.handles.length === handles.length &&
       handles.every((handle, i) => handle === line.handles[i]);
     if (was && same) return was;
-    const where = { marginTop: top, justifyContent: along ?? 'flex-start', ...strut };
+    const where = lineProps(line.text === true, top, along, strut);
     const handle = was
       ? this.clone(was, placed ? null : where, [...handles])
       : this.fabric.createNode(
           nextTag(),
-          'View',
+          line.text ? PARAGRAPH : 'View',
           this.rootTag,
-          { ...LINE_BOX, ...where },
+          where,
           container,
         );
     if (!was) for (const child of handles) this.fabric.appendChild(handle, child);
@@ -16649,8 +16955,11 @@ export class Engine implements HostEngine {
    * is the one of a first box that has been made again.
    */
   private lineOf(container: EngineNode, first: EngineNode): LineBox {
-    if (first.line?.in !== container) {
-      first.line = { handle: null, top: 0, handles: [], in: container };
+    // A line of words is a paragraph, and one of boxes alone a row: another view, with every
+    // box in it made again, as native never moves one.
+    const text = wordsLine(container.flow?.plan.lines.get(first)?.boxes ?? NO_BOXES);
+    if (first.line?.in !== container || first.line.text !== text) {
+      first.line = { handle: null, top: 0, handles: [], in: container, text };
     }
     return first.line;
   }
@@ -16700,7 +17009,17 @@ export class Engine implements HostEngine {
       return this.reconcileUnder(parent, text, context);
     }
     const box = this.looseText(parent, text, LOOSE_TEXT[viewName]);
-    return box ? this.reconcileUnder(parent, box, context) : null;
+    if (!box) return null;
+    const first = parent.flow?.lined.get(text);
+    const spanned = (first !== undefined && box.tag === 'text') || undefined;
+    if (box.spanned !== spanned) {
+      box.spanned = spanned;
+      dirtyProps(box);
+      // Its spaces beside a box are kept now, or dropped.
+      dirtyProps(text);
+    }
+    // Under the line it is on, as a box on it is: see `reconcileChild`.
+    return this.reconcileUnder(first ? this.lineOf(parent, first) : parent, box, context);
   }
 
   /**
@@ -16717,7 +17036,7 @@ export class Engine implements HostEngine {
   /** The paragraph of each word of a run, kept for the word in its place while there is one. */
   private wordBoxes(parent: EngineNode, text: EngineNode): EngineNode[] {
     const at = parent.childList.indexOf(text);
-    const words = wordsOf(text.nodeText, at > 0, at < parent.childList.length - 1);
+    const words = wordsOf(text.nodeText, holdsBefore(parent, at), at < parent.childList.length - 1);
     const boxes = (text.words ??= []);
     for (const gone of boxes.splice(words.length)) if (gone.committed) this.forgetCommitted(gone);
     words.forEach((word, i) => {
@@ -16758,7 +17077,7 @@ export class Engine implements HostEngine {
   private looseText(parent: EngineNode, text: EngineNode, drawnBy = 'text'): EngineNode | null {
     for (const word of text.words ?? []) if (word.committed) this.forgetCommitted(word);
     text.words = undefined;
-    if (!trimEnds(text.nodeText)) return null;
+    if (!drawnText(parent, text)) return null;
     const box = this.boxFor(text, drawnBy);
     box.parent = parent;
     // Merged before the view is, so the view's truncation is read here: see `truncatedAs`.

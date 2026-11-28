@@ -59,6 +59,13 @@ last app has gone, as Angular never gives one back.
 - The element interfaces, `HTMLInputElement` and the rest, for `instanceof`.
 - The HTML elements a library writes that the engine has no view for, a `<button>` or a
   `<table>`, are views. A `<button>` and an `<a>` have their roles.
+- Words and the inline boxes beside them, a link with an icon in a sentence, are one paragraph
+  that wraps as a browser's does: the boxes sit on its lines among the words, on their baseline,
+  and a text element with no padding, border, margin or size is a span of it. That is so in a
+  `<p>` and for words written straight into a block beside a box. A span that is an inline-block
+  clipping what it holds, a line cut short with an ellipsis, is a box among the words. A
+  component with no selector in a directory given as `sources` is hosted by `ng-component`,
+  which is inline as a browser has it.
 
 Gaps: the element interfaces answer `instanceof` only. They have no prototype a member can be
 added to, and no `new`. A comment before or after an HTML document's `<html>` is left out.
@@ -167,7 +174,8 @@ with no margins and no heading sizes. A table's columns are worked out again whe
 cell is put in or taken out or a span changes, and not when what a cell holds changes;
 `border-collapse`, `border-spacing` and `caption-side` are not read. The window does not
 scroll. Nothing kept in `localStorage` outlives the app, and nothing can be selected.
-An inline element over two lines is one box around both, where a browser has two.
+An inline element over two lines is one box around both, where a browser has two, and a box
+among a paragraph's words stays whole on one line: its own words do not wrap with the paragraph's.
 A table's `clientTop` and `clientLeft` are its border's width with `border-collapse: collapse`
 too, where Chrome answers half of it. A table whose overflow is `scroll` or `auto` scrolls, where
 Chrome draws it as `visible`; an `IntersectionObserver` sees it as Chrome does.
