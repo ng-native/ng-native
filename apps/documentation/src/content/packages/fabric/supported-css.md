@@ -773,6 +773,22 @@ write another way:
   native view is sent it, and without that package nothing is drawn of it. A band with an edge
   that is a length or a token, and any other polygon, is dropped with a warning.
 - Any other clip is dropped with a warning, as everywhere.
+- `mask-image` of one `url()`, or a token holding one, and the first layer of `mask-size` and
+  `mask-position`, or the `mask` shorthand, are kept for
+  [`@ng-native/web-compat`](/packages/web-compat), which draws the SVG in the box's background
+  colour: an icon written as a mask, as Taiga UI and Iconify write theirs. While it draws one the
+  box paints no background of its own, and a `position: static` box is the one an absolute box
+  inside it is placed against. No native view is sent them, and without that package the box is
+  drawn unmasked. A size is a length, a percentage, `min()` of a length and a percentage, either
+  with a length or a token added in `calc()`, `auto`, `contain` or `cover`. A gradient or a second
+  layer is dropped with a warning, and so is a token anywhere but the image and the size.
+  `mask-repeat` other than `no-repeat`, `mask-composite` other than `add` and a `luminance`
+  `mask-mode` are said with a warning, and the one layer is drawn once, by its alpha.
+  The mask is placed in and cut to the box inside its border: `mask-clip` and `mask-origin` of
+  `border-box` or `padding-box` are read, and any other is said with a warning. A token holding
+  several layers is said with a warning, and the box is drawn unmasked. In an app's own sheet, a
+  mask is dropped with a warning that says to draw an icon with `<svg>` or
+  [`@ng-native/icons`](/packages/icons).
 - `will-change`, `contain`, `perspective` and `backdrop-filter` make a `position: static` box the
   one an absolute box inside it is placed against, as in a browser: a `will-change` naming
   `transform`, `translate`, `rotate`, `scale`, `perspective`, `filter`, `backdrop-filter`,

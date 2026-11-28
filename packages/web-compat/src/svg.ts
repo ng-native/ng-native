@@ -90,8 +90,15 @@ export function drawingElement(engine: Engine, name: string, drawn: boolean): En
 const FILLED = { fill: 'black' };
 
 /** The paint a drawing's own attributes give the shapes in it: see `drawingPaint`. */
-const DRAWING_PAINT = ['fill', 'stroke', 'stroke-width'];
-const DRAWING_PAINT_PROPS = ['fill', 'stroke', 'strokeWidth', 'propList'];
+const DRAWING_PAINT = ['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin'];
+const DRAWING_PAINT_PROPS = [
+  'fill',
+  'stroke',
+  'strokeWidth',
+  'strokeLinecap',
+  'strokeLinejoin',
+  'propList',
+];
 
 /**
  * Give an `<svg>` its paint attributes, `fill="none" stroke="currentColor"` as Lucide's icons

@@ -320,8 +320,22 @@ a page written right to left too, and a date's or a time's `valueAsNumber` is `N
   touch events and not for a touch a listener cancels, as a phone's browser sends the mouse events
   of a tap: a chart shows a series' tooltip. The mouse stays there as the finger lifts, and goes
   `mouseout` and `mouseleave` when a finger comes down on another shape or anywhere else.
+- A box with a `mask-image` of one SVG in a library's stylesheet, as Taiga UI and Iconify write
+  an icon, is drawn as that SVG in the colour the box would paint: every paint of the drawing is
+  that colour at the paint's own alpha, which is what a browser shows of a mask over a box of one
+  colour, and the box paints no background of its own. A `url()` to a `data:` URL is read where
+  it is, and any other is fetched against the page's address, once for all the boxes that name
+  it, and again for a box named later where that fetch failed. The drawing is under what the box
+  holds, cut to the box, and is no child of it to a script. It is sized and placed as
+  the mask's first layer is (see [Supported CSS](/packages/fabric/supported-css)), and follows the
+  colour, the size and the image changing. A line width in `vw` or `vh` is of the mask's size,
+  and one with `vector-effect: non-scaling-stroke` is drawn that wide whatever the drawing is
+  scaled to. A box whose mask image cannot be fetched paints no background of its own.
 
-Gaps: without react-native-svg's native views a drawing shows nothing, as an icon does. A
+Gaps: without react-native-svg's native views a drawing shows nothing, as an icon does. A mask
+is drawn in one colour: a gradient under it, or one a shape of the SVG fills with, is drawn as the
+box's colour or the gradient's own, and a mask of a gradient is not drawn. Where a box's size is
+not in points, the mask's size its lines are worked out from is the box's last layout. A
 stylesheet's attribute selector does not match a drawing's attributes: `svg[width="16"]` matches
 nothing. A marker is drawn from the `marker-start`, `marker-mid` and `marker-end` attributes, not
 from a style. A filter draws its drop shadow and its blur; each other step passes on what it

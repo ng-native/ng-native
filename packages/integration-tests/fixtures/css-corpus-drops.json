@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2643,
-    "dropped": 510,
+    "rules": 2646,
+    "dropped": 498,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -128,7 +128,7 @@
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 57
       },
       "--*": {
-        "'--*' has a value native cannot express in any form": 14,
+        "'--*' has a value native cannot express in any form": 2,
         "filter: invert() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": 4
       },
       "-moz-column-gap": {
@@ -230,13 +230,13 @@
         "'list-style-type' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "mask-image": {
-        "'mask-image' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
+        "'mask-image' is drawn only for a library's stylesheet, by @ng-native/web-compat. In an app's own, draw an icon with <svg> or @ng-native/icons.": 2
       },
       "mask-position": {
-        "'mask-position' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
+        "'mask-position' is drawn only for a library's stylesheet, by @ng-native/web-compat. In an app's own, draw an icon with <svg> or @ng-native/icons.": 2
       },
       "mask-size": {
-        "'mask-size' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
+        "'mask-size' is drawn only for a library's stylesheet, by @ng-native/web-compat. In an app's own, draw an icon with <svg> or @ng-native/icons.": 2
       },
       "min-height": {
         "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 5
@@ -607,7 +607,7 @@
   },
   "pico": {
     "rules": 490,
-    "dropped": 270,
+    "dropped": 256,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -727,7 +727,7 @@
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 71
       },
       "--*": {
-        "'--*' has a value native cannot express in any form": 15,
+        "'--*' has a value native cannot express in any form": 1,
         "filter: blur() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": 1
       },
       "-ms-overflow-style": {
@@ -851,7 +851,7 @@
   },
   "open-props": {
     "rules": 95,
-    "dropped": 167,
+    "dropped": 162,
     "emitted": [
       "$transitionDuration",
       "alignItems",
@@ -938,7 +938,7 @@
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 2
       },
       "--*": {
-        "'--*' has a value native cannot express in any form": 123,
+        "'--*' has a value native cannot express in any form": 118,
         "filter: contrast() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": 5
       },
       "-webkit-tap-highlight-color": {

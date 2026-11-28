@@ -56,6 +56,9 @@ export { isBlockContainer, planFlow, type FlowKey, type FlowPlan, type FlowTree 
 export {
   DIRECT_EVENTS,
   Engine,
+  type MaskAxis,
+  type MaskDrawer,
+  type MaskStyle,
   SyntheticEvent,
   isTokenPaint,
   claimHost,
