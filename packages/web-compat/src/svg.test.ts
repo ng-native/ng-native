@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { afterEach, describe, it } from 'node:test';
 import { Component } from '@angular/core';
-import { cleanup, render, settle, type FakeFabricNode } from '@ng-native/testing';
+import { cleanup, render, screen, settle, type FakeFabricNode } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 
 afterEach(cleanup);
@@ -106,6 +106,29 @@ describe('@ng-native/web-compat, a shape a script draws', () => {
     svg.appendChild(path);
     await settle();
     assert.equal(view(path)!.props['d'], 'M 5 5 L 6 6');
+  });
+});
+
+@Component({
+  template: `
+    <svg width="40" height="40">
+      <circle testID="circle" class="t-circle" />
+      <rect testID="rect" class="t-rect" />
+    </svg>
+  `,
+})
+class Unsized {}
+
+describe('@ng-native/web-compat, a shape a stylesheet sizes', () => {
+  // Taiga UI's loader is a circle with a class and no attribute, its size a rule's: Android's
+  // shape view reads a length it was never given as null, and crashes drawing it.
+  it('is given the geometry a shape has by default, with no attribute of its own', async () => {
+    await render(Unsized, { providers: [provideWebCompat()] });
+    await settle();
+    const circle = screen.getByTestId('circle').props;
+    assert.deepEqual([circle['cx'], circle['cy'], circle['r']], [0, 0, 0]);
+    const rect = screen.getByTestId('rect').props;
+    assert.deepEqual([rect['x'], rect['y'], rect['width'], rect['height']], [0, 0, 0, 0]);
   });
 });
 
