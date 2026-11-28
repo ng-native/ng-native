@@ -1665,6 +1665,20 @@ const TRANSFORM_FUNCTIONS = /^(translate|scale|rotate|skew)(X|Y|Z|3d)?$/i;
 const GENERATED = new Set(['before', 'after']);
 
 /**
+ * The bar a `<progress>` fills to its value, which each browser names its own way: the element
+ * `@ng-native/web-compat` keeps in a progress bar for it.
+ */
+const VALUE_BARS = new Set(['-webkit-progress-value', '-moz-progress-bar']);
+const VALUE_BAR = '::-webkit-progress-value';
+
+/** The element a generated box's rules are for, or none for any other pseudo-element. */
+function boxName(part) {
+  if (GENERATED.has(part.kind)) return `::${part.kind}`;
+  // Its name in any case, as Lightning CSS keeps a vendor's name as written.
+  return part.kind === 'custom' && VALUE_BARS.has(part.name.toLowerCase()) ? VALUE_BAR : undefined;
+}
+
+/**
  * A rule with each `X::before` and `X::after` among its selectors as `X > ::before`: a rule for
  * an element of that name under X, which is what the engine keeps there for the box. Only for a
  * sheet compiled with `generated`; any other is refused its pseudo-elements where they are read.
@@ -1672,8 +1686,9 @@ const GENERATED = new Set(['before', 'after']);
 function withGeneratedBoxes(rule) {
   const selectors = rule.value.selectors.map((parts) => {
     const last = parts.at(-1);
-    if (last?.type !== 'pseudo-element' || !GENERATED.has(last.kind)) return parts;
-    const box = { type: 'type', name: `::${last.kind}` };
+    const name = last?.type === 'pseudo-element' ? boxName(last) : undefined;
+    if (!name) return parts;
+    const box = { type: 'type', name };
     return [...parts.slice(0, -1), { type: 'combinator', value: 'child' }, box];
   });
   return { ...rule, value: { ...rule.value, selectors } };
@@ -4257,7 +4272,7 @@ function compileCss(source, context = 'styles', options = {}) {
 /** Whether a rule is for a generated box, `::before` or `::after`. */
 const drawsABox = (rule) => {
   const type = rule.compounds[rule.compounds.length - 1]?.type;
-  return type === '::before' || type === '::after';
+  return type === '::before' || type === '::after' || type === VALUE_BAR;
 };
 
 /** The element that draws a background through its letters. */

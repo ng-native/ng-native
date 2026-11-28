@@ -12,6 +12,7 @@ import {
   valueAsNumber,
 } from './range.ts';
 import { method, own, type Reflecting, type Reflection } from './reflect.ts';
+import { PROGRESS } from './progress-value.ts';
 import {
   chosen,
   optionsOf,
@@ -281,6 +282,7 @@ const OPTION: Readonly<Record<string, Reflection>> = {
 
 /** The properties above, by element and by name. */
 export const CONTROLS: Readonly<Record<string, Readonly<Record<string, Reflection>>>> = {
+  progress: PROGRESS,
   input: {
     value: inputValue,
     checked,

@@ -1172,7 +1172,8 @@ function componentSheet(
     ...locating(parts, className, module),
     onUnsupported: warn,
     recover: recover || copied,
-    generated,
+    // Its `::before` and `::after`, masks and background images too, as a library's are.
+    generated: generated || copied,
   };
 
   const sheet = compileCss(css, context, options);
