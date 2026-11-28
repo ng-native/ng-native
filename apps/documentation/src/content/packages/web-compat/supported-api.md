@@ -266,7 +266,9 @@ sight as a drag does, shows the move late. One in a line of inline boxes moves a
   `input` or `change`. Of two options of one value, the one chosen by place, by a press or by
   `selected` is the one it keeps.
 - `checked` is the state a click, a script or a binding sets, and a radio checked unchecks the rest
-  of its group.
+  of its group. A library's stylesheet matches `:checked` by that state and `:indeterminate` by
+  the `indeterminate` a script sets, each as it changes. A form reset puts `checked` back to the
+  `checked` attribute and clears `indeterminate`.
 - A control has `validity`, `willValidate`, `validationMessage`, `checkValidity()`,
   `reportValidity()` and `setCustomValidity()`, and `:valid`, `:invalid`, `:in-range`,
   `:out-of-range`, `:placeholder-shown`, `:checked`, `:indeterminate` and `:default` match.

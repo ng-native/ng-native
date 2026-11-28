@@ -42,6 +42,12 @@ export interface AttributeTest {
   readonly value?: string;
   /** The `i` flag: the value is compared without case, and is written here in lower case. */
   readonly insensitive?: true;
+  /**
+   * A control's state, `:checked` or `:indeterminate` in a sheet read as a browser reads it: the
+   * state a package keeps for the node where it keeps one (`Engine.setControlState`), and the prop
+   * of the name where it does not.
+   */
+  readonly state?: true;
 }
 
 export interface Compound {
@@ -837,6 +843,8 @@ export interface StyleTarget {
   readonly props: Readonly<Record<string, unknown>>;
   /** Attributes a package keeps apart from props, for selectors alone: see `attributeOf`. */
   readonly keptAttributes?: Readonly<Record<string, string>>;
+  /** A control's state a package keeps, by name, for `:checked`: see `Engine.setControlState`. */
+  readonly controlStates?: ReadonlyMap<string, boolean>;
   /**
    * Whether `props.style` sets a property children inherit, kept by whoever sets the style so the
    * resolver reads the style only where it can matter. Absent is false.
@@ -1247,6 +1255,8 @@ const attributeText = (actual: unknown, test: AttributeTest): string =>
  * is the element's class list, as the attribute would spell it.
  */
 function matchesAttribute(node: StyleTarget, test: AttributeTest): boolean {
+  const state = test.state ? node.controlStates?.get(test.name) : undefined;
+  if (state !== undefined) return state;
   const actual = test.name === 'class' ? classAttribute(node) : attributeOf(node, test.name);
   if (actual === undefined || actual === null || actual === false) return false;
   if (test.operator === undefined) return true;
@@ -3060,6 +3070,12 @@ function reachByAttribute(node: StyleTarget, take: (key: string) => void): void 
   }
   // One kept by no prop's name: a prop's is taken above.
   if (kept) for (const name in kept) if (!(name in node.props)) take(`attr:${name}`);
+  if (node.controlStates) reachByState(node.controlStates, take);
+}
+
+/** The buckets of a control's state, `:checked`, filed by the attribute's name: see `AttributeTest.state`. */
+function reachByState(states: ReadonlyMap<string, boolean>, take: (key: string) => void): void {
+  for (const [name, on] of states) if (on) take(`attr:${name}`);
 }
 
 /**

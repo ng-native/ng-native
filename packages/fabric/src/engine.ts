@@ -972,6 +972,8 @@ export interface EngineNode extends HostNode {
   attributeOnly?: Set<string>;
   /** Attributes a package keeps apart from props, for selectors alone. See `keepAttribute`. */
   keptAttributes: Record<string, string> | undefined;
+  /** A control's state a package keeps for `:checked`. See `setControlState`. */
+  controlStates?: Map<string, boolean>;
   /**
    * Set by whoever needs to know which props have been written: each `setProp` with a value adds
    * its key, even one equal to the value already there, and one with `undefined` or `null` takes
@@ -6935,6 +6937,7 @@ const ENGINE_NODE_FIELDS = {
   nativeView: true,
   attributeOnly: true,
   keptAttributes: true,
+  controlStates: true,
   writes: true,
   propWatches: true,
   paintsOn: true,
@@ -9742,6 +9745,21 @@ export class Engine implements HostEngine {
     if (!(key in node.props)) return;
     (node.attributeOnly ??= new Set()).add(key);
     this.markProps(node, false);
+  }
+
+  /**
+   * Say a control's state, `checked`, `indeterminate` or `placeholder-shown`, which a library's
+   * `:checked`, `:indeterminate` and `:placeholder-shown` match by, apart from any attribute of that
+   * name: a browser's checkbox is checked by a tap or a script, and its `checked` attribute is what
+   * it starts as. `undefined`
+   * leaves the state to the prop of the name again, as it is for a node nobody says one of.
+   */
+  setControlState(node: EngineNode, name: string, on: boolean | undefined): void {
+    if (node.controlStates?.get(name) === on) return;
+    if (on === undefined) node.controlStates?.delete(name);
+    else (node.controlStates ??= new Map()).set(name, on);
+    if (this.generated !== null) this.generateFor(node, name);
+    if (this.styles.reads(name)) this.markProps(node, true, this.styles.readsBeside(name));
   }
 
   /**
