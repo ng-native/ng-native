@@ -30,7 +30,7 @@ import {
   splitOutside,
   type MathValue,
 } from './css-math.ts';
-import { ELEMENT_STYLES } from './element-styles.ts';
+import { BROWSER_STYLES, ELEMENT_STYLES } from './element-styles.ts';
 import { type Channel, relativeColour } from './relative-colour.ts';
 import type { Keyframe } from './transition.ts';
 
@@ -873,6 +873,8 @@ export interface StyleTarget {
   readonly outsideCascade?: true;
   /** One of HTML's text elements the engine has styles of its own for, such as `strong`. */
   readonly styled?: true;
+  /** An element a package says is a browser's, given `BROWSER_STYLES`: see `giveBrowserStyles`. */
+  readonly browserStyled?: true;
   /**
    * The sheet this node's own rules come from, which is the sheet of the component whose renderer
    * created it. Read from the node rather than passed in, because a node's ancestors usually
@@ -1865,6 +1867,10 @@ function takesParents(rule: StyleRule): boolean {
   }
   return takes;
 }
+
+/** Whether the engine matches a sheet of its own on a node: `ELEMENT_STYLES` or `BROWSER_STYLES`. */
+const hasOwnSheet = (node: StyleTarget): boolean =>
+  node.styled === true || node.browserStyled === true;
 
 /** Whether a node is one of the children CSS counts. Text and anchors are children, not elements. */
 const isElement = (node: StyleTarget) =>
@@ -2888,6 +2894,13 @@ function layerOrder(a: LayerPlace | undefined, b: LayerPlace | undefined): numbe
 const ELEMENT_ENTRIES: readonly RuleEntry[] = ELEMENT_STYLES.rules.map((rule) => ({
   rule,
   sheet: ELEMENT_STYLES,
+  weight: rule.specificity,
+}));
+
+/** A browser's own styles for HTML's blocks, matched as `ELEMENT_ENTRIES` are: see `BROWSER_STYLES`. */
+const BROWSER_ENTRIES: readonly RuleEntry[] = BROWSER_STYLES.rules.map((rule) => ({
+  rule,
+  sheet: BROWSER_STYLES,
   weight: rule.specificity,
 }));
 
@@ -4507,7 +4520,9 @@ export class StyleResolver {
   /** The rules a node matches now, weakest first. */
   private matchedBy(node: StyleTarget): readonly StyleRule[] {
     const candidates = this.rulesFor(node);
-    return this.matched(node, node.styled ? ELEMENT_ENTRIES.concat(candidates) : candidates);
+    // A browser's own styles, then the engine's, then every stylesheet's, weakest first.
+    const own = node.browserStyled ? BROWSER_ENTRIES.concat(candidates) : candidates;
+    return this.matched(node, node.styled ? ELEMENT_ENTRIES.concat(own) : own);
   }
 
   /**
@@ -4600,7 +4615,7 @@ export class StyleResolver {
       this.addedSheets.length === 0 &&
       !node.customProperties &&
       !node.boundStyle &&
-      !node.styled
+      !hasOwnSheet(node)
     );
   }
 

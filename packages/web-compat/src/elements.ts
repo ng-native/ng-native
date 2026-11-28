@@ -150,6 +150,11 @@ const BLOCKS = new Set([
   ...['details', 'summary', 'search'],
 ]);
 const BLOCK = { ...CONTENT_BOX, display: 'block' };
+/** The elements a browser's own sheet spaces or sizes: see `BROWSER_STYLES` in the engine. */
+const BROWSER_STYLED = new Set([
+  ...['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'menu', 'dl', 'dd'],
+  ...['blockquote', 'figure', 'pre', 'hr', 'fieldset', 'legend'],
+]);
 const SIZED_WHOLE = new Set(['button', 'select', 'table']);
 
 /** A table's row: its cells side by side. */
@@ -206,6 +211,8 @@ export function giveDefaults(node: EngineNode, engine: Engine): void {
   const style = defaultsOf(node, engine);
   if (!style) return;
   engine.setDefaultStyle(node, style);
+  // A paragraph's and a list's margins, a heading's size: what a browser's own sheet gives them.
+  if (BROWSER_STYLED.has(node.tag)) engine.giveBrowserStyles(node);
   if (node.tag.includes('-')) engine.setInline(node, 'unless-block');
   else if (style !== BLOCK && !NOT_INLINE.has(node.tag)) engine.setInline(node, 'always');
 }

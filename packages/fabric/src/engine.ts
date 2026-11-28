@@ -784,6 +784,8 @@ export interface EngineNode extends HostNode {
   outsideCascade?: true;
   /** See `StyleTarget.styled`. */
   styled?: true;
+  /** See `StyleTarget.browserStyled`. */
+  browserStyled?: true;
   /** `:focus`, from the native focus and blur events. */
   focused?: boolean;
   /** `:active`, set on the responder and every ancestor of it. */
@@ -6705,6 +6707,7 @@ class RetainedNode {
   anonymous: true | undefined = undefined;
   outsideCascade: true | undefined = undefined;
   styled: true | undefined = undefined;
+  browserStyled: true | undefined = undefined;
   bornIn: number | undefined = undefined;
   truncates: true | undefined = undefined;
   // Written on nodes that never had one: a style set inline, and every node a commit forgets. A
@@ -6886,6 +6889,7 @@ const ENGINE_NODE_FIELDS = {
   anonymous: true,
   outsideCascade: true,
   styled: true,
+  browserStyled: true,
   focused: true,
   active: true,
   hovered: true,
@@ -17917,6 +17921,19 @@ export class Engine implements HostEngine {
       `[angular-native] mask-image: ${image} has several layers, and a mask is drawn from one` +
         ` image, so the box is drawn unmasked. Give the token one url().`,
     );
+  }
+
+  /**
+   * Give an element a browser's own styles for HTML's blocks, `BROWSER_STYLES`: a paragraph's and
+   * a list's margins, a heading's size and weight. Under every rule a stylesheet writes. For a
+   * package that lays out a library's HTML as a browser does, such as `@ng-native/web-compat`.
+   */
+  giveBrowserStyles(node: EngineNode): void {
+    if (node.browserStyled) return;
+    node.browserStyled = true;
+    // Matched again: a node already committed keeps its cached style otherwise.
+    this.markProps(node);
+    this.markParagraph(node);
   }
 
   /** Say where a touch that starts on a node is taken to be, or nothing to leave it to native. */
