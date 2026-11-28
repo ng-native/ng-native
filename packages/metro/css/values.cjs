@@ -626,12 +626,24 @@ function tokenValue(parts, context) {
   // Not a length or a time: `13px` read as 13 scaled a box thirteen times, where a browser drops
   // the declaration.
   if (!hasUnit(part)) attempt('number', () => number(part.value ?? part, context));
-  attempt('weight', () => weight(part.value ?? part));
+  // A length is no weight: `1px` drew a hairline's token as the thinnest face.
+  if (!hasUnit(part)) attempt('weight', () => weight(part.value ?? part));
   Object.assign(out, unitForms(part));
   if (part.value?.type === 'number') Object.assign(out, bareNumber(part.value.value));
   Object.assign(out, functionForms(part), variantForm(out.keyword));
 
-  return Object.keys(out).length ? out : null;
+  return Object.keys(out).length ? out : unreadUnit(part);
+}
+
+/**
+ * A number with a unit nothing reads, `4px` and a no-break space: a word, as a browser keeps the
+ * token, which no use site can read. A number and a no-break space alone is a number token's,
+ * which is refused.
+ */
+function unreadUnit(part) {
+  const dimension = part?.value?.type === 'dimension' ? part.value : null;
+  if (!dimension || dimension.unit.trim() === '') return null;
+  return { keyword: `${dimension.value}${dimension.unit}` };
 }
 
 /**
@@ -824,6 +836,9 @@ function listValue(parts) {
 }
 
 function otherListValue(parts) {
+  // A whole `font` shorthand, Taiga UI's typography: read before a family, which its last word is.
+  const font = require('./font-token.cjs').fontForm(parts);
+  if (font !== undefined) return { font };
   const animation = animationForm(parts);
   if (animation !== undefined) return { animation };
   const family = firstFamily(parts);
@@ -1200,8 +1215,7 @@ function fallbacks(varPart, kind, context) {
   // `var(--c, currentColor)`: the colour in scope where it is used, which the device fills in.
   const current = kind === 'color' && converted?.keyword?.toLowerCase() === 'currentcolor';
   const read = laidOut(current ? CURRENT_COLOUR : formOf(converted, kind), kind, context);
-  // One made of other tokens is worked out where it is used, from the tokens in scope there.
-  const derived = converted && DERIVED.some((form) => form in converted);
+  const derived = madeOfTokens(converted, varPart);
   const fallback = read ?? (derived ? undefined : sumOf(varPart, kind, context));
   return {
     ...(alternatives.length ? { alternatives } : {}),
@@ -1210,6 +1224,16 @@ function fallbacks(varPart, kind, context) {
     ...(derived ? { fallbackToken: converted } : {}),
   };
 }
+
+/**
+ * Whether a fallback is made of other tokens, worked out where it is used from the tokens in scope
+ * there. A sum of em and points with no token in it is the length a declaration of it is
+ * (`sumOf`).
+ */
+const madeOfTokens = (converted, varPart) =>
+  Boolean(converted) &&
+  DERIVED.some((form) => form in converted) &&
+  (varPart.value?.fallback ?? []).some(require('./colour-expression.cjs').mentionsVar);
 
 /**
  * A fallback that is a `calc()` of a unit the device settles and a length, `calc(100vw - 32px)`,

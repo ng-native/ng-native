@@ -35,13 +35,42 @@ function tree(term, kind, context) {
   if (name === 'calc') return arithmetic(meaningful(term.value.arguments), kind, context);
   // `max(var(--safe-area-inset-top, 0px), calc(var(--spacing) * 4))`, which is `pt-safe-or-4`.
   if (name === 'max' || name === 'min') {
-    const sides = commaSeparated(term.value.arguments).map((side) =>
-      arithmetic(meaningful(side), kind, context),
-    );
+    const sides = comparedSides(term, kind, context);
     return sides.reduce((a, b) => [name, a, b]);
+  }
+  // `clamp(lo, value, hi)` is `max(lo, min(value, hi))`: Taiga's `--t-zoom`, a switch from 0 to 1.
+  if (name === 'clamp') {
+    const sides = comparedSides(term, kind, context);
+    if (sides.length !== 3) throw unreadable(context, 'is a clamp() of other than three values');
+    return ['max', sides[0], ['min', sides[1], sides[2]]];
   }
   return literal(term, kind, context);
 }
+
+/**
+ * The values a `min()`, `max()` or `clamp()` compares. A percentage, an em or a viewport unit among
+ * them is refused: only the box, or the place it is used, knows its size, and the device compares
+ * points.
+ */
+function comparedSides(term, kind, context) {
+  const sides = commaSeparated(term.value.arguments).map((side) =>
+    arithmetic(meaningful(side), kind, context),
+  );
+  const unit = sides.map(relativeUnit).find((one) => one !== undefined);
+  if (unit !== undefined) {
+    const what = unit === '%' ? 'a percentage' : `'${unit}'`;
+    throw unreadable(context, `compares ${what} in ${term.value.name}(), which only layout can`);
+  }
+  return sides;
+}
+
+const relativeUnit = (node) =>
+  Array.isArray(node)
+    ? node
+        .slice(1)
+        .map(relativeUnit)
+        .find((one) => one !== undefined)
+    : node?.relative?.unit;
 
 function arithmetic(terms, kind, context) {
   const parsed = arithmeticTree(
@@ -85,8 +114,8 @@ function leaf(term, kind, context) {
  * number, a percentage, as `{ percentage }`, the fraction it is kept apart from a bare number.
  */
 function literal(term, kind, context) {
-  const fraction = kind === 'number' ? fractionOf(term) : undefined;
-  if (fraction !== undefined) return { percentage: fraction };
+  const kept = keptForm(term, kind);
+  if (kept !== undefined) return kept;
   for (const read of READERS) {
     const value = read(term, context);
     if (value !== undefined) return value;
@@ -94,6 +123,36 @@ function literal(term, kind, context) {
   const what = term?.value?.unit ?? term?.value?.type ?? term?.type;
   throw unreadable(context, `cannot take '${what}' here`);
 }
+
+/**
+ * A literal kept in the form its slot works it out in: a percentage where the slot is a number,
+ * and a length in em or a viewport unit, kept as that unit for the device to add where it is
+ * used. Taiga UI centres a field's label with `calc(var(--t-height) / 2 - .625em)`.
+ */
+function keptForm(term, kind) {
+  if (kind === 'number') {
+    const fraction = fractionOf(term);
+    return fraction === undefined ? undefined : { percentage: fraction };
+  }
+  if (kind !== 'length') return undefined;
+  const relative = relativeOf(term);
+  return relative === undefined ? undefined : { relative };
+}
+
+/** The units a length can be in that only the place it is used knows the size of. */
+const RELATIVE_UNITS = new Set(['em', 'vw', 'vh', 'vmin', 'vmax']);
+
+const relativeOf = (term) => {
+  if (term?.type === 'length' && RELATIVE_UNITS.has(term.value?.unit)) {
+    return { unit: term.value.unit, factor: round(term.value.value) };
+  }
+  // A share of the box, worked out by the box where it is used: Taiga UI centres a pin with
+  // `translate(calc(var(--tui-inline) * -50%), -50%)`.
+  if (term?.type === 'token' && term.value?.type === 'percentage') {
+    return { unit: '%', factor: round(term.value.value * 100) };
+  }
+  return undefined;
+};
 
 const numberOf = (term) =>
   term?.type === 'token' && term.value?.type === 'number' ? round(term.value.value) : undefined;
@@ -133,8 +192,8 @@ function pointsOf(term, context) {
 const unreadable = (context, why) =>
   new CssUnsupported(
     `${context}: arithmetic with tokens in it ${why}. What the device works out is numbers, ` +
-      `points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport ` +
-      `unit beside a token needs layout the device does not do here.`,
+      `points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() ` +
+      `and clamp(); a percentage only of a box's size, place or move, and compared with nothing.`,
   );
 
 /**
@@ -254,10 +313,27 @@ function calcWithTokens(parts, kind, context) {
   }
   if (kind !== 'length' && kind !== 'number') return null;
   if (!fits(written[0], kind)) throw mixedTypes(context);
-  return slot(written[0], kind, context);
+  const out = slot(written[0], kind, context);
+  const units = [...relativeUnits(out, new Set())];
+  // The device keeps one unit of the use site in a sum, and works out no more.
+  if (units.length > 1) {
+    throw unreadable(
+      context,
+      `cannot add '${units[0]}' and '${units[1]}', two units the device knows only where it is used`,
+    );
+  }
+  return out;
 }
 
-const MATH = new Set(['calc', 'max', 'min']);
+/** The units of the use site a calc() tree written here holds: `em`, `vw` and the rest. */
+function relativeUnits(node, into) {
+  if (node === null || typeof node !== 'object') return into;
+  if (node.relative && typeof node.relative.unit === 'string') into.add(node.relative.unit);
+  for (const value of Object.values(node)) relativeUnits(value, into);
+  return into;
+}
+
+const MATH = new Set(['calc', 'max', 'min', 'clamp']);
 
 /**
  * What `translate3d()` writes: across and down, where it moves nothing along the depth a view

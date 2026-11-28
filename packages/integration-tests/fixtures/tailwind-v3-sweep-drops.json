@@ -973,12 +973,14 @@
     "rounded-r-[0.35]",
     "rounded-r-[3]"
   ],
-  "dropped 'border-bottom-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
-    "!divide-y-[0.35]",
+  "dropped 'border-bottom-width': '…' has no box for a percentage in calc() to be a share of": [
     "!divide-y-[37%]",
+    "divide-y-[37%]"
+  ],
+  "dropped 'border-bottom-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
+    "!divide-y-[0.35]",
     "!divide-y-[3]",
     "divide-y-[0.35]",
-    "divide-y-[37%]",
     "divide-y-[3]"
   ],
   "dropped 'border-bottom-width': expected a length, and a colour is not one": [
@@ -1131,12 +1133,14 @@
     "border-x-[37%]",
     "border-x-[3]"
   ],
-  "dropped 'border-left-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
-    "!divide-x-[0.35]",
+  "dropped 'border-left-width': '…' has no box for a percentage in calc() to be a share of": [
     "!divide-x-[37%]",
+    "divide-x-[37%]"
+  ],
+  "dropped 'border-left-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
+    "!divide-x-[0.35]",
     "!divide-x-[3]",
     "divide-x-[0.35]",
-    "divide-x-[37%]",
     "divide-x-[3]"
   ],
   "dropped 'border-left-width': expected a length, and a colour is not one": [
@@ -1191,12 +1195,14 @@
     "border-x-[37%]",
     "border-x-[3]"
   ],
-  "dropped 'border-right-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
-    "!divide-x-[0.35]",
+  "dropped 'border-right-width': '…' has no box for a percentage in calc() to be a share of": [
     "!divide-x-[37%]",
+    "divide-x-[37%]"
+  ],
+  "dropped 'border-right-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
+    "!divide-x-[0.35]",
     "!divide-x-[3]",
     "divide-x-[0.35]",
-    "divide-x-[37%]",
     "divide-x-[3]"
   ],
   "dropped 'border-right-width': expected a length, and a colour is not one": [
@@ -1479,12 +1485,14 @@
     "rounded-tr-[0.35]",
     "rounded-tr-[3]"
   ],
-  "dropped 'border-top-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
-    "!divide-y-[0.35]",
+  "dropped 'border-top-width': '…' has no box for a percentage in calc() to be a share of": [
     "!divide-y-[37%]",
+    "divide-y-[37%]"
+  ],
+  "dropped 'border-top-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
+    "!divide-y-[0.35]",
     "!divide-y-[3]",
     "divide-y-[0.35]",
-    "divide-y-[37%]",
     "divide-y-[3]"
   ],
   "dropped 'border-top-width': expected a length, and a colour is not one": [
@@ -2550,12 +2558,10 @@
     "my-[0.35]",
     "my-[3]"
   ],
-  "dropped 'margin-bottom': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'margin-bottom': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "!space-y-[0.35]",
-    "!space-y-[37%]",
     "!space-y-[3]",
     "space-y-[0.35]",
-    "space-y-[37%]",
     "space-y-[3]"
   ],
   "dropped 'margin-bottom': expected a length, and a colour is not one": [
@@ -2632,12 +2638,10 @@
     "mx-[0.35]",
     "mx-[3]"
   ],
-  "dropped 'margin-left': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'margin-left': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "!space-x-[0.35]",
-    "!space-x-[37%]",
     "!space-x-[3]",
     "space-x-[0.35]",
-    "space-x-[37%]",
     "space-x-[3]"
   ],
   "dropped 'margin-left': expected a length, and a colour is not one": [
@@ -2682,12 +2686,10 @@
     "mx-[0.35]",
     "mx-[3]"
   ],
-  "dropped 'margin-right': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'margin-right': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "!space-x-[0.35]",
-    "!space-x-[37%]",
     "!space-x-[3]",
     "space-x-[0.35]",
-    "space-x-[37%]",
     "space-x-[3]"
   ],
   "dropped 'margin-right': expected a length, and a colour is not one": [
@@ -2732,12 +2734,10 @@
     "my-[0.35]",
     "my-[3]"
   ],
-  "dropped 'margin-top': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'margin-top': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "!space-y-[0.35]",
-    "!space-y-[37%]",
     "!space-y-[3]",
     "space-y-[0.35]",
-    "space-y-[37%]",
     "space-y-[3]"
   ],
   "dropped 'margin-top': expected a length, and a colour is not one": [
@@ -3053,7 +3053,7 @@
   "dropped 'padding-bottom': a placeholder takes only a colour and an opacity on native, not '…'": [
     "placeholder:p-4"
   ],
-  "dropped 'padding-bottom': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'padding-bottom': arithmetic with tokens in it compares a percentage in max(), which only layout can. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "!min-pb-safe-[37%]",
     "min-pb-safe-[37%]"
   ],
@@ -3198,7 +3198,7 @@
   "dropped 'padding-top': a placeholder takes only a colour and an opacity on native, not '…'": [
     "placeholder:p-4"
   ],
-  "dropped 'padding-top': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'padding-top': arithmetic with tokens in it compares a percentage in max(), which only layout can. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "!min-pt-safe-[37%]",
     "min-pt-safe-[37%]"
   ],

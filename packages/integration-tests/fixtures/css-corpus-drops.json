@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2646,
-    "dropped": 498,
+    "rules": 2651,
+    "dropped": 490,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -217,9 +217,6 @@
         "font-weight: 'bolder' is relative to the inherited weight, and native takes an absolute one. Write the weight: bold, or a number from 100 to 900.": 2,
         "font-weight: 'lighter' is relative to the inherited weight, and native takes an absolute one. Write the weight: bold, or a number from 100 to 900.": 1
       },
-      "height": {
-        "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 3
-      },
       "line-break": {
         "'line-break' has no React Native equivalent: no style prop of a native view does what it does.": 2
       },
@@ -237,9 +234,6 @@
       },
       "mask-size": {
         "'mask-size' is drawn only for a library's stylesheet, by @ng-native/web-compat. In an app's own, draw an icon with <svg> or @ng-native/icons.": 2
-      },
-      "min-height": {
-        "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 5
       },
       "overflow-anchor": {
         "'overflow-anchor' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
@@ -302,8 +296,8 @@
     }
   },
   "bulma": {
-    "rules": 3457,
-    "dropped": 1562,
+    "rules": 3460,
+    "dropped": 1550,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -426,7 +420,7 @@
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 16
       },
       "--*": {
-        "'--*' has a value native cannot express in any form": 23
+        "'--*' has a value native cannot express in any form": 21
       },
       "-webkit-overflow-scrolling": {
         "'-webkit-overflow-scrolling' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": 7
@@ -534,9 +528,6 @@
         "justify-content: expected a keyword, got {\"type\":\"left\",\"overflow\":null}": 1,
         "justify-content: expected a keyword, got {\"type\":\"right\",\"overflow\":null}": 1
       },
-      "left": {
-        "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
-      },
       "list-style": {
         "'list-style' has no React Native equivalent: no style prop of a native view does what it does.": 3
       },
@@ -546,12 +537,6 @@
       "list-style-type": {
         "'list-style-type' has no React Native equivalent: no style prop of a native view does what it does.": 7
       },
-      "max-height": {
-        "arithmetic with tokens in it cannot take 'vh' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 4
-      },
-      "min-height": {
-        "arithmetic with tokens in it cannot take 'vh' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
-      },
       "outline-color": {
         "'outline-color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1
       },
@@ -560,12 +545,6 @@
       },
       "overflow-y": {
         "'overflow-y': native has one overflow for both axes. Write 'overflow'.": 9
-      },
-      "padding-left": {
-        "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
-      },
-      "padding-right": {
-        "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
       },
       "padding-top": {
         "'padding-top: initial' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
@@ -581,9 +560,6 @@
       },
       "text-size-adjust": {
         "'text-size-adjust' has no React Native equivalent: no style prop of a native view does what it does.": 1
-      },
-      "top": {
-        "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 2
       },
       "vertical-align": {
         "vertical-align: 'baseline' has no native equivalent (auto, top, bottom, middle do)": 1
@@ -607,7 +583,7 @@
   },
   "pico": {
     "rules": 490,
-    "dropped": 256,
+    "dropped": 255,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -676,6 +652,7 @@
       "marginRight",
       "marginStart",
       "marginTop",
+      "maxHeight",
       "maxWidth",
       "minHeight",
       "minWidth",
@@ -805,9 +782,6 @@
       "margin-right": {
         "'margin-right: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
-      "max-height": {
-        "arithmetic with tokens in it cannot take 'vh' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
-      },
       "min-width": {
         "min-width: expected a length, and 'fit-content' is not one": 2
       },
@@ -851,7 +825,7 @@
   },
   "open-props": {
     "rules": 95,
-    "dropped": 162,
+    "dropped": 181,
     "emitted": [
       "$transitionDuration",
       "alignItems",
@@ -938,7 +912,7 @@
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 2
       },
       "--*": {
-        "'--*' has a value native cannot express in any form": 118,
+        "'--*' has a value native cannot express in any form": 137,
         "filter: contrast() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": 5
       },
       "-webkit-tap-highlight-color": {
@@ -969,7 +943,7 @@
         "'font-family' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1
       },
       "font-size": {
-        "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
+        "arithmetic with tokens in it compares 'em' in max(), which only layout can. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": 1
       },
       "min-block-size": {
         "min-height: unit 'lh' has no meaning on native (px, rem, em, %, vw, vh, vmin and vmax are)": 1

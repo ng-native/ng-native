@@ -33,11 +33,29 @@ function rewriteAtRule(css, prelude, keepBody) {
     if (open === -1) break;
     const close = blockEnd(out, open);
     if (close === -1) break;
-    const body = keepBody ? out.slice(open + 1, close) : '';
+    const kept = keepBody && !(prelude === '@supports' && asksForNoUnit(out.slice(at, open)));
+    const body = kept ? out.slice(open + 1, close) : '';
     out = out.slice(0, at) + body + out.slice(close + 1);
   }
   return out;
 }
+
+/**
+ * Length units a browser has and native has no meaning for: a feature test that asks for one is
+ * false here, as it is in a browser without the unit, and the block is dropped. Taiga UI's theme
+ * sets `--tui-lh: 1.4em`, then `1lh` where `@supports (font-size: 1lh)`. A custom property takes
+ * any value, so a test of one is left as it was.
+ */
+const NO_UNIT =
+  /\(\s*(?!--)[a-z-]+\s*:\s*-?[\d.]+(lh|rlh|cap|rcap|ic|ric|ex|rex|ch|rch|cqw|cqh|cqi|cqb|cqmin|cqmax)\s*\)/i;
+
+/**
+ * Whether a `@supports` condition is one test of a declaration with such a unit, `(font-size:
+ * 1lh)`. A test it is part of, `not` or `and`, is left as it was, unwrapped.
+ * ponytail: one test alone; read `not`, `and` and `or` if a library's theme writes them.
+ */
+const asksForNoUnit = (condition) =>
+  NO_UNIT.test(condition) && /^@supports\s*\([^()]*\)\s*$/i.test(condition.trim());
 
 /**
  * Put a sheet's rules in the order its cascade layers give them, and take the layers away.

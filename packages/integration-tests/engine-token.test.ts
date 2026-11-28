@@ -11,7 +11,8 @@ import { recorder } from './native-animated.ts';
 
 const CSS =
   ':root { --brand: #ff0000; --accent: var(--brand); --soft: color-mix(in srgb, var(--accent) 50%, white);' +
-  ' --fallen: var(--nowhere, #00ff00); --gap: 12px; --label: bold }' +
+  ' --fallen: var(--nowhere, #00ff00); --gap: 12px; --label: bold; --line: 1.4em;' +
+  ' --offset: calc((56px - var(--line)) / 2) }' +
   ' @media (prefers-color-scheme: dark) { :root { --brand: #0000ff } }' +
   ' .local { --accent: #123456; --only: 3px } .plain { color: red }';
 
@@ -39,6 +40,9 @@ describe('a token read from TypeScript', () => {
     assert.equal(engine.token('--fallen'), 'rgb(0, 255, 0)');
     assert.equal(engine.token('--gap'), '12px');
     assert.equal(engine.token('--label'), 'bold');
+    // A length in em is worked out where it is used, so it reads as written, with any sum around it.
+    assert.equal(engine.token('--line'), '1.4em');
+    assert.equal(engine.token('--offset'), 'calc(-0.7em + 28px)');
     assert.equal(engine.token('--undefined'), undefined);
   });
 

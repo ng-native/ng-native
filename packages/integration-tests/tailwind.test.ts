@@ -100,6 +100,20 @@ describe('flattening Tailwind for the engine', () => {
     assert.match(out, /\.a/);
   });
 
+  it('drops a block that asks for a unit native has no meaning for, which it does not have', () => {
+    // Taiga UI's theme: `1.4em`, and `1lh` where a browser has the unit.
+    const out = flattenTailwind(
+      ':root { --lh: 1.4em } @supports (font-size: 1lh) { :root { --lh: 1lh } }' +
+        ' @supports not (font-size: 1lh) { .b { flex: 1 } }',
+    );
+    assert.doesNotMatch(out, /1lh/);
+    assert.match(out, /1\.4em/);
+    assert.match(out, /\.b/);
+    // A custom property takes any value, so testing one says nothing of the unit.
+    const custom = flattenTailwind('@supports (--probe: 1lh) { .a { flex: 1 } }');
+    assert.match(custom, /\.a/);
+  });
+
   it("keeps a @property's initial value, which is where a default comes from", () => {
     const css = `
       @property --tw-offset { syntax: "*"; initial-value: 12px }

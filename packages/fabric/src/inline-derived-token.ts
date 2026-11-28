@@ -6,7 +6,7 @@
  *
  * The shapes are the build-time conversion's and no more (`deferCalcToken`, `deferHslToken`,
  * `deferChannelsToken` and `deferMixToken` in `@ng-native/metro/css/compile.cjs`): `calc()`,
- * `min()`, `max()` or `clamp()` of numbers, lengths in `px` or `rem`, angles, times and `var()`, with + - * /
+ * `min()`, `max()` or `clamp()` of numbers, lengths in `px`, `rem`, em or a viewport unit, angles, times and `var()`, with + - * /
  * and brackets; an `hsl()` with a `var()` for a channel; `rgb()` or `hsl()` of one channels token,
  * with an alpha written or tokened; and a `color-mix()` of any of these colours, tokens and
  * colours written out. Anything else is undefined, as a stylesheet refuses it.
@@ -116,9 +116,27 @@ function leaf(cursor: Cursor, kind: Marker['kind']): Expression {
     const value = leafFallback(reference(cursor, name).fallback, kind);
     return value === undefined ? { reference: name } : { reference: name, fallback: value };
   }
+  const relative = kind === 'length' ? relativeLength(cursor) : undefined;
+  if (relative) return { relative };
   const value = literal(cursor, unitsOf(kind));
   // A percentage, kept apart from a bare number, as `literal` in the compiler keeps it.
   return cursor.text[cursor.at - 1] === '%' ? { percentage: value } : value;
+}
+
+/** The units a length can be in that only the place it is used knows the size of. */
+const RELATIVE_UNITS: ReadonlySet<string> = new Set(['em', 'vw', 'vh', 'vmin', 'vmax']);
+
+/**
+ * A length in em or a viewport unit, kept as that unit for the place it is used to measure, as
+ * `keptForm` in the compiler keeps it. Nothing, and the cursor where it was, for any other.
+ */
+function relativeLength(cursor: Cursor): { unit: string; factor: number } | undefined {
+  const at = cursor.at;
+  const found = match(cursor, LITERAL);
+  const unit = found?.[2]?.toLowerCase();
+  if (found && unit && RELATIVE_UNITS.has(unit)) return { unit, factor: Number(found[1]) };
+  cursor.at = at;
+  return undefined;
 }
 
 /** Arithmetic of tokens, read into the tree the cascade works out where they are set. */
@@ -181,7 +199,8 @@ const mathTypes: MathReader<MathType> = {
       return 'any';
     }
     const found = match(cursor, LITERAL) ?? fail();
-    return UNIT_TYPES[(found[2] ?? '').toLowerCase()] ?? fail();
+    const unit = (found[2] ?? '').toLowerCase();
+    return RELATIVE_UNITS.has(unit) ? 'length' : (UNIT_TYPES[unit] ?? fail());
   },
   combine(op, a, b) {
     if (a === null || b === null) return null;

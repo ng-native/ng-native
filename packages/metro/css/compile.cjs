@@ -62,6 +62,7 @@ const {
 const { filter, undrawnOnIos, undrawnOnMacos } = require('./filters.cjs');
 const { expandShorthand } = require('./shorthands.cjs');
 const { readMask } = require('./mask.cjs');
+const { FONT_PROPS } = require('./font-token.cjs');
 
 /** Angular's emulated encapsulation marker, which we strip: scoping is per rule set already. */
 const NG_ATTR = /^_ngcontent-|^_nghost-/;
@@ -694,6 +695,12 @@ function deferVar(value, context) {
   if (varPart?.type !== 'var') {
     // More than one token in a calc(), worked out on device as a tree.
     const tokened = calcWithTokens(parts, kindOf(property), context);
+    // A percentage is a share of a box: of none where the property has no box to be one of.
+    if (tokened !== null && holdsShare(tokened) && !OF_A_BOX.test(property)) {
+      throw new CssUnsupported(
+        `${context}: '${property}' has no box for a percentage in calc() to be a share of`,
+      );
+    }
     if (tokened !== null) return { props: propsFor(property), within: tokened };
     throw new CssUnsupported(
       `${context}: '${property}' mixes var() with other values, which needs a parser on device. ` +
@@ -703,6 +710,11 @@ function deferVar(value, context) {
   }
 
   if (property === 'background-image' && !arithmetic) return imagesOfToken(varPart, context);
+  // `font: var(--typography)`: every longhand, each from the token's font form. See `font-token.cjs`.
+  if (property === 'font' && !arithmetic && varPart.value?.name?.ident) {
+    const reference = varPart.value.name.ident;
+    return { props: FONT_PROPS, kind: 'font', reference, ...fallbacks(varPart, 'font', context) };
+  }
 
   // Arithmetic on a length is a length, which a line height takes as it is: `leading-6` is
   // `calc(var(--spacing) * 6)`.
@@ -1358,6 +1370,12 @@ function isLoneLiteral(parts) {
   const written = meaningful(parts);
   return written.length === 1 && !mentionsVar(written);
 }
+
+/** Whether a sum of tokens holds a share of a box, `-50%`, which only a box works out. */
+const holdsShare = (value) =>
+  value !== null &&
+  typeof value === 'object' &&
+  (value.relative?.unit === '%' || Object.values(value).some(holdsShare));
 
 /** A rule with each control's state in its selectors as the prop the control keeps it in. */
 function withControlStates(rule) {

@@ -26,7 +26,7 @@ import {
  * has no `url()` or token in a gradient, and its gradients are those `backgroundLayers` reads, each
  * placed in `px`, `rem` or percentages. A `box-shadow` has no relative length, no colour worked out on the node, and a token only as all
  * of it. A `font` has no
- * `small-caps`, stretch, keyword size or system font. Anything else is dropped with a warning.
+ * `small-caps`, stretch, keyword size or system font, or is one token holding a whole font. Anything else is dropped with a warning.
  */
 export interface ReadShorthand {
   /** The longhands the shorthand sets, `null` for one back at its initial value. */
@@ -409,6 +409,51 @@ function fontLineHeight(height: string | undefined): unknown {
   return height.endsWith('%') ? String(Number(height.slice(0, -1)) / 100) : height;
 }
 
+/**
+ * `font: var(--tui-typography-body-m)`, a token holding a whole `font`, as Taiga UI binds one: set
+ * from the token's parts where it is used, as the same declaration in a stylesheet is. A written
+ * fallback, `var(--missing, 20px serif)`, is set as the font it is, which the token's parts
+ * replace where it is set.
+ */
+function fontToken(text: string, on: string): Reading | undefined {
+  if (cssValues(text).length !== 1) return undefined;
+  const declaration = boundDeclaration('fontSize', tokenFromValue(text), on);
+  if (!declaration?.reference) return undefined;
+  const { fallback: _, ...rest } = declaration;
+  const written = /^var\(\s*--[^,]*,([\s\S]*)\)$/i.exec(text)?.[1]?.trim();
+  if (!written || hasToken(written)) {
+    return { set: [], deferred: { ...rest, props: FONT_PROPS, kind: 'font' } };
+  }
+  const fallback = fontFallback(written);
+  return fallback && { set: [], deferred: { ...rest, props: FONT_PROPS, kind: 'font', fallback } };
+}
+
+/**
+ * A `font` fallback as the longhands a stylesheet commits for it, which the node writes as they
+ * are. Undefined for a size or a line height only the node can measure, an em say: the
+ * declaration is then dropped with a warning, as `readFont` drops it.
+ */
+function fontFallback(text: string): Record<string, unknown> | undefined {
+  const read = readFont(text);
+  if (typeof read === 'string') return undefined;
+  const font: Record<string, unknown> = Object.fromEntries(read.set);
+  const size = points(String(font['fontSize']));
+  if (size === undefined) return undefined;
+  const height = font['lineHeight'] as string | null;
+  const multiple = height !== null && /^[\d.]+$/.test(height) ? Number(height) * size : undefined;
+  const line = height === null ? null : (multiple ?? points(height));
+  if (line === undefined) return undefined;
+  return { ...font, fontSize: size, lineHeight: line };
+}
+
+/** A length in `px` or `rem` as points, and undefined for any other. */
+function points(length: string): number | undefined {
+  const value = /^([\d.]+)(px|rem)$/i.exec(length);
+  if (length === '0') return 0;
+  return value ? Number(value[1]) * (value[2]!.toLowerCase() === 'rem' ? 16 : 1) : undefined;
+}
+const FONT_PROPS = ['fontFamily', 'fontSize', 'fontStyle', 'fontWeight', 'lineHeight'];
+
 /** `font: italic bold 12px/1.5 Georgia, serif`: all a browser sets, the left out at its initial. */
 function readFont(text: string): Reading {
   const parts = cssValues(text.replace(/[ \t\n\r\f]*\/[ \t\n\r\f]*/, '/'));
@@ -507,6 +552,6 @@ export const MIXED_SHORTHANDS: ReadonlyMap<string, (text: string, on: string) =>
       'a background-repeat is its keywords, a layer each',
     ),
   ],
-  ['font', readFont],
+  ['font', (text, on) => (hasToken(text) ? fontToken(text, on) : undefined) ?? readFont(text)],
   ['textDecoration', readDecoration],
 ]);
