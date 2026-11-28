@@ -150,6 +150,15 @@ const BLOCKS = new Set([
   ...['details', 'summary', 'search'],
 ]);
 const BLOCK = { ...CONTENT_BOX, display: 'block' };
+
+/** HTML's elements, each a name a template writes for a browser, which the engine has no view of. */
+const KNOWN = new Set([
+  ...HTML_ELEMENTS,
+  ...BLOCKS,
+  ...['output', 'var', 'kbd', 'samp', 'sub', 'sup', 'q', 'dfn', 'bdi', 'bdo', 'data', 'ins'],
+  ...['del', 'wbr', 'dialog', 'progress', 'meter', 'picture', 'source', 'canvas', 'iframe'],
+  ...['video', 'audio', 'track', 'map', 'object', 'embed', 'slot', 'ruby', 'rt'],
+]);
 /** The elements a browser's own sheet spaces or sizes: see `BROWSER_STYLES` in the engine. */
 const BROWSER_STYLED = new Set([
   ...['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'menu', 'dl', 'dd'],
@@ -210,6 +219,8 @@ export function defaultsOf(node: EngineNode, engine: Engine): Record<string, unk
 export function giveDefaults(node: EngineNode, engine: Engine): void {
   const style = defaultsOf(node, engine);
   if (!style) return;
+  // One of HTML's, which is no misspelt name: the engine says nothing of it in development.
+  if (KNOWN.has(node.tag)) engine.declareElement(node.tag);
   engine.setDefaultStyle(node, style);
   // A paragraph's and a list's margins, a heading's size: what a browser's own sheet gives them.
   if (BROWSER_STYLED.has(node.tag)) engine.giveBrowserStyles(node);

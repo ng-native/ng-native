@@ -34,6 +34,7 @@ import { NODE_CONSTANTS } from './node-constants.ts';
 import { nodeInterfaces } from './node-interfaces.ts';
 import { installNamedProperties } from './named-properties.ts';
 import { installNavigator } from './navigator-identity.ts';
+import { installNumberParts } from './number-parts.ts';
 import { ResizeObserver, ResizeObserverEntry, ResizeObserverSize } from './resize-observer.ts';
 import { scrollAsked, scrollPromise } from './scroll-offset.ts';
 import { NodeFilter, NodeIterator, TreeWalker } from './traversal.ts';
@@ -338,6 +339,8 @@ export function installWindow(): () => void {
   const unplaced = placeNodes(target);
   // A phone's browser, as the user agent says: see `navigator-identity.ts`.
   const unidentified = installNavigator();
+  // What Hermes has no copy of in its Intl: see `number-parts.ts`.
+  const unparted = installNumberParts();
   // An element with an id is a global by it: see `named-properties.ts`.
   const unnamed = installNamedProperties(target);
   // The event a listener is being told: see `events.ts`.
@@ -373,6 +376,7 @@ export function installWindow(): () => void {
     unlistenAll(globalThis);
     unplaced();
     unidentified();
+    unparted();
     unnamed();
     unphased();
     if (evented) delete target['event'];
