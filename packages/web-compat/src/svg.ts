@@ -190,6 +190,8 @@ export function svgInserted(node: EngineNode, parent: EngineNode, engine: Engine
   if (node.tag === 'feDropShadow') drawAgain(node, engine);
   // One with no attribute is never drawn by one being set, and is the whole drawing.
   if (node.tag === 'foreignObject') drawLater(node, engine);
+  // One whose size is a rule's, with no attribute: Android crashes on a length it never had.
+  if (node.tag in UNSEEN_SHAPES && !drawn.has(node)) drawLater(node, engine);
   startFilled(node, engine);
   longPathsMoved(node, engine);
 }
