@@ -11,6 +11,7 @@ import gridSource from '@ng-native/metro/css/grid.cjs?raw';
 import gradientsSource from '@ng-native/metro/css/gradients.cjs?raw';
 import propertiesSource from '@ng-native/metro/css/properties.cjs?raw';
 import shorthandsSource from '@ng-native/metro/css/shorthands.cjs?raw';
+import maskSource from '@ng-native/metro/css/mask.cjs?raw';
 import valuesSource from '@ng-native/metro/css/values.cjs?raw';
 import flattenSource from '@ng-native/tailwind/flatten.cjs?raw';
 
@@ -23,6 +24,7 @@ export const SOURCES: Readonly<Record<string, string>> = {
   './properties.cjs': propertiesSource,
   './gradients.cjs': gradientsSource,
   './shorthands.cjs': shorthandsSource,
+  './mask.cjs': maskSource,
   './filters.cjs': filtersSource,
   './grid.cjs': gridSource,
   './flatten.cjs': flattenSource,

@@ -586,6 +586,19 @@ function weight(value) {
  * and a use site asking for one of those is unset, as the property that reads a token of the
  * wrong kind is in CSS, rather than taking its fallback.
  */
+/**
+ * A token that is text rather than a word: no keyword, colour or display a use site reads. A
+ * string is a family where one is read, as the device reads one bound on an element
+ * (`fromText`), and a URL an image's address, for a mask a library draws an icon with.
+ */
+function textValue(part) {
+  if (part?.value?.type === 'string') {
+    return { keyword: JSON.stringify(part.value.value), family: part.value.value };
+  }
+  if (part?.type === 'url') return { keyword: `url(${JSON.stringify(part.value.url)})` };
+  return null;
+}
+
 function tokenValue(parts, context) {
   if (!Array.isArray(parts)) return null;
   if (parts.length !== 1) return listValue(parts);
@@ -594,9 +607,8 @@ function tokenValue(parts, context) {
   if (part?.type === 'var') return aliasValue(part, context);
   // A string is text rather than a word: no keyword, colour or display a use site reads, and a
   // family where one is read, as the device reads one bound on an element (`fromText`).
-  if (part?.value?.type === 'string') {
-    return { keyword: JSON.stringify(part.value.value), family: part.value.value };
-  }
+  const text = textValue(part);
+  if (text) return text;
   const out = {};
 
   const attempt = (kind, fn) => {

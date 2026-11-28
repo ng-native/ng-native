@@ -2425,6 +2425,12 @@ function unsupported(property, context) {
       `${context}: '${property}': native has one overflow for both axes. Write 'overflow'.`,
     );
   }
+  if (/^mask(-|$)/.test(property)) {
+    return new CssUnsupported(
+      `${context}: '${property}' is drawn only for a library's stylesheet, by ` +
+        `@ng-native/web-compat. In an app's own, draw an icon with <svg> or @ng-native/icons.`,
+    );
+  }
   if (property.startsWith('animation-')) {
     return new CssUnsupported(
       `${context}: '${property}' is not supported. The player runs one animation on the clock, ` +

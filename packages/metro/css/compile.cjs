@@ -61,6 +61,7 @@ const {
 } = require('./token-arithmetic.cjs');
 const { filter, undrawnOnIos, undrawnOnMacos } = require('./filters.cjs');
 const { expandShorthand } = require('./shorthands.cjs');
+const { readMask } = require('./mask.cjs');
 
 /** Angular's emulated encapsulation marker, which we strip: scoping is per rule set already. */
 const NG_ATTR = /^_ngcontent-|^_nghost-/;
@@ -3691,6 +3692,7 @@ function compileCss(source, context = 'styles', options = {}) {
    */
   function readAsABrowser(declaration, out, deferred, context) {
     if (shapePaint(declaration, out, deferred, context)) return true;
+    if (readMask(declaration, out, deferred, context, linear)) return true;
     if (tokenedBand(declaration, deferred)) return true;
     if (!isContent(declaration)) return asABrowserReads(declaration, out);
     declareContent(declaration, out, context);

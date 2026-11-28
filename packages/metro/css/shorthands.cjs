@@ -407,4 +407,4 @@ function flexGrowing(list, context) {
   };
 }
 
-module.exports = { expandShorthand, LOGICAL };
+module.exports = { expandShorthand, LOGICAL, components, reference, arithmetic, staticLength };

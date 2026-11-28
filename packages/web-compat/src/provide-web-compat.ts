@@ -44,6 +44,7 @@ import { registerSvg } from './svg.ts';
 import { treeMembers } from './tree-members.ts';
 import { cancelAnimations } from './web-animation.ts';
 import { engineOf, installWindow, windowOf } from './window.ts';
+import { maskDrawer } from './mask-image.ts';
 import { keyboardMoved, windowHeight } from './window-size.ts';
 
 /** How many apps in the process asked for it: nodes share one prototype, and globals are global. */
@@ -330,7 +331,10 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
       engine.holdMovesUnderFinger(true);
       // A touch on a drawing is on the shape a browser finds under the finger: see `listen.ts`.
       engine.setTouchTarget(touchTarget(engine));
+      // A library's icon written as a mask, drawn in the box's colour: see `mask-image.ts`.
+      engine.setMaskDrawer(maskDrawer(engine));
       inject(DestroyRef).onDestroy(() => {
+        engine.setMaskDrawer(null);
         engine.holdMovesUnderFinger(false);
         engine.setTouchTarget(null);
         forgetPicker();

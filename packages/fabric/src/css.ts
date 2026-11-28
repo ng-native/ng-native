@@ -805,6 +805,8 @@ interface HandedOver {
  */
 export function fills(child: StyleTarget): boolean {
   if (child.nodeKind === 'anchor' || (boxesDrawn && isGenerated(child.tag))) return false;
+  // A view a package draws in the box, such as its mask, which no template wrote.
+  if (child.outsideCascade) return false;
   return child.nodeKind !== 'text' || (child as { nodeText?: string }).nodeText !== '';
 }
 
@@ -849,7 +851,8 @@ export interface StyleTarget {
   readonly anonymous?: true;
   /**
    * A node the cascade leaves out: no rule matches it and it inherits nothing, so its style is
-   * always empty and a change above it never styles it again. Set before the node is attached.
+   * always empty and a change above it never styles it again. Nor is it one of its parent's
+   * children to `:empty` or a selector that counts them. Set before the node is attached.
    */
   readonly outsideCascade?: true;
   /** One of HTML's text elements the engine has styles of its own for, such as `strong`. */
@@ -969,7 +972,11 @@ const INHERITED_POINTER_EVENTS = new Set(['none', 'auto']);
  * ponytail: an inline style's paint is handed down by a drawing's node alone (`setsInherited`).
  * Hand it down from any node as a rule's is if `[style.fill]` on a box around a drawing is seen.
  */
-const SHAPE_PAINT_INHERITED: ReadonlySet<string> = new Set(['fill', 'stroke', 'strokeWidth']);
+const SHAPE_PAINT_INHERITED: ReadonlySet<string> = new Set([
+  ...['fill', 'stroke', 'strokeWidth'],
+  // A line's cap and join: Lucide's icons set them round on the `<svg>`, and draw a dot with it.
+  ...['strokeLinecap', 'strokeLinejoin'],
+]);
 
 /**
  * Whether a node takes the shape's paint it is handed: a node of a library's drawing, or one a
@@ -985,7 +992,9 @@ export const isInherited = (key: string): boolean => INHERITED.has(key);
 const handedPaint = (inherited: Record<string, unknown>): boolean =>
   inherited['fill'] !== undefined ||
   inherited['stroke'] !== undefined ||
-  inherited['strokeWidth'] !== undefined;
+  inherited['strokeWidth'] !== undefined ||
+  inherited['strokeLinecap'] !== undefined ||
+  inherited['strokeLinejoin'] !== undefined;
 
 /** The styles of nodes outside a drawing with no rules, by the map they inherit: see `unpainted`. */
 const unpaintedStyles = new WeakMap<Record<string, unknown>, Record<string, unknown>>();
@@ -1843,7 +1852,8 @@ function takesParents(rule: StyleRule): boolean {
 const isElement = (node: StyleTarget) =>
   // Asked of each sibling a rule counts: told from a generated box here, without a call.
   (node.nodeKind === undefined || node.nodeKind === 'element') &&
-  !(boxesDrawn && node.tag.charCodeAt(0) === COLON);
+  !(boxesDrawn && node.tag.charCodeAt(0) === COLON) &&
+  node.outsideCascade !== true;
 
 /**
  * Whether an element's name is a generated box's, `::before` or `::after`: a child the engine

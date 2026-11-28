@@ -3322,12 +3322,21 @@ const LAID_OUT_HERE = new Set([
  */
 const ASKED_AS_NUMBER: ReadonlySet<string> = new Set([...LAID_OUT_HERE, 'flex', 'flexGrow']);
 /**
- * Whether a box is what an absolute box in it is placed against: one that is not static, or one
- * CSS makes a containing block however it is positioned (see `containsAbsolutes`).
+ * Nodes whose mask a drawer draws, which are positioned to hold the drawing: what an absolute box
+ * in one is placed against (see `Engine.masked`).
+ */
+const holdsMask = new WeakSet<EngineNode>();
+
+/**
+ * Whether a box is what an absolute box in it is placed against: one that is not static, one CSS
+ * makes a containing block however it is positioned (see `containsAbsolutes`), or one holding a
+ * drawn mask.
  */
 function placesItself(node: EngineNode): boolean {
   return (
-    readStyle(node, 'position') !== 'static' || containsAbsolutes((key) => readStyle(node, key))
+    readStyle(node, 'position') !== 'static' ||
+    holdsMask.has(node) ||
+    containsAbsolutes((key) => readStyle(node, key))
   );
 }
 
@@ -7785,6 +7794,57 @@ const emptyBrush = (value: unknown): boolean =>
   value !== null &&
   (value as { type?: unknown }).type === 0 &&
   (value as { payload?: unknown }).payload == null;
+
+/**
+ * One axis of a mask's size, as `@ng-native/metro` compiles it: points, a percentage, `auto`,
+ * `contain` or `cover`, or a length no larger than a share of the box with points added,
+ * `calc(min(1em, 100%) + 20px)`, which is `{ size: 16, upTo: '100%', plus: 20 }` at 16px.
+ */
+export type MaskAxis =
+  | number
+  | string
+  | { readonly size: number | string; readonly upTo?: string; readonly plus?: number };
+
+/** A box's mask, settled against the node: what `Engine.setMaskDrawer` is told. */
+export interface MaskStyle {
+  /** The image, `url("icon.svg")` or a `data:` URL, as written. */
+  readonly image: string;
+  readonly width: MaskAxis;
+  readonly height: MaskAxis;
+  /** Where it is placed, as a background position is: `{ left: '50%', top: '50%' }`. */
+  readonly position: Readonly<Record<string, number | string>>;
+  /** The colour the box would paint, which the mask is drawn in. */
+  readonly colour: unknown;
+}
+
+export type MaskDrawer = (node: EngineNode, mask: MaskStyle | null) => void;
+
+/** What a node's mask is compiled to, none of which a native view reads. */
+const MASK_KEYS = ['maskImage', 'maskWidth', 'maskHeight', 'maskPosition'] as const;
+/** Where a mask is placed with no `mask-position`: the box's top left. */
+const MASK_ORIGIN = { left: '0%', top: '0%' };
+
+/** One `url()`, its address bare or quoted, with nothing after it: a mask's one layer. */
+const ONE_URL =
+  /^url\(\s*(?:"(?:[^"\\]|\\[\s\S])*"|'(?:[^'\\]|\\[\s\S])*'|(?:[^"'()\s\\]|\\[\s\S])*)\s*\)$/i;
+
+/**
+ * A style's mask, settled: none where its image is no `url()`, as `none` or a gradient is not,
+ * and `undefined` where it is several, which a token can hold and the compiler cannot see.
+ */
+function maskOf(style: Record<string, unknown>): MaskStyle | null | undefined {
+  const written = style['maskImage'];
+  const image = typeof written === 'string' ? written.trim() : '';
+  if (!/^url\(/i.test(image)) return null;
+  if (!ONE_URL.test(image)) return undefined;
+  return {
+    image,
+    width: (style['maskWidth'] ?? 'auto') as MaskAxis,
+    height: (style['maskHeight'] ?? 'auto') as MaskAxis,
+    position: (style['maskPosition'] ?? MASK_ORIGIN) as MaskStyle['position'],
+    colour: style['backgroundColor'] ?? null,
+  };
+}
 
 /**
  * A token set to whitespace alone, written as the compiler writes `--x: ;`: an empty keyword, which
@@ -13450,6 +13510,17 @@ export class Engine implements HostEngine {
     const intrinsic = node.props[INTRINSIC_SIZE] as IntrinsicSize | undefined;
     if (intrinsic) applyIntrinsicSize(style, intrinsic);
     flattenStyle(node.props[STYLE_OVERRIDE], style);
+    // After the override, whose paint is the box's. Asked of the keys first, and of the nodes
+    // told of a mask: it is asked of every node merged.
+    if (
+      style['maskImage'] !== undefined ||
+      style['maskWidth'] !== undefined ||
+      style['maskHeight'] !== undefined ||
+      style['maskPosition'] !== undefined ||
+      this.masksTold?.has(node)
+    ) {
+      this.masked(node, style);
+    }
     this.fontFaces.apply(style);
     holdLoadingFamily(node, style);
     monospaceGeneric(style);
@@ -17766,6 +17837,68 @@ export class Engine implements HostEngine {
       this.reportEventError(error, topLevelType);
       return hit;
     }
+  }
+
+  /** What draws a box's mask, told of each one: see `setMaskDrawer`. */
+  private maskDrawer: MaskDrawer | null = null;
+  /** The mask each node was last told it has, as text, to tell it again only of a change. */
+  private masksTold: WeakMap<EngineNode, string> | null = null;
+
+  /**
+   * Say what draws a box's mask, `mask-image` in a sheet read as a browser reads it, or nothing to
+   * leave masks undrawn. It is told the mask a node has, settled, each time that or the colour the
+   * box would paint changes, and `null` once it has none. It is told while a commit is under way,
+   * so it changes the tree after it. While a node has a mask it paints no background of its own,
+   * which the mask is drawn in, and a node not positioned is one, to hold what is drawn.
+   */
+  setMaskDrawer(draw: MaskDrawer | null): void {
+    this.maskDrawer = draw;
+    this.masksTold = draw ? new WeakMap() : null;
+  }
+
+  /** A node's mask taken out of what it commits, and told to what draws it. */
+  private masked(node: EngineNode, style: Record<string, unknown>): void {
+    const image = style['maskImage'];
+    const settled = maskOf(style);
+    for (const key of MASK_KEYS) delete style[key];
+    holdsMask.delete(node);
+    if (!this.maskDrawer || !this.masksTold) return;
+    if (settled === undefined) this.reportMaskLayers(String(image));
+    const mask = settled ?? null;
+    this.tellMask(node, mask, this.maskDrawer, this.masksTold);
+    if (!mask) return;
+    delete style['backgroundColor'];
+    holdsMask.add(node);
+    if (style['position'] !== 'static') return;
+    style['position'] = 'relative';
+    // Still static to what places it: an inset moves no static box.
+    for (const key of INSET_SIDES) if (style[key] !== undefined) delete style[key];
+  }
+
+  /** A drawer told of a node's mask where it is not the one it was last told of. */
+  private tellMask(
+    node: EngineNode,
+    mask: MaskStyle | null,
+    draw: MaskDrawer,
+    told: WeakMap<EngineNode, string>,
+  ): void {
+    const text = mask ? JSON.stringify(mask) : '';
+    if ((told.get(node) ?? '') === text) return;
+    if (mask) told.set(node, text);
+    else told.delete(node);
+    draw(node, mask);
+  }
+
+  private readonly maskLayers = new Set<string>();
+
+  /** A token's mask of several layers, drawn unmasked: said once per value. */
+  private reportMaskLayers(image: string): void {
+    if (this.maskLayers.has(image)) return;
+    this.maskLayers.add(image);
+    console.warn(
+      `[angular-native] mask-image: ${image} has several layers, and a mask is drawn from one` +
+        ` image, so the box is drawn unmasked. Give the token one url().`,
+    );
   }
 
   /** Say where a touch that starts on a node is taken to be, or nothing to leave it to native. */

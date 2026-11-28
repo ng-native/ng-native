@@ -193,6 +193,15 @@ function prune(parent: Parsed): void {
  * from the moment it is parsed. Parsed apart first, so no element of it is built until then.
  */
 function shapesOf(markup: string): string | undefined {
+  const drawing = drawingIn(markup);
+  return drawing && serializeOuter(drawing);
+}
+
+/**
+ * The first `<svg>` of a picture's markup, parsed apart, with only what it draws: see `shapesOf`.
+ * What a mask is drawn from too, recoloured before it is built (see `mask-image.ts`).
+ */
+export function drawingIn(markup: string): DefaultTreeAdapterMap['element'] | undefined {
   const find = (parent: Parsed): Parsed | undefined => {
     for (const child of parent.childNodes) {
       if (child.nodeName === 'svg' && 'namespaceURI' in child && child.namespaceURI === SVG) {
@@ -206,7 +215,7 @@ function shapesOf(markup: string): string | undefined {
   const drawing = find(parseFragment(markup));
   if (!drawing) return undefined;
   prune(drawing);
-  return serializeOuter(drawing as DefaultTreeAdapterMap['element']);
+  return drawing as DefaultTreeAdapterMap['element'];
 }
 
 /** Build the `<svg>` an image's markup has in its box, and nothing else of it. */
