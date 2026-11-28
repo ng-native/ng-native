@@ -132,7 +132,9 @@ color optional. A radial gradient with tokens in its stops takes its shape, size
 keywords and positions (`circle closest-side at 50% 18%`), not an explicit radius; a position
 can be a token too (`at var(--x) 30%`), with a fallback after its name. `background-image` takes
 gradients only - a `url()` in `background-image` is dropped, because there is no image loader
-behind that prop; put an image in an `<image>` element instead. `background-image: var(--g)` draws
+behind that prop; put an image in an `<image>` element instead. In a library's stylesheet read by
+[`@ng-native/web-compat`](/packages/web-compat), a background of one `url()` is kept for that
+package, which draws it as an image under what the box holds. `background-image: var(--g)` draws
 the gradients its token holds, in a stylesheet's token, one set on an element or a fallback. A
 token of `none`, one with a color in it, `linear-gradient(...), red`, or one that holds no image
 leaves no image, as in a browser, where such a value is invalid.

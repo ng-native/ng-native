@@ -3336,16 +3336,19 @@ const ASKED_AS_NUMBER: ReadonlySet<string> = new Set([...LAID_OUT_HERE, 'flex', 
  * in one is placed against (see `Engine.masked`).
  */
 const holdsMask = new WeakSet<EngineNode>();
+/** Nodes whose background image a drawer draws, positioned to hold it as one with a mask is. */
+const holdsBackground = new WeakSet<EngineNode>();
 
 /**
  * Whether a box is what an absolute box in it is placed against: one that is not static, one CSS
  * makes a containing block however it is positioned (see `containsAbsolutes`), or one holding a
- * drawn mask.
+ * drawn mask or background image.
  */
 function placesItself(node: EngineNode): boolean {
   return (
     readStyle(node, 'position') !== 'static' ||
     holdsMask.has(node) ||
+    holdsBackground.has(node) ||
     containsAbsolutes((key) => readStyle(node, key))
   );
 }
@@ -8078,6 +8081,35 @@ function maskOf(style: Record<string, unknown>): MaskStyle | null | undefined {
     height: (style['maskHeight'] ?? 'auto') as MaskAxis,
     position: (style['maskPosition'] ?? MASK_ORIGIN) as MaskStyle['position'],
     colour: style['backgroundColor'] ?? null,
+  };
+}
+
+/**
+ * A box's background image, `background: url('/wallpaper.jpg') center / cover`, settled against
+ * the node: what `Engine.setBackgroundDrawer` is told. Its size, position and repeat are the
+ * first layer's, as React Native names a gradient's.
+ */
+export interface BackgroundStyle {
+  /** The image, `url("/wallpaper.jpg")`, as written. */
+  readonly image: string;
+  /** `cover`, `contain` or `{ x, y }` of points, percentages and `auto`. */
+  readonly size: unknown;
+  readonly position: unknown;
+  readonly repeat: unknown;
+}
+
+export type BackgroundDrawer = (node: EngineNode, background: BackgroundStyle | null) => void;
+
+/** A style's background image, settled: none where it has no `url()`. */
+function backgroundOf(style: Record<string, unknown>): BackgroundStyle | null {
+  const image = style['backgroundUrl'];
+  if (typeof image !== 'string' || !/^url\(/i.test(image.trim())) return null;
+  const first = (key: string) => (style[key] as unknown[] | undefined)?.[0] ?? null;
+  return {
+    image: image.trim(),
+    size: first('experimental_backgroundSize') ?? 'auto',
+    position: first('experimental_backgroundPosition') ?? MASK_ORIGIN,
+    repeat: first('experimental_backgroundRepeat') ?? { x: 'repeat', y: 'repeat' },
   };
 }
 
@@ -13803,6 +13835,9 @@ export class Engine implements HostEngine {
     if (style['rowGap'] !== undefined) percentGap(node, style);
     if (this.asked & CSS_LAYOUT) this.flowed(node, style);
     placeholderFaded(style);
+    if (style['backgroundUrl'] !== undefined || this.backdropsTold?.has(node)) {
+      this.backdropped(node, style);
+    }
     const intrinsic = node.props[INTRINSIC_SIZE] as IntrinsicSize | undefined;
     if (intrinsic) applyIntrinsicSize(style, intrinsic);
     flattenStyle(node.props[STYLE_OVERRIDE], style);
@@ -18240,6 +18275,42 @@ export class Engine implements HostEngine {
       `[angular-native] mask-image: ${image} has several layers, and a mask is drawn from one` +
         ` image, so the box is drawn unmasked. Give the token one url().`,
     );
+  }
+
+  /** What draws a box's background image, told of each one: see `setBackgroundDrawer`. */
+  private backgroundDrawer: BackgroundDrawer | null = null;
+  /** The background each node was last told it has, as text, to tell it again only of a change. */
+  private backdropsTold: WeakMap<EngineNode, string> | null = null;
+
+  /**
+   * Say what draws a box's background image, a `url()` in a sheet read as a browser reads it,
+   * which native paints none of, or nothing to leave them undrawn. It is told the background a
+   * node has each time that changes, and `null` once it has none, while a commit is under way,
+   * so it changes the tree after it. A node not positioned is, to hold what is drawn.
+   */
+  setBackgroundDrawer(draw: BackgroundDrawer | null): void {
+    this.backgroundDrawer = draw;
+    this.backdropsTold = draw ? new WeakMap() : null;
+  }
+
+  /** A node's background image taken out of what it commits, and told to what draws it. */
+  private backdropped(node: EngineNode, style: Record<string, unknown>): void {
+    const background = backgroundOf(style);
+    delete style['backgroundUrl'];
+    holdsBackground.delete(node);
+    if (!this.backgroundDrawer || !this.backdropsTold) return;
+    const text = background ? JSON.stringify(background) : '';
+    if ((this.backdropsTold.get(node) ?? '') !== text) {
+      if (background) this.backdropsTold.set(node, text);
+      else this.backdropsTold.delete(node);
+      this.backgroundDrawer(node, background);
+    }
+    if (!background) return;
+    holdsBackground.add(node);
+    if (style['position'] !== 'static') return;
+    style['position'] = 'relative';
+    // Still static to what places it: an inset moves no static box.
+    for (const key of INSET_SIDES) if (style[key] !== undefined) delete style[key];
   }
 
   /**

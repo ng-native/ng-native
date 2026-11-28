@@ -819,7 +819,8 @@ interface HandedOver {
  */
 export function fills(child: StyleTarget): boolean {
   if (child.nodeKind === 'anchor' || (boxesDrawn && isGenerated(child.tag))) return false;
-  // A view a package draws in the box, such as its mask, which no template wrote.
+  // A view a package draws in the box, such as its mask or background image, which no template
+  // wrote.
   if (child.outsideCascade) return false;
   return child.nodeKind !== 'text' || (child as { nodeText?: string }).nodeText !== '';
 }

@@ -63,6 +63,8 @@ export {
   Engine,
   type MaskAxis,
   type MaskDrawer,
+  type BackgroundStyle,
+  type BackgroundDrawer,
   type MaskStyle,
   SyntheticEvent,
   isTokenPaint,
