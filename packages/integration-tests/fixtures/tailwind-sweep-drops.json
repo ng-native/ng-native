@@ -2719,17 +2719,19 @@
     "rounded-r-[3]",
     "rounded-r-[3]!"
   ],
+  "dropped 'border-bottom-width': '…' has no box for a percentage in calc() to be a share of": [
+    "divide-y-[37%]",
+    "divide-y-[37%]!"
+  ],
   "dropped 'border-bottom-width': a length needs a unit: '…' is a bare number, which a browser drops. Write Npx, or N for none.": [
     "border-b-[0.35]",
     "border-b-[0.35]!",
     "border-b-[3]",
     "border-b-[3]!"
   ],
-  "dropped 'border-bottom-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'border-bottom-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "divide-y-[0.35]",
     "divide-y-[0.35]!",
-    "divide-y-[37%]",
-    "divide-y-[37%]!",
     "divide-y-[3]",
     "divide-y-[3]!"
   ],
@@ -2849,17 +2851,19 @@
     "border-e-[37%]",
     "border-e-[37%]!"
   ],
+  "dropped 'border-inline-end-width': '…' has no box for a percentage in calc() to be a share of": [
+    "divide-x-[37%]",
+    "divide-x-[37%]!"
+  ],
   "dropped 'border-inline-end-width': a length needs a unit: '…' is a bare number, which a browser drops. Write Npx, or N for none.": [
     "border-e-[0.35]",
     "border-e-[0.35]!",
     "border-e-[3]",
     "border-e-[3]!"
   ],
-  "dropped 'border-inline-end-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'border-inline-end-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "divide-x-[0.35]",
     "divide-x-[0.35]!",
-    "divide-x-[37%]",
-    "divide-x-[37%]!",
     "divide-x-[3]",
     "divide-x-[3]!"
   ],
@@ -2885,17 +2889,19 @@
     "border-s-[37%]",
     "border-s-[37%]!"
   ],
+  "dropped 'border-inline-start-width': '…' has no box for a percentage in calc() to be a share of": [
+    "divide-x-[37%]",
+    "divide-x-[37%]!"
+  ],
   "dropped 'border-inline-start-width': a length needs a unit: '…' is a bare number, which a browser drops. Write Npx, or N for none.": [
     "border-s-[0.35]",
     "border-s-[0.35]!",
     "border-s-[3]",
     "border-s-[3]!"
   ],
-  "dropped 'border-inline-start-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'border-inline-start-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "divide-x-[0.35]",
     "divide-x-[0.35]!",
-    "divide-x-[37%]",
-    "divide-x-[37%]!",
     "divide-x-[3]",
     "divide-x-[3]!"
   ],
@@ -3221,17 +3227,19 @@
     "rounded-tr-[3]",
     "rounded-tr-[3]!"
   ],
+  "dropped 'border-top-width': '…' has no box for a percentage in calc() to be a share of": [
+    "divide-y-[37%]",
+    "divide-y-[37%]!"
+  ],
   "dropped 'border-top-width': a length needs a unit: '…' is a bare number, which a browser drops. Write Npx, or N for none.": [
     "border-t-[0.35]",
     "border-t-[0.35]!",
     "border-t-[3]",
     "border-t-[3]!"
   ],
-  "dropped 'border-top-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'border-top-width': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "divide-y-[0.35]",
     "divide-y-[0.35]!",
-    "divide-y-[37%]",
-    "divide-y-[37%]!",
     "divide-y-[3]",
     "divide-y-[3]!"
   ],
@@ -4951,17 +4959,13 @@
     "mbe-[3]",
     "mbe-[3]!"
   ],
-  "dropped 'margin-block-end': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'margin-block-end': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "-space-y-[0.35]",
     "-space-y-[0.35]!",
-    "-space-y-[37%]",
-    "-space-y-[37%]!",
     "-space-y-[3]",
     "-space-y-[3]!",
     "space-y-[0.35]",
     "space-y-[0.35]!",
-    "space-y-[37%]",
-    "space-y-[37%]!",
     "space-y-[3]",
     "space-y-[3]!"
   ],
@@ -5017,17 +5021,13 @@
     "mbs-[3]",
     "mbs-[3]!"
   ],
-  "dropped 'margin-block-start': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'margin-block-start': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "-space-y-[0.35]",
     "-space-y-[0.35]!",
-    "-space-y-[37%]",
-    "-space-y-[37%]!",
     "-space-y-[3]",
     "-space-y-[3]!",
     "space-y-[0.35]",
     "space-y-[0.35]!",
-    "space-y-[37%]",
-    "space-y-[37%]!",
     "space-y-[3]",
     "space-y-[3]!"
   ],
@@ -5143,17 +5143,13 @@
     "me-[3]",
     "me-[3]!"
   ],
-  "dropped 'margin-inline-end': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'margin-inline-end': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "-space-x-[0.35]",
     "-space-x-[0.35]!",
-    "-space-x-[37%]",
-    "-space-x-[37%]!",
     "-space-x-[3]",
     "-space-x-[3]!",
     "space-x-[0.35]",
     "space-x-[0.35]!",
-    "space-x-[37%]",
-    "space-x-[37%]!",
     "space-x-[3]",
     "space-x-[3]!"
   ],
@@ -5209,17 +5205,13 @@
     "ms-[3]",
     "ms-[3]!"
   ],
-  "dropped 'margin-inline-start': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'margin-inline-start': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "-space-x-[0.35]",
     "-space-x-[0.35]!",
-    "-space-x-[37%]",
-    "-space-x-[37%]!",
     "-space-x-[3]",
     "-space-x-[3]!",
     "space-x-[0.35]",
     "space-x-[0.35]!",
-    "space-x-[37%]",
-    "space-x-[37%]!",
     "space-x-[3]",
     "space-x-[3]!"
   ],
@@ -8194,7 +8186,7 @@
     "scale-[rgb(10,20,30)]",
     "scale-[rgb(10,20,30)]!"
   ],
-  "dropped 'scale': arithmetic with tokens in it scales in three dimensions. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'scale': arithmetic with tokens in it scales in three dimensions. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "-scale-z-(--x)",
     "-scale-z-(--x)!",
     "-scale-z-0 -scale-200",
@@ -9994,7 +9986,7 @@
     "ease-[rgb(10,20,30)]",
     "ease-[rgb(10,20,30)]!"
   ],
-  "dropped 'translate': arithmetic with tokens in it moves in three dimensions. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+  "dropped 'translate': arithmetic with tokens in it moves in three dimensions. What the device works out is numbers, points, degrees, em, viewport units and var(), with + - * / and brackets, min(), max() and clamp(); a percentage only of a box's size, place or move, and compared with nothing.": [
     "-translate-z-(--x)",
     "-translate-z-(--x)!",
     "-translate-z-14",

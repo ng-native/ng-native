@@ -689,11 +689,18 @@ clamped into it, and a `font-weight` outside 1 to 1000 is dropped.
 
 `calc()` may add one viewport or font-relative length to absolute ones
 (`calc(1.375rem + 1.5vw)`), which is settled on device. `min()`, `max()` and `clamp()` fold when
-every argument is absolute. A `calc()` may have any number of tokens in it, with numbers and
-absolute lengths, `+ - * /` and brackets: `calc((var(--end) - var(--start)) * 1px)` is worked
-out on device, where a token that is a length counts in points and a bare number multiplies. A
-percentage, an em or a viewport unit beside a token is dropped, since it needs layout the device
-does not do there, except a percentage added to a token for the properties below.
+every argument is absolute. A `calc()`, `min()`, `max()` or `clamp()` may have any number of
+tokens in it, with numbers and absolute lengths, `+ - * /` and brackets:
+`calc((var(--end) - var(--start)) * 1px)` is worked out on device, where a token that is a length
+counts in points and a bare number multiplies, and so is a custom property that holds one,
+`--zoom: clamp(0, var(--scale), 1)`. A token holding a length in em or a viewport unit counts as
+that unit, worked out where the sum is used: `calc((var(--height) - var(--line)) / 2)` with
+`--line: 1.4em` is half of the height less 1.4 times the font size there. One such unit can be in
+a sum, multiplied or divided by a number, and not compared in `min()` or `max()`; a sum with two,
+an em and a vw, is dropped, with a warning at build time where both are written in it. An em or a
+viewport unit written beside a token counts the same way. A percentage written beside a token is
+dropped, since it needs layout the device does not do there, except a percentage added to a token
+for the properties below.
 
 `calc()` may also add a length to a percentage, `calc(100% - 2rem)`, for a box's `width` and
 `height`, their minimums and maximums, its insets, its margins and its padding: Tailwind's

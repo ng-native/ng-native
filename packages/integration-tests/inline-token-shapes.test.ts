@@ -66,6 +66,10 @@ describe('a custom property set on an element', () => {
 
   it('is a length in rem', () => same('width: var(--x)', '1rem', 'width'));
   it('is a length in em', () => same('width: var(--x)', '2em', 'width'));
+  it('is a calc() of a token and an em, measured where it is used', () =>
+    same('width: var(--x)', 'calc(var(--gap) * 2 - 0.5em)', 'width', '.k { font-size: 10px }'));
+  it('is a calc() of a token and a viewport unit', () =>
+    same('width: var(--x)', 'calc(var(--gap) + 10vw)', 'width'));
   it('is two lengths, for a padding', () => same('padding: var(--x)', '8px 16px', 'paddingLeft'));
 });
 

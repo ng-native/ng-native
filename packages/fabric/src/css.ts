@@ -293,7 +293,14 @@ export const isPlatformColour = (value: unknown): value is PlatformColour =>
   Array.isArray((value as Partial<PlatformColour>).platformColor);
 
 export interface TokenValue {
-  readonly length?: number | string;
+  /**
+   * A whole `font` shorthand's longhands, `fontFamily`, `fontSize`, `fontStyle`, `fontWeight` and
+   * `lineHeight`, for `font: var()`: Taiga UI's typography. A size or a family read from another
+   * token is a marker the node works out.
+   */
+  readonly font?: Readonly<Record<string, unknown>>;
+  /** Points, a percentage, or a length in em or a viewport unit worked out where it is used. */
+  readonly length?: number | string | { readonly __defer: DeferredEm };
   /** An angle, in degrees whatever unit it was written in. */
   readonly angle?: number;
   /** A time, in milliseconds whatever unit it was written in. */
@@ -402,7 +409,8 @@ export type TokenKind =
   | 'easing'
   | 'time'
   | 'animation'
-  | 'display';
+  | 'display'
+  | 'font';
 
 /**
  * Where a form a token does not have can be read from instead. A length is already a
@@ -5479,6 +5487,50 @@ export class StyleResolver {
     if (!needsFilling(value)) return value;
     const fill = (part: unknown) => this.filledIn(part, declaration, own, parentInherited, tokens);
     if (Array.isArray(value)) return this.filledList(value, fill, tokens);
+    const marked = this.markerSettled(value, declaration, own, parentInherited, tokens, whole);
+    if (marked !== NOT_A_MARKER) return marked;
+    const pending = (value as { __defer?: DeferredDeclaration['compute'] }).__defer;
+    if (pending) return this.computed({ ...declaration, compute: pending }, own, parentInherited);
+    const font = declaration.kind === 'font';
+    const out: Record<string, unknown> = {};
+    for (const [key, part] of Object.entries(value)) {
+      const filled = font && key === 'lineHeight' ? part : fill(part);
+      if (filled === UNSETTLED) return UNSETTLED;
+      out[key] = filled;
+    }
+    return font ? this.fontLineHeight(out, declaration, own, parentInherited, tokens) : out;
+  }
+
+  /**
+   * A font's line height in em, or in percent, settled against the size the font sets, where its
+   * size in em is of the parent's: `font: 2em/150%` is 3em of the parent's.
+   */
+  private fontLineHeight(
+    font: Record<string, unknown>,
+    declaration: DeferredDeclaration,
+    own: Record<string, unknown>,
+    parentInherited: Record<string, unknown>,
+    tokens: Readonly<Record<string, TokenValue>>,
+  ): unknown {
+    if (!('lineHeight' in font)) return font;
+    const sized = { ...declaration, props: ['lineHeight'] };
+    const sizedOwn = { ...own, fontSize: font['fontSize'] };
+    const height = this.filledIn(font['lineHeight'], sized, sizedOwn, parentInherited, tokens);
+    return height === UNSETTLED ? UNSETTLED : { ...font, lineHeight: height };
+  }
+
+  /**
+   * A token's marker in a structured value settled for this node, `UNSETTLED` where it cannot be,
+   * and `NOT_A_MARKER` for a value that is none.
+   */
+  private markerSettled(
+    value: object,
+    declaration: DeferredDeclaration,
+    own: Record<string, unknown>,
+    parentInherited: Record<string, unknown>,
+    tokens: Readonly<Record<string, TokenValue>>,
+    whole: boolean,
+  ): unknown {
     // `currentcolor` is the colour in scope, which only the node knows: Tailwind's ring default.
     // On `color` itself that is the inherited colour, as CSS reads it.
     const current = (): string => {
@@ -5486,18 +5538,13 @@ export class StyleResolver {
       return (ownColour ?? parentInherited['color'] ?? 'black') as string;
     };
     const marked = settledMarker(value, tokens, current);
+    if (marked === NOT_A_MARKER) return marked;
     const settled = marked === 'currentcolor' ? current() : marked;
     if (isPlatformColour(settled) && !whole) return UNSETTLED;
-    if (marked !== NOT_A_MARKER) return settled ?? UNSETTLED;
-    const pending = (value as { __defer?: DeferredDeclaration['compute'] }).__defer;
-    if (pending) return this.computed({ ...declaration, compute: pending }, own, parentInherited);
-    const out: Record<string, unknown> = {};
-    for (const [key, part] of Object.entries(value)) {
-      const filled = fill(part);
-      if (filled === UNSETTLED) return UNSETTLED;
-      out[key] = filled;
-    }
-    return out;
+    // A sum with an em or a viewport unit in it, worked out against this node: see `calculated`.
+    const relative = (settled as { __defer?: DeferredDeclaration['compute'] } | null)?.__defer;
+    if (!relative) return settled ?? UNSETTLED;
+    return this.computed({ ...declaration, compute: relative }, own, parentInherited);
   }
 
   /**
@@ -5853,9 +5900,17 @@ function inCycles(
 /** Whether a token is made of others, and so worked out where it is defined. */
 function isDerived(token: TokenValue | undefined): boolean {
   return Boolean(
-    token?.hsl || token?.deferredColour || token?.deferredCalc || token?.deferredLengths,
+    token?.hsl ||
+    token?.deferredColour ||
+    token?.deferredCalc ||
+    token?.deferredLengths ||
+    (token?.font && Object.values(token.font).some(readsToken)),
   );
 }
+
+/** Whether a part of a font token reads another token: a size of a sum, or a family. */
+const readsToken = (part: unknown): boolean =>
+  typeof part === 'object' && part !== null && ('__calc' in part || '__family' in part);
 
 /** A token made of others, worked out from the tokens in scope. */
 function derived(
@@ -5864,8 +5919,29 @@ function derived(
 ): TokenValue | undefined {
   if (token.hsl) return colourToken(resolveHsl(token.hsl, tokens));
   if (token.deferredColour) return colourToken(resolveColour(token.deferredColour, tokens));
+  if (token.font && Object.values(token.font).some(readsToken)) {
+    const { font, ...rest } = token;
+    const others = isDerived(rest) ? derived(rest, tokens) : rest;
+    return { ...others, font: settledFont(font, tokens) };
+  }
   if (token.deferredLengths) return lengthsToken(token, tokens);
   return calcToken(token.deferredCalc!, tokens);
+}
+
+/**
+ * A font token's size and family worked out from the tokens where it is defined, as a custom
+ * property substitutes the `var()`s in it before it is inherited. An em in its size is still
+ * measured where it is used.
+ */
+function settledFont(
+  font: Readonly<Record<string, unknown>>,
+  tokens: Readonly<Record<string, TokenValue>>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [prop, part] of Object.entries(font)) {
+    out[prop] = readsToken(part) ? settledMarker(part as object, tokens) : part;
+  }
+  return out;
 }
 
 /**
@@ -5957,6 +6033,7 @@ function leafType(
   tokens: Readonly<Record<string, TokenValue>>,
 ): '' | '%' | undefined {
   if ('percentage' in leaf) return '%';
+  if ('relative' in leaf) return '';
   const token = tokens[leaf.reference];
   if (!token) return leaf.fallback === undefined ? undefined : calcType(leaf.fallback, tokens);
   return typeof token.length === 'string' && token.length.endsWith('%') ? '%' : '';
@@ -6262,6 +6339,10 @@ function writeSettled(
   settled: unknown,
   layers: BackgroundLayers | undefined,
 ): void {
+  // `font: var()`: each longhand its own part of the token's font form, and none where it is unset.
+  if (declaration.kind === 'font') {
+    return write(own, prop, (settled as Record<string, unknown> | undefined)?.[prop], false);
+  }
   const one = settled instanceof EachSide ? settled.at(declaration.props, prop) : settled;
   const value = taken(prop, clamped(prop, one)) ?? declaration.unset;
   if (declaration.layers) writeLayer(own, prop, value, layers, declaration.over);
@@ -7092,6 +7173,8 @@ interface LengthMarker {
 type CalcExpression =
   | number
   | { readonly percentage: number }
+  /** A length in em or a viewport unit written in the sum, worked out where it is used. */
+  | { readonly relative: { readonly unit: string; readonly factor: number } }
   | { readonly reference: string; readonly fallback?: CalcExpression }
   | readonly ['+' | '-' | '*' | '/' | 'max' | 'min', CalcExpression, CalcExpression];
 
@@ -7107,7 +7190,7 @@ interface CalcMarker {
 function resolveCalc(
   marker: CalcMarker,
   tokens: Readonly<Record<string, TokenValue>>,
-): number | string | undefined {
+): number | string | { __defer: DeferredEm } | undefined {
   const percentage = wholePercentage(marker, tokens);
   if (percentage !== undefined) return percentage;
   if (bareNumberAsLength(marker, tokens) || notAnAngle(marker, tokens)) return undefined;
@@ -7115,9 +7198,29 @@ function resolveCalc(
   if (marker.kind === 'number' && calcType(marker.expression, tokens) === undefined)
     return undefined;
   const value = calculated(marker.expression, marker.kind, tokens);
-  if (value === undefined || !Number.isFinite(value)) return undefined;
-  const rounded = Math.round(value * 1000) / 1000;
+  if (value === undefined || !Number.isFinite(value.points)) return undefined;
+  const rounded = Math.round(value.points * 1000) / 1000;
+  if (value.relative)
+    return marker.kind === 'length' ? deferredSum(value.relative, rounded) : undefined;
   return marker.kind === 'angle' ? `${rounded}deg` : rounded;
+}
+
+/**
+ * A sum with a token in em or a viewport unit in it, `offset` points added: worked out where it
+ * is used, as a token holding the unit alone is.
+ */
+function deferredSum(
+  relative: NonNullable<Summed['relative']>,
+  offset: number,
+): { __defer: DeferredEm } | string | undefined {
+  if (!Number.isFinite(relative.factor)) return undefined;
+  const factor = Math.round(relative.factor * 100000) / 100000;
+  // A share of the box, which the box it is used by works out: `-50%`, or `calc(50% + 10px)`.
+  if (relative.unit === '%') {
+    if (!offset) return `${factor}%`;
+    return `calc(${factor}% ${offset < 0 ? '-' : '+'} ${Math.abs(offset)}px)`;
+  }
+  return { __defer: { unit: relative.unit, factor, ...(offset ? { offset } : {}) } };
 }
 
 /**
@@ -7170,23 +7273,89 @@ function wholePercentage(
   return whole ? (value as string) : undefined;
 }
 
+/**
+ * A part of a sum worked out: points, and an amount of one unit only the place it is used knows,
+ * `em` or a viewport unit, where a token held one. `calc(56px - 1.4em)` is 56 points and -1.4em.
+ */
+interface Summed {
+  readonly points: number;
+  readonly relative?: { readonly unit: string; readonly factor: number };
+  /** Points a token holds as a length, which is no factor: `2px` times an em is no length. */
+  readonly length?: true;
+}
+
+/** A sum's parts of a unit only the use site knows, added: undefined for two different units. */
+function addedRelative(
+  a: Summed['relative'],
+  b: Summed['relative'],
+  sign: number,
+): Summed['relative'] | null {
+  if (!b) return a;
+  if (!a) return { unit: b.unit, factor: b.factor * sign };
+  return a.unit === b.unit ? { unit: a.unit, factor: a.factor + b.factor * sign } : null;
+}
+
+/** A sum scaled by a number. */
+const scaledSum = (sum: Summed, by: number): Summed => ({
+  ...sum,
+  points: sum.points * by,
+  ...(sum.relative ? { relative: { ...sum.relative, factor: sum.relative.factor * by } } : {}),
+});
+
+/**
+ * A calc() tree worked out from the tokens. A token in `em` or a viewport unit stays that unit,
+ * added to or scaled with the rest, as a browser keeps it until the sum is used. Two such units,
+ * or one multiplied by another or by a token's length, or compared in `min()` or `max()`, are not
+ * worked out here.
+ */
 function calculated(
   expression: CalcExpression,
   kind: CalcMarker['kind'],
   tokens: Readonly<Record<string, TokenValue>>,
-): number | undefined {
-  if (typeof expression === 'number') return expression;
+): Summed | undefined {
+  if (typeof expression === 'number') return { points: expression };
   if (!Array.isArray(expression)) return leafValue(expression as CalcLeaf, kind, tokens);
   const [op, a, b] = expression as readonly [string, CalcExpression, CalcExpression];
   const left = calculated(a, kind, tokens);
   const right = calculated(b, kind, tokens);
   if (left === undefined || right === undefined) return undefined;
-  if (op === '+') return left + right;
-  if (op === '-') return left - right;
-  if (op === '*') return left * right;
-  if (op === 'max') return Math.max(left, right);
-  if (op === 'min') return Math.min(left, right);
-  return left / right;
+  if (op === '+' || op === '-') return added(left, right, op === '+' ? 1 : -1);
+  if (op === '*') return multiplied(left, right);
+  return op === '/' ? divided(left, right) : compared(op, left, right);
+}
+
+/** One part divided by another: a unit of the use site only by a plain number, `calc(1em / 2)`. */
+function divided(left: Summed, right: Summed): Summed | undefined {
+  if (right.relative) return undefined;
+  if (left.relative) return scaledSum(left, 1 / right.points);
+  return { ...left, points: left.points / right.points };
+}
+
+/** `max()` or `min()` of two parts, which a unit only the use site knows cannot be compared in. */
+function compared(op: string, left: Summed, right: Summed): Summed | undefined {
+  if (left.relative || right.relative) return undefined;
+  const pick = op === 'max' ? Math.max : Math.min;
+  return { points: pick(left.points, right.points) };
+}
+
+/** Two parts of a sum added, or the second taken from the first: one unit of the use site at most. */
+function added(left: Summed, right: Summed, sign: number): Summed | undefined {
+  const relative = addedRelative(left.relative, right.relative, sign);
+  if (relative === null) return undefined;
+  const length = left.length || right.length ? { length: true as const } : {};
+  return {
+    points: left.points + right.points * sign,
+    ...(relative ? { relative } : {}),
+    ...length,
+  };
+}
+
+/** Two parts multiplied: a unit of the use site only by a plain number. */
+function multiplied(left: Summed, right: Summed): Summed | undefined {
+  if (left.relative && right.relative) return undefined;
+  if ((left.relative && right.length) || (right.relative && left.length)) return undefined;
+  const scaled = left.relative ? scaledSum(left, right.points) : scaledSum(right, left.points);
+  return left.length || right.length ? { ...scaled, length: true } : scaled;
 }
 
 /** A written percentage, or a token, as `calculated` reads it: its fallback when it is unset. */
@@ -7194,8 +7363,9 @@ function leafValue(
   leaf: CalcLeaf,
   kind: CalcMarker['kind'],
   tokens: Readonly<Record<string, TokenValue>>,
-): number | undefined {
-  if ('percentage' in leaf) return leaf.percentage;
+): Summed | undefined {
+  if ('percentage' in leaf) return { points: leaf.percentage };
+  if ('relative' in leaf) return { points: 0, relative: leaf.relative };
   const token = tokens[leaf.reference];
   if (token) return tokenNumber(token, kind);
   return leaf.fallback === undefined ? undefined : calculated(leaf.fallback, kind, tokens);
@@ -7212,19 +7382,36 @@ const FORM_OF_KIND: Record<
 };
 
 /**
+ * A token's number in a slot of this kind: a length, which no em multiplies, or a bare 0, which is
+ * a number as well as a length and multiplies as the number.
+ */
+const pointsOrFactor = (own: number, token: TokenValue, kind: CalcMarker['kind']): Summed =>
+  kind === 'length' && token.number === undefined ? { points: own, length: true } : { points: own };
+
+/**
  * A token as a number in a slot of this kind: its length in points or its angle in degrees, or
  * a bare number, which multiplies (`calc(var(--n) * 1px)`). A length that is not points, a
  * percentage, is not one, and is not read as the bare number it also is.
  */
-function tokenNumber(token: TokenValue | undefined, kind: CalcMarker['kind']): number | undefined {
+function tokenNumber(token: TokenValue | undefined, kind: CalcMarker['kind']): Summed | undefined {
   if (!token) return undefined;
   const own = kind === 'number' ? undefined : FORM_OF_KIND[kind](token);
-  if (own !== undefined) return typeof own === 'number' ? own : undefined;
+  if (typeof own === 'number') return pointsOrFactor(own, token, kind);
+  // A length in em or a viewport unit, kept as that unit: see `calculated`.
+  const pending =
+    kind === 'length' ? (own as { __defer?: DeferredEm } | undefined)?.__defer : undefined;
+  if (pending) {
+    return {
+      points: pending.offset ?? 0,
+      relative: { unit: pending.unit, factor: pending.factor },
+    };
+  }
+  if (own !== undefined) return undefined;
   // An angle is a number of degrees to a hue, and neither a length nor a factor: `30deg` as a
   // translate moved a box thirty points, and as a scale made it thirty times the size, where a
   // browser drops the declaration.
   if (token.angle !== undefined) return undefined;
-  return token.number;
+  return token.number === undefined ? undefined : { points: token.number };
 }
 
 /** A whole shadow, filter or transform token in a list, and the entries to use when it is unset. */
@@ -7317,6 +7504,13 @@ function settledMarker(
   if (sum) return resolveCalc(sum, tokens);
   const shadow = (value as { __dropShadow?: { reference: string } }).__dropShadow;
   if (shadow) return dropShadowOf(tokens[shadow.reference]?.shadow);
+  // A font's family from a token, as `font: var()` reads Taiga UI's: its first name, or the
+  // family written as its fallback where the token is unset.
+  const family = (value as { __family?: { reference: string; fallback?: string } }).__family;
+  if (family) {
+    const token = tokens[family.reference];
+    return token === undefined ? family.fallback : formOf(token, 'family');
+  }
   return NOT_A_MARKER;
 }
 
@@ -7484,7 +7678,7 @@ function adjusted(value: unknown, adjust: NonNullable<DeferredDeclaration['adjus
   return adjust.floor === undefined ? scaled : Math.max(scaled, adjust.floor);
 }
 
-interface DeferredEm {
+export interface DeferredEm {
   readonly unit: string;
   readonly factor: number;
   readonly offset?: number;

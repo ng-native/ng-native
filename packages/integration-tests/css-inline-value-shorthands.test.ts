@@ -205,6 +205,15 @@ describe('over what a rule set', () => {
     ['background-position: 4px 5px', 'background-image: linear-gradient(red, blue)'],
     ['text-decoration: underline', 'text-decoration: underline dotted blue', 'text'],
     ['font: bold 12px/20px Arial', 'font-size: 30px; line-height: 40px', 'text'],
+    // A token holding a whole font, as Taiga UI binds its typography.
+    ['font: var(--f)', '--f: italic bold 12px/20px Arial', 'text'],
+    ['font: var(--missing)', 'font: 13px Georgia', 'text'],
+    // Its fallback where the token is unset, as a font of its own, and the token where it is set.
+    ['font: var(--missing, bold 20px serif)', 'font: 13px Georgia', 'text'],
+    ['font: var(--f, 20px serif)', '--f: italic bold 12px/20px Arial', 'text'],
+    ['font: var(--missing, var(--f))', '--f: italic bold 12px/20px Arial', 'text'],
+    ['font: var(--missing, italic 1rem/1.5 serif)', 'font: 13px Georgia', 'text'],
+    ['font: var(--missing, 20px/150% serif)', '', 'text'],
   ];
   for (const [declaration, rule, tag] of rows) {
     it(`${declaration} over ${rule}`, () => assertParity(declaration, rule, tag));
@@ -472,6 +481,7 @@ describe('a value a shorthand does not take', () => {
     ['font: caption', 'text'],
     ['font: var(--f)', 'text'],
     ['font: 12px var(--f)', 'text'],
+    ['font: var(--f, 1em serif)', 'text'],
     ['text-decoration: notaline', 'text'],
     ['text-decoration: var(--t)', 'text'],
     ['text-decoration: underline var(--c)', 'text'],

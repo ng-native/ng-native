@@ -142,7 +142,7 @@ describe('tokens', () => {
     // `border: var(--x)` could be a width, a style or a colour, and nothing on device can parse
     // the substituted text to find out.
     assert.throws(() => compileCss('view { border: var(--b) }'), /shorthand/i);
-    assert.throws(() => compileCss('view { font: var(--f) }'), /shorthand/i);
+    // `font: var(--f)` is not: a token holding a whole font is read for it (css-font-token.test.ts).
   });
 
   describe('with !important', () => {

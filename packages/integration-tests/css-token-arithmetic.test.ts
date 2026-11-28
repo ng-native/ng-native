@@ -136,6 +136,8 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
   const cases: readonly [string, string, string, unknown][] = [
     ['calc(var(--gap) * 2)', 'width: var(--x)', 'width', 8],
     ['calc(var(--gap) + 1px)', 'width: var(--x)', 'width', 5],
+    // An em is measured where the sum is used, against the 16-point default there.
+    ['calc(var(--gap) + 1em)', 'width: var(--x)', 'width', 20],
     ['calc(var(--gap) + var(--gap) * var(--n))', 'width: var(--x)', 'width', 16],
     ['calc(var(--n) * 1px)', 'width: var(--x)', 'width', 3],
     ['calc((var(--gap) - 1px) / 2)', 'width: var(--x)', 'width', 1.5],
@@ -340,7 +342,11 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
     // takes no fallback, and it is not read, so the property is unset: never a colour string with
     // a var() in it.
     const width = 'width: var(--x, 7px)';
-    assert.equal(set(TOKENS, 'calc(var(--gap) + 1em)', width)['width'], undefined);
+    // A sum of two units the use site knows, or one compared, which a stylesheet drops the
+    // custom property for: unset, so the use site takes its fallback.
+    for (const value of ['calc(var(--gap) + 1em + 1vw)', 'min(var(--gap), 1em)']) {
+      assert.equal(set(TOKENS, value, width)['width'], 7, value);
+    }
     const color = 'color: var(--x, rgb(1, 2, 3))';
     assert.equal(set(TOKENS, 'rgb(var(--n) 0 0)', color)['color'], undefined);
     assert.equal(set(TOKENS, 'rgb(var(--rgb)', color)['color'], undefined);

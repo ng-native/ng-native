@@ -811,7 +811,8 @@ describe('what it refuses, and how it says so', () => {
   });
 
   it('still names a shorthand a token cannot be read in', () => {
-    assert.throws(() => declarationsOf('font: var(--x)'), /shorthand/);
+    // A font token is read whole (see `css-font-token.test.ts`); a flex flow's two parts are not.
+    assert.throws(() => declarationsOf('flex-flow: var(--x)'), /shorthand/);
   });
 
   it('names the property of a dropped var() declaration, not the parser shape it arrived in', () => {

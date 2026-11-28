@@ -378,8 +378,6 @@ const SHORTHAND_TOKEN =
   'A token holding a whole shorthand with var()s inside it, `--bs-alert-border: ' +
   'var(--bs-border-width) solid var(--bs-alert-border-color)`, would need substituting and ' +
   'parsing on device. A token is read in one form; this one has none.';
-const TWO_VARS =
-  '`calc(var(--a) - var(--b))`: arithmetic between two tokens needs evaluating on device.';
 
 const DELIBERATE: Record<string, Partial<Record<CorpusProperty, string>>> = {
   'bootstrap .alert.alert-success': {
@@ -393,10 +391,6 @@ const DELIBERATE: Record<string, Partial<Record<CorpusProperty, string>>> = {
   'bulma .button.is-primary': {
     color: HSL_TOKENS,
     'background-color': HSL_TOKENS,
-    'padding-top': TWO_VARS,
-    'padding-right': TWO_VARS,
-    'padding-bottom': TWO_VARS,
-    'padding-left': TWO_VARS,
   },
   'bulma .is-size-3': { 'line-height': BODY_LINE_HEIGHT },
   'bulma .tag': { 'background-color': HSL_TOKENS },
