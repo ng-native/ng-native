@@ -384,7 +384,8 @@ describe('markup a template binds with [innerHTML]', () => {
     assert.equal(label.textContent, 'Files & folders 3 < 4');
     assert.deepEqual(tags(), ['b', 'i', 'br']);
     assert.equal(label.querySelector('i').getAttribute('class'), 'hint');
-    assert.ok(screen.getByText('folders'));
+    // One paragraph, its words and the elements' run on as a browser sets them.
+    assert.ok(screen.getByText('Files & folders 3 < 4'));
     assert.equal(screen.queryByText('steal()'), null);
   });
 

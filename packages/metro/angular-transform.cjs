@@ -1315,6 +1315,11 @@ function browserElements(src) {
       if (element) names.add(element[1].toLowerCase());
     }
   }
+  // A component with no selector is hosted by `ng-component`, as a partial declaration names it.
+  for (const [, decorator] of src.matchAll(/@Component\(([\s\S]*?)\bclass\s/g)) {
+    // A property of the metadata's, after its brace or a comma, and not words in a template.
+    if (!/[{,]\s*selector\s*:/.test(decorator)) names.add('ng-component');
+  }
   if (!names.size) return '';
   return (
     `\n;(globalThis.ɵngNativeBrowserElements ??= new Set());` +

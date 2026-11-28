@@ -148,16 +148,20 @@ function startsContext<T>(tree: FlowTree<T>, node: T): boolean {
   );
 }
 
-/** The runs of inline-level boxes among a container's in-flow children, one box a run too. */
+/**
+ * The runs of inline-level boxes among a container's in-flow children, one box a run too, with
+ * the text beside them: a browser puts both on the same lines. Text with no box beside it is a
+ * block of its own.
+ */
 function runsOf<T>(tree: FlowTree<T>, flow: readonly T[]): Map<T, T[]> {
   const runs = new Map<T, T[]>();
   let run: T[] = [];
   for (const child of [...flow, undefined]) {
-    if (child !== undefined && inlineLevel(tree, child)) {
+    if (child !== undefined && (inlineLevel(tree, child) || tree.isText?.(child) === true)) {
       run.push(child);
       continue;
     }
-    if (run.length) runs.set(run[0]!, run);
+    if (run.some((each) => inlineLevel(tree, each))) runs.set(run[0]!, run);
     run = [];
   }
   return runs;
@@ -174,8 +178,9 @@ function collapseChildren<T>(tree: FlowTree<T>, flow: readonly T[], openTop: boo
   let emitted = 0;
   let last: T | undefined;
   let lineLast = false;
+  const lined = new Set([...runs.values()].flat());
   for (const child of flow) {
-    if (inlineLevel(tree, child)) {
+    if (lined.has(child)) {
       // The boxes after the first of a line are in it already.
       if (!runs.has(child)) continue;
       // A line: the margins before it end here, and its boxes keep their own inside it.

@@ -63,6 +63,15 @@ afterEach(() => {
 
 const node = (selector: string) => globals.document!.querySelector(selector);
 /** Whether a box lays what it holds out in lines: a row that wraps. */
+/**
+ * What a text element sets on its line, as the paragraph it is: a box among its words is a view
+ * in the paragraph, and a span of text a span of it.
+ */
+const onItsLine = (id: string) => {
+  const paragraph = screen.getByTestId(id);
+  assert.equal(paragraph.viewName, 'Paragraph');
+  return paragraph.children.map((child: { viewName: string }) => child.viewName);
+};
 const inLines = (id: string) => {
   const { flexDirection, flexWrap } = screen.getByTestId(id).props;
   return flexDirection === 'row' && flexWrap === 'wrap';
@@ -95,14 +104,14 @@ describe('an inline element in an app that asked for web-compat', () => {
     await render(Page, { providers: [provideWebCompat()] });
     await settle();
     assert.equal(node('x-label').inlineLevel, 'unless-block');
-    assert.equal(inLines('label'), true);
+    assert.deepEqual(onItsLine('label'), ['View', 'VirtualText']);
   });
 
   it('does so for a label out of the flow too, as a floating label is', async () => {
     await render(Page, { providers: [provideWebCompat()] });
     await settle();
     assert.equal(screen.getByTestId('floating').props['position'], 'absolute');
-    assert.equal(inLines('floating'), true);
+    assert.deepEqual(onItsLine('floating'), ['View', 'VirtualText']);
   });
 
   it("lays out what a library's element holds in lines where it is a flex item", async () => {
