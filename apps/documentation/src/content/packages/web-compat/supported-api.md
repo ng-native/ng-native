@@ -342,7 +342,18 @@ a page written right to left too, and a date's or a time's `valueAsNumber` is `N
   and one with `vector-effect: non-scaling-stroke` is drawn that wide whatever the drawing is
   scaled to. A box whose mask image cannot be fetched paints no background of its own.
 
-Gaps: without react-native-svg's native views a drawing shows nothing, as an icon does. A mask
+- A box with a background of one `url()` in a library's stylesheet, `background:
+url('/wallpaper.jpg') center / cover`, is drawn as the platform's image under what the box
+  holds, its address resolved against the page's as an `<img>`'s is. It fills the box as
+  `cover`, `contain` or a size of `100% 100%` says, repeats an image of its own size, or shows one
+  of its own size alone in the middle with `no-repeat`, scaled down to fit where it is larger than
+  the box. It follows the image changing, and goes with the background, a later
+  `background-image: none` included.
+
+Gaps: without react-native-svg's native views a drawing shows nothing, as an icon does. A
+background image is not placed by `background-position` or sized in points, which is said with a
+warning in development, its corners are not
+cut to the box's, and a `url()` among other background layers is dropped with a warning. A mask
 is drawn in one colour: a gradient under it, or one a shape of the SVG fills with, is drawn as the
 box's colour or the gradient's own, and a mask of a gradient is not drawn. Where a box's size is
 not in points, the mask's size its lines are worked out from is the box's last layout. A

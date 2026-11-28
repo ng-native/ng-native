@@ -45,6 +45,7 @@ import { treeMembers } from './tree-members.ts';
 import { cancelAnimations } from './web-animation.ts';
 import { engineOf, installWindow, windowOf } from './window.ts';
 import { maskDrawer } from './mask-image.ts';
+import { backgroundDrawer } from './background-image.ts';
 import { keyboardMoved, windowHeight } from './window-size.ts';
 
 /** How many apps in the process asked for it: nodes share one prototype, and globals are global. */
@@ -333,8 +334,11 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
       engine.setTouchTarget(touchTarget(engine));
       // A library's icon written as a mask, drawn in the box's colour: see `mask-image.ts`.
       engine.setMaskDrawer(maskDrawer(engine));
+      // A background of an image, which native paints none of: see `background-image.ts`.
+      engine.setBackgroundDrawer(backgroundDrawer(engine));
       inject(DestroyRef).onDestroy(() => {
         engine.setMaskDrawer(null);
+        engine.setBackgroundDrawer(null);
         engine.holdMovesUnderFinger(false);
         engine.setTouchTarget(null);
         forgetPicker();

@@ -3,6 +3,7 @@ import { serializeOuter, type DefaultTreeAdapterMap } from 'parse5';
 import { styled } from './geometry.ts';
 import { setMarkup } from './html.ts';
 import { drawingIn } from './image.ts';
+import { commitLater } from './commit-later.ts';
 import { keptOwn } from './in-document.ts';
 import { parseUrl } from './parse-url.ts';
 import { engineOf } from './window.ts';
@@ -55,20 +56,20 @@ export function maskDrawer(engine: Engine): MaskDrawer {
     const was = drawn.get(node);
     if (!mask) {
       drawn.delete(node);
-      return later(engine, () => removed(was, engine));
+      return commitLater(engine, () => removed(was, engine));
     }
     if (was && was.mask.image === mask.image) {
       was.mask = mask;
-      return later(engine, () => placed(node, was, engine));
+      return commitLater(engine, () => placed(node, was, engine));
     }
     const now: Drawn = { mask };
     drawn.set(node, now);
-    later(engine, () => removed(was, engine));
+    commitLater(engine, () => removed(was, engine));
     const address = unescaped(URL_VALUE.exec(mask.image)?.[2] ?? '');
     void markupOf(address, node).then((markup) => {
       if (drawn.get(node) !== now || markup === undefined) return;
       now.markup = markup;
-      later(engine, () => placed(node, now, engine));
+      commitLater(engine, () => placed(node, now, engine));
     });
   };
 }
@@ -506,25 +507,3 @@ const FILLED = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 };
 
 /** The side of the drawing's box a share of the room puts it at, as `preserveAspectRatio` names it. */
 const side = (share: number): string => (share < 0.25 ? 'Min' : share > 0.75 ? 'Max' : 'Mid');
-
-/** The changes waiting for each app's next commit of drawings: see `later`. */
-const waiting = new Map<Engine, (() => void)[]>();
-
-/**
- * After the commit that told of it, and committed with every other change asked for meanwhile: the
- * boxes of a page that name one image are drawn as it arrives, in one commit rather than one each.
- */
-function later(engine: Engine, change: () => void): void {
-  const changes = waiting.get(engine);
-  if (changes) return void changes.push(change);
-  waiting.set(engine, [change]);
-  queueMicrotask(() => {
-    const each = waiting.get(engine) ?? [];
-    waiting.delete(engine);
-    try {
-      for (const one of each) one();
-    } finally {
-      if (engine.pending) engine.commit();
-    }
-  });
-}

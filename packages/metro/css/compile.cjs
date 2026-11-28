@@ -62,6 +62,7 @@ const {
 const { filter, undrawnOnIos, undrawnOnMacos } = require('./filters.cjs');
 const { expandShorthand } = require('./shorthands.cjs');
 const { readMask } = require('./mask.cjs');
+const { readBackgroundUrl, clearBackgroundUrl } = require('./background-url.cjs');
 const { FONT_PROPS } = require('./font-token.cjs');
 
 /** Angular's emulated encapsulation marker, which we strip: scoping is per rule set already. */
@@ -3149,12 +3150,12 @@ function addDeclaration(declaration, out, tokens, deferred, context) {
  * One declaration of a rule in a sheet read as a browser reads it: as `addDeclaration` has it, or
  * one of the properties that make a box the containing block of the absolute boxes in it, for the
  * engine alone (`heldForTheEngine`). An app's own sheet is refused them, and places such a box
- * against one it gives a position.
+ * against one it gives a position. A background of no url() takes off an earlier one's image.
  */
 function addBrowsersDeclaration(declaration, out, tokens, deferred, context) {
-  if (!heldForTheEngine(declaration, out, context)) {
-    addDeclaration(declaration, out, tokens, deferred, context);
-  }
+  if (heldForTheEngine(declaration, out, context)) return;
+  addDeclaration(declaration, out, tokens, deferred, context);
+  clearBackgroundUrl(declaration, out);
 }
 
 /** What native does not do of each property `heldForTheEngine` keeps, where the value does it. */
@@ -3717,6 +3718,8 @@ function compileCss(source, context = 'styles', options = {}) {
   function readAsABrowser(declaration, out, deferred, context) {
     if (shapePaint(declaration, out, deferred, context)) return true;
     if (readMask(declaration, out, deferred, context, linear)) return true;
+    const add = (one) => addDeclaration(one, out, null, deferred, context);
+    if (readBackgroundUrl(declaration, out, context, add)) return true;
     if (tokenedBand(declaration, deferred)) return true;
     if (!isContent(declaration)) return asABrowserReads(declaration, out);
     declareContent(declaration, out, context);
